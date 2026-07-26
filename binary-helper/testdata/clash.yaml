@@ -1,0 +1,7 @@
+proxies:
+  - name: test-node
+    type: ss
+    server: 127.0.0.1
+    port: 8388
+    cipher: aes-128-gcm
+    password: test

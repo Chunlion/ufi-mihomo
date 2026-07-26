@@ -948,6 +948,10 @@ KANO_YQ_SMOKE_EOF
       }
       baseObject = read.value;
       generated = await yamlHasGeneratedMarker(templatePath);
+      if (generated === null) {
+        createToast('template.yaml 生成标记读取失败，已中止且未改写原文件。', 'red', 9000);
+        return false;
+      }
     }
 
     let normalized;
@@ -1199,6 +1203,7 @@ KANO_YQ_SMOKE_EOF
     const res = await runShellWithRoot(`
         [ -s ${shellQuote(yamlPath)} ] && grep -qF ${shellQuote(GENERATED_TEMPLATE_MARKER)} ${shellQuote(yamlPath)} && echo 1 || echo 0
         `, 10 * 1000);
+    if (!res || !res.success) return null;
     return String(res.content || '').trim() == '1';
   };
 
@@ -1650,6 +1655,8 @@ KANO_YQ_SMOKE_EOF
     return { groups, proxyGroup: groups[0] ? groups[0].name : 'Proxy', createdFallback };
   };
 
+  const MANAGED_RULE_SET_PATTERN = /^RULE-SET\s*,\s*kano_(reject_domain|direct_domain|direct_ip|proxy_domain)\s*,/;
+
   const removeLegacyManagedRulePrefix = (rules = [], proxyGroup = 'Proxy') => {
     let output = rules.slice();
     const expected = buildManagedFallbackRules(proxyGroup);
@@ -1657,9 +1664,11 @@ KANO_YQ_SMOKE_EOF
     const prefixMatches = output.length >= 12 && output.slice(0, 12).every((rule, index) => {
       return rule === expected[index] || rule === legacyProxy[index];
     });
-    if (prefixMatches) output = output.slice(12);
-    if (output[0] === `MATCH,${proxyGroup}` || output[0] === 'MATCH,Proxy') output = output.slice(1);
-    return output;
+    if (prefixMatches) {
+      output = output.slice(12);
+      if (output[0] === `MATCH,${proxyGroup}` || output[0] === 'MATCH,Proxy') output = output.slice(1);
+    }
+    return output.filter((rule) => !MANAGED_RULE_SET_PATTERN.test(String(rule).trim()));
   };
 
   const applyManagedRules = (config, { generated = false, proxyGroup = 'Proxy' } = {}) => {
@@ -1688,7 +1697,16 @@ KANO_YQ_SMOKE_EOF
       if (Object.keys(providers).length > 0) config['rule-providers'] = providers;
       else delete config['rule-providers'];
     }
-    config.rules = removeLegacyManagedRulePrefix(rules, proxyGroup);
+    const cleaned = removeLegacyManagedRulePrefix(rules, proxyGroup);
+    if (cleaned.length == 0) {
+      config['rule-providers'] = {
+        ...(isPlainYamlObject(config['rule-providers']) ? config['rule-providers'] : {}),
+        ...buildManagedRuleProviders(),
+      };
+      config.rules = buildManagedFallbackRules(proxyGroup);
+      return;
+    }
+    config.rules = cleaned;
   };
 
   const validateManagedConfigObject = (config, {
@@ -1723,6 +1741,7 @@ KANO_YQ_SMOKE_EOF
       names.add(name);
     });
     if (!Array.isArray(config.rules)) throw new Error('rules 必须是数组');
+    if (config.rules.length == 0) throw new Error('rules 为空，拒绝生成无规则配置');
     if (!Array.isArray(config.proxies)) throw new Error('proxies 必须是数组');
     if (Object.prototype.hasOwnProperty.call(config, 'rule-providers') && !isPlainYamlObject(config['rule-providers'])) {
       throw new Error('rule-providers 必须是映射对象');
@@ -2118,6 +2137,10 @@ KANO_YQ_SMOKE_EOF
     }
 
     const generated = await yamlHasGeneratedMarker(templatePath);
+    if (generated === null) {
+      createToast('template.yaml 生成标记读取失败，已中止且未改写原文件。', 'red', 9000);
+      return false;
+    }
     const write = await writeYamlObjectAtomic(templatePath, outputObj, {
       label: 'template.yaml',
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
@@ -2199,6 +2222,7 @@ KANO_WRITE_CHECK_EOF
     if (!read.ok) return fail('read_template', read.message || 'template.yaml 读取失败');
 
     const generated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
+    if (generated === null) return fail('read_template_marker', 'template.yaml 生成标记读取失败');
     const tproxyPort = await detectF50TproxyPort();
     let normalized;
     try {
@@ -2328,7 +2352,7 @@ KANO_WRITE_CHECK_EOF
           pidof Clash.Core 2>/dev/null ||
           pidof Clash 2>/dev/null ||
           pidof mihomo 2>/dev/null ||
-          pgrep -f '/data/[c]lash|[C]lash.Core|[m]ihomo' 2>/dev/null ||
+          pgrep -f '/data/clash/Proxy/[C]lash\.Core' 2>/dev/null ||
           true
         ) | awk 'NF{print $1; exit}'
         `);
@@ -2541,6 +2565,9 @@ KANO_WRITE_CHECK_EOF
       templateObject['external-controller'] = checked.controller;
       templateObject.secret = checked.secret;
       templateGenerated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
+      if (templateGenerated === null) {
+        return { ...checked, ok: false, message: 'template.yaml 生成标记读取失败，未改写原文件' };
+      }
     }
 
     let templateWrite = null;
@@ -3619,9 +3646,22 @@ KANO_WRITE_CHECK_EOF
     return false;
   };
 
+  const isCorePidAlive = async (pid) => {
+    if (!pid) return false;
+    const res = await runShellWithRoot(`
+        PID=${shellQuote(String(pid))}
+        [ -r "/proc/$PID/cmdline" ] || { echo 0; exit 0; }
+        if tr '\\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | grep -qF ${shellQuote(CLASH_CORE)}; then echo 1; else echo 0; fi
+        `, 8 * 1000);
+    return !!(res && res.success && String(res.content || '').trim() == '1');
+  };
+
   const acceptRunningCoreWithSlowApi = async (context = '\u542f\u52a8') => {
     const pid = await getCorePid();
     if (!pid) return false;
+    if (!(await isCorePidAlive(pid))) return false;
+    await wait(1500);
+    if (!(await isCorePidAlive(pid))) return false;
     await appendTemplateFlowDebug(`core process ready before api context=${context} pid=${pid}`);
     createToast(
       `${escapeHtml(context)}\u540e\u6838\u5fc3\u8fdb\u7a0b\u5df2\u542f\u52a8\uff0c\u63a7\u5236 API \u54cd\u5e94\u8f83\u6162\uff1b\u5df2\u4fdd\u7559\u65b0\u8bbe\u7f6e\uff0c\u4e0d\u518d\u81ea\u52a8\u6062\u590d\u65e7\u503c\u3002`,
@@ -3734,10 +3774,10 @@ KANO_WRITE_CHECK_EOF
           echo "CONFIG_ROLLBACK="
         fi
         `);
-    if (!res.success) return '';
-    return ((String(res.content || '').split('\n').find((line) => line.startsWith('CONFIG_ROLLBACK=')) || '')
-      .replace(/^CONFIG_ROLLBACK=/, '')
-      .trim());
+    if (!res.success) return null;
+    const line = String(res.content || '').split('\n').find((item) => item.startsWith('CONFIG_ROLLBACK='));
+    if (line === undefined) return null;
+    return line.replace(/^CONFIG_ROLLBACK=/, '').trim();
   };
 
   const restoreConfigRollbackPoint = async (rollbackPath = '', context = '\u56de\u6eda') => {
@@ -4860,7 +4900,9 @@ KANO_BOOTSTRAP_CONFIG
       if (!(await verifyStartOrRollback('\u9996\u6b21\u542f\u52a8'))) {
         return await failInstalledPackage('首次启动健康检查失败');
       }
-      await reapplyPolicyRulesSilent({ ensureScript: false });
+      if (!(await reapplyPolicyRulesSilent({ ensureScript: false }))) {
+        createToast('核心已启动，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+      }
 
       disabled_btn_enabled = false;
 
@@ -6072,13 +6114,16 @@ KANO_POLICY_TOOLS_EOF
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
     await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-    await reapplyPolicyRulesSilent();
+    const rulesOk = await reapplyPolicyRulesSilent();
     createToast(
       `<div style="width:300px;text-align:center">
             ${textToHtml(res.content || '')}
         </div>`,
       'green',
     );
+    if (!rulesOk) {
+      createToast('核心已重启，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+    }
     await isMMRunning();
     return true;
   };
@@ -8021,15 +8066,39 @@ ${expectedProviderChecks}
 
     const commitUploadedConfigWithValidation = async (uploadedPath, controllerInfo = null) => {
       const rollbackPath = await createConfigRollbackPoint('uploaded_config');
-      const commitRes = await runShellWithRoot(`
+      if (rollbackPath === null) {
+        await runShellWithRoot(`rm -f ${shellQuote(uploadedPath)} 2>/dev/null || true`);
+        createToast('无法创建 config.yaml 回滚点，已取消写入（原 config.yaml 未改动）。', 'red', 9000);
+        return false;
+      }
+      const stagePath = `${CLASH_CONFIG}.kano_upload_stage`;
+      const stageRes = await runShellWithRoot(`
         set -e
         mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
-        mv ${shellQuote(uploadedPath)} ${shellQuote(CLASH_CONFIG)}
+        rm -f ${shellQuote(stagePath)} 2>/dev/null || true
+        mv ${shellQuote(uploadedPath)} ${shellQuote(stagePath)}
+        chmod 644 ${shellQuote(stagePath)}
+        [ -s ${shellQuote(stagePath)} ] && echo STAGE_OK
+      `);
+      if (!stageRes.success) {
+        await runShellWithRoot(`rm -f ${shellQuote(stagePath)} ${shellQuote(uploadedPath)} 2>/dev/null || true`);
+        createToast(`配置暂存失败，原 config.yaml 未改动<br>${textToHtml(stageRes.content || '')}`, 'red', 9000);
+        return false;
+      }
+      if (!(await testConfigWithCore(stagePath))) {
+        await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
+        createToast('上传的 config.yaml 未通过核心校验，原 config.yaml 未改动。', 'red', 10000);
+        return false;
+      }
+      const commitRes = await runShellWithRoot(`
+        set -e
+        mv -f ${shellQuote(stagePath)} ${shellQuote(CLASH_CONFIG)}
         chmod 644 ${shellQuote(CLASH_CONFIG)}
         ${setConfigSourceCmd('uploaded_config')}
         [ -s ${shellQuote(CLASH_CONFIG)} ] && echo CONFIG_OK
       `);
       if (!commitRes.success) {
+        await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
         await restoreConfigRollbackPoint(rollbackPath, '上传配置');
         createToast(`配置写入失败<br>${textToHtml(commitRes.content || '')}`, 'red', 9000);
         return false;
@@ -8775,7 +8844,9 @@ ${expectedProviderChecks}
         }
         if (await checkIsInstalled() && await checkAdvanceFunc() && await getCorePid()) {
           const policyReady = await ensurePolicyToolsScript();
-          if (policyReady) await reapplyPolicyRulesSilent({ ensureScript: false });
+          if (policyReady && !(await reapplyPolicyRulesSilent({ ensureScript: false }))) {
+            createToast('网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+          }
         }
         await isMMRunning();
         await autoEnsureBinaryHelper();

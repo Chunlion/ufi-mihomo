@@ -33,8 +33,9 @@
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
 
+  // sed 用 # 作分隔符，所以 / 不需要转义（转了反而影响可读性与后续处理）
   const sedEscape = (value) =>
-    String(value).replace(/[\\^$.*/[\]&#]/g, (ch) => `\\${ch}`);
+    String(value).replace(/[\\^$.*[\]&#]/g, (ch) => `\\${ch}`);
 
   const escapeHtml = (value = '') =>
     String(value).replace(/[&<>"']/g, (ch) => ({
@@ -80,7 +81,6 @@
     `BEGIN_MARK=${shellQuote(BOOT_BEGIN)}`,
     `END_MARK=${shellQuote(BOOT_END)}`,
     'LOCK_DIR=/data/local/tmp/f50_plugin_boot_manager.lock',
-    'WORK_DIR="$FIX_DIR/work"',
     '',
     'PATH=/sbin:/system/sbin:/system/bin:/system/xbin:/vendor/bin:/vendor/xbin:/data/local/bin:$PATH',
     'export PATH',
@@ -134,8 +134,10 @@
     '    "" | *[!0-9]*) return 0 ;;',
     '  esac',
     '  [ "$tl" -le "$tmax" ] && return 0',
-    '  if tail -n "$tkeep" "$tf" > "$tf.trim" 2>/dev/null; then',
-    '    mv -f "$tf.trim" "$tf" 2>/dev/null || true',
+    '  # 就地截断而不是换文件：被重放拉起的常驻服务可能还持有这个 fd，',
+    '  # 换 inode 会让它们继续往看不见的旧文件里写。',
+    '  if tail -n "$tkeep" "$tf" > "$tf.trim" 2>/dev/null && [ -s "$tf.trim" ]; then',
+    '    cat "$tf.trim" > "$tf" 2>/dev/null || true',
     '  fi',
     '  rm -f "$tf.trim" 2>/dev/null || true',
     '  return 0',
@@ -203,10 +205,15 @@
     '  have_getprop=0',
     '  command -v getprop >/dev/null 2>&1 && have_getprop=1',
     '  start_up=$(uptime_seconds)',
+    '  loops=0',
     '  while :; do',
     '    up=$(uptime_seconds)',
+    '    # 同时用「循环次数」兜底：/proc/uptime 读不到时 up 恒为 0，',
+    '    # 只靠 uptime 差值会让这个循环永远出不来。',
     '    elapsed=$((up - start_up))',
     '    [ "$elapsed" -ge 0 ] || elapsed=0',
+    '    [ "$elapsed" -ge "$((loops * 2))" ] || elapsed=$((loops * 2))',
+    '    loops=$((loops + 1))',
     '    boot_done=1',
     '    if [ "$have_getprop" = "1" ]; then',
     '      [ "$(getprop sys.boot_completed 2>/dev/null)" = "1" ] || boot_done=0',
@@ -249,11 +256,80 @@
     '}',
     '',
     'entry_label() {',
-    '  awk \'NF && $0 !~ /^[[:space:]]*#/ { sub(/^[[:space:]]+/, ""); print substr($0, 1, 90); exit }\' "$1" 2>/dev/null | tr "|" "/"',
+    '  awk \'NF && $0 !~ /^[[:space:]]*#/ { sub(/^[[:space:]]+/, ""); print substr($0, 1, 200); exit }\' "$1" 2>/dev/null',
+    '}',
+    '',
+    '# 只是「定义东西」的片段（函数定义、纯赋值）必须和后面用到它的指令待在一起，',
+    '# 否则隔离执行会让 my_func() {...} 和随后的 my_func 分家，调用直接 127。',
+    '# 返回 0 表示「这一段只有定义，先别断开」。',
+    'entry_defines_only() {',
+    '  awk \'',
+    '    /^[[:space:]]*$/ { next }',
+    '    /^[[:space:]]*#/ { next }',
+    '    { n++; last = $0; if (n == 1) { first = $0 } }',
+    '    $0 !~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^;&|]*$/ { not_assign = 1 }',
+    '    END {',
+    '      if (n == 0) { exit 1 }',
+    '      # 情况一：整段就是一个函数定义',
+    '      if (last ~ /^[[:space:]]*\\}[[:space:]]*;?[[:space:]]*$/) {',
+    '        if (first ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*\\)/) { exit 0 }',
+    '        if (first ~ /^[[:space:]]*function[[:space:]]/) { exit 0 }',
+    '      }',
+    '      # 情况二：整段全是变量赋值',
+    '      if (not_assign != 1) { exit 0 }',
+    '      exit 1',
+    '    }',
+    '  \' "$1" 2>/dev/null',
+    '}',
+    '',
+    '# sh -n 对「没写结束符的 heredoc」是放行的（dash/mksh/busybox 实测都返回 0），',
+    '# 所以必须自己盯着 heredoc 是否闭合，否则会把 heredoc 正文切成一条条指令去执行。',
+    '# 返回 0 表示「还有 heredoc 没闭合」。判断偏保守：宁可多等，也不会切错。',
+    'heredoc_open() {',
+    '  awk \'',
+    '    pending > 0 {',
+    '      l = $0',
+    '      if (strip[pending] == 1) { sub(/^\\t+/, "", l) }',
+    '      if (l == delim[pending]) { pending-- }',
+    '      next',
+    '    }',
+    '    /^[ \\t]*#/ { next }',
+    '    {',
+    '      rest = $0',
+    '      while ((p = index(rest, "<<")) > 0) {',
+    '        rest = substr(rest, p + 2)',
+    '        if (substr(rest, 1, 1) == "<") { rest = substr(rest, 2); continue }',
+    '        st = 0',
+    '        if (substr(rest, 1, 1) == "-") { st = 1; rest = substr(rest, 2) }',
+    '        sub(/^[ \\t]+/, "", rest)',
+    '        q = substr(rest, 1, 1)',
+    '        if (q == "\\047" || q == "\\042") {',
+    '          e = index(substr(rest, 2), q)',
+    '          if (e == 0) { break }',
+    '          d = substr(rest, 2, e - 1)',
+    '          rest = substr(rest, e + 2)',
+    '        } else if (match(rest, /^[A-Za-z0-9_.\\-]+/)) {',
+    '          d = substr(rest, 1, RLENGTH)',
+    '          rest = substr(rest, RLENGTH + 1)',
+    '        } else { break }',
+    '        pending++',
+    '        delim[pending] = d',
+    '        strip[pending] = st',
+    '      }',
+    '    }',
+    '    END { exit(pending > 0 ? 0 : 1) }',
+    '  \' "$1" 2>/dev/null',
     '}',
     '',
     '# 按「能被 sh -n 解析」为界把启动指令切成一条条独立单元。',
     '# 这样 if/while/函数/heredoc 等多行写法会被完整保留在同一单元里。',
+    'emit_entry() {',
+    '  ENTRY_COUNT=$((ENTRY_COUNT + 1))',
+    '  [ "$ENTRY_COUNT" -le "$MAX_ENTRIES" ] || return 4',
+    '  mv -f "$1" "$WORK_DIR/entry.$ENTRY_COUNT" 2>/dev/null || return 1',
+    '  return 0',
+    '}',
+    '',
     'split_entries() {',
     '  ENTRY_COUNT=0',
     '  cand="$WORK_DIR/candidate"',
@@ -266,19 +342,28 @@
     '$line"',
     '    fi',
     '    printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
-    '    if sh -n "$cand" 2>/dev/null; then',
-    '      if entry_has_code "$cand"; then',
-    '        ENTRY_COUNT=$((ENTRY_COUNT + 1))',
-    '        if [ "$ENTRY_COUNT" -gt "$MAX_ENTRIES" ]; then',
-    '          return 4',
-    '        fi',
-    '        mv -f "$cand" "$WORK_DIR/entry.$ENTRY_COUNT" 2>/dev/null || return 1',
-    '      fi',
-    '      buf=""',
+    '    sh -n "$cand" 2>/dev/null || continue',
+    '    heredoc_open "$cand" && continue',
+    '    if entry_has_code "$cand"; then',
+    '      # 只有定义没有调用 -> 先不断开，把后面的行并进来',
+    '      entry_defines_only "$cand" && continue',
+    '      emit_entry "$cand" || return $?',
     '    fi',
+    '    buf=""',
     '  done < "$PAYLOAD"',
+    '  # 收尾：文件最后一段（比如只定义了函数）也要落地，不能当成残渣丢掉',
+    '  if [ -n "$buf" ]; then',
+    '    printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
+    '    if sh -n "$cand" 2>/dev/null && ! heredoc_open "$cand"; then',
+    '      if entry_has_code "$cand"; then',
+    '        emit_entry "$cand" || return $?',
+    '      fi',
+    '    else',
+    '      rm -f "$cand" 2>/dev/null || true',
+    '      return 3',
+    '    fi',
+    '  fi',
     '  rm -f "$cand" 2>/dev/null || true',
-    '  [ -z "$buf" ] || return 3',
     '  return 0',
     '}',
     '',
@@ -341,7 +426,10 @@
     '  return 0',
     '}',
     '',
+    '# --list 用独立的工作目录：状态查询可能和正在进行的开机执行并发，',
+    '# 共用一个目录会把正在跑的那次的指令文件删掉。',
     'prepare_work() {',
+    '  WORK_DIR="$FIX_DIR/$1"',
     '  rm -rf "$WORK_DIR" 2>/dev/null || true',
     '  mkdir -p "$WORK_DIR" 2>/dev/null || return 1',
     '  PAYLOAD="$WORK_DIR/payload.sh"',
@@ -405,7 +493,7 @@
     'load_config',
     '',
     'if [ "$MODE" = "list" ]; then',
-    '  prepare_work || exit 1',
+    '  prepare_work worklist || exit 1',
     '  if ! extract_payload; then',
     '    printf "LIST_MODE=whole\\n"',
     '    printf "LIST_ERROR=门标记不闭合\\n"',
@@ -445,7 +533,11 @@
     '  trim_file "$LOG_FILE" 400 250',
     '  exit 0',
     'fi',
-    'trap release_lock EXIT INT TERM',
+    '# 信号处理函数返回后 shell 会继续往下跑，所以 INT/TERM 必须显式退出，',
+    '# 否则会出现「锁已释放但自己还在继续执行」，允许第二个实例并发重放。',
+    'trap release_lock EXIT',
+    "trap 'release_lock; exit 130' INT",
+    "trap 'release_lock; exit 143' TERM",
     '',
     'log_line "==== 管理器启动 v$MANAGER_VERSION mode=$MODE trigger=$TRIGGER boot=$BOOT_ID ===="',
     '',
@@ -472,7 +564,7 @@
     '  exit 1',
     'fi',
     '',
-    'prepare_work || { log_line "error: 无法创建工作目录"; exit 1; }',
+    'prepare_work work || { log_line "error: 无法创建工作目录"; exit 1; }',
     ': > "$RUN_LOG" 2>/dev/null || true',
     ': > "$STATE_FILE" 2>/dev/null || true',
     'state_line "VERSION=$MANAGER_VERSION"',
@@ -586,8 +678,17 @@
     }
   };
 
+  // 输出分段：启动文件内容 / 插件日志都会被原样带回来，
+  // 不分段的话，任何插件只要打印一行 INSTALLED=1 就能把状态显示成绿色。
+  const section = (content, name) => {
+    const match = String(content).match(
+      new RegExp(`F50_${name}_BEGIN\\n([\\s\\S]*?)\\nF50_${name}_END`),
+    );
+    return match ? match[1] : '';
+  };
+
   const parseKeyed = (content, key) => {
-    const match = content.match(new RegExp(`(?:^|\\n)${key}=([^\\n]*)`));
+    const match = String(content).match(new RegExp(`(?:^|\\n)${key}=([^\\n]*)`));
     return match ? match[1] : '';
   };
 
@@ -600,40 +701,51 @@
       begin_count=$(grep -cxF "$BEGIN" "$BOOT" 2>/dev/null || true)
       end_count=$(grep -cxF "$END" "$BOOT" 2>/dev/null || true)
       manager_count=$(grep -cF "$FIX" "$BOOT" 2>/dev/null || true)
+      first_line=$(head -n 1 "$BOOT" 2>/dev/null || true)
+      second_line=$(head -n 2 "$BOOT" 2>/dev/null | tail -n 1 || true)
       [ -n "$begin_count" ] || begin_count=0
       [ -n "$end_count" ] || end_count=0
       [ -n "$manager_count" ] || manager_count=0
       manager_ok=0
       [ -x "$FIX" ] && manager_ok=1
+      # 版本号直接从脚本文件里读，绝不执行来路不明的管理器：
+      # 旧版管理器不认识 --version/--list，会被当成一次真正的开机重放跑起来。
+      mgr_ver=$(sed -n 's/^MANAGER_VERSION=//p' "$FIX" 2>/dev/null | head -n 1)
+      mgr_current=0
+      [ "$mgr_ver" = ${shellQuote(MANAGER_VERSION)} ] && mgr_current=1
+      gate_first=0
+      case "$first_line" in
+        "$BEGIN") gate_first=1 ;;
+        "#!"*) [ "$second_line" = "$BEGIN" ] && gate_first=1 ;;
+      esac
       installed=0
       [ "$manager_ok" = "1" ] && [ "$begin_count" = "1" ] && [ "$end_count" = "1" ] && [ "$manager_count" -ge 1 ] && installed=1
+      echo "F50_META_BEGIN"
       echo "INSTALLED=$installed"
       echo "MANAGER_OK=$manager_ok"
+      echo "GATE_FIRST=$gate_first"
       echo "GATE_COUNT=$begin_count/$end_count/$manager_count"
-      if [ "$manager_ok" = "1" ]; then
-        echo "MANAGER_VERSION=$("$FIX" --version 2>/dev/null)"
-      else
-        echo "MANAGER_VERSION="
-      fi
+      echo "MANAGER_VERSION=$mgr_ver"
+      echo "MANAGER_CURRENT=$mgr_current"
       if [ -f ${shellQuote(SERVICE_D_HOOK)} ]; then echo "SERVICE_D=1"; else echo "SERVICE_D=0"; fi
       echo "BOOT_LINES=$(grep -c -v -e '^[[:space:]]*$' "$BOOT" 2>/dev/null || true)"
-      if [ "$manager_ok" = "1" ]; then
+      echo "F50_META_END"
+      echo "F50_LIST_BEGIN"
+      if [ "$mgr_current" = "1" ]; then
         "$FIX" --list 2>/dev/null
       fi
-      if [ -f ${shellQuote(FIX_STATE)} ]; then
-        echo "STATE_BEGIN"
-        cat ${shellQuote(FIX_STATE)} 2>/dev/null
-        echo "STATE_END"
-      fi
-      if [ -f ${shellQuote(FIX_LOG)} ]; then
-        echo "LOG_BEGIN"
-        tail -n 14 ${shellQuote(FIX_LOG)} 2>/dev/null
-        echo "LOG_END"
-      fi
-    `, 20000);
+      echo "F50_LIST_END"
+      echo "F50_STATE_BEGIN"
+      cat ${shellQuote(FIX_STATE)} 2>/dev/null
+      echo "F50_STATE_END"
+      echo "F50_LOG_BEGIN"
+      tail -n 14 ${shellQuote(FIX_LOG)} 2>/dev/null
+      echo "F50_LOG_END"
+    `, 25000);
+    const meta = section(result.content, 'META');
     return {
-      success: result.success,
-      installed: /(?:^|\n)INSTALLED=1(?:\n|$)/.test(result.content),
+      success: result.success && /(?:^|\n)INSTALLED=[01](?:\n|$)/.test(meta),
+      installed: /(?:^|\n)INSTALLED=1(?:\n|$)/.test(meta),
       content: result.content,
     };
   };
@@ -651,12 +763,21 @@
       FIX_NEW="$FIX.new.$$"
       BOOT_NEW="$BOOT.new.$$"
       PAYLOAD="$FIX_DIR/payload.$$"
+      SRC="$FIX_DIR/src.$$"
       BEGIN=${shellQuote(BOOT_BEGIN)}
       END=${shellQuote(BOOT_END)}
       OLD_FIX=${shellQuote(OLD_FIX_SCRIPT)}
       MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
       ROLLING_BACKUP="$BOOT.f50_last"
-      trap 'rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" 2>/dev/null || true' EXIT
+      COMMITTED=0
+      cleanup() {
+        rc=$?
+        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$SRC" 2>/dev/null || true
+        if [ "$rc" != "0" ] && [ "$COMMITTED" = "0" ]; then
+          echo "F50_ABORT: 安装中断(rc=$rc)，启动文件未被改动；备份：$MANAGER_BACKUP"
+        fi
+      }
+      trap cleanup EXIT
       mkdir -p "$FIX_DIR"
 
       # ---------- 1. 安装管理器 ----------
@@ -676,10 +797,13 @@ F50_BOOT_FIX_EOF
         cat "$BOOT" > "$MANAGER_BACKUP"
       fi
       cat "$BOOT" > "$ROLLING_BACKUP"
+      boot_size_before=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
 
-      # ---------- 3. 校验门标记 ----------
-      begin_count=$(grep -cxF "$BEGIN" "$BOOT" 2>/dev/null || true)
-      end_count=$(grep -cxF "$END" "$BOOT" 2>/dev/null || true)
+      # ---------- 3. 先统一换行符，再比对门标记 ----------
+      # 文件里只要混进 CRLF，门标记就会「看起来不存在」，从而被重复安装一遍。
+      sed 's/\\r$//' "$BOOT" > "$SRC"
+      begin_count=$(grep -cxF "$BEGIN" "$SRC" 2>/dev/null || true)
+      end_count=$(grep -cxF "$END" "$SRC" 2>/dev/null || true)
       [ -n "$begin_count" ] || begin_count=0
       [ -n "$end_count" ] || end_count=0
       if [ "$begin_count" != "$end_count" ] || [ "$begin_count" -gt 1 ]; then
@@ -693,9 +817,9 @@ F50_BOOT_FIX_EOF
         $0 == e { if (depth > 0) depth--; next }
         depth > 0 { next }
         index($0, old_fix) { next }
-        { sub(/\\r$/, ""); print }
+        { print }
         END { if (depth > 0) exit 3 }
-      ' "$BOOT" > "$PAYLOAD"; then
+      ' "$SRC" > "$PAYLOAD"; then
         echo "F50_ABORT: 启动指令提取失败（门标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
@@ -703,15 +827,15 @@ F50_BOOT_FIX_EOF
 ${legacyRewriteSed}
 
       # ---------- 5. 无损校验：提取出来的行数必须和预期完全一致 ----------
-      src_lines=$(grep -c -v -e '^[[:space:]]*$' "$BOOT" 2>/dev/null || true)
+      src_lines=$(grep -c -v -e '^[[:space:]]*$' "$SRC" 2>/dev/null || true)
       pay_lines=$(grep -c -v -e '^[[:space:]]*$' "$PAYLOAD" 2>/dev/null || true)
       gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
         $0 == b { inside=1 }
         inside && NF { count++ }
         $0 == e { inside=0 }
         END { print count + 0 }
-      ' "$BOOT" 2>/dev/null || true)
-      old_lines=$(grep -c -F "$OLD_FIX" "$BOOT" 2>/dev/null || true)
+      ' "$SRC" 2>/dev/null || true)
+      old_lines=$(grep -c -F "$OLD_FIX" "$SRC" 2>/dev/null || true)
       [ -n "$src_lines" ] || src_lines=0
       [ -n "$pay_lines" ] || pay_lines=0
       [ -n "$gate_lines" ] || gate_lines=0
@@ -727,7 +851,19 @@ ${legacyRewriteSed}
       sh -n "$PAYLOAD" 2>/dev/null || payload_ok=0
 
       # ---------- 6. 组装并原子替换启动文件 ----------
-      cat > "$BOOT_NEW" <<'F50_BOOT_GATE_EOF'
+      # 原文件若以 #! 开头，必须让它继续留在第一行，否则宿主直接执行该文件会失败。
+      shebang=""
+      first_pay=$(head -n 1 "$PAYLOAD" 2>/dev/null || true)
+      case "$first_pay" in
+        "#!"*) shebang="$first_pay" ;;
+      esac
+      : > "$BOOT_NEW"
+      if [ -n "$shebang" ]; then
+        printf '%s\\n' "$shebang" >> "$BOOT_NEW"
+        tail -n +2 "$PAYLOAD" > "$PAYLOAD.rest"
+        mv -f "$PAYLOAD.rest" "$PAYLOAD"
+      fi
+      cat >> "$BOOT_NEW" <<'F50_BOOT_GATE_EOF'
 ${bootGate}
 F50_BOOT_GATE_EOF
       if [ -s "$PAYLOAD" ]; then
@@ -746,7 +882,14 @@ F50_BOOT_GATE_EOF
         "" | *[!0-7]*) boot_mode=755 ;;
       esac
       chmod "$boot_mode" "$BOOT_NEW" 2>/dev/null || true
+      # 处理期间别的插件可能刚好往同一个文件追加了自己的自启行，写回去会把它吞掉。
+      boot_size_now=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
+      if [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
+        echo "F50_ABORT: 启动文件在处理过程中被其它插件改动，已中止且未改动原文件，请重新点击一次；备份：$MANAGER_BACKUP"
+        exit 1
+      fi
       mv -f "$BOOT_NEW" "$BOOT"
+      COMMITTED=1
       sync 2>/dev/null || true
 
       # ---------- 7. 备用触发点（有 Magisk 时才装，管理器本身幂等）----------
@@ -788,12 +931,14 @@ F50_SERVICE_D_EOF
       END=${shellQuote(BOOT_END)}
       BOOT_NEW="$BOOT.new.$$"
       PAYLOAD="$BOOT.payload.$$"
+      SRC="$BOOT.src.$$"
       MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
-      trap 'rm -f "$BOOT_NEW" "$PAYLOAD" 2>/dev/null || true' EXIT
+      trap 'rm -f "$BOOT_NEW" "$PAYLOAD" "$SRC" 2>/dev/null || true' EXIT
       touch "$BOOT"
       cat "$BOOT" > "$BOOT.f50_last"
-      begin_count=$(grep -cxF "$BEGIN" "$BOOT" 2>/dev/null || true)
-      end_count=$(grep -cxF "$END" "$BOOT" 2>/dev/null || true)
+      sed 's/\\r$//' "$BOOT" > "$SRC"
+      begin_count=$(grep -cxF "$BEGIN" "$SRC" 2>/dev/null || true)
+      end_count=$(grep -cxF "$END" "$SRC" 2>/dev/null || true)
       [ -n "$begin_count" ] || begin_count=0
       [ -n "$end_count" ] || end_count=0
       if [ "$begin_count" != "$end_count" ]; then
@@ -807,18 +952,18 @@ F50_SERVICE_D_EOF
           depth > 0 { next }
           { print }
           END { if (depth > 0) exit 3 }
-        ' "$BOOT" > "$PAYLOAD"; then
+        ' "$SRC" > "$PAYLOAD"; then
           echo "F50_ABORT: 提取失败，未改动启动文件；备份：$MANAGER_BACKUP"
           exit 1
         fi
-        src_lines=$(grep -c -v -e '^[[:space:]]*$' "$BOOT" 2>/dev/null || true)
+        src_lines=$(grep -c -v -e '^[[:space:]]*$' "$SRC" 2>/dev/null || true)
         pay_lines=$(grep -c -v -e '^[[:space:]]*$' "$PAYLOAD" 2>/dev/null || true)
         gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
           $0 == b { inside=1 }
           inside && NF { count++ }
           $0 == e { inside=0 }
           END { print count + 0 }
-        ' "$BOOT" 2>/dev/null || true)
+        ' "$SRC" 2>/dev/null || true)
         [ -n "$src_lines" ] || src_lines=0
         [ -n "$pay_lines" ] || pay_lines=0
         [ -n "$gate_lines" ] || gate_lines=0
@@ -932,26 +1077,34 @@ F50_SERVICE_D_EOF
   };
 
   const renderDetail = (content) => {
-    const installed = /(?:^|\n)INSTALLED=1(?:\n|$)/.test(content);
-    const managerOk = parseKeyed(content, 'MANAGER_OK') === '1';
-    const gate = parseKeyed(content, 'GATE_COUNT');
-    const version = parseKeyed(content, 'MANAGER_VERSION');
-    const serviceD = parseKeyed(content, 'SERVICE_D') === '1';
-    const listMode = parseKeyed(content, 'LIST_MODE');
-    const listError = parseKeyed(content, 'LIST_ERROR');
-    const listCount = parseKeyed(content, 'LIST_COUNT');
-    const listItems = (content.match(/(?:^|\n)LIST\|[^\n]*/g) || []).map((line) => {
+    const meta = section(content, 'META');
+    const listBlock = section(content, 'LIST');
+    const installed = /(?:^|\n)INSTALLED=1(?:\n|$)/.test(meta);
+    const managerOk = parseKeyed(meta, 'MANAGER_OK') === '1';
+    const gate = parseKeyed(meta, 'GATE_COUNT');
+    const gateFirst = parseKeyed(meta, 'GATE_FIRST') === '1';
+    const version = parseKeyed(meta, 'MANAGER_VERSION');
+    const serviceD = parseKeyed(meta, 'SERVICE_D') === '1';
+    const listMode = parseKeyed(listBlock, 'LIST_MODE');
+    const listError = parseKeyed(listBlock, 'LIST_ERROR');
+    const listCount = parseKeyed(listBlock, 'LIST_COUNT');
+    const listItems = (listBlock.match(/(?:^|\n)LIST\|[^\n]*/g) || []).map((line) => {
       const parts = line.replace(/^\n/, '').split('|');
       return { idx: parts[1], label: parts.slice(2).join('|') };
     });
-    const stateMatch = content.match(/STATE_BEGIN\n([\s\S]*?)\nSTATE_END/);
+    const stateText = section(content, 'STATE');
 
     const warnings = [];
     const [begin, end] = String(gate).split('/');
     if (!managerOk) warnings.push('管理器脚本缺失或不可执行 —— 此时「门」会自动放行，回到未修复状态，请点击「安装 / 修复」。');
     if (managerOk && begin === '0') warnings.push('启动文件里的「门」不见了（可能被其它插件整体重写过），请点击「安装 / 修复」重新写入。');
     if (begin !== end) warnings.push(`门标记不成对(${escapeHtml(String(gate))})，请点击「安装 / 修复」修正。`);
-    if (version && version !== MANAGER_VERSION) warnings.push(`设备上的管理器为 v${escapeHtml(version)}，当前插件为 v${MANAGER_VERSION}，建议点击「安装 / 修复」升级。`);
+    if (installed && !gateFirst) warnings.push('「门」不在启动文件最顶部，前面的插件指令仍会在开机极早期执行，请点击「安装 / 修复」重排。');
+    if (managerOk && version !== MANAGER_VERSION) {
+      warnings.push(version
+        ? `设备上的管理器是 v${escapeHtml(version)}，当前插件为 v${MANAGER_VERSION}，请点击「安装 / 修复」升级。`
+        : `设备上装的是旧版管理器（没有版本号），请点击「安装 / 修复」升级到 v${MANAGER_VERSION}。`);
+    }
     if (listError) warnings.push(`启动指令解析：${escapeHtml(listError)}（将退回整体重放模式，仍会执行，但一条卡住会影响后面的）。`);
 
     const listHtml = listItems.length
@@ -968,7 +1121,7 @@ F50_SERVICE_D_EOF
         <div style="margin-top:6px"><strong>本机托管的插件启动指令（${escapeHtml(listCount || String(listItems.length))} 条${listMode === 'whole' ? '，当前为整体重放模式' : ''}）：</strong></div>
         <div style="margin-left:2px">${listHtml}</div>
         <div style="margin-top:6px"><strong>最近一次执行结果：</strong></div>
-        <div style="margin-left:2px">${renderState(stateMatch ? stateMatch[1] : '')}</div>
+        <div style="margin-left:2px">${renderState(stateText)}</div>
       </div>`;
   };
 
@@ -1034,7 +1187,10 @@ F50_SERVICE_D_EOF
     };
 
     installBtn.onclick = withBusy(installBtn, '安装中...', async () => {
-      if (await installFix()) await showStatus();
+      // 失败路径也刷新一次：超时之类的情况下安装其实可能已经生效，
+      // 只是那条成功标记没来得及回传，不刷新会让人以为没装上。
+      await installFix();
+      await showStatus();
     });
 
     statusBtn.onclick = withBusy(statusBtn, '检查中...', showStatus);

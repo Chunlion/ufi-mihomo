@@ -1,0 +1,4 @@
+tests/boot-fix/sbx/
+tests/boot-fix/sbxc/
+tests/boot-fix/compat/
+node_modules/

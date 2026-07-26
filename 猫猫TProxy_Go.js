@@ -64,7 +64,7 @@
   const KANO_HELPER_SIZE = 5177506;
   const KANO_HELPER_SHA256 = '5035f23a0d77e99dab8eabba0c1ff5d0d146c7c648493b36886a00747a6d92f2';
   const KANO_HELPER_DOWNLOAD_URL =
-    'https://gitee.com/womye/123/raw/374dc906bdc8a376902879de7e2c19634f5a260e/kano-f50-helper-linux-arm64';
+    'https://gitee.com/womye/123/raw/b3f3599f8ca91a5d84c0ad066847eebd30ae9005/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
 
   // ===== Basic helpers =====

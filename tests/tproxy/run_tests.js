@@ -103,6 +103,7 @@ const EXPORTS = [
 
 function runFor(label, file) {
   console.log(`\n######## ${label} (${path.basename(file)}) ########`);
+  const source = fs.readFileSync(file, 'utf8');
   let shellReply = { success: true, content: '' };
   const handler = async () => shellReply;
   const { api } = loadPlugin(file, handler, EXPORTS);
@@ -110,6 +111,36 @@ function runFor(label, file) {
   const missing = EXPORTS.filter((n) => typeof api[n] === 'undefined');
   chk(missing, [], `全部待测函数均已导出 (${EXPORTS.length} 个)`);
   if (missing.length) return;
+
+  console.log('--- installer controller hardening ---');
+  chk(
+    source.includes('arm64-v8a|aarch64|armv8*|*arm64*')
+      && source.includes('armeabi-v7a|armeabi|armv7*|armv6*'),
+    true,
+    'ABI mapping covers Android and uname ARM variants',
+  );
+  chk(
+    source.includes('FALLBACK_CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl"')
+      && source.includes('ln -s "$controller_name" "$FALLBACK_CONTROLLER"'),
+    true,
+    'package creates a compatible generic controller fallback',
+  );
+  const stagedProbe = source.indexOf('INSTALL_VERIFY_FAILED: clash controller cannot execute on ABI');
+  const packageCommit = source.indexOf('INSTALL_PACKAGE_COMMITTED', stagedProbe);
+  chk(stagedProbe >= 0 && packageCommit > stagedProbe, true, 'staged controller is executed before package commit');
+  chk(
+    source.includes('INSTALL_PERMISSION_FAILED: controller is not executable')
+      && source.includes('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller'),
+    true,
+    'installed controller and service wrapper are checked after chmod',
+  );
+  const permissionProbe = source.indexOf('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller');
+  const serviceStart = source.indexOf('${shellQuote(CLASH_SERVICE)} start', permissionProbe);
+  chk(
+    permissionProbe >= 0 && serviceStart >= 0 && permissionProbe < serviceStart,
+    true,
+    'controller preflight runs before the first service start',
+  );
 
   console.log('--- #9 托管规则清理 ---');
   const fb = api.buildManagedFallbackRules('Proxy'); // 13 条，末条即 MATCH,<group>

@@ -4261,16 +4261,38 @@ KANO_BOOTSTRAP_CONFIG
         SERVICE="$PACKAGE_ROOT/Scripts/Clash.Service"
         CORE="$PACKAGE_ROOT/Proxy/Clash.Core"
         YQ="$PACKAGE_ROOT/Tools/yq_linux_arm64"
-        case "$(getprop ro.product.cpu.abi 2>/dev/null)" in
-          arm64-v8a) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_arm64" ;;
-          armeabi-v7a|armeabi) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_armv7" ;;
-          *) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl" ;;
+        DEVICE_ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        [ -n "$DEVICE_ABI" ] || DEVICE_ABI="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+        case "$DEVICE_ABI" in
+          arm64-v8a|aarch64|armv8*|*arm64*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_arm64" ;;
+          armeabi-v7a|armeabi|armv7*|armv6*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_armv7" ;;
+          *)
+            echo "INSTALL_VERIFY_FAILED: unsupported CPU ABI: \${DEVICE_ABI:-unknown}"
+            exit 1
+            ;;
         esac
         [ -s "$SERVICE" ] || { echo "INSTALL_VERIFY_FAILED: Clash.Service missing"; exit 1; }
         [ -s "$CORE" ] || { echo "INSTALL_VERIFY_FAILED: Clash.Core missing"; exit 1; }
         [ -s "$YQ" ] || { echo "INSTALL_VERIFY_FAILED: yq_linux_arm64 missing"; exit 1; }
         [ -s "$CONTROLLER" ] || { echo "INSTALL_VERIFY_FAILED: clash controller missing: $CONTROLLER"; exit 1; }
         chmod 755 "$SERVICE" "$CORE" "$YQ" "$CONTROLLER" || exit 1
+        FALLBACK_CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl"
+        if [ ! -e "$FALLBACK_CONTROLLER" ]; then
+          controller_name="$(basename "$CONTROLLER")"
+          ln -s "$controller_name" "$FALLBACK_CONTROLLER" 2>/dev/null || {
+            cp "$CONTROLLER" "$FALLBACK_CONTROLLER" || exit 1
+            chmod 755 "$FALLBACK_CONTROLLER" || exit 1
+          }
+        fi
+        controller_probe="$("$CONTROLLER" --help 2>&1)"
+        controller_probe_rc=$?
+        case "$controller_probe_rc" in
+          126|127)
+            echo "INSTALL_VERIFY_FAILED: clash controller cannot execute on ABI $DEVICE_ABI"
+            echo "$controller_probe"
+            exit 1
+            ;;
+        esac
         yq_version="$("$YQ" --version 2>&1)" || { echo "INSTALL_VERIFY_FAILED: yq cannot execute"; exit 1; }
         echo "$yq_version" | grep -Eiq 'version[[:space:]]+v?4\.' || {
           echo "INSTALL_VERIFY_FAILED: unsupported yq: $yq_version"
@@ -4369,6 +4391,43 @@ KANO_BOOTSTRAP_CONFIG
           ${shellQuote(`${CLASH_DIR}/Tools/mosdns_arm64`)}; do
           [ ! -f "$EXECUTABLE" ] || chmod 755 "$EXECUTABLE" || exit 1
         done
+        DEVICE_ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        [ -n "$DEVICE_ABI" ] || DEVICE_ABI="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+        case "$DEVICE_ABI" in
+          arm64-v8a|aarch64|armv8*|*arm64*) INSTALLED_CONTROLLER=${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)} ;;
+          armeabi-v7a|armeabi|armv7*|armv6*) INSTALLED_CONTROLLER=${shellQuote(`${CLASH_DIR}/Scripts/clashctl_armv7`)} ;;
+          *)
+            echo "INSTALL_PERMISSION_FAILED: unsupported CPU ABI: \${DEVICE_ABI:-unknown}"
+            exit 1
+            ;;
+        esac
+        [ -x "$INSTALLED_CONTROLLER" ] || {
+          echo "INSTALL_PERMISSION_FAILED: controller is not executable: $INSTALLED_CONTROLLER"
+          exit 1
+        }
+        controller_probe="$("$INSTALLED_CONTROLLER" --help 2>&1)"
+        controller_probe_rc=$?
+        case "$controller_probe_rc" in
+          126|127)
+            echo "INSTALL_PERMISSION_FAILED: controller cannot execute on ABI $DEVICE_ABI"
+            echo "$controller_probe"
+            exit 1
+            ;;
+        esac
+        service_probe="$(${shellQuote(CLASH_SERVICE)} --help 2>&1)"
+        service_probe_rc=$?
+        if echo "$service_probe" | grep -q '找不到适用于当前架构'; then
+          echo "INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller for ABI $DEVICE_ABI"
+          echo "$service_probe"
+          exit 1
+        fi
+        case "$service_probe_rc" in
+          126|127)
+            echo "INSTALL_PERMISSION_FAILED: Clash.Service cannot execute"
+            echo "$service_probe"
+            exit 1
+            ;;
+        esac
         [ -f ${shellQuote(CLASH_SUB_URLS)} ] && chmod 600 ${shellQuote(CLASH_SUB_URLS)}
         ${addBootLinesCmd()}
         `);

@@ -98,14 +98,19 @@ function loadPlugin(file, shellHandler, exportNames) {
 const EXPORTS = [
   'removeLegacyManagedRulePrefix', 'applyManagedRules', 'validateManagedConfigObject',
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
-  'buildManagedRuleProviders', 'isPlainYamlObject',
+  'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
+  'ensureInstallToolbox',
 ];
 
 function runFor(label, file) {
   console.log(`\n######## ${label} (${path.basename(file)}) ########`);
   const source = fs.readFileSync(file, 'utf8');
   let shellReply = { success: true, content: '' };
-  const handler = async () => shellReply;
+  let lastShellCommand = '';
+  const handler = async (command) => {
+    lastShellCommand = String(command || '');
+    return shellReply;
+  };
   const { api } = loadPlugin(file, handler, EXPORTS);
 
   const missing = EXPORTS.filter((n) => typeof api[n] === 'undefined');
@@ -140,6 +145,18 @@ function runFor(label, file) {
     permissionProbe >= 0 && serviceStart >= 0 && permissionProbe < serviceStart,
     true,
     'controller preflight runs before the first service start',
+  );
+  chk(
+    source.indexOf('await ensureInstallToolbox()') >= 0
+      && source.indexOf('await ensureInstallToolbox()') < source.indexOf('releases/download/v1/tproxy-yq.zip'),
+    true,
+    'toolbox preflight runs before the package download',
+  );
+  chk(
+    source.includes("const KANO_INSTALL_TOOLBOX_DIR = '/data/kano_tproxy_tools'")
+      && source.includes("export PATH='${KANO_INSTALL_TOOLBOX_BIN}':\"$PATH\""),
+    true,
+    'managed toolbox PATH is applied to every plugin shell call',
   );
 
   console.log('--- #9 托管规则清理 ---');
@@ -186,6 +203,31 @@ function runFor(label, file) {
     chk(await api.createConfigRollbackPoint('x'), null, 'shell 失败 -> null（可与"无旧配置"区分）');
     shellReply = { success: true, content: 'garbage-without-marker' };
     chk(await api.createConfigRollbackPoint('x'), null, '输出缺少标记行 -> null');
+
+    console.log('--- install toolbox preflight ---');
+    shellReply = {
+      success: true,
+      content: 'TOOLBOX_ADDED= unzip timeout\nTOOLBOX_MISSING= \nTOOLBOX_OPTIONAL_MISSING= zip jq\nTOOLBOX_READY\n',
+    };
+    const toolboxReady = await api.ensureInstallToolbox();
+    chk(toolboxReady.success, true, 'ready marker and shell success are both required');
+    chk(toolboxReady.added, ['unzip', 'timeout'], 'auto-completed tools are parsed');
+    chk(toolboxReady.optionalMissing, ['zip', 'jq'], 'optional missing tools are reported separately');
+    chk(
+      lastShellCommand.includes('for tool in curl unzip timeout')
+        && lastShellCommand.includes('cmp ip inotifyd')
+        && lastShellCommand.includes('command -v iptables')
+        && lastShellCommand.includes('/system/bin/toybox'),
+      true,
+      'preflight checks required tools, firewall capability, and multicall fallbacks',
+    );
+    shellReply = {
+      success: false,
+      content: 'TOOLBOX_ADDED=\nTOOLBOX_MISSING= unzip iptables\nTOOLBOX_OPTIONAL_MISSING=\n',
+    };
+    const toolboxFailed = await api.ensureInstallToolbox();
+    chk(toolboxFailed.success, false, 'missing required tools fail the preflight');
+    chk(toolboxFailed.missing, ['unzip', 'iptables'], 'required missing tools are returned to the UI');
   })();
 }
 

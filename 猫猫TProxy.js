@@ -44,6 +44,8 @@
   const KANO_YQ_RUNTIME_DIR = '/data/kano_yq_runtime';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const F50_FILES_DIR = '/data/data/com.minikano.f50_sms/files';
+  const KANO_INSTALL_TOOLBOX_DIR = '/data/kano_tproxy_tools';
+  const KANO_INSTALL_TOOLBOX_BIN = `${KANO_INSTALL_TOOLBOX_DIR}/bin`;
   const LOG_FILE = '/sdcard/Clash\u5185\u6838\u65e5\u5fd7.txt';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
@@ -58,6 +60,15 @@
   const CONTROLLER_INFO_CACHE_TTL = 250;
 
   // ===== Basic helpers =====
+  const hostRunShellWithRoot = globalThis.runShellWithRoot;
+  const runShellWithRoot = (script = '', timeout) =>
+    hostRunShellWithRoot.call(
+      globalThis,
+      `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi
+${script}`,
+      timeout,
+    );
+
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
 
@@ -139,6 +150,138 @@
       throw new Error('\u4e0a\u4f20\u8def\u5f84\u5f02\u5e38');
     }
     return `${F50_FILES_DIR}/${normalized}`;
+  };
+
+  const parseInstallToolboxResult = (result = {}) => {
+    const content = String(result.content || '');
+    const marker = (name) => {
+      const prefix = `${name}=`;
+      const line = content.split(/\r?\n/).find((item) => item.startsWith(prefix));
+      return line ? line.slice(prefix.length).trim().split(/\s+/).filter(Boolean) : [];
+    };
+    return {
+      success: !!result.success && /(?:^|\n)TOOLBOX_READY(?:\r?\n|$)/.test(content),
+      added: marker('TOOLBOX_ADDED'),
+      missing: marker('TOOLBOX_MISSING'),
+      optionalMissing: marker('TOOLBOX_OPTIONAL_MISSING'),
+      content,
+    };
+  };
+
+  const ensureInstallToolbox = async () => {
+    const result = await runShellWithRoot(`
+      set +e
+      TOOLBOX_DIR=${shellQuote(KANO_INSTALL_TOOLBOX_DIR)}
+      TOOLBOX_BIN=${shellQuote(KANO_INSTALL_TOOLBOX_BIN)}
+      F50_FILES=${shellQuote(F50_FILES_DIR)}
+      BASE_PATH="$PATH"
+      case "$BASE_PATH" in
+        "$TOOLBOX_BIN":*) BASE_PATH="\${BASE_PATH#*:}" ;;
+      esac
+      export PATH="$BASE_PATH"
+      mkdir -p "$TOOLBOX_BIN" || {
+        echo "TOOLBOX_MISSING=toolbox-directory"
+        exit 1
+      }
+      chmod 755 "$TOOLBOX_DIR" "$TOOLBOX_BIN" 2>/dev/null || {
+        echo "TOOLBOX_MISSING=toolbox-permission"
+        exit 1
+      }
+
+      added=""
+      missing=""
+      optional_missing=""
+
+      write_direct_wrapper() {
+        tool="$1"
+        source="$2"
+        target="$TOOLBOX_BIN/$tool"
+        printf '#!/system/bin/sh\\nexec "%s" "$@"\\n' "$source" > "$target" || return 1
+        chmod 755 "$target" || return 1
+        return 0
+      }
+
+      write_applet_wrapper() {
+        tool="$1"
+        source="$2"
+        target="$TOOLBOX_BIN/$tool"
+        printf '#!/system/bin/sh\\nexec "%s" "%s" "$@"\\n' "$source" "$tool" > "$target" || return 1
+        chmod 755 "$target" || return 1
+        return 0
+      }
+
+      ensure_tool() {
+        tool="$1"
+        rm -f "$TOOLBOX_BIN/$tool" 2>/dev/null || return 1
+        native="$( (PATH="$BASE_PATH"; command -v "$tool") 2>/dev/null )"
+        if [ -n "$native" ] && [ -x "$native" ]; then
+          "$native" --help >/dev/null 2>&1
+          native_rc=$?
+          case "$native_rc" in 126|127) ;; *) return 0 ;; esac
+        fi
+
+        direct="$F50_FILES/$tool"
+        if [ -x "$direct" ]; then
+          "$direct" --help >/dev/null 2>&1
+          direct_rc=$?
+          case "$direct_rc" in
+            126|127) ;;
+            *)
+              write_direct_wrapper "$tool" "$direct" || return 1
+              added="$added $tool"
+              return 0
+              ;;
+          esac
+        fi
+
+        path_busybox="$( (PATH="$BASE_PATH"; command -v busybox) 2>/dev/null )"
+        path_toybox="$( (PATH="$BASE_PATH"; command -v toybox) 2>/dev/null )"
+        for multicall in \
+          "$F50_FILES/busybox" "$F50_FILES/toybox" \
+          /system/bin/toybox /system/bin/busybox /system/xbin/busybox \
+          /vendor/bin/toybox /vendor/bin/busybox \
+          "$path_busybox" "$path_toybox"; do
+          [ -n "$multicall" ] && [ -x "$multicall" ] || continue
+          "$multicall" "$tool" --help >/dev/null 2>&1
+          applet_rc=$?
+          case "$applet_rc" in 126|127) continue ;; esac
+          write_applet_wrapper "$tool" "$multicall" || return 1
+          added="$added $tool"
+          return 0
+        done
+        return 1
+      }
+
+      for tool in curl unzip timeout awk sed grep find du wc head tail tr chmod cp mv rm mkdir ln date cat cut basename sort uniq xargs stat cmp ip inotifyd; do
+        ensure_tool "$tool" || missing="$missing $tool"
+      done
+      for tool in tar gzip zip sha256sum md5sum cksum jq ss netstat; do
+        ensure_tool "$tool" || optional_missing="$optional_missing $tool"
+      done
+
+      firewall=""
+      for candidate in \
+        "$( (PATH="$BASE_PATH"; command -v iptables) 2>/dev/null )" \
+        "$( (PATH="$BASE_PATH"; command -v iptables-nft) 2>/dev/null )" \
+        "$( (PATH="$BASE_PATH"; command -v iptables-legacy) 2>/dev/null )" \
+        /system/bin/iptables /system/bin/iptables-nft /system/bin/iptables-legacy; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+          firewall="$candidate"
+          break
+        fi
+      done
+      [ -n "$firewall" ] || missing="$missing iptables"
+
+      echo "TOOLBOX_ADDED=$added"
+      echo "TOOLBOX_MISSING=$missing"
+      echo "TOOLBOX_OPTIONAL_MISSING=$optional_missing"
+      if [ -n "$missing" ]; then
+        exit 1
+      fi
+      export PATH="$TOOLBOX_BIN:$BASE_PATH"
+      echo "TOOLBOX_READY"
+    `, 30 * 1000);
+    return parseInstallToolboxResult(result);
   };
 
   // ===== File and boot helpers =====
@@ -4134,6 +4277,20 @@ KANO_BOOTSTRAP_CONFIG
         return;
       }
 
+      createToast('正在检查并补齐设备工具...');
+      const toolbox = await ensureInstallToolbox();
+      if (!toolbox.success) {
+        const missing = toolbox.missing.length > 0 ? toolbox.missing.join('、') : '未知系统组件';
+        return createToast(
+          `设备工具准备失败<br>缺少：${escapeHtml(missing)}<br>${textToHtml(toolbox.content || '')}`,
+          'red',
+          12000,
+        );
+      }
+      if (toolbox.added.length > 0) {
+        createToast(`已自动补齐：${escapeHtml(toolbox.added.join('、'))}`, 'green', 5000);
+      }
+
       createToast('\u4e0b\u8f7d\u6240\u9700\u7ec4\u4ef6\u4e2d...');
       const res0 = await runShellWithRoot(
         `(
@@ -4531,6 +4688,7 @@ KANO_BOOTSTRAP_CONFIG
           rm -rf ${shellQuote(KANO_YQ_RUNTIME_DIR)} 2>/dev/null || true
           rm -f /data/kano_* 2>/dev/null || true
           rm -f ${shellQuote(DOWNLOAD_ZIP)} ${shellQuote(DOWNLOAD_LOG)} ${shellQuote(LOG_FILE)} 2>/dev/null || true
+          rm -rf ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} 2>/dev/null || true
           echo "\u5df2\u5220\u9664 /data/kano_* \u8c03\u8bd5\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7"
           echo "UNINSTALL_NO_BACKUP_DONE"
           `, 60 * 1000);

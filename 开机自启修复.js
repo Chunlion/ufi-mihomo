@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '2.0.0';
+  const MANAGER_VERSION = '2.1.0';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -16,10 +16,6 @@
   const BOOT_BEGIN = '# F50_BOOT_FIX_BEGIN';
   const BOOT_END = '# F50_BOOT_FIX_END';
   const OLD_FIX_SCRIPT = `${FIX_DIR}/clash_boot.sh`;
-  // 门内联执行阈值：系统已启动超过该秒数且 sys.boot_completed=1 时，
-  // 说明这次是「开机后手工运行启动文件」，门直接放行，保持原生行为。
-  const GATE_INLINE_UPTIME = 45;
-
   // 历史遗留行迁移表：只按整行精确匹配替换，用于清理早期插件写入的
   // 「自己等系统就绪」的行（管理器已统一负责等待）。与核心逻辑解耦，
   // 不做任何模糊改写，避免破坏其它插件的执行顺序。
@@ -618,7 +614,8 @@
 
   // ==========================================================================
   // 写入共享启动文件顶部的「门」。三条硬规则：
-  //   1. 系统已就绪（手工执行/开机很久之后）-> 直接放行，行为与没装修复完全一致。
+  //   1. 只要管理器可用就统一托管；不能用 uptime 猜测是否手工执行，
+  //      否则宿主较晚调用启动文件时会随机绕过修复。
   //   2. 管理器不存在或不可执行（/data 未挂载、被清理）-> 直接放行，
   //      宁可回到「早启动」也绝不出现「什么都不启动」。
   //   3. 被 source 时用 return，不会打断宿主后续的启动流程。
@@ -628,17 +625,10 @@
     '# 由插件「全插件开机自启修复」写入：把所有插件的自启推迟到系统真正就绪之后。',
     '# 手工删除本段即可完全恢复原始行为。',
     'if [ "${F50_BOOT_REPLAY:-0}" != "1" ]; then',
-    '  f50_gate_up=$(cut -d. -f1 /proc/uptime 2>/dev/null)',
-    '  case "$f50_gate_up" in "" | *[!0-9]*) f50_gate_up=0 ;; esac',
-    '  f50_gate_done=$(getprop sys.boot_completed 2>/dev/null)',
-    `  if [ "$f50_gate_up" -lt ${GATE_INLINE_UPTIME} ] || [ "$f50_gate_done" != "1" ]; then`,
-    `    if [ -x ${FIX_SCRIPT} ]; then`,
-    `      ( ${FIX_SCRIPT} --trigger=bootfile >/dev/null 2>&1 </dev/null & )`,
-    '      unset f50_gate_up f50_gate_done',
-    '      return 0 2>/dev/null || exit 0',
-    '    fi',
+    `  if [ -x ${FIX_SCRIPT} ]; then`,
+    `    ( ${FIX_SCRIPT} --trigger=bootfile >/dev/null 2>&1 </dev/null & )`,
+    '    return 0 2>/dev/null || exit 0',
     '  fi',
-    '  unset f50_gate_up f50_gate_done',
     'fi',
     BOOT_END,
   ].join('\n');

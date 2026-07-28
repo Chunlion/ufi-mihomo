@@ -1,6 +1,6 @@
 ﻿//<script>
 // 猫猫TProxy v6.1 - atomic YAML transactions with unified IP/MAC bypass
-(() => {
+((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
   const CLASH_SERVICE = `${CLASH_DIR}/Scripts/Clash.Service`;
@@ -60,7 +60,6 @@
   const CONTROLLER_INFO_CACHE_TTL = 250;
 
   // ===== Basic helpers =====
-  const hostRunShellWithRoot = globalThis.runShellWithRoot;
   const runShellWithRoot = (script = '', timeout) =>
     hostRunShellWithRoot.call(
       globalThis,
@@ -8303,5 +8302,5 @@ ${expectedUrlChecks}
       }
     })();
   })();
-})();
+})(runShellWithRoot);
 //</script >

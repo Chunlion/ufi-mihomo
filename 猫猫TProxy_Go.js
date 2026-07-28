@@ -1,6 +1,6 @@
 ﻿//<script>
 // 猫猫TProxy_Go v6.2 - Go ARM64 read-path acceleration with verified Shell fallback
-(() => {
+((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
   const CLASH_SERVICE = `${CLASH_DIR}/Scripts/Clash.Service`;
@@ -70,7 +70,6 @@
   const KANO_HELPER_SNAPSHOT_TTL = 500;
 
   // ===== Basic helpers =====
-  const hostRunShellWithRoot = globalThis.runShellWithRoot;
   const runShellWithRoot = (script = '', timeout) =>
     hostRunShellWithRoot.call(
       globalThis,
@@ -9086,5 +9085,5 @@ ${expectedProviderChecks}
       }
     })();
   })();
-})();
+})(runShellWithRoot);
 //</script >

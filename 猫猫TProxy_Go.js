@@ -4671,7 +4671,7 @@ KANO_BOOTSTRAP_CONFIG
             echo "DOWNLOAD_FAILED: curl \u4e0d\u5b58\u5728" > ${shellQuote(DOWNLOAD_LOG)}
             exit 1
           fi
-          "$CURL_BIN" -fSL "https://pan.kanokano.cn/d/UFI-TOOLS-UPDATE/plugins/mihomo-tproxy.zip" -o ${shellQuote(DOWNLOAD_ZIP)} --write-out "DOWNLOAD_DONE\\nTotal: %{size_download} bytes\\nSpeed: %{speed_download} B/s\\nTime: %{time_total} sec\\n" > ${shellQuote(DOWNLOAD_LOG)} 2>&1 ||
+          "$CURL_BIN" -fSL "https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip" -o ${shellQuote(DOWNLOAD_ZIP)} --write-out "DOWNLOAD_DONE\\nTotal: %{size_download} bytes\\nSpeed: %{speed_download} B/s\\nTime: %{time_total} sec\\n" > ${shellQuote(DOWNLOAD_LOG)} 2>&1 ||
             echo "DOWNLOAD_FAILED:$?" >> ${shellQuote(DOWNLOAD_LOG)}
         ) &`,
         100 * 1000,

@@ -347,15 +347,18 @@ const gateOf = (text) => {
     assert(/HOST_CONTINUED rc=0/.test(r.stdout), `宿主脚本在门之后继续运行，实测输出: ${r.stdout.trim().slice(0, 120)}`);
   });
 
-  await test('T12 开机很久之后手工执行启动文件：门透明放行，立即执行（保持原生行为）', async () => {
+  await test('T12 宿主较晚调用启动文件：仍由管理器托管，不会因 uptime 较大而绕过修复', async () => {
     await freshInstall(MULTI);
     clearProbes();
     await waitQuiet();
     fs.rmSync(sbx.p('data/f50_boot_fix/last_run.txt'), { force: true });
     simulateBoot({ uptime: 9999, bootCompleted: '1' });
+    const state = await waitForState(sbx, 30000);
+    const { meta } = parseState(state);
     const p = probes();
-    assert(p.includes('a1_cleanup') && p.includes('c2_mine'), `手工执行时同步跑完，实测: ${p.join(',')}`);
-    assert(!sbx.exists('data/f50_boot_fix/last_run.txt'), '没有走管理器（说明门是透明的）');
+    assert(p.includes('a1_cleanup') && p.includes('c2_mine'), `所有插件仍被执行，实测: ${p.join(',')}`);
+    assert(meta.DONE === '1', '较晚触发仍走管理器并完整结束');
+    assert(meta.TRIGGER === 'bootfile', `触发来源仍为启动文件，实际 ${meta.TRIGGER}`);
   });
 
   await test('T13 /sdcard 挂载晚于管理器启动：管理器会等文件出现再执行', async () => {

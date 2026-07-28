@@ -74,17 +74,23 @@ function buildContext(shellHandler) {
 }
 
 // 插件是 IIFE，内部函数不外泄。用「在源码尾部注入导出钩子」的方式取出待测函数。
-function loadPlugin(file, shellHandler, exportNames) {
+function loadPlugin(file, shellHandler, exportNames, { lexicalHostOnly = false } = {}) {
   let src = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
   src = src.replace(/^\/\/<script>/, '').replace(/\/\/<\/script\s*>\s*$/, '');
-  // 待测函数都定义在最外层 IIFE 的顶层作用域。把导出钩子插到最外层 IIFE 的收尾 '})();' 之前，
+  // 待测函数都定义在最外层 IIFE 的顶层作用域。把导出钩子插到最外层 IIFE 的收尾之前，
   // 且必须在其内部所有嵌套 IIFE 之后，这样定义已全部执行完毕。
   const hook = `\n;globalThis.__captured = { ${exportNames.map((n) => `${n}: (typeof ${n} !== 'undefined' ? ${n} : undefined)`).join(', ')} };\n`;
-  const tail = src.lastIndexOf('})();');
+  const tailMarker = '})(runShellWithRoot);';
+  const tail = src.lastIndexOf(tailMarker);
   if (tail < 0) throw new Error('IIFE tail not found in ' + file);
   src = src.slice(0, tail) + hook + src.slice(tail);
 
   const ctx = buildContext(shellHandler);
+  if (lexicalHostOnly) {
+    ctx.__hostRunShellWithRoot = ctx.runShellWithRoot;
+    delete ctx.runShellWithRoot;
+    src = `((runShellWithRoot) => {\n${src}\n})(globalThis.__hostRunShellWithRoot);`;
+  }
   vm.createContext(ctx);
   try {
     vm.runInContext(src, ctx, { filename: path.basename(file), timeout: 20000 });
@@ -187,6 +193,14 @@ function runFor(label, file) {
 
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {
+    shellReply = { success: true, content: '0' };
+    const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });
+    chk(
+      await lexicalOnly.api.yamlHasGeneratedMarker('/x'),
+      false,
+      '宿主 root 接口仅存在于插件加载作用域时仍可调用',
+    );
+
     shellReply = { success: true, content: '1' };
     chk(await api.yamlHasGeneratedMarker('/x'), true, 'shell 成功且有标记 -> true');
     shellReply = { success: true, content: '0' };

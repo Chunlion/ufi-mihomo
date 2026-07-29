@@ -108,7 +108,7 @@ const EXPORTS = [
   'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
   'ensureInstallToolbox',
 ];
-const GO_EXPORTS = [
+const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
   'deriveSubscriptionUpdateOutcome',
@@ -124,7 +124,7 @@ function runFor(label, file) {
     return shellReply;
   };
   const isGo = file === FILES.go;
-  const exportNames = isGo ? [...EXPORTS, ...GO_EXPORTS] : EXPORTS;
+  const exportNames = [...EXPORTS, ...RUNTIME_EXPORTS];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
 
@@ -155,9 +155,7 @@ function runFor(label, file) {
     'installed controller and service wrapper are checked after chmod',
   );
   const permissionProbe = source.indexOf('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller');
-  const serviceStart = isGo
-    ? source.indexOf('await startClashServiceClean({ stopFirst: false', permissionProbe)
-    : source.indexOf('${shellQuote(CLASH_SERVICE)} start', permissionProbe);
+  const serviceStart = source.indexOf('await startClashServiceClean({ stopFirst: false', permissionProbe);
   chk(
     permissionProbe >= 0 && serviceStart >= 0 && permissionProbe < serviceStart,
     true,
@@ -167,8 +165,9 @@ function runFor(label, file) {
     isGo
       ? source.includes('const archive = await downloadCoreArchive({ allowCached: false })')
         && source.includes('const toolbox = await ensureInstallToolbox()')
-      : source.indexOf('await ensureInstallToolbox()') >= 0
-        && source.indexOf('await ensureInstallToolbox()') < source.indexOf('releases/download/v1/tproxy-yq.zip'),
+      : source.indexOf('await ensureInstallToolbox()', source.indexOf('btn_enabled.onclick')) >= 0
+        && source.indexOf('await ensureInstallToolbox()', source.indexOf('btn_enabled.onclick'))
+          < source.indexOf('const res0 = await runShellWithRoot', source.indexOf('btn_enabled.onclick')),
     true,
     'toolbox preflight runs before the package download',
   );
@@ -179,8 +178,8 @@ function runFor(label, file) {
     'managed toolbox PATH is applied to every plugin shell call',
   );
 
-  if (isGo) {
-    console.log('--- Go runtime preflight / API / boot behavior ---');
+  {
+    console.log(`--- ${isGo ? 'Go' : 'Shell'} runtime preflight / API / boot behavior ---`);
     const runtimeSyntax = spawnSync('sh', ['-n'], {
       input: api.buildRuntimeManagerScript(),
       encoding: 'utf8',
@@ -245,8 +244,11 @@ function runFor(label, file) {
         true, 'boot and manual operations share the runtime preflight starter');
       chk(source.includes("sed -i '/\\/data\\/clash\\/Scripts\\/Clash.Service start/d'"), false,
         'boot cleanup does not use fuzzy service-line deletion');
-      chk(source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
-        true, 'self-heal preserves user data and has rollback');
+      chk(
+        source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
+        true,
+        'self-heal preserves user data and has rollback',
+      );
       chk(
         source.includes('controller_from_cached_archive')
           && source.includes('"$UNZIP" -p "$RECOVERY_ARCHIVE" "$ARCHIVE_CONTROLLER"'),
@@ -276,12 +278,14 @@ function runFor(label, file) {
         'subscription result title separates config health from provider runtime state');
       chk(stoppedProviderOutcome.color, 'yellow',
         'stopped-core provider refresh is a warning instead of a config error');
-      chk(
-        source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
-          && !source.includes('raw.githubusercontent.com/Chunlion/ufi-mihomo'),
-        true,
-        'runtime downloads the Go helper only from the Gitee release',
-      );
+      if (isGo) {
+        chk(
+          source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
+            && !source.includes('raw.githubusercontent.com/Chunlion/ufi-mihomo'),
+          true,
+          'runtime downloads the Go helper only from the Gitee release',
+        );
+      }
       chk(source.includes('df -k /data /tmp'), false, 'diagnostics do not pass a missing /tmp to df');
       chk(source.includes('RECOVERY_ARCHIVE_STATUS=retained') && source.includes('离线自愈包：已保留'),
         true, 'cache cleanup preserves a valid offline recovery archive');

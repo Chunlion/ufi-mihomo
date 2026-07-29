@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
@@ -107,6 +108,10 @@ const EXPORTS = [
   'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
   'ensureInstallToolbox',
 ];
+const GO_EXPORTS = [
+  'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
+  'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
+];
 
 function runFor(label, file) {
   console.log(`\n######## ${label} (${path.basename(file)}) ########`);
@@ -117,10 +122,13 @@ function runFor(label, file) {
     lastShellCommand = String(command || '');
     return shellReply;
   };
-  const { api } = loadPlugin(file, handler, EXPORTS);
+  const isGo = file === FILES.go;
+  const exportNames = isGo ? [...EXPORTS, ...GO_EXPORTS] : EXPORTS;
+  const { api } = loadPlugin(file, handler, exportNames);
+  let goBehaviorPromise = Promise.resolve();
 
-  const missing = EXPORTS.filter((n) => typeof api[n] === 'undefined');
-  chk(missing, [], `全部待测函数均已导出 (${EXPORTS.length} 个)`);
+  const missing = exportNames.filter((n) => typeof api[n] === 'undefined');
+  chk(missing, [], `全部待测函数均已导出 (${exportNames.length} 个)`);
   if (missing.length) return;
 
   console.log('--- installer controller hardening ---');
@@ -146,15 +154,20 @@ function runFor(label, file) {
     'installed controller and service wrapper are checked after chmod',
   );
   const permissionProbe = source.indexOf('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller');
-  const serviceStart = source.indexOf('${shellQuote(CLASH_SERVICE)} start', permissionProbe);
+  const serviceStart = isGo
+    ? source.indexOf('await startClashServiceClean({ stopFirst: false', permissionProbe)
+    : source.indexOf('${shellQuote(CLASH_SERVICE)} start', permissionProbe);
   chk(
     permissionProbe >= 0 && serviceStart >= 0 && permissionProbe < serviceStart,
     true,
     'controller preflight runs before the first service start',
   );
   chk(
-    source.indexOf('await ensureInstallToolbox()') >= 0
-      && source.indexOf('await ensureInstallToolbox()') < source.indexOf('releases/download/v1/tproxy-yq.zip'),
+    isGo
+      ? source.includes('const archive = await downloadCoreArchive({ allowCached: false })')
+        && source.includes('const toolbox = await ensureInstallToolbox()')
+      : source.indexOf('await ensureInstallToolbox()') >= 0
+        && source.indexOf('await ensureInstallToolbox()') < source.indexOf('releases/download/v1/tproxy-yq.zip'),
     true,
     'toolbox preflight runs before the package download',
   );
@@ -164,6 +177,82 @@ function runFor(label, file) {
     true,
     'managed toolbox PATH is applied to every plugin shell call',
   );
+
+  if (isGo) {
+    console.log('--- Go runtime preflight / API / boot behavior ---');
+    const runtimeSyntax = spawnSync('sh', ['-n'], {
+      input: api.buildRuntimeManagerScript(),
+      encoding: 'utf8',
+    });
+    const bashSyntax = runtimeSyntax.status === 0 ? null : spawnSync('bash', ['-n'], {
+      input: api.buildRuntimeManagerScript(),
+      encoding: 'utf8',
+    });
+    const syntaxDetail = [runtimeSyntax.stderr, bashSyntax && bashSyntax.stderr].filter(Boolean).join(' ').trim();
+    chk(runtimeSyntax.status, 0, `generated runtime manager passes sh -n${syntaxDetail ? `: ${syntaxDetail}` : ''}`);
+    const stopped = api.parseRuntimePreflightResult({
+      success: true,
+      content: 'PREFLIGHT_STATE=installed_stopped\nABI=arm64\nCONFIG_VALID=1\nREPAIRED=controller:chmod\nCORE_PID=\n',
+    });
+    chk(stopped.state, 'installed_stopped', 'complete installation with no PID is installed_stopped');
+    chk(stopped.repaired, ['controller:chmod'], 'permission repair is reported structurally');
+    chk(api.deriveRuntimeState(stopped, null), 'installed_stopped', 'API is not consulted when core is stopped');
+
+    const running = api.parseRuntimePreflightResult({
+      success: true,
+      content: 'PREFLIGHT_STATE=running_api_unavailable\nABI=arm64\nCONFIG_VALID=1\nCORE_PID=123\n',
+    });
+    chk(api.deriveRuntimeState(running, { success: false }), 'running_api_unavailable', 'running core with unavailable API is classified separately');
+    chk(api.deriveRuntimeState(running, { success: true }), 'healthy', 'running core with healthy API is healthy');
+
+    const damaged = api.parseRuntimePreflightResult({
+      success: false,
+      content: 'PREFLIGHT_STATE=damaged\nABI=arm64\nMISSING=controller\nPROBE_ERRORS=controller_architecture\nCONFIG_VALID=1\nREPAIRABLE=1\n',
+    });
+    chk(damaged.state, 'damaged', 'missing or wrong-architecture controller is damaged');
+    chk(damaged.probeErrors, ['controller_architecture'], 'wrong ELF architecture is exposed as a probe error');
+
+    chk(api.classifyMihomoApiError({ corePid: '' }).errorType, 'core_not_running', 'stopped core is not reported as an HTTP failure');
+    chk(api.classifyMihomoApiError({ corePid: '1', curlStatus: 7 }).errorType, 'connection_refused', 'curl refusal is classified');
+    chk(api.classifyMihomoApiError({ corePid: '1', curlStatus: 28 }).errorType, 'timeout', 'curl timeout is classified');
+    chk(api.classifyMihomoApiError({ corePid: '1', statusCode: 401 }).errorType, 'auth_failed', 'API authentication failure is not called a subscription failure');
+
+    const noSecretCurl = api.buildApiCurl('/version', 'GET', null, {
+      apiBase: 'http://127.0.0.1:7788', secret: '', secretSet: false,
+    });
+    chk(noSecretCurl.includes('Authorization: Bearer'), false, 'unset config secret does not inject a fake Authorization header');
+    const actualSecretCurl = api.buildApiCurl('/version', 'GET', null, {
+      apiBase: 'http://127.0.0.1:7788', secret: 'configured-secret', secretSet: true,
+    });
+    chk(actualSecretCurl.includes('Authorization: Bearer configured-secret'), true, 'configured API secret is used');
+
+    const shellBeforeStoppedApi = lastShellCommand;
+    goBehaviorPromise = Promise.resolve(api.callMihomoApi('/version', 'GET', null, {
+      apiBase: 'http://127.0.0.1:7788', secret: '', secretSet: false,
+    }, 2, { corePid: '' })).then((apiStopped) => {
+      chk(apiStopped.errorType, 'core_not_running', 'provider/control API request is not run when core is stopped');
+      chk(lastShellCommand, shellBeforeStoppedApi, 'stopped-core API check does not invoke curl');
+
+      chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=managed\nMANAGER_VERSION=2.1.0\n' }).state,
+        'managed', 'boot manager state is parsed');
+      chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=direct\n' }).state,
+        'direct', 'direct boot state is distinguished');
+      chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=manager_damaged\n' }).state,
+        'manager_damaged', 'damaged boot manager state is distinguished');
+
+      chk(source.includes('Clash.KanoStart} --boot') || source.includes('CLASH_RUNTIME_MANAGER} --boot'),
+        true, 'boot and manual operations share the runtime preflight starter');
+      chk(source.includes("sed -i '/\\/data\\/clash\\/Scripts\\/Clash.Service start/d'"), false,
+        'boot cleanup does not use fuzzy service-line deletion');
+      chk(source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
+        true, 'self-heal preserves user data and has rollback');
+      chk(source.includes('not_run_core_stopped') && source.includes('ok: configCheck.ok'),
+        true, 'subscription config health remains independent from core/API health');
+      chk(source.includes('df -k /data /tmp'), false, 'diagnostics do not pass a missing /tmp to df');
+      chk(source.includes('iptables -F') || source.includes('iptables -t nat -F'), false,
+        'network rescue does not globally flush firewall tables');
+    });
+  }
 
   console.log('--- #9 托管规则清理 ---');
   const fb = api.buildManagedFallbackRules('Proxy'); // 13 条，末条即 MATCH,<group>
@@ -193,6 +282,7 @@ function runFor(label, file) {
 
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {
+    await goBehaviorPromise;
     shellReply = { success: true, content: '0' };
     const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });
     chk(

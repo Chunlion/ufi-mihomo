@@ -1,33 +1,44 @@
 # ufi-mihomo
 
-中兴 F50 等 UFI-TOOLS 随身 WiFi 的 mihomo (Clash.Meta) 透明代理插件套件。
+中兴 F50 等 UFI-TOOLS 随身 WiFi 的 mihomo（Clash.Meta）透明代理插件套件。
 
-## 组件
+## 组件与职责
 
 | 文件 | 说明 |
 |---|---|
-| `猫猫TProxy_Go.js` | 主插件（推荐）。TProxy/TUN 双模式透明代理管理，内置 Go 内核读取加速（自动安装，Shell 兜底），订阅本地转换、图形化规则、设备绕过、诊断工具等 |
-| `猫猫TProxy.js` | 纯 Shell 版本。功能同上但无 Go 加速与本地订阅转换，适用于不便安装二进制的场景 |
-| `开机自启修复.js` | 全插件开机自启修复。以门控+回放机制统一托管 `/sdcard/ufi_tools_boot.sh` 中各插件的自启命令，等待系统就绪后再执行 |
-| `binary-helper/` | Go 内核源码（`kano-f50-helper`）。为插件提供快照读取、控制器解析、订阅转换（Clash YAML / v2ray 分享链接）等 JSON 接口 |
-| `dist/kano-f50-helper-linux-arm64` | Go 内核预编译二进制（linux/arm64，插件按 size+sha256+version 三重校验后安装） |
+| `猫猫TProxy_Go.js` | 推荐主插件。负责 mihomo 安装、自愈、启动、停止、控制 API、订阅、配置、TProxy/TUN 和网络策略 |
+| `猫猫TProxy.js` | 纯 Shell 版本，不包含 Go 读取加速和设备本地订阅转换 |
+| `开机自启修复.js` | 独立的全插件开机调度器；只负责等待系统就绪并回放启动命令 |
+| `dist/kano-f50-helper-linux-arm64` | 可选 Go 辅助程序，只加速状态读取、控制器解析和本地订阅转换；它不是 mihomo 核心，也不是 `clashctl` |
+
+主插件的手动安装、启动、停止、重启和自愈不依赖“开机自启修复”。安装该修复插件后，猫猫的开机命令会由它托管；未安装时仍可直接执行，但页面会明确显示“直接执行”。
 
 ## 安装
 
-1. 打开 UFI-TOOLS 管理页（默认 `192.168.0.1:2333`）→ 插件功能
-2. 上传 `猫猫TProxy_Go.js` 与 `开机自启修复.js` 并提交
-3. 刷新页面，展开「猫猫」面板 → 安装/启动核心
-4. Go 内核会在后台自动安装；也可在「网络与设备 → Go内核」手动管理
+1. 打开 UFI-TOOLS 管理页（通常为 `http://192.168.0.1:2333/`）→ 插件功能。
+2. 上传并提交 `猫猫TProxy_Go.js`。
+3. 需要可靠开机启动时，再上传并提交 `开机自启修复.js`，点击“安装 / 修复”。
+4. 刷新页面，展开“猫猫”，点击“安装 / 启动核心”。
 
-## 构建 Go 内核
+主插件会在安装和每次关键操作前检查设备 ABI、控制器、mihomo、yq、权限和配置。安装损坏时会先备份配置、模板、订阅和策略数据，再通过受校验的本地安装包或正式下载包修复；提交或启动失败会恢复旧安装目录。
 
-```bash
-cd binary-helper
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o kano-f50-helper-linux-arm64 .
-```
+## 状态与排错
 
-> 注意：插件以精确的 size + sha256 + version 校验二进制，任何源码改动都需要同步更新
-> `猫猫TProxy_Go.js` 中的 `KANO_HELPER_VERSION` / `KANO_HELPER_SIZE` / `KANO_HELPER_SHA256` / `KANO_HELPER_DOWNLOAD_URL` 四个常量。
+运行诊断会区分以下状态：
+
+- `not_installed`：未安装。
+- `damaged`：组件、架构、权限或配置预检失败。
+- `installed_stopped`：安装完整，核心未运行。
+- `running_api_unavailable`：核心进程存在，但控制 API 拒绝、超时、鉴权失败或返回异常。
+- `healthy`：核心和控制 API 均正常。
+
+订阅配置检查、核心状态、控制 API 和 Provider 更新分别显示。核心未运行时不会请求 Provider API，也不会把 API 故障误报为配置或订阅地址失效。
+
+设备没有 `/tmp` 时属于受支持场景。插件使用 `/data/kano_yq_runtime/tmp` 和 `/data/kano_diag_runtime/tmp`，诊断只检查真实存在的文件系统路径。
+
+## 更新与卸载
+
+更新时重新上传主插件即可；已有配置和订阅数据不会因插件脚本更新被覆盖。完整卸载请使用猫猫面板中的“完整卸载”，开机启动管理器需在“全插件开机自启修复”中单独卸载。
 
 ## License
 

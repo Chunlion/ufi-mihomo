@@ -1,5 +1,5 @@
 ﻿//<script>
-// 猫猫TProxy_Go v6.2 - Go ARM64 read-path acceleration with verified Shell fallback
+// 猫猫TProxy_Go v6.3 - unified runtime preflight, recovery and startup control
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -49,24 +49,33 @@
   const LOG_FILE = '/sdcard/Clash\u5185\u6838\u65e5\u5fd7.txt';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
+  const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
+  const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
+  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.0';
+  const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
+  const BOOT_MANAGER_VERSION = '2.1.0';
+  const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
+  const BOOT_GATE_END = '# F50_BOOT_FIX_END';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
-  const BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
+  const BOOT_SERVICE_LINE = `${CLASH_RUNTIME_MANAGER} --boot`;
+  const LEGACY_BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
   const BOOT_INOTIFY_LINE =
     `inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_DIR}/Clash" >> /dev/null &`;
   const BOOT_POLICY_TOOLS_LINE = `sleep 8; ${CLASH_POLICY_SCRIPT} apply`;
+  const LEGACY_BOOT_MAC_BYPASS_LINE = `sleep 10; ${CLASH_MAC_BYPASS_SCRIPT}`;
   const SUB_RULE_MODE_TEMPLATE = 'template';
   const SUB_CONVERT_MODE_PROVIDER = 'provider';
   const SUB_CONVERT_MODE_LOCAL = 'local';
   const SUB_DISABLED_MARKER = '# KANO_SUB_DISABLED ';
   const KANO_PROVIDER_USER_AGENT = 'Mozilla/5.0';
-  const POLICY_SCRIPT_VERSION = '6.2';
+  const POLICY_SCRIPT_VERSION = '6.3';
   const CONTROLLER_INFO_CACHE_TTL = 250;
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
-  const KANO_HELPER_VERSION = '0.2.1';
+  const KANO_HELPER_VERSION = '0.2.2';
   const KANO_HELPER_SIZE = 5177506;
-  const KANO_HELPER_SHA256 = '5035f23a0d77e99dab8eabba0c1ff5d0d146c7c648493b36886a00747a6d92f2';
+  const KANO_HELPER_SHA256 = 'a9dfd9ea21d145238030ef7f3f1da2bac7ccd888b003e9d421b2d96e412d5a9f';
   const KANO_HELPER_DOWNLOAD_URL =
-    'https://gitee.com/womye/123/raw/b3f3599f8ca91a5d84c0ad066847eebd30ae9005/kano-f50-helper-linux-arm64';
+    'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/dist/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
 
   // ===== Basic helpers =====
@@ -261,7 +270,7 @@ ${script}`,
         return 1
       }
 
-      for tool in curl unzip timeout awk sed grep find du wc head tail tr chmod cp mv rm mkdir ln date cat cut basename sort uniq xargs stat cmp ip inotifyd; do
+      for tool in curl unzip timeout awk sed grep find du wc head tail tr chmod cp mv rm mkdir ln date cat cut basename dirname readlink od sort uniq xargs stat cmp ip inotifyd; do
         ensure_tool "$tool" || missing="$missing $tool"
       done
       for tool in tar gzip zip sha256sum md5sum cksum jq ss netstat; do
@@ -303,6 +312,11 @@ ${script}`,
     { label: 'override.js', path: CLASH_OVERRIDE_JS },
     { label: 'rule_override.json', path: CLASH_RULE_OVERRIDE_JSON },
     { label: 'rule_override_applied.json', path: CLASH_RULE_OVERRIDE_APPLIED_JSON },
+    { label: 'sub_rule_mode.conf', path: CLASH_SUB_RULE_MODE_FILE },
+    { label: 'sub_user_agent.conf', path: CLASH_SUB_USER_AGENT_FILE },
+    { label: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE },
+    { label: 'options.conf', path: CLASH_POLICY_OPTIONS_FILE },
+    { label: 'mac_bypass.txt', path: CLASH_MAC_BYPASS_FILE },
   ];
 
   const editableLocalFiles = () => [
@@ -324,10 +338,20 @@ ${script}`,
 
   const removeBootLinesCmd = () => `
         if [ -f ${shellQuote(BOOT_FILE)} ]; then
-          sed -i '/\/data\/clash\/Scripts\/Clash.Service start/d' ${shellQuote(BOOT_FILE)}
-          sed -i '/Clash.Inotify/d' ${shellQuote(BOOT_FILE)}
-          sed -i '/Clash.MacBypass/d' ${shellQuote(BOOT_FILE)}
-          sed -i '/Clash.PolicyTools/d' ${shellQuote(BOOT_FILE)}
+          BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano`)}.$$
+          awk \
+            -v cleanup=${shellQuote(BOOT_CLEANUP_LINE)} \
+            -v runtime=${shellQuote(BOOT_SERVICE_LINE)} \
+            -v service=${shellQuote(LEGACY_BOOT_SERVICE_LINE)} \
+            -v inotify=${shellQuote(BOOT_INOTIFY_LINE)} \
+            -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
+            -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
+            '$0 != cleanup && $0 != runtime && $0 != service && $0 != inotify && $0 != policy && $0 != mac { print }' \
+            ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
+            mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
+          BOOT_RC=$?
+          rm -f "$BOOT_TMP" 2>/dev/null || true
+          [ "$BOOT_RC" -eq 0 ] || exit "$BOOT_RC"
         fi
         `;
 
@@ -432,6 +456,726 @@ KANO_YQ_SMOKE_EOF
         grep -qxF ${shellQuote(BOOT_INOTIFY_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_INOTIFY_LINE)} >> ${shellQuote(BOOT_FILE)}
         ${addPolicyToolsBootLineCmd()}
         `;
+
+  const buildRuntimeManagerScript = () => `#!/system/bin/sh
+# KANO_RUNTIME_MANAGER_VERSION=${CLASH_RUNTIME_MANAGER_VERSION}
+set +e
+CLASH_DIR=${CLASH_DIR}
+SERVICE=${CLASH_SERVICE}
+CORE=${CLASH_CORE}
+CONFIG=${CLASH_CONFIG}
+YQ=${CLASH_DIR}/Tools/yq_linux_arm64
+POLICY=${CLASH_POLICY_SCRIPT}
+DIAG=/data/kano_diag_runtime
+TMPDIR="$DIAG/tmp"
+HOME="$DIAG/home"
+export TMPDIR TMP="$TMPDIR" TEMP="$TMPDIR" HOME XDG_CONFIG_HOME="$HOME"
+mkdir -p "$TMPDIR" "$HOME" 2>/dev/null || {
+  echo "PREFLIGHT_STATE=damaged"
+  echo "PROBE_ERRORS=runtime_directory"
+  echo "MESSAGE=无法创建 /data 诊断运行目录"
+  exit 2
+}
+chmod 700 "$DIAG" "$TMPDIR" "$HOME" 2>/dev/null || true
+
+append_word() {
+  current="$(eval "printf '%s' \\"\\$$1\\"")"
+  if [ -n "$current" ]; then
+    eval "$1=\\"$current,$2\\""
+  else
+    eval "$1=\\"$2\\""
+  fi
+}
+
+detect_abi() {
+  ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+  ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+  MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  case "$ABI $ABILIST $MACHINE" in
+    *arm64-v8a*|*aarch64*|*armv8*) ABI_KIND=arm64; CONTROLLER="$CLASH_DIR/Scripts/clashctl_arm64"; ELF_CLASS=2; ELF_MACHINE=183 ;;
+    *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) ABI_KIND=armv7; CONTROLLER="$CLASH_DIR/Scripts/clashctl_armv7"; ELF_CLASS=1; ELF_MACHINE=40 ;;
+    *) ABI_KIND=unsupported; CONTROLLER=""; ELF_CLASS=0; ELF_MACHINE=0 ;;
+  esac
+}
+
+verify_elf() {
+  target="$1"
+  expected_class="$2"
+  expected_machine="$3"
+  [ -s "$target" ] || return 1
+  command -v od >/dev/null 2>&1 || return 2
+  magic="$(od -An -t x1 -N 4 "$target" 2>/dev/null | tr -d ' \\n')"
+  [ "$magic" = "7f454c46" ] || return 1
+  class="$(od -An -t u1 -j 4 -N 1 "$target" 2>/dev/null | tr -d ' ')"
+  machine="$(od -An -t u1 -j 18 -N 2 "$target" 2>/dev/null | awk '{print $1 + ($2 * 256)}')"
+  [ "$class" = "$expected_class" ] && [ "$machine" = "$expected_machine" ]
+}
+
+find_core_pid() {
+  pid="$(pidof Clash.Core 2>/dev/null | awk '{print $1}')"
+  if [ -z "$pid" ]; then
+    pid="$(ps -A 2>/dev/null | awk '/[C]lash\\.Core|[m]ihomo/ {print $2; exit}')"
+  fi
+  printf '%s\\n' "$pid"
+}
+
+emit_preflight() {
+  echo "PREFLIGHT_STATE=$STATE"
+  echo "ABI=$ABI_KIND"
+  echo "CONTROLLER=$CONTROLLER"
+  echo "MISSING=$MISSING"
+  echo "PERMISSION_ERRORS=$PERMISSION_ERRORS"
+  echo "PROBE_ERRORS=$PROBE_ERRORS"
+  echo "CONFIG_VALID=$CONFIG_VALID"
+  echo "REPAIRABLE=$REPAIRABLE"
+  echo "REPAIRED=$REPAIRED"
+  echo "CORE_PID=$(find_core_pid)"
+  echo "MESSAGE=$MESSAGE"
+}
+
+preflight() {
+  STATE=installed_stopped
+  MISSING=""
+  PERMISSION_ERRORS=""
+  PROBE_ERRORS=""
+  CONFIG_VALID=0
+  REPAIRABLE=0
+  REPAIRED=""
+  MESSAGE="运行组件和配置检查通过"
+  detect_abi
+  if [ ! -d "$CLASH_DIR" ]; then
+    STATE=not_installed
+    MESSAGE="未找到安装目录"
+    emit_preflight
+    return 3
+  fi
+  if [ "$ABI_KIND" = "unsupported" ]; then
+    STATE=damaged
+    REPAIRABLE=0
+    PROBE_ERRORS=unsupported_abi
+    MESSAGE="不支持的 CPU ABI"
+    emit_preflight
+    return 2
+  fi
+  for item in "service:$SERVICE" "core:$CORE" "yq:$YQ" "controller:$CONTROLLER" "config:$CONFIG"; do
+    label="$item"
+    path="$item"
+    label="$(printf '%s' "$label" | cut -d: -f1)"
+    path="$(printf '%s' "$path" | cut -d: -f2-)"
+    if [ -L "$path" ] && [ ! -e "$path" ]; then
+      append_word MISSING "$label:broken_link"
+    elif [ ! -s "$path" ]; then
+      append_word MISSING "$label"
+    fi
+  done
+
+  GENERIC="$CLASH_DIR/Scripts/clashctl"
+  if [ ! -s "$CONTROLLER" ] && [ -s "$GENERIC" ] && [ ! -L "$GENERIC" ]; then
+    verify_elf "$GENERIC" "$ELF_CLASS" "$ELF_MACHINE"
+    elf_rc=$?
+    if [ "$elf_rc" -eq 0 ]; then
+      chmod 755 "$GENERIC" 2>/dev/null || true
+      generic_probe="$("$GENERIC" --help 2>&1)"
+      generic_rc=$?
+      case "$generic_rc:$generic_probe" in
+        126:*|127:*|*:*Exec\\ format*|*:*not\\ found*) ;;
+        *)
+          cp "$GENERIC" "$CONTROLLER" 2>/dev/null &&
+            chmod 755 "$CONTROLLER" 2>/dev/null &&
+            append_word REPAIRED controller_from_validated_generic
+          if [ -s "$CONTROLLER" ]; then
+            MISSING="$(printf '%s' "$MISSING" | awk -F, '{
+              out=""
+              for (i=1; i<=NF; i++) if ($i !~ /^controller(:|$)/) out=(out ? out "," : "") $i
+              print out
+            }')"
+          fi
+          ;;
+      esac
+    fi
+  fi
+
+  if [ -s "$CONTROLLER" ]; then
+    verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE"
+    elf_rc=$?
+    if [ "$elf_rc" -eq 1 ]; then
+      if [ -s "$GENERIC" ] && [ ! -L "$GENERIC" ]; then
+        verify_elf "$GENERIC" "$ELF_CLASS" "$ELF_MACHINE"
+        generic_elf_rc=$?
+        generic_probe="$("$GENERIC" --help 2>&1)"
+        generic_rc=$?
+        case "$generic_elf_rc:$generic_rc:$generic_probe" in
+          0:126:*|0:127:*|0:*:*Exec\\ format*|0:*:*not\\ found*) ;;
+          0:*)
+            cp "$GENERIC" "$CONTROLLER" 2>/dev/null &&
+              chmod 755 "$CONTROLLER" 2>/dev/null &&
+              append_word REPAIRED controller_replaced_from_validated_generic
+            ;;
+          *) ;;
+        esac
+      fi
+      verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE" || append_word PROBE_ERRORS controller_architecture
+    elif [ "$elf_rc" -eq 2 ]; then
+      append_word PROBE_ERRORS elf_reader_unavailable
+    fi
+  fi
+
+  for item in "service:$SERVICE" "core:$CORE" "yq:$YQ" "controller:$CONTROLLER"; do
+    label="$(printf '%s' "$item" | cut -d: -f1)"
+    path="$(printf '%s' "$item" | cut -d: -f2-)"
+    [ -s "$path" ] || continue
+    if [ ! -x "$path" ]; then
+      chmod 755 "$path" 2>/dev/null
+      if [ -x "$path" ]; then
+        append_word REPAIRED "$label:chmod"
+      else
+        append_word PERMISSION_ERRORS "$label"
+      fi
+    fi
+  done
+
+  if [ -x "$CONTROLLER" ] && ! printf '%s' "$PROBE_ERRORS" | grep -q controller_architecture; then
+    controller_probe="$("$CONTROLLER" --help 2>&1)"
+    controller_rc=$?
+    case "$controller_rc:$controller_probe" in
+      126:*|127:*|*:*Exec\\ format*|*:*not\\ found*) append_word PROBE_ERRORS controller_execute ;;
+    esac
+  fi
+  if [ -x "$SERVICE" ]; then
+    service_probe="$("$SERVICE" --help 2>&1)"
+    service_rc=$?
+    case "$service_rc:$service_probe" in
+      126:*|127:*|*:*找不到适用于当前架构*|*:*Exec\\ format*) append_word PROBE_ERRORS service_controller ;;
+    esac
+  fi
+  if [ -x "$CORE" ]; then
+    "$CORE" -v >/dev/null 2>"$DIAG/core_version.err" || "$CORE" -h >/dev/null 2>"$DIAG/core_version.err"
+    [ "$?" -eq 0 ] || append_word PROBE_ERRORS core_execute
+  fi
+  if [ -x "$YQ" ]; then
+    yq_version="$("$YQ" --version 2>&1)"
+    echo "$yq_version" | grep -Eiq 'version[[:space:]]+v?4\\.' || append_word PROBE_ERRORS yq_v4
+  fi
+
+  if [ -s "$CONFIG" ] && [ -x "$YQ" ] && [ -x "$CORE" ]; then
+    "$YQ" e '.' "$CONFIG" >/dev/null 2>"$DIAG/config_yaml.err" &&
+      "$CORE" -t -f "$CONFIG" >"$DIAG/config_core.out" 2>&1
+    if [ "$?" -eq 0 ]; then
+      CONFIG_VALID=1
+    else
+      append_word PROBE_ERRORS config_invalid
+    fi
+  fi
+
+  if [ -n "$MISSING" ] || [ -n "$PERMISSION_ERRORS" ] || [ -n "$PROBE_ERRORS" ] || [ "$CONFIG_VALID" != "1" ]; then
+    STATE=damaged
+    REPAIRABLE=1
+    MESSAGE="运行组件或配置损坏，需要安全修复"
+    emit_preflight
+    return 2
+  fi
+
+  if [ -e "$GENERIC" ] || [ -L "$GENERIC" ]; then
+    generic_target="$(readlink "$GENERIC" 2>/dev/null)"
+    if [ -n "$generic_target" ] && [ "$generic_target" != "$(basename "$CONTROLLER")" ]; then
+      rm -f "$GENERIC" 2>/dev/null || true
+    fi
+  fi
+  if [ ! -e "$GENERIC" ]; then
+    ln -s "$(basename "$CONTROLLER")" "$GENERIC" 2>/dev/null ||
+      { cp "$CONTROLLER" "$GENERIC" 2>/dev/null && chmod 755 "$GENERIC" 2>/dev/null; }
+    [ -e "$GENERIC" ] && append_word REPAIRED generic_controller
+  fi
+  pid="$(find_core_pid)"
+  [ -z "$pid" ] || STATE=running_api_unavailable
+  emit_preflight
+  return 0
+}
+
+rescue_runtime() {
+  "$SERVICE" stop >/dev/null 2>&1 || true
+  [ ! -x "$POLICY" ] || "$POLICY" flush >/dev/null 2>&1 || true
+}
+
+start_runtime() {
+  action="$1"
+  preflight
+  preflight_rc=$?
+  [ "$preflight_rc" -eq 0 ] || return "$preflight_rc"
+  if [ "$action" = "--restart" ]; then
+    "$SERVICE" stop >/dev/null 2>&1 || true
+  fi
+  [ ! -x "$POLICY" ] || "$POLICY" flush >/dev/null 2>&1 || true
+  "$SERVICE" start >"$DIAG/service_start.out" 2>&1
+  service_start_rc=$?
+  if [ "$service_start_rc" -ne 0 ]; then
+    echo "START_STATE=service_failed"
+    echo "API_STATUS=not_run"
+    echo "HTTP_CODE=000"
+    echo "MESSAGE=Clash.Service 启动失败"
+    cat "$DIAG/service_start.out" 2>/dev/null || true
+    rescue_runtime
+    return 4
+  fi
+
+  controller="$("$YQ" e '.external-controller // ""' "$CONFIG" 2>/dev/null | head -n 1)"
+  secret="$("$YQ" e '.secret // ""' "$CONFIG" 2>/dev/null | head -n 1)"
+  controller="$(printf '%s' "$controller" | sed 's#^http://##;s#^https://##')"
+  case "$controller" in
+    ""|null) controller=127.0.0.1:7788 ;;
+    0.0.0.0:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^[^:]*://')" ;;
+    localhost:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^[^:]*://')" ;;
+    \\[::\\]:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^.*://')" ;;
+  esac
+  CURL_BIN="$(command -v curl 2>/dev/null)"
+  last_status=unavailable
+  last_http=000
+  attempt=0
+  while [ "$attempt" -lt 20 ]; do
+    attempt=$((attempt + 1))
+    pid="$(find_core_pid)"
+    if [ -n "$pid" ] && [ -n "$CURL_BIN" ]; then
+      if [ -n "$secret" ] && [ "$secret" != "null" ]; then
+        last_http="$("$CURL_BIN" -sS -m 2 -o "$DIAG/api.out" -w '%{http_code}' -H "Authorization: Bearer $secret" "http://$controller/version" 2>"$DIAG/api.err")"
+      else
+        last_http="$("$CURL_BIN" -sS -m 2 -o "$DIAG/api.out" -w '%{http_code}' "http://$controller/version" 2>"$DIAG/api.err")"
+      fi
+      curl_rc=$?
+      case "$curl_rc:$last_http" in
+        0:2*) echo "START_STATE=healthy"; echo "API_STATUS=healthy"; echo "HTTP_CODE=$last_http"; echo "MESSAGE=核心和控制 API 已就绪"; return 0 ;;
+        0:401|0:403) last_status=auth_failed; break ;;
+        7:*) last_status=refused ;;
+        28:*) last_status=timeout ;;
+        *) last_status=http_error ;;
+      esac
+    elif [ -z "$pid" ]; then
+      last_status=core_not_running
+    else
+      last_status=curl_missing
+    fi
+    sleep 1
+  done
+  echo "START_STATE=running_api_unavailable"
+  echo "API_STATUS=$last_status"
+  echo "HTTP_CODE=$last_http"
+  echo "MESSAGE=核心未在等待时间内通过控制 API 健康检查"
+  rescue_runtime
+  return 5
+}
+
+ACTION="$1"
+[ -n "$ACTION" ] || ACTION=--check
+case "$ACTION" in
+  --check) preflight ;;
+  --start|--restart|--boot) start_runtime "$ACTION" ;;
+  *) echo "usage: $0 --check|--start|--restart|--boot"; exit 64 ;;
+esac
+`;
+
+  const parseKeyValueOutput = (content = '') => {
+    const values = {};
+    String(content || '').split(/\r?\n/).forEach((line) => {
+      const separator = line.indexOf('=');
+      if (separator <= 0) return;
+      values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+    });
+    return values;
+  };
+
+  const parseRuntimePreflightResult = (result = {}) => {
+    const values = parseKeyValueOutput(result.content || '');
+    const state = ['not_installed', 'damaged', 'installed_stopped', 'running_api_unavailable', 'healthy']
+      .includes(values.PREFLIGHT_STATE)
+      ? values.PREFLIGHT_STATE
+      : 'damaged';
+    return {
+      state,
+      abi: values.ABI || 'unknown',
+      controller: values.CONTROLLER || '',
+      missing: String(values.MISSING || '').split(',').filter(Boolean),
+      permissionErrors: String(values.PERMISSION_ERRORS || '').split(',').filter(Boolean),
+      probeErrors: String(values.PROBE_ERRORS || '').split(',').filter(Boolean),
+      configValid: values.CONFIG_VALID == '1',
+      repairable: values.REPAIRABLE == '1',
+      repaired: String(values.REPAIRED || '').split(',').filter(Boolean),
+      corePid: values.CORE_PID || '',
+      message: values.MESSAGE || '',
+      shellSuccess: !!result.success,
+      content: String(result.content || ''),
+    };
+  };
+
+  const classifyMihomoApiError = ({ corePid = '', curlStatus = 0, statusCode = 0, responseText = '' } = {}) => {
+    if (!String(corePid || '').trim()) return { errorType: 'core_not_running', message: '核心未运行' };
+    if (statusCode == 401 || statusCode == 403) return { errorType: 'auth_failed', message: `控制 API 鉴权失败（HTTP ${statusCode}）` };
+    if (Number(curlStatus) == 7) return { errorType: 'connection_refused', message: '控制 API 拒绝连接' };
+    if (Number(curlStatus) == 28) return { errorType: 'timeout', message: '控制 API 连接超时' };
+    if (statusCode >= 400) return { errorType: 'http_error', message: `控制 API 返回 HTTP ${statusCode}` };
+    const lower = String(responseText || '').toLowerCase();
+    if (lower.includes('connection refused')) return { errorType: 'connection_refused', message: '控制 API 拒绝连接' };
+    if (lower.includes('timed out') || lower.includes('timeout')) return { errorType: 'timeout', message: '控制 API 连接超时' };
+    return { errorType: 'unavailable', message: '控制 API 不可用' };
+  };
+
+  const deriveRuntimeState = (preflight = {}, apiResult = null) => {
+    if (preflight.state == 'not_installed' || preflight.state == 'damaged') return preflight.state;
+    if (!preflight.corePid) return 'installed_stopped';
+    return apiResult && apiResult.success ? 'healthy' : 'running_api_unavailable';
+  };
+
+  const ensureRuntimeManagerScript = async ({ force = false } = {}) => {
+    const script = buildRuntimeManagerScript();
+    const marker = `# KANO_RUNTIME_MANAGER_VERSION=${CLASH_RUNTIME_MANAGER_VERSION}`;
+    const result = await runShellWithRoot(`
+      set -e
+      [ -s ${shellQuote(CLASH_SERVICE)} ] || { echo "RUNTIME_MANAGER_SKIPPED=service_missing"; exit 3; }
+      TARGET=${shellQuote(CLASH_RUNTIME_MANAGER)}
+      NEW="$TARGET.new.$$"
+      if [ ${shellQuote(force ? '1' : '0')} != "1" ] && [ -x "$TARGET" ] && grep -qxF ${shellQuote(marker)} "$TARGET"; then
+        echo "RUNTIME_MANAGER_READY=${CLASH_RUNTIME_MANAGER_VERSION}"
+        exit 0
+      fi
+      cat > "$NEW" <<'KANO_RUNTIME_MANAGER_EOF'
+${script}
+KANO_RUNTIME_MANAGER_EOF
+      chmod 755 "$NEW"
+      sh -n "$NEW" || { rm -f "$NEW"; echo "RUNTIME_MANAGER_SYNTAX_FAILED"; exit 1; }
+      mv "$NEW" "$TARGET"
+      echo "RUNTIME_MANAGER_READY=${CLASH_RUNTIME_MANAGER_VERSION}"
+    `, 20 * 1000);
+    return !!(result.success && String(result.content || '').includes('RUNTIME_MANAGER_READY='));
+  };
+
+  const runtimePreflight = async ({ freshController = true } = {}) => {
+    const dirCheck = await runShellWithRoot(`[ -d ${shellQuote(CLASH_DIR)} ] && echo present || echo missing`, 5000);
+    if (String(dirCheck.content || '').trim() != 'present') {
+      return {
+        state: 'not_installed', abi: 'unknown', controller: '', missing: [], permissionErrors: [],
+        probeErrors: [], configValid: false, repairable: false, repaired: [], corePid: '',
+        message: '未找到安装目录', shellSuccess: true, content: 'PREFLIGHT_STATE=not_installed',
+      };
+    }
+    const managerReady = await ensureRuntimeManagerScript();
+    if (!managerReady) {
+      return {
+        state: 'damaged', abi: 'unknown', controller: '', missing: ['service_or_runtime_manager'],
+        permissionErrors: [], probeErrors: ['runtime_manager'], configValid: false, repairable: true,
+        repaired: [], corePid: '', message: '运行预检脚本无法安装', shellSuccess: false, content: '',
+      };
+    }
+    const shellResult = await runShellWithRoot(`${shellQuote(CLASH_RUNTIME_MANAGER)} --check`, 45 * 1000);
+    const preflight = parseRuntimePreflightResult(shellResult);
+    if (preflight.state != 'running_api_unavailable') return preflight;
+    const controllerInfo = await buildControllerInfo({ fresh: freshController });
+    const api = await callMihomoApi('/version', 'GET', null, controllerInfo, 3, { corePid: preflight.corePid });
+    return {
+      ...preflight,
+      state: deriveRuntimeState(preflight, api),
+      api,
+    };
+  };
+
+  const parseBootIntegrationResult = (result = {}) => {
+    const values = parseKeyValueOutput(result.content || '');
+    const state = ['disabled', 'managed', 'direct', 'manager_damaged'].includes(values.BOOT_STATE)
+      ? values.BOOT_STATE
+      : 'manager_damaged';
+    return {
+      state,
+      enabled: state != 'disabled',
+      managerVersion: values.MANAGER_VERSION || '',
+      message: values.BOOT_MESSAGE || '',
+      content: String(result.content || ''),
+    };
+  };
+
+  const inspectBootIntegration = async () => {
+    const result = await runShellWithRoot(`
+      BOOT=${shellQuote(BOOT_FILE)}
+      MANAGER=${shellQuote(BOOT_MANAGER_PATH)}
+      if [ ! -f "$BOOT" ] || ! grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} "$BOOT"; then
+        echo "BOOT_STATE=disabled"
+        echo "BOOT_MESSAGE=猫猫未写入开机启动命令"
+        exit 0
+      fi
+      version="$(grep -m 1 '^MANAGER_VERSION=' "$MANAGER" 2>/dev/null | sed "s/^[^=]*=//;s/['\\\"]//g")"
+      echo "MANAGER_VERSION=$version"
+      if ! grep -qxF ${shellQuote(BOOT_GATE_START)} "$BOOT" || ! grep -qxF ${shellQuote(BOOT_GATE_END)} "$BOOT"; then
+        echo "BOOT_STATE=direct"
+        echo "BOOT_MESSAGE=已写入自启命令，但未由开机自启修复管理"
+        exit 0
+      fi
+      if [ ! -x "$MANAGER" ] || [ "$version" != ${shellQuote(BOOT_MANAGER_VERSION)} ] || ! sh -n "$MANAGER" >/dev/null 2>&1; then
+        echo "BOOT_STATE=manager_damaged"
+        echo "BOOT_MESSAGE=开机自启管理器版本异常或脚本损坏"
+        exit 0
+      fi
+      echo "BOOT_STATE=managed"
+      echo "BOOT_MESSAGE=由开机自启修复管理"
+    `, 10 * 1000);
+    return parseBootIntegrationResult(result);
+  };
+
+  const downloadCoreArchive = async ({ allowCached = false } = {}) => {
+    const toolbox = await ensureInstallToolbox();
+    if (!toolbox.success) {
+      return {
+        ok: false,
+        stage: 'toolbox',
+        message: `设备工具不完整：${toolbox.missing.join('、') || '未知组件'}`,
+        content: toolbox.content,
+      };
+    }
+    const result = await runShellWithRoot(`
+      set -e
+      ZIP=${shellQuote(DOWNLOAD_ZIP)}
+      NEW="$ZIP.new.$$"
+      LOG=${shellQuote(DOWNLOAD_LOG)}
+      validate_archive() {
+        [ -s "$1" ] || return 1
+        size="$(wc -c < "$1" 2>/dev/null || echo 0)"
+        echo "$size" | grep -Eq '^[0-9]+$' || return 1
+        [ "$size" -ge 100000 ] && [ "$size" -le 209715200 ] || return 1
+        unzip -t "$1" >"$LOG" 2>&1 || return 1
+        names="$(unzip -Z1 "$1" 2>/dev/null || true)"
+        [ -z "$names" ] || ! printf '%s\\n' "$names" | grep -Eq '(^/|(^|/)\.\.(/|$))'
+      }
+      if [ ${shellQuote(allowCached ? '1' : '0')} = "1" ] && validate_archive "$ZIP"; then
+        echo "ARCHIVE_READY=cached"
+        exit 0
+      fi
+      rm -f "$NEW" 2>/dev/null || true
+      ${getCurlBinCmd()}
+      "$CURL_BIN" -fSL --connect-timeout 20 --max-time 600 ${shellQuote(CLASH_PACKAGE_URL)} -o "$NEW" >"$LOG" 2>&1 || {
+        rc=$?
+        rm -f "$NEW" 2>/dev/null || true
+        echo "ARCHIVE_DOWNLOAD_FAILED=$rc"
+        cat "$LOG" 2>/dev/null || true
+        exit 1
+      }
+      validate_archive "$NEW" || {
+        rm -f "$NEW" 2>/dev/null || true
+        echo "ARCHIVE_VERIFY_FAILED"
+        cat "$LOG" 2>/dev/null || true
+        exit 1
+      }
+      mv "$NEW" "$ZIP"
+      echo "ARCHIVE_READY=downloaded"
+    `, 650 * 1000);
+    const content = String(result.content || '');
+    return {
+      ok: !!(result.success && content.includes('ARCHIVE_READY=')),
+      stage: content.includes('ARCHIVE_DOWNLOAD_FAILED') ? 'download' : 'archive_verify',
+      source: content.includes('ARCHIVE_READY=cached') ? 'cached' : 'downloaded',
+      message: content.includes('ARCHIVE_DOWNLOAD_FAILED') ? '正式安装包下载失败' : '正式安装包校验失败',
+      content,
+    };
+  };
+
+  const stageAndCommitRepairArchive = async () => {
+    const result = await runDangerousShellWithRoot(`
+      set +e
+      ZIP=${shellQuote(DOWNLOAD_ZIP)}
+      TARGET=${shellQuote(CLASH_DIR)}
+      STAGE="/data/kano_clash_repair.$$"
+      PACKAGE_ROOT=""
+      TARGET_BACKUP=""
+      USER_BACKUP=""
+      committed=0
+      cleanup_repair() {
+        rc=$?
+        trap - EXIT
+        [ -d "$STAGE" ] && rm -rf "$STAGE" 2>/dev/null || true
+        if [ "$rc" -ne 0 ] && [ "$committed" = "1" ]; then
+          [ -x "$TARGET/Scripts/Clash.Service" ] && "$TARGET/Scripts/Clash.Service" stop >/dev/null 2>&1 || true
+          [ -d "$TARGET" ] && rm -rf "$TARGET" 2>/dev/null || true
+          [ -d "$TARGET_BACKUP" ] && mv "$TARGET_BACKUP" "$TARGET" 2>/dev/null || true
+        fi
+        exit "$rc"
+      }
+      trap cleanup_repair EXIT
+      [ -s "$ZIP" ] || { echo "REPAIR_FAILED=archive_missing"; exit 1; }
+      unzip -t "$ZIP" >/data/kano_clash_repair_zip_test.out 2>&1 || {
+        echo "REPAIR_FAILED=archive_integrity"
+        cat /data/kano_clash_repair_zip_test.out 2>/dev/null || true
+        exit 1
+      }
+      names="$(unzip -Z1 "$ZIP" 2>/dev/null || true)"
+      if [ -n "$names" ] && printf '%s\\n' "$names" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+        echo "REPAIR_FAILED=unsafe_archive_path"
+        exit 1
+      fi
+      mkdir -p "$STAGE" || exit 1
+      unzip -q "$ZIP" -d "$STAGE" >/data/kano_clash_repair_unzip.out 2>&1 || {
+        echo "REPAIR_FAILED=unzip"
+        cat /data/kano_clash_repair_unzip.out 2>/dev/null || true
+        exit 1
+      }
+      if find "$STAGE" -type l 2>/dev/null | grep -q .; then
+        echo "REPAIR_FAILED=archive_symlink"
+        exit 1
+      fi
+      expanded="$(du -sk "$STAGE" 2>/dev/null | awk '{print $1}')"
+      echo "$expanded" | grep -Eq '^[0-9]+$' || expanded=0
+      [ "$expanded" -gt 0 ] && [ "$expanded" -le 307200 ] || {
+        echo "REPAIR_FAILED=expanded_size"
+        exit 1
+      }
+      if [ -s "$STAGE/Scripts/Clash.Service" ]; then
+        PACKAGE_ROOT="$STAGE"
+      elif [ -s "$STAGE/clash/Scripts/Clash.Service" ]; then
+        PACKAGE_ROOT="$STAGE/clash"
+      else
+        candidate="$(find "$STAGE" -type f -path '*/Scripts/Clash.Service' 2>/dev/null | head -n 1)"
+        [ -n "$candidate" ] && PACKAGE_ROOT="$(printf '%s' "$candidate" | sed 's#/Scripts/Clash.Service$##')"
+      fi
+      [ -n "$PACKAGE_ROOT" ] || { echo "REPAIR_FAILED=package_root"; exit 1; }
+      SERVICE="$PACKAGE_ROOT/Scripts/Clash.Service"
+      CORE="$PACKAGE_ROOT/Proxy/Clash.Core"
+      YQ="$PACKAGE_ROOT/Tools/yq_linux_arm64"
+      abi="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+      abilist="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+      machine="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+      case "$abi $abilist $machine" in
+        *arm64-v8a*|*aarch64*|*armv8*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_arm64"; ELF_CLASS=2; ELF_MACHINE=183 ;;
+        *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_armv7"; ELF_CLASS=1; ELF_MACHINE=40 ;;
+        *) echo "REPAIR_FAILED=unsupported_abi"; exit 1 ;;
+      esac
+      for required in "$SERVICE" "$CORE" "$YQ" "$CONTROLLER"; do
+        [ -s "$required" ] || { echo "REPAIR_FAILED=required_component:$required"; exit 1; }
+      done
+      command -v od >/dev/null 2>&1 || { echo "REPAIR_FAILED=elf_reader"; exit 1; }
+      magic="$(od -An -t x1 -N 4 "$CONTROLLER" 2>/dev/null | tr -d ' \\n')"
+      class="$(od -An -t u1 -j 4 -N 1 "$CONTROLLER" 2>/dev/null | tr -d ' ')"
+      elf_machine="$(od -An -t u1 -j 18 -N 2 "$CONTROLLER" 2>/dev/null | awk '{print $1 + ($2 * 256)}')"
+      [ "$magic" = "7f454c46" ] && [ "$class" = "$ELF_CLASS" ] && [ "$elf_machine" = "$ELF_MACHINE" ] || {
+        echo "REPAIR_FAILED=controller_architecture"
+        exit 1
+      }
+      chmod 755 "$SERVICE" "$CORE" "$YQ" "$CONTROLLER" || { echo "REPAIR_FAILED=chmod"; exit 1; }
+      probe="$("$CONTROLLER" --help 2>&1)"
+      probe_rc=$?
+      case "$probe_rc:$probe" in
+        126:*|127:*|*:*Exec\\ format*|*:*not\\ found*) echo "REPAIR_FAILED=controller_probe"; exit 1 ;;
+      esac
+      yq_version="$("$YQ" --version 2>&1)" || { echo "REPAIR_FAILED=yq_probe"; exit 1; }
+      echo "$yq_version" | grep -Eiq 'version[[:space:]]+v?4\\.' || { echo "REPAIR_FAILED=yq_version"; exit 1; }
+      "$CORE" -v >/dev/null 2>&1 || "$CORE" -h >/dev/null 2>&1 || { echo "REPAIR_FAILED=core_probe"; exit 1; }
+      rm -f "$PACKAGE_ROOT/Scripts/clashctl" 2>/dev/null || true
+      ln -s "$(basename "$CONTROLLER")" "$PACKAGE_ROOT/Scripts/clashctl" 2>/dev/null || {
+        cp "$CONTROLLER" "$PACKAGE_ROOT/Scripts/clashctl" || exit 1
+        chmod 755 "$PACKAGE_ROOT/Scripts/clashctl" || exit 1
+      }
+
+      stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
+      [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
+      USER_BACKUP="/data/kano_clash_user_backup.$stamp"
+      mkdir -p "$USER_BACKUP" || { echo "REPAIR_FAILED=user_backup_directory"; exit 1; }
+      for relative in \
+        Proxy/config.yaml Proxy/subscription_urls.txt Proxy/mac_bypass.txt Proxy/proxies Proxy/Policy \
+        Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json \
+        Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf \
+        Tools/config_source.conf Policy; do
+        source="$TARGET/$relative"
+        [ -e "$source" ] || continue
+        mkdir -p "$USER_BACKUP/$(dirname "$relative")" "$PACKAGE_ROOT/$(dirname "$relative")" || exit 1
+        cp -pR "$source" "$USER_BACKUP/$relative" || { echo "REPAIR_FAILED=user_backup:$relative"; exit 1; }
+        rm -rf "$PACKAGE_ROOT/$relative" 2>/dev/null || true
+        cp -pR "$source" "$PACKAGE_ROOT/$relative" || { echo "REPAIR_FAILED=user_restore_to_stage:$relative"; exit 1; }
+      done
+      if [ -s "$PACKAGE_ROOT/Proxy/config.yaml" ]; then
+        "$YQ" e '.' "$PACKAGE_ROOT/Proxy/config.yaml" >/dev/null 2>/data/kano_clash_repair_config.err &&
+          "$CORE" -t -f "$PACKAGE_ROOT/Proxy/config.yaml" >/data/kano_clash_repair_core.out 2>&1 || {
+            echo "REPAIR_FAILED=preserved_config_invalid"
+            cat /data/kano_clash_repair_config.err /data/kano_clash_repair_core.out 2>/dev/null || true
+            exit 1
+          }
+      else
+        echo "REPAIR_FAILED=preserved_config_missing"
+        exit 1
+      fi
+
+      [ -x "$TARGET/Scripts/Clash.Service" ] && "$TARGET/Scripts/Clash.Service" stop >/dev/null 2>&1 || true
+      [ -x "$TARGET/Scripts/Clash.PolicyTools" ] && "$TARGET/Scripts/Clash.PolicyTools" flush >/dev/null 2>&1 || true
+      TARGET_BACKUP="/data/clash.before_repair.$stamp"
+      mv "$TARGET" "$TARGET_BACKUP" || { echo "REPAIR_FAILED=target_backup"; exit 1; }
+      mv "$PACKAGE_ROOT" "$TARGET" || {
+        mv "$TARGET_BACKUP" "$TARGET" 2>/dev/null || true
+        echo "REPAIR_FAILED=atomic_commit"
+        exit 1
+      }
+      committed=1
+      [ "$PACKAGE_ROOT" = "$STAGE" ] || rm -rf "$STAGE" 2>/dev/null || true
+      sync 2>/dev/null || true
+      echo "REPAIR_TARGET_BACKUP=$TARGET_BACKUP"
+      echo "REPAIR_USER_BACKUP=$USER_BACKUP"
+      echo "REPAIR_COMMITTED=1"
+    `, 180 * 1000, 'damaged_install_repair');
+    const values = parseKeyValueOutput(result.content || '');
+    return {
+      ok: !!(result.success && values.REPAIR_COMMITTED == '1'),
+      targetBackup: values.REPAIR_TARGET_BACKUP || '',
+      userBackup: values.REPAIR_USER_BACKUP || '',
+      content: String(result.content || ''),
+    };
+  };
+
+  const rollbackRepairedInstall = async (backupPath = '', reason = '') => {
+    if (!/^\/data\/clash\.before_repair\.[A-Za-z0-9_.-]+$/.test(String(backupPath || ''))) {
+      return { success: false, content: 'REPAIR_ROLLBACK_BACKUP_INVALID' };
+    }
+    return runDangerousShellWithRoot(`
+      set -e
+      TARGET=${shellQuote(CLASH_DIR)}
+      BACKUP=${shellQuote(backupPath)}
+      [ -d "$BACKUP" ] || { echo "REPAIR_ROLLBACK_BACKUP_MISSING"; exit 1; }
+      [ -x "$TARGET/Scripts/Clash.Service" ] && "$TARGET/Scripts/Clash.Service" stop >/dev/null 2>&1 || true
+      [ -x "$TARGET/Scripts/Clash.PolicyTools" ] && "$TARGET/Scripts/Clash.PolicyTools" flush >/dev/null 2>&1 || true
+      FAILED="$TARGET.failed_repair.$(date +%Y%m%d%H%M%S 2>/dev/null)"
+      [ -d "$TARGET" ] && mv "$TARGET" "$FAILED"
+      mv "$BACKUP" "$TARGET"
+      printf 'REPAIR_ROLLBACK_REASON=%s\\n' ${shellQuote(reason)}
+      echo "REPAIR_ROLLBACK=restored_previous"
+    `, 60 * 1000, 'damaged_install_rollback');
+  };
+
+  const selfHealDamagedInstall = async (initialState = null) => {
+    const state = initialState || await checkInstallState({ fresh: true });
+    if (state.state != 'damaged' || !state.repairable) return false;
+    const archive = await downloadCoreArchive({ allowCached: true });
+    if (!archive.ok) {
+      createToast(`安装自愈失败（${escapeHtml(archive.stage)}）<br>${textToHtml(archive.content || archive.message)}`, 'red', 12000);
+      return false;
+    }
+    const committed = await stageAndCommitRepairArchive();
+    if (!committed.ok) {
+      createToast(`安装自愈提交失败<br>${textToHtml(committed.content)}`, 'red', 12000);
+      return false;
+    }
+    const failAndRollback = async (stage, detail = '') => {
+      const rollback = await rollbackRepairedInstall(committed.targetBackup, stage);
+      runtimePreflightCache = null;
+      createToast(
+        `安装自愈在 ${escapeHtml(stage)} 阶段失败<br>${textToHtml(detail)}<br>${rollback.success ? '已恢复修复前安装目录。' : `回滚失败：${textToHtml(rollback.content || '')}`}`,
+        'red',
+        14000,
+      );
+      return false;
+    };
+    if (!(await ensurePolicyToolsScript())) return failAndRollback('policy_script');
+    if (!(await ensureRuntimeManagerScript({ force: true }))) return failAndRollback('runtime_manager');
+    const checked = await runtimePreflight();
+    if (['not_installed', 'damaged'].includes(checked.state)) {
+      return failAndRollback('post_preflight', checked.content || checked.message);
+    }
+    const started = await runShellWithRoot(`${shellQuote(CLASH_RUNTIME_MANAGER)} --restart`, 75 * 1000);
+    if (!started.success || !String(started.content || '').includes('START_STATE=healthy')) {
+      return failAndRollback('post_start', started.content || '未返回健康状态');
+    }
+    runtimePreflightCache = null;
+    createToast(`安装自愈完成并已启动核心<br>用户数据备份：${escapeHtml(committed.userBackup)}`, 'green', 9000);
+    return true;
+  };
 
   const setButtonBusy = (button, busy, busyText = '') => {
     if (!button) return;
@@ -600,7 +1344,7 @@ KANO_YQ_SMOKE_EOF
       return Array.from(bytes, (value) => characters[value % characters.length]).join('');
     } catch (e) {
       console.error('secure secret generation unavailable', e);
-      return '123456';
+      return `${createRandomString(size)}${Date.now().toString(36)}`.slice(0, size);
     }
   };
 
@@ -2534,7 +3278,6 @@ KANO_WRITE_CHECK_EOF
 
   const readControllerInfo = async () => {
     const fallbackController = '127.0.0.1:7788';
-    const fallbackSecret = '123456';
     let externalController = '';
     let secret = '';
 
@@ -2544,16 +3287,16 @@ KANO_WRITE_CHECK_EOF
         externalController = String(snapshot.externalController || '').trim();
         secret = String(snapshot.secret || '').trim();
       }
-      if (snapshot) {
+      if (snapshot && externalController) {
         const controllerInfo = normalizeController(externalController || fallbackController);
         return {
           ...controllerInfo,
           externalController: externalController || fallbackController,
-          secret: secret || fallbackSecret,
-          secretSet: !!secret,
+          secret,
+          secretSet: snapshot.secretSet === true || !!secret,
           usingFallbackController: !externalController,
           usingFallbackSecret: !secret,
-          configSource: externalController && secret ? 'binary' : 'fallback',
+          configSource: 'binary',
         };
       }
       const res = await runShellWithRoot(`
@@ -2599,11 +3342,11 @@ KANO_WRITE_CHECK_EOF
     return {
       ...controllerInfo,
       externalController: externalController || fallbackController,
-      secret: secret || fallbackSecret,
+      secret,
       secretSet: !!secret,
       usingFallbackController: !externalController,
       usingFallbackSecret: !secret,
-      configSource: externalController && secret ? 'real' : 'fallback',
+      configSource: externalController ? 'config' : 'controller_fallback',
     };
   };
 
@@ -2810,6 +3553,9 @@ KANO_WRITE_CHECK_EOF
     const outputArg = outputFile
       ? `-o ${shellQuote(outputFile)} -w ${shellQuote('%{http_code}')}`
       : '';
+    const authorizationArgs = info.secretSet || info.secret
+      ? `-H ${shellQuote(`Authorization: Bearer ${info.secret}`)}`
+      : '';
     return [
       '"$CURL_BIN"',
       '-sS',
@@ -2817,8 +3563,7 @@ KANO_WRITE_CHECK_EOF
       outputArg,
       '-X',
       shellQuote(String(method || 'GET').toUpperCase()),
-      '-H',
-      shellQuote(`Authorization: Bearer ${info.secret || '123456'}`),
+      authorizationArgs,
       typeArg,
       bodyArg,
       shellQuote(url),
@@ -2831,8 +3576,22 @@ KANO_WRITE_CHECK_EOF
     body = null,
     controllerInfo = null,
     requestTimeout = 8,
+    { corePid = null } = {},
   ) => {
+    const detectedCorePid = corePid == null ? await getCorePid() : String(corePid || '');
     const info = controllerInfo || await buildControllerInfo();
+    if (!detectedCorePid) {
+      const classified = classifyMihomoApiError({ corePid: '' });
+      return {
+        success: false,
+        statusCode: 0,
+        curlStatus: 0,
+        responseText: '',
+        controllerInfo: info,
+        corePid: '',
+        ...classified,
+      };
+    }
     const suffix = `${Date.now()}_${createRandomString(6)}`;
     const outFile = `/data/kano_mihomo_api_${suffix}.out`;
     const errFile = `/data/kano_mihomo_api_${suffix}.err`;
@@ -2850,6 +3609,7 @@ KANO_WRITE_CHECK_EOF
         fi
         echo
         echo "__HTTP_CODE:\${HTTP_CODE:-000}__"
+        echo "__CURL_STATUS:\${CURL_STATUS:-1}__"
         rm -f ${shellQuote(outFile)} ${shellQuote(errFile)}
         if [ "$CURL_STATUS" -eq 0 ] && [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
           exit 0
@@ -2858,14 +3618,31 @@ KANO_WRITE_CHECK_EOF
         `, (Math.max(1, Number(requestTimeout) || 8) + 8) * 1000);
     const raw = String(res.content || '');
     const codeMatch = raw.match(/__HTTP_CODE:(\d{3})__/);
+    const curlMatch = raw.match(/__CURL_STATUS:(\d+)__/);
     const statusCode = codeMatch ? Number(codeMatch[1]) : 0;
-    const responseText = raw.replace(/\n?__HTTP_CODE:\d{3}__\s*$/, '').trim();
+    const curlStatus = curlMatch ? Number(curlMatch[1]) : 1;
+    const responseText = raw
+      .replace(/\n?__HTTP_CODE:\d{3}__\s*/, '')
+      .replace(/\n?__CURL_STATUS:\d+__\s*$/, '')
+      .trim();
+    const success = !!(res.success && curlStatus == 0 && statusCode >= 200 && statusCode < 300);
+    const classified = success
+      ? { errorType: '', message: `控制 API 正常（HTTP ${statusCode}）` }
+      : classifyMihomoApiError({
+        corePid: detectedCorePid,
+        curlStatus,
+        statusCode,
+        responseText,
+      });
     return {
       ...res,
-      success: !!(res.success && statusCode >= 200 && statusCode < 300),
+      success,
       statusCode,
+      curlStatus,
       responseText,
       controllerInfo: info,
+      corePid: detectedCorePid,
+      ...classified,
     };
   };
 
@@ -2892,7 +3669,10 @@ KANO_WRITE_CHECK_EOF
       ...target,
       success: !!responses[index].success,
       statusCode: responses[index].statusCode || 0,
-      message: sanitizeSubscriptionSecrets(responses[index].responseText || responses[index].content || ''),
+      errorType: responses[index].errorType || '',
+      message: sanitizeSubscriptionSecrets(
+        responses[index].message || responses[index].responseText || responses[index].content || '',
+      ),
     }));
   };
 
@@ -3022,7 +3802,7 @@ KANO_WRITE_CHECK_EOF
     const embeddedStatus = Number((raw.match(/(?:status(?: code)?|http)[^0-9]{0,8}(\d{3})/i) || [])[1] || 0);
     const status = embeddedStatus || Number(statusCode) || 0;
     if (status == 401 || status == 403 || /(?:unauthorized|forbidden|token[^\n]*(?:invalid|expired))/.test(lower)) {
-      return { type: 'permission', message: '订阅地址无权限或已失效', retryable: false };
+      return { type: 'api_auth', message: `Mihomo 控制 API 鉴权失败${status ? `（HTTP ${status}）` : ''}`, retryable: false };
     }
     if (status == 404 || /provider[^\n]*(?:not found|does not exist)/.test(lower)) {
       const providerMissing = /provider[^\n]*(?:not found|does not exist)/.test(lower);
@@ -3077,7 +3857,7 @@ KANO_WRITE_CHECK_EOF
     for (let attempt = 1; attempt <= tries; attempt++) {
       const pid = await getCorePid();
       if (pid || attempt % 3 == 0 || attempt == tries) {
-        lastResponse = await callMihomoApi('/providers/proxies', 'GET', null, controllerInfo, 3);
+        lastResponse = await callMihomoApi('/providers/proxies', 'GET', null, controllerInfo, 3, { corePid: pid });
         snapshot = lastResponse.success ? parseProviderApiSnapshot(lastResponse.responseText) : null;
         if (snapshot && targets.every((name) => Object.prototype.hasOwnProperty.call(snapshot, name))) {
           return { ok: true, controllerInfo, snapshot, response: lastResponse };
@@ -3107,6 +3887,34 @@ KANO_WRITE_CHECK_EOF
       return emptyResult;
     }
 
+    const runtime = await checkInstallState({ fresh: true });
+    if (!runtime.corePid) {
+      const runtimeMessage = runtime.state == 'damaged'
+        ? '未执行：运行组件预检失败'
+        : '未执行：核心未运行';
+      const notRunResult = buildProviderUpdateResult(requestedNames.map((name) => ({
+        type: 'proxy-provider',
+        name,
+        ok: false,
+        attempts: 0,
+        statusCode: null,
+        errorType: runtime.state == 'damaged' ? 'not_run_runtime_damaged' : 'not_run_core_stopped',
+        message: runtimeMessage,
+        rawMessage: runtime.content || runtime.message || '',
+        urlMasked: '',
+        proxyCount: null,
+        cacheAvailable: false,
+      })), {
+        controllerInfo: null,
+        apiStatusCode: 0,
+        apiErrorType: runtime.state == 'damaged' ? 'runtime_damaged' : 'core_not_running',
+        notRunReason: runtimeMessage,
+        runtimeState: runtime.state,
+      });
+      if (showToast) createToast(runtimeMessage, 'yellow', 7000);
+      return notRunResult;
+    }
+
     const readiness = await waitForProviderApiReady(requestedNames);
     if (!readiness.ok) {
       const rawMessage = sanitizeSubscriptionSecrets(
@@ -3117,7 +3925,10 @@ KANO_WRITE_CHECK_EOF
         const providerMissing = Object.keys(snapshot).length > 0 && !Object.prototype.hasOwnProperty.call(snapshot, name);
         const classified = providerMissing
           ? { type: 'provider_missing', message: '运行配置中未找到该节点来源' }
-          : { type: 'api_unavailable', message: 'Mihomo 控制 API 暂不可用' };
+          : {
+            type: readiness.response && readiness.response.errorType || 'api_unavailable',
+            message: readiness.response && readiness.response.message || 'Mihomo 控制 API 暂不可用',
+          };
         return {
           type: 'proxy-provider', name, ok: false, attempts: 0,
           statusCode: readiness.response && readiness.response.statusCode || null,
@@ -3132,6 +3943,7 @@ KANO_WRITE_CHECK_EOF
       const unavailableResult = buildProviderUpdateResult(results, {
         controllerInfo: readiness.controllerInfo,
         apiStatusCode: readiness.response && readiness.response.statusCode || 0,
+        apiErrorType: readiness.response && readiness.response.errorType || 'api_unavailable',
       });
       if (showToast) createToast(`节点来源更新失败：${escapeHtml(results[0].message)}`, 'red', 7000);
       return unavailableResult;
@@ -3573,31 +4385,47 @@ KANO_WRITE_CHECK_EOF
 
   // \u68c0\u6d4b\u662f\u5426\u5f00\u673a\u81ea\u542f
   const checkIsBootUp = async () => {
-    const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(BOOT_FILE)} ] && grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} ${shellQuote(BOOT_FILE)}; then
-          echo 1
-        else
-          echo 0
-        fi
-        `);
-    return String(res.content || '').trim() == '1';
+    const state = await inspectBootIntegration();
+    return state.enabled;
+  };
+
+  let runtimePreflightCache = null;
+  let runtimePreflightCacheExpiresAt = 0;
+  const checkInstallState = async ({ fresh = false } = {}) => {
+    if (!fresh && runtimePreflightCache && runtimePreflightCacheExpiresAt > Date.now()) {
+      return runtimePreflightCache;
+    }
+    const state = await runtimePreflight();
+    runtimePreflightCache = state;
+    runtimePreflightCacheExpiresAt = Date.now() + 1500;
+    return state;
   };
 
   //\u76d1\u6d4b\u662f\u5426\u5df2\u7ecf\u5b89\u88c5\u8fc7\u4e86
   const checkIsInstalled = async () => {
-    const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-          echo 1
-        else
-          echo 0
-        fi
-        `);
-    return res.success && String(res.content || '').trim() == '1';
+    const state = await checkInstallState();
+    return !['not_installed', 'damaged'].includes(state.state);
   };
 
   const ensureInstalled = async () => {
-    if (await checkIsInstalled()) return true;
-    createToast('\u6ca1\u6709\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5\uff01', 'red');
+    let state = await checkInstallState({ fresh: true });
+    if (!['not_installed', 'damaged'].includes(state.state)) return true;
+    if (state.state == 'damaged' && state.repairable) {
+      createToast(`检测到安装损坏，正在安全修复<br>${textToHtml(state.message || state.content)}`, 'yellow', 8000);
+      if (await selfHealDamagedInstall(state)) {
+        state = await checkInstallState({ fresh: true });
+        if (!['not_installed', 'damaged'].includes(state.state)) return true;
+      }
+      createToast('安装自愈失败，未继续执行当前操作。', 'red', 10000);
+      return false;
+    }
+    createToast(
+      state.state == 'not_installed'
+        ? '\u6ca1\u6709\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5\uff01'
+        : `猫猫安装不可用<br>${textToHtml(state.message || state.content)}`,
+      'red',
+      9000,
+    );
     return false;
   };
 
@@ -3701,7 +4529,13 @@ KANO_WRITE_CHECK_EOF
         echo
         echo "[filesystem]"
         (mount 2>/dev/null | grep -E ' on /(tmp|data) | /(tmp|data) ' || true)
-        (df -k /data /tmp 2>/dev/null || df -k /data 2>/dev/null || true)
+        DF_PATHS="/data"
+        if [ -e /tmp ]; then
+          DF_PATHS="$DF_PATHS /tmp"
+        else
+          echo "note: /tmp is unavailable; managed runtime directories under /data are used"
+        fi
+        df -k $DF_PATHS 2>/dev/null || true
         echo
         echo "[yq runtime]"
         ls -ld ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(`${KANO_YQ_RUNTIME_DIR}/tmp`)} 2>/dev/null || true
@@ -3753,34 +4587,38 @@ KANO_WRITE_CHECK_EOF
     return res.success;
   };
 
-  const startClashServiceClean = async ({ stopFirst = false, reason = '\u542f\u52a8' } = {}) =>
-    runShellWithRoot(
-      `
-        set +e
-        if [ ! -f ${shellQuote(CLASH_SERVICE)} ]; then
-          echo "Clash.Service \u4e0d\u5b58\u5728"
-          exit 1
-        fi
-        echo "[restart] reason: ${shellQuote(reason)}"
-        if [ ${shellQuote(stopFirst ? '1' : '0')} = '1' ]; then
-          ${shellQuote(CLASH_SERVICE)} stop 2>&1 || true
-          sleep 2
-        fi
-        ${flushGeneratedRulesCmd()}
-        ${shellQuote(CLASH_SERVICE)} start
-        rc=$?
-        sleep 2
-        exit "$rc"
-        `,
+  const startClashServiceClean = async ({ stopFirst = false, reason = '\u542f\u52a8' } = {}) => {
+    let state = await checkInstallState({ fresh: true });
+    if (state.state == 'damaged' && state.repairable) {
+      if (!(await selfHealDamagedInstall(state))) {
+        return { success: false, content: `SELF_HEAL_FAILED\n${state.content || state.message}` };
+      }
+      state = await checkInstallState({ fresh: true });
+    }
+    if (state.state == 'not_installed' || state.state == 'damaged') {
+      return { success: false, content: `PREFLIGHT_BLOCKED=${state.state}\n${state.content || state.message}` };
+    }
+    if (!(await ensureRuntimeManagerScript())) {
+      return { success: false, content: 'RUNTIME_MANAGER_UNAVAILABLE' };
+    }
+    const action = stopFirst ? '--restart' : '--start';
+    const result = await runShellWithRoot(
+      `echo "START_REASON=${shellQuote(reason)}"; ${shellQuote(CLASH_RUNTIME_MANAGER)} ${action}`,
       100 * 1000,
     );
+    runtimePreflightCache = null;
+    return {
+      ...result,
+      success: !!(result.success && String(result.content || '').includes('START_STATE=healthy')),
+    };
+  };
 
   const waitForCoreApi = async (tries = 12, delayMs = 1000) => {
     const info = await buildControllerInfo();
     for (let i = 0; i < tries; i++) {
       const pid = await getCorePid();
       if (pid || i % 3 == 2 || i == tries - 1) {
-        const version = await callMihomoApi('/version', 'GET', null, info, 2);
+        const version = await callMihomoApi('/version', 'GET', null, info, 2, { corePid: pid });
         if (version.success) return true;
       }
       await wait(delayMs);
@@ -4367,7 +5205,7 @@ KANO_WRITE_CHECK_EOF
         ? '\u63a7\u5236\u5730\u5740\uff1a\u4f7f\u7528\u9ed8\u8ba4\u503c'
         : '\u63a7\u5236\u5730\u5740\uff1a\u5df2\u8bfb\u53d6\u914d\u7f6e',
       info.usingFallbackSecret
-        ? '\u8bbf\u95ee\u5bc6\u94a5\uff1a\u4f7f\u7528\u9ed8\u8ba4\u503c'
+        ? '\u8bbf\u95ee\u5bc6\u94a5\uff1a\u914d\u7f6e\u4e2d\u672a\u8bbe\u7f6e'
         : '\u8bbf\u95ee\u5bc6\u94a5\uff1a\u5df2\u8bfb\u53d6\u914d\u7f6e',
     ].join('<br>');
     const { el, close } = createFixedToast(
@@ -4457,6 +5295,8 @@ KANO_WRITE_CHECK_EOF
   const showStatusDiagnostic = async () => {
     const controllerInfoPromise = buildControllerInfo();
     const pidPromise = getCorePid();
+    const runtimeStatePromise = checkInstallState({ fresh: true });
+    const bootStatePromise = inspectBootIntegration();
     const configPromise = runShellWithRoot(`
         if [ -f ${shellQuote(CLASH_CONFIG)} ]; then
           size="$(wc -c < ${shellQuote(CLASH_CONFIG)} 2>/dev/null | tr -d ' ')"
@@ -4473,12 +5313,12 @@ KANO_WRITE_CHECK_EOF
         fi
         `);
     const versionPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      pid ? callMihomoApi('/version', 'GET', null, info) : { success: false, statusCode: 0 });
+      callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid }));
     const connectionsPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      pid ? callMihomoApi('/connections', 'GET', null, info, 5) : { success: false, statusCode: 0 });
+      callMihomoApi('/connections', 'GET', null, info, 5, { corePid: pid }));
     const [
-      installed,
-      bootUp,
+      runtimeState,
+      bootState,
       pid,
       controllerInfo,
       policyState,
@@ -4487,8 +5327,8 @@ KANO_WRITE_CHECK_EOF
       versionRes,
       connectionsRes,
     ] = await Promise.all([
-      checkIsInstalled(),
-      checkIsBootUp(),
+      runtimeStatePromise,
+      bootStatePromise,
       pidPromise,
       controllerInfoPromise,
       readPolicyState(),
@@ -4513,18 +5353,19 @@ KANO_WRITE_CHECK_EOF
       }
     }
     const rows = [
-      ['\u662f\u5426\u5df2\u5b89\u88c5', installed ? '\u662f' : '\u5426'],
-      ['\u5f00\u673a\u81ea\u542f', bootUp ? '\u5df2\u5f00\u542f' : '\u672a\u5f00\u542f'],
+      ['\u5b89\u88c5/\u8fd0\u884c\u72b6\u6001', runtimeState.state],
+      ['\u9884\u68c0\u4fe1\u606f', runtimeState.message || '\u65e0'],
+      ['\u5f00\u673a\u81ea\u542f', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
       ['\u6838\u5fc3\u8fdb\u7a0b PID', pid || '\u672a\u8fd0\u884c'],
       ['\u6d41\u91cf\u63a5\u7ba1', policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '\u5df2\u5173\u95ed' : 'TProxy')],
       ['IPv6', policyState.options.ipv6 == 'on' ? '\u5df2\u5f00\u542f' : '\u672a\u5f00\u542f'],
       ['config.yaml', configExists ? `\u5b58\u5728\uff0c${configSize || 0} bytes` : '\u4e0d\u5b58\u5728'],
       ['\u63a7\u5236\u5730\u5740', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '\uff08\u9ed8\u8ba4\u503c\uff09' : '\uff08\u5df2\u8bfb\u53d6\u914d\u7f6e\uff09'}`],
       ['API \u5730\u5740', controllerInfo.apiBase],
-      ['\u8bbf\u95ee\u5bc6\u94a5', controllerInfo.secretSet ? '\u5df2\u8bfb\u53d6\u914d\u7f6e' : '\u9ed8\u8ba4\u503c'],
+      ['\u8bbf\u95ee\u5bc6\u94a5', controllerInfo.secretSet ? '\u5df2\u8bfb\u53d6\u914d\u7f6e' : '\u914d\u7f6e\u4e2d\u672a\u8bbe\u7f6e'],
       ['API \u8fde\u63a5', !pid
         ? '\u6838\u5fc3\u672a\u8fd0\u884c'
-        : (versionRes.success ? `\u6b63\u5e38\uff08HTTP ${versionRes.statusCode}\uff09` : `\u5931\u8d25\uff08HTTP ${versionRes.statusCode || '\u65e0'}\uff09`)],
+        : (versionRes.success ? `\u6b63\u5e38\uff08HTTP ${versionRes.statusCode}\uff09` : versionRes.message || '\u63a7\u5236 API \u4e0d\u53ef\u7528')],
       ['\u6d3b\u52a8\u8fde\u63a5', connectionStatus],
     ];
     const rowHtml = rows.map(([key, value]) =>
@@ -4673,7 +5514,7 @@ KANO_WRITE_CHECK_EOF
     return true;
   };
 
-  const buildBootstrapConfig = (secret = '123456') => [
+  const buildBootstrapConfig = (secret = createRandomSecret()) => [
     'port: 7890',
     'socks-port: 7891',
     'mixed-port: 7892',
@@ -4797,7 +5638,12 @@ KANO_BOOTSTRAP_CONFIG
     setButtonBusy(btn_enabled, true, '\u5b89\u88c5\u4e2d...');
     try {
       if (!(await ensureAdvanced())) return;
-      if (await checkIsInstalled()) {
+      const currentInstallState = await checkInstallState({ fresh: true });
+      if (currentInstallState.state == 'damaged') {
+        await selfHealDamagedInstall(currentInstallState);
+        return;
+      }
+      if (currentInstallState.state != 'not_installed') {
         createToast('\u5df2\u7ecf\u5b89\u88c5\u8fc7\u732b\u732b\u4e86\uff01', 'red');
         return;
       }
@@ -4816,59 +5662,15 @@ KANO_BOOTSTRAP_CONFIG
         createToast(`已自动补齐：${escapeHtml(toolbox.added.join('、'))}`, 'green', 5000);
       }
 
-      createToast('\u4e0b\u8f7d\u6240\u9700\u7ec4\u4ef6\u4e2d...');
-      const res0 = await runShellWithRoot(
-        `(
-          CURL_BIN=${shellQuote(`${F50_FILES_DIR}/curl`)}
-          if [ ! -x "$CURL_BIN" ]; then
-            CURL_BIN="$(command -v curl 2>/dev/null)"
-          fi
-          if [ -z "$CURL_BIN" ]; then
-            echo "DOWNLOAD_FAILED: curl \u4e0d\u5b58\u5728" > ${shellQuote(DOWNLOAD_LOG)}
-            exit 1
-          fi
-          "$CURL_BIN" -fSL "https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip" -o ${shellQuote(DOWNLOAD_ZIP)} --write-out "DOWNLOAD_DONE\\nTotal: %{size_download} bytes\\nSpeed: %{speed_download} B/s\\nTime: %{time_total} sec\\n" > ${shellQuote(DOWNLOAD_LOG)} 2>&1 ||
-            echo "DOWNLOAD_FAILED:$?" >> ${shellQuote(DOWNLOAD_LOG)}
-        ) &`,
-        100 * 1000,
-      );
-      if (!res0.success) {
-        return createToast('\u4e0b\u8f7d\u4f9d\u8d56\u5931\u8d25!', 'red');
-      }
-
-      let log = '';
-      const max_times = 600; // \u6700\u591a\u7b49\u5f8510\u5206\u949f
-      let count_times = 0;
-      const { el, close } = createFixedToast(
-        'kano_mihomo_toast',
-        `<pre style="white-space: pre-wrap;min-width:300px;text-align: center;">\u7b49\u5f85\u65e5\u5fd7\u4e2d...</pre>`,
-        '',
-      );
-      const logEl = el.querySelector('pre');
-      while (true) {
-        const dlog = await runShellWithRoot(
-          `if [ -f ${shellQuote(DOWNLOAD_LOG)} ]; then timeout 2s awk '{print}' ${shellQuote(DOWNLOAD_LOG)}; fi`,
+      createToast('\u4e0b\u8f7d\u5e76\u6821\u9a8c\u6240\u9700\u7ec4\u4ef6\u4e2d...');
+      const archive = await downloadCoreArchive({ allowCached: false });
+      if (!archive.ok) {
+        return createToast(
+          `\u4e0b\u8f7d\u6216\u6821\u9a8c\u5b89\u88c5\u5305\u5931\u8d25<br>${textToHtml(archive.content || archive.message)}`,
+          'red',
+          12000,
         );
-        const lines = String(dlog.content || '').split('\n');
-        log = lines.slice(-6).join('\n');
-        setText(logEl, log || '\u7b49\u5f85\u4e0b\u8f7d...');
-        if (max_times <= count_times) {
-          close();
-          return createToast('\u4e0b\u8f7d\u8d85\u65f6\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u8fde\u63a5\u6216\u7a0d\u540e\u91cd\u8bd5\uff01', 'red');
-        }
-        if (log.includes('DOWNLOAD_FAILED')) {
-          close();
-          return createToast(`\u4e0b\u8f7d\u5931\u8d25\uff1a<br>${textToHtml(log)}`, 'red');
-        }
-        if (log.includes('DOWNLOAD_DONE')) {
-          close();
-          break;
-        }
-        count_times++;
-        await wait(1000);
       }
-
-      await runShellWithRoot(`rm -f ${shellQuote(DOWNLOAD_LOG)}`);
 
       createToast('\u89e3\u538b\u732b\u732b\u6587\u4ef6...');
       const res2 = await runShellWithRoot(`
@@ -5111,17 +5913,17 @@ KANO_BOOTSTRAP_CONFIG
             ;;
         esac
         [ -f ${shellQuote(CLASH_SUB_URLS)} ] && chmod 600 ${shellQuote(CLASH_SUB_URLS)}
-        ${addBootLinesCmd()}
         `);
       if (!res5.success) return await failInstalledPackage('设置开机启动失败', res5.content || '');
       if (!(await ensurePolicyToolsScript())) return await failInstalledPackage('写入策略脚本失败');
       if (!(await ensureBootstrapConfig())) return await failInstalledPackage('创建基础配置失败');
       if (!(await sanitizeConfigForTProxy({ showToast: false }))) return await failInstalledPackage('基础配置校验失败');
+      if (!(await ensureRuntimeManagerScript({ force: true }))) return await failInstalledPackage('写入运行预检脚本失败');
+      const bootWrite = await runShellWithRoot(addBootLinesCmd());
+      if (!bootWrite.success) return await failInstalledPackage('设置开机启动失败', bootWrite.content || '');
 
       createToast('\u542f\u52a8Clash...');
-      const res6 = await runShellWithRoot(`
-        ${shellQuote(CLASH_SERVICE)} start
-        `);
+      const res6 = await startClashServiceClean({ stopFirst: false, reason: '首次启动' });
       if (!res6.success) {
         await networkRescue({ stopService: true, showOutput: false, reason: '\u9996\u6b21\u542f\u52a8\u5931\u8d25' });
         return await failInstalledPackage('首次启动失败', res6.content || '');
@@ -5277,7 +6079,9 @@ KANO_BOOTSTRAP_CONFIG
         TMP_MAC=""
         chmod 600 "$DEVICE" "$LEGACY" 2>/dev/null || true
         if [ -f "$BOOT" ]; then
-          sed -i '/Clash.MacBypass/d' "$BOOT" 2>/dev/null || true
+          awk -v line=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} '$0 != line { print }' "$BOOT" > "$BOOT.kano.$$" &&
+            mv "$BOOT.kano.$$" "$BOOT"
+          rm -f "$BOOT.kano.$$" 2>/dev/null || true
         fi
         rm -f ${shellQuote(CLASH_MAC_BYPASS_SCRIPT)} 2>/dev/null || true
         for NAME in iptables ip6tables; do
@@ -5893,7 +6697,12 @@ KANO_POLICY_TOOLS_EOF
         }
         write_policy_file ${shellQuote(CLASH_DEVICE_BYPASS_FILE)} 600 ${shellQuote(normalizedDevice.text)}
         write_policy_file ${shellQuote(CLASH_MAC_BYPASS_FILE)} 600 ${shellQuote(macMirrorText)}
-        if [ -f ${shellQuote(BOOT_FILE)} ]; then sed -i '/Clash.MacBypass/d' ${shellQuote(BOOT_FILE)} || true; fi
+        if [ -f ${shellQuote(BOOT_FILE)} ]; then
+          BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano`)}.$$
+          awk -v line=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} '$0 != line { print }' ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
+            mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
+          rm -f "$BOOT_TMP" 2>/dev/null || true
+        fi
         write_policy_file ${shellQuote(CLASH_DIRECT_DOMAIN_FILE)} 600 ${shellQuote(directDomain)}
         write_policy_file ${shellQuote(CLASH_DIRECT_IP_FILE)} 600 ${shellQuote(directIp)}
         write_policy_file ${shellQuote(CLASH_PROXY_DOMAIN_FILE)} 600 ${shellQuote(proxyDomain)}
@@ -6993,33 +7802,52 @@ KANO_POLICY_TOOLS_EOF
     boot_on.classList.add('btn');
     boot_on.textContent = '\u5f00\u673a\u81ea\u542f';
     boot_on.style.background = '';
+    const applyBootButtonState = (state) => {
+      const status = state && state.state || 'disabled';
+      boot_on.dataset.bootState = status;
+      boot_on.style.background = status == 'disabled' ? '' : 'var(--dark-btn-color-active)';
+      boot_on.textContent = status == 'managed'
+        ? '开机自启（已托管）'
+        : status == 'direct'
+          ? '开机自启（直接执行）'
+          : status == 'manager_damaged'
+            ? '开机自启（管理器异常）'
+            : '开机自启';
+      boot_on.title = state && state.message || '';
+    };
     boot_on.addEventListener('click', async () => {
       if (!(await ensureReady())) return;
       const operationToken = acquireCriticalOperation('修改开机自启');
       if (!operationToken) return;
       setButtonBusy(boot_on, true, '处理中...');
       try {
-        const isBootUp = await checkIsBootUp();
-        const result = await runShellWithRoot(isBootUp ? removeBootLinesCmd() : addBootLinesCmd());
+        const before = await inspectBootIntegration();
+        if (!before.enabled && !(await ensureRuntimeManagerScript())) {
+          createToast('运行预检脚本不可用，未写入开机启动命令。', 'red', 8000);
+          return;
+        }
+        const result = await runShellWithRoot(before.enabled ? removeBootLinesCmd() : addBootLinesCmd());
         if (!result.success) {
           createToast(`修改开机自启失败<br>${textToHtml(result.content || '')}`, 'red', 8000);
           return;
         }
-        boot_on.style.background = isBootUp ? '' : 'var(--dark-btn-color-active)';
-        createToast(isBootUp ? '\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f' : '\u5df2\u8bbe\u7f6e\u5f00\u673a\u81ea\u542f', 'green');
+        const after = await inspectBootIntegration();
+        applyBootButtonState(after);
+        const color = after.state == 'managed' || after.state == 'disabled' ? 'green' : 'yellow';
+        createToast(
+          after.state == 'disabled'
+            ? '\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f'
+            : `${escapeHtml(after.message)}<br>手动启动、停止和重启不依赖开机自启修复。`,
+          color,
+          8000,
+        );
       } finally {
         setButtonBusy(boot_on, false);
         releaseCriticalOperation(operationToken);
       }
     });
 
-    checkIsBootUp().then((isBootUp) => {
-      if (isBootUp) {
-        boot_on.style.background = 'var(--dark-btn-color-active)';
-      } else {
-        boot_on.style.background = '';
-      }
-    });
+    inspectBootIntegration().then(applyBootButtonState);
 
     const showLogBtn = document.createElement('button');
     showLogBtn.classList.add('btn');
@@ -7221,7 +8049,7 @@ KANO_POLICY_TOOLS_EOF
         const runtimeLines = runtimeResults.map((item) => {
           if (item.success) return `${item.label}\uff1a\u5df2\u5237\u65b0`;
           if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}\uff1a\u5f53\u524d\u5185\u6838\u4e0d\u652f\u6301`;
-          return `${item.label}\uff1a\u5237\u65b0\u5931\u8d25\uff08HTTP ${item.statusCode || '\u65e0'}\uff09`;
+          return `${item.label}\uff1a${item.message || '\u5237\u65b0\u5931\u8d25'}`;
         });
         const runtimeOk = runtimeResults.every((item) =>
           item.success || item.statusCode == 404 || item.statusCode == 405);
@@ -7676,6 +8504,7 @@ ${expectedProviderChecks}
       repairable,
     }) => {
       const providerResult = providerUpdateResult || buildProviderUpdateResult([]);
+      const providerNotRun = !!providerResult.notRunReason;
       const providerExpected = configValidationResult.providerCount > 0;
       const providerOk = providerResult.total > 0
         ? providerResult.failed == 0
@@ -7688,14 +8517,18 @@ ${expectedProviderChecks}
       const allOk = configValidationResult.ok && providerOk;
       const title = !configValidationResult.ok
         ? '订阅配置检查异常'
+        : providerNotRun
+          ? '订阅配置检查通过，节点来源未执行'
         : allOk
           ? '订阅更新成功'
           : providerResult.success > 0
             ? '订阅更新部分成功'
             : '配置已应用，但节点来源更新失败';
-      const color = !configValidationResult.ok || confirmedNoCache || noUsableProvider ? 'red' : allOk ? 'green' : 'yellow';
+      const color = !configValidationResult.ok || (!providerNotRun && (confirmedNoCache || noUsableProvider)) ? 'red' : allOk ? 'green' : 'yellow';
       const summary = !configValidationResult.ok
         ? '订阅配置检查异常，请查看详细结果。'
+        : providerNotRun
+          ? providerResult.notRunReason
         : allOk
           ? `订阅更新成功：节点来源 ${providerResult.success}/${providerResult.total}`
           : `配置检查通过，节点来源更新 ${providerResult.success}/${providerResult.total}`;
@@ -7715,7 +8548,7 @@ ${expectedProviderChecks}
             : '';
           return `<div style="padding:9px 10px;border:1px solid rgba(148,163,184,.25);border-radius:9px;overflow-wrap:anywhere;word-break:break-word;">
             <b>${escapeHtml(item.name)}</b><br>
-            状态：${item.ok ? '成功' : '失败'}<br>
+            状态：${item.ok ? '成功' : String(item.errorType || '').startsWith('not_run_') ? '未执行' : '失败'}<br>
             尝试次数：${item.attempts}<br>
             ${item.ok ? '' : `原因：${escapeHtml(item.message)}<br>`}
             ${item.urlMasked ? `服务器：${escapeHtml(item.urlMasked)}<br>` : ''}
@@ -7743,7 +8576,7 @@ ${expectedProviderChecks}
           </div>
           <div style="margin-top:12px;text-align:right;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
             ${repairable ? `<button style="font-size:.64rem" id="${repairId}">应用模板修复</button>` : ''}
-            ${failedProviders.length > 0 ? `<button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${retryId}">重新更新失败项</button>` : ''}
+            ${failedProviders.length > 0 ? `<button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${retryId}">${providerNotRun ? '修复并启动核心后重试' : '重新更新失败项'}</button>` : ''}
             <button style="font-size:.64rem" id="${closeId}">关闭</button>
           </div>
         </div>`,
@@ -7780,6 +8613,7 @@ ${expectedProviderChecks}
           if (!operationToken) return;
           setButtonBusy(retryBtn, true, '重试中...');
           try {
+            if (providerNotRun && !(await restartClash())) return;
             const retryResult = await forceUpdateProvidersFromConfig({
               showToast: false,
               providerNames: failedProviders.map((item) => item.name),
@@ -7815,9 +8649,7 @@ ${expectedProviderChecks}
       const [controllerCheck, configCheck] = await Promise.all([controllerCheckPromise, configCheckPromise]);
       const configSummary = `当前规则来源：template 规则\n订阅转换：${cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? '设备本地转换' : 'Mihomo HTTP Provider'}\n当前 config 来源：${configCheck.configSource || 'unknown'}\nproxy-providers 数量：${configCheck.providerCount}\n有效订阅 URL 数量：${configCheck.providerUrlCount}\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n模式标记：${configCheck.modeLineOk && configCheck.convertModeOk ? '正确' : '错误'}`;
       const controllerOk = !!controllerCheck.success;
-      const controllerIssue = controllerOk ? '' : `\u63a7\u5236 API \u4e0d\u901a\uff1aHTTP ${controllerCheck.statusCode || '\u65e0'}`;
       const issues = (configCheck.issues || []).slice();
-      if (controllerIssue) issues.push(controllerIssue);
       const issueText = issues.join('\n');
       const diagnosticText = String(configCheck.content || '')
         .split('\n')
@@ -7828,17 +8660,17 @@ ${expectedProviderChecks}
       const diagnosticSummary = diagnosticText || `RUNTIME_CONFIG_CHECK=${configCheck.status || 'unknown'}`;
       const controllerText = controllerCheck.success
         ? `\u63a7\u5236 API\uff1a\u53ef\u8bbf\u95ee\uff08HTTP ${controllerCheck.statusCode}\uff09`
-        : `\u63a7\u5236 API\uff1a\u4e0d\u53ef\u8bbf\u95ee\uff08HTTP ${controllerCheck.statusCode || '\u65e0'}\uff09`;
-      const ok = configCheck.ok && controllerOk;
+        : `\u63a7\u5236 API\uff1a${controllerCheck.message || '不可访问'}${controllerCheck.statusCode ? `（HTTP ${controllerCheck.statusCode}）` : ''}`;
       const configValidationResult = {
         ...configCheck,
-        ok,
+        ok: configCheck.ok,
         controllerOk,
         controllerStatusCode: controllerCheck.statusCode || 0,
+        controllerErrorType: controllerCheck.errorType || '',
       };
       const expectedSourceCount = normalizeSubSourceList(sources).length;
       const expectedProviderUrlCount = cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? 0 : expectedSourceCount;
-      const repairable = !ok && configCheck.status == 'ok' && (
+      const repairable = !configCheck.ok && configCheck.status == 'ok' && (
         configCheck.missingUrls > 0 ||
         configCheck.providerCount != expectedSourceCount ||
         configCheck.providerUrlCount != expectedProviderUrlCount ||

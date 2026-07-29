@@ -405,6 +405,27 @@ const gateOf = (text) => {
     assert(count === 1, `插件启动指令只被执行一次，实际执行 ${count} 次`);
   });
 
+  await test('T15b 过期空锁存在时，多个触发点也只有一个能原子接管', async () => {
+    const counter = `${S}/probe/stale_count`;
+    const content = [`sleep 2; printf x >> ${counter}`, ''].join('\n');
+    await freshInstall(content);
+    await waitQuiet();
+    clearProbes();
+    fs.rmSync(sbx.p('data/f50_boot_fix/last_completed_boot_id'), { force: true });
+    fs.rmSync(sbx.p('data/f50_boot_fix/last_run.txt'), { force: true });
+    fs.mkdirSync(sbx.p('data/local/tmp/f50_plugin_boot_manager.lock'), { recursive: true });
+    sbx.setBootCompleted('1');
+    sbx.setUptime(5);
+    const mgr = `${S}/data/f50_boot_fix/boot_manager.sh`;
+    sbx.runShell(`( ${mgr} --trigger=stale-a >/dev/null 2>&1 </dev/null & ) ; ( ${mgr} --trigger=stale-b >/dev/null 2>&1 </dev/null & )`, 10000, { rewrite: false });
+    await waitForState(sbx, 30000);
+    await sleep(3000);
+    const count = fs.existsSync(sbx.p('probe/stale_count'))
+      ? fs.readFileSync(sbx.p('probe/stale_count'), 'utf8').length
+      : 0;
+    assert(count === 1, `过期锁只能被一个实例接管，实际执行 ${count} 次`);
+  });
+
   await test('T16 启动文件本身有语法错误：不破坏文件，管理器退回整体重放且不崩', async () => {
     const content = [
       `touch ${S}/probe/s1`,
@@ -543,6 +564,19 @@ const gateOf = (text) => {
     await app.click('status');
     const detail = app.elements.get('#f50_boot_fix_standalone_detail').innerHTML;
     assert(/门.*不见了|⚠/.test(detail), '面板给出了告警');
+  });
+
+  await test('T26 页面操作使用同一把忙锁，不允许安装与卸载并发执行', async () => {
+    await waitQuiet();
+    sbx.reset();
+    sbx.writeBoot(MULTI);
+    const app = loadPlugin(sbx);
+    const installing = app.click('install');
+    const uninstalling = app.click('uninstall');
+    await Promise.all([installing, uninstalling]);
+    assert(sbx.exists('data/f50_boot_fix/boot_manager.sh'), '并发点击没有卸载正在安装的管理器');
+    assert((sbx.readBoot() || '').includes('# F50_BOOT_FIX_BEGIN'), '并发点击后启动门仍完整');
+    assert(app.toasts.some((item) => /已有一项开机自启操作/.test(item.msg)), '第二个操作被明确拒绝');
   });
 
   // -------------------------------------------------------------------------

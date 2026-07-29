@@ -50,6 +50,9 @@ const check = (name, ok, detail = '') => {
   check('抽出管理器脚本', manager.length > 2000, `长度 ${manager.length}`);
   check('抽出门代码', gate.includes('F50_BOOT_FIX_BEGIN'), gate.slice(0, 80));
   check('抽出 service.d 钩子', hook.includes('boot_manager.sh'));
+  check('后台入口在 exec 前忽略 HUP', gate.includes("trap '' HUP; exec") && hook.includes("trap '' HUP; exec"));
+  check('状态查询使用独立工作目录', manager.includes('prepare_work "worklist.$$"'));
+  check('过期锁通过原子改名接管', manager.includes('mv "$LOCK_DIR" "$stale_lock"'));
 
   const files = {
     manager: manager.replace(/^#!.*\n/, '#!/bin/sh\n'),
@@ -121,6 +124,7 @@ const check = (name, ok, detail = '') => {
     ['mkdir 原子建目录（当锁用）', `rm -rf "${tmp}/lk"; busybox mkdir "${tmp}/lk" && busybox mkdir "${tmp}/lk" 2>/dev/null; echo $?`, '1'],
     ['rmdir 释放锁', `busybox rmdir "${tmp}/lk" && echo ok`, 'ok'],
     ['mv -f 原子替换', `printf new > "${tmp}/n"; busybox mv -f "${tmp}/n" "${tmp}/f.txt" && busybox cat "${tmp}/f.txt"`, 'new'],
+    ['cmp -s 精确检查文件是否变化', `printf same > "${tmp}/a"; printf same > "${tmp}/b"; busybox cmp -s "${tmp}/a" "${tmp}/b" && echo ok`, 'ok'],
     ['kill -0 探测进程（shell 内建）', `dash -c 'kill -0 $$ && echo ok'`, 'ok'],
     ['command -v 探测命令', `command -v busybox >/dev/null && echo ok`, 'ok'],
     ['printf %s\\n', `busybox printf '%s\\n' hi`, 'hi'],

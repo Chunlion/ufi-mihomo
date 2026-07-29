@@ -51,7 +51,7 @@
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
   const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.0';
+  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.1';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_MANAGER_VERSION = '2.2.0';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
@@ -466,6 +466,7 @@ CORE=${CLASH_CORE}
 CONFIG=${CLASH_CONFIG}
 YQ=${CLASH_DIR}/Tools/yq_linux_arm64
 POLICY=${CLASH_POLICY_SCRIPT}
+RECOVERY_ARCHIVE=${DOWNLOAD_ZIP}
 DIAG=/data/kano_diag_runtime
 TMPDIR="$DIAG/tmp"
 HOME="$DIAG/home"
@@ -492,9 +493,9 @@ detect_abi() {
   ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
   MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
   case "$ABI $ABILIST $MACHINE" in
-    *arm64-v8a*|*aarch64*|*armv8*) ABI_KIND=arm64; CONTROLLER="$CLASH_DIR/Scripts/clashctl_arm64"; ELF_CLASS=2; ELF_MACHINE=183 ;;
-    *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) ABI_KIND=armv7; CONTROLLER="$CLASH_DIR/Scripts/clashctl_armv7"; ELF_CLASS=1; ELF_MACHINE=40 ;;
-    *) ABI_KIND=unsupported; CONTROLLER=""; ELF_CLASS=0; ELF_MACHINE=0 ;;
+    *arm64-v8a*|*aarch64*|*armv8*) ABI_KIND=arm64; CONTROLLER="$CLASH_DIR/Scripts/clashctl_arm64"; ARCHIVE_CONTROLLER="Scripts/clashctl_arm64"; ELF_CLASS=2; ELF_MACHINE=183 ;;
+    *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) ABI_KIND=armv7; CONTROLLER="$CLASH_DIR/Scripts/clashctl_armv7"; ARCHIVE_CONTROLLER="Scripts/clashctl_armv7"; ELF_CLASS=1; ELF_MACHINE=40 ;;
+    *) ABI_KIND=unsupported; CONTROLLER=""; ARCHIVE_CONTROLLER=""; ELF_CLASS=0; ELF_MACHINE=0 ;;
   esac
 }
 
@@ -509,6 +510,55 @@ verify_elf() {
   class="$(od -An -t u1 -j 4 -N 1 "$target" 2>/dev/null | tr -d ' ')"
   machine="$(od -An -t u1 -j 18 -N 2 "$target" 2>/dev/null | awk '{print $1 + ($2 * 256)}')"
   [ "$class" = "$expected_class" ] && [ "$machine" = "$expected_machine" ]
+}
+
+repair_controller_from_archive() {
+  [ -n "$CONTROLLER" ] && [ -n "$ARCHIVE_CONTROLLER" ] && [ -s "$RECOVERY_ARCHIVE" ] || return 1
+  UNZIP=""
+  for candidate in /data/kano_tproxy_tools/bin/unzip "$(command -v unzip 2>/dev/null)"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    UNZIP="$candidate"
+    break
+  done
+  [ -n "$UNZIP" ] || return 1
+  "$UNZIP" -t "$RECOVERY_ARCHIVE" >/dev/null 2>&1 || return 1
+  NEW_CONTROLLER="$CONTROLLER.kano_new.$$"
+  rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+  "$UNZIP" -p "$RECOVERY_ARCHIVE" "$ARCHIVE_CONTROLLER" > "$NEW_CONTROLLER" 2>/dev/null || {
+    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+    return 1
+  }
+  verify_elf "$NEW_CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE" || {
+    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+    return 1
+  }
+  chmod 755 "$NEW_CONTROLLER" 2>/dev/null || {
+    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+    return 1
+  }
+  archive_probe="$("$NEW_CONTROLLER" --help 2>&1)"
+  archive_rc=$?
+  case "$archive_rc:$archive_probe" in
+    126:*|127:*|*:*Exec\\ format*|*:*not\\ found*)
+      rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+      return 1
+      ;;
+  esac
+  mv -f "$NEW_CONTROLLER" "$CONTROLLER" 2>/dev/null || {
+    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
+    return 1
+  }
+  chmod 755 "$CONTROLLER" 2>/dev/null || true
+  return 0
+}
+
+remove_missing_label() {
+  missing_label="$1"
+  MISSING="$(printf '%s' "$MISSING" | awk -F, -v label="$missing_label" '{
+    out=""
+    for (i=1; i<=NF; i++) if ($i != label && $i !~ ("^" label ":")) out=(out ? out "," : "") $i
+    print out
+  }')"
 }
 
 find_core_pid() {
@@ -584,15 +634,16 @@ preflight() {
             chmod 755 "$CONTROLLER" 2>/dev/null &&
             append_word REPAIRED controller_from_validated_generic
           if [ -s "$CONTROLLER" ]; then
-            MISSING="$(printf '%s' "$MISSING" | awk -F, '{
-              out=""
-              for (i=1; i<=NF; i++) if ($i !~ /^controller(:|$)/) out=(out ? out "," : "") $i
-              print out
-            }')"
+            remove_missing_label controller
           fi
           ;;
       esac
     fi
+  fi
+
+  if [ ! -s "$CONTROLLER" ] && repair_controller_from_archive; then
+    append_word REPAIRED controller_from_cached_archive
+    remove_missing_label controller
   fi
 
   if [ -s "$CONTROLLER" ]; then
@@ -614,7 +665,13 @@ preflight() {
           *) ;;
         esac
       fi
-      verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE" || append_word PROBE_ERRORS controller_architecture
+      if ! verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE"; then
+        if repair_controller_from_archive; then
+          append_word REPAIRED controller_replaced_from_cached_archive
+        else
+          append_word PROBE_ERRORS controller_architecture
+        fi
+      fi
     elif [ "$elf_rc" -eq 2 ]; then
       append_word PROBE_ERRORS elf_reader_unavailable
     fi
@@ -3873,6 +3930,60 @@ KANO_WRITE_CHECK_EOF
     const success = results.filter((item) => item.ok).length;
     const total = results.length;
     return { ...metadata, total, success, failed: total - success, providers: results, okCount: success, results };
+  };
+
+  const deriveSubscriptionUpdateOutcome = (
+    configValidationResult = {},
+    providerUpdateResult = null,
+  ) => {
+    const providerResult = providerUpdateResult || buildProviderUpdateResult([]);
+    const providerNotRun = !!providerResult.notRunReason;
+    const providerExpected = Number(configValidationResult.providerCount || 0) > 0;
+    const providerOk = providerResult.total > 0
+      ? providerResult.failed == 0
+      : !providerExpected;
+    const failedProviders = providerResult.providers.filter((item) => !item.ok);
+    const confirmedNoCache = failedProviders.length > 0 && failedProviders.every((item) => item.proxyCount === 0);
+    const noUsableProvider = providerResult.total > 0 && providerResult.success == 0 && failedProviders.every(
+      (item) => item.proxyCount === 0 || item.errorType == 'provider_missing',
+    );
+    const configOk = !!configValidationResult.ok;
+    const allOk = configOk && providerOk;
+    const title = !configOk
+      ? '订阅配置检查异常'
+      : providerNotRun
+        ? '订阅配置正常 · 节点来源未更新'
+        : allOk
+          ? '订阅更新成功'
+          : providerResult.success > 0
+            ? '订阅配置正常 · 节点来源部分更新'
+            : '订阅配置正常 · 节点来源更新失败';
+    const color = !configOk || (!providerNotRun && (confirmedNoCache || noUsableProvider))
+      ? 'red'
+      : allOk
+        ? 'green'
+        : 'yellow';
+    const summary = !configOk
+      ? '订阅配置检查异常，请查看详细结果。'
+      : providerNotRun
+        ? `配置检查通过；${providerResult.notRunReason || '节点来源更新未执行'}。`
+        : allOk
+          ? `订阅更新成功：节点来源 ${providerResult.success}/${providerResult.total}`
+          : `配置检查通过；节点来源更新 ${providerResult.success}/${providerResult.total}`;
+    return {
+      providerResult,
+      providerNotRun,
+      providerExpected,
+      providerOk,
+      failedProviders,
+      confirmedNoCache,
+      noUsableProvider,
+      configOk,
+      allOk,
+      title,
+      color,
+      summary,
+    };
   };
 
   const forceUpdateProvidersFromConfig = async ({ showToast = false, providerNames = null } = {}) => {
@@ -8038,24 +8149,48 @@ KANO_POLICY_TOOLS_EOF
         const runtimeResults = await flushMihomoRuntimeCaches();
         const res = await runDangerousShellWithRoot(`
           set +e
-          rm -f ${shellQuote(DOWNLOAD_ZIP)} ${shellQuote(DOWNLOAD_LOG)} 2>/dev/null || true
+          RECOVERY_ARCHIVE=${shellQuote(DOWNLOAD_ZIP)}
+          RECOVERY_ARCHIVE_STATUS=missing
+          if [ -s "$RECOVERY_ARCHIVE" ]; then
+            UNZIP_BIN=""
+            for candidate in ${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/unzip`)} "$(command -v unzip 2>/dev/null)"; do
+              [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+              UNZIP_BIN="$candidate"
+              break
+            done
+            if [ -n "$UNZIP_BIN" ] && "$UNZIP_BIN" -t "$RECOVERY_ARCHIVE" >/dev/null 2>&1; then
+              RECOVERY_ARCHIVE_STATUS=retained
+            else
+              rm -f "$RECOVERY_ARCHIVE" 2>/dev/null || true
+              RECOVERY_ARCHIVE_STATUS=removed_invalid
+            fi
+          fi
+          rm -f ${shellQuote(DOWNLOAD_LOG)} 2>/dev/null || true
           rm -f /data/kano_mihomo_api_*.out /data/kano_mihomo_api_*.err /data/kano_yaml_after_override.yaml /data/kano_ui_rules_*.txt /data/kano_ui_rules_patch.yaml /data/kano_subscription_* 2>/dev/null || true
           rm -f ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.tmp ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.bak 2>/dev/null || true
           for EMPTY_CACHE in ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.yaml; do
             [ -f "$EMPTY_CACHE" ] && [ ! -s "$EMPTY_CACHE" ] && rm -f "$EMPTY_CACHE" 2>/dev/null || true
           done
+          echo "RECOVERY_ARCHIVE_STATUS=$RECOVERY_ARCHIVE_STATUS"
           echo "CACHE_CLEAN_DONE"
         `, 20 * 1000, 'clear_cache');
         const runtimeLines = runtimeResults.map((item) => {
           if (item.success) return `${item.label}\uff1a\u5df2\u5237\u65b0`;
+          if (item.errorType == 'core_not_running') return `${item.label}：已跳过（核心未运行）`;
           if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}\uff1a\u5f53\u524d\u5185\u6838\u4e0d\u652f\u6301`;
           return `${item.label}\uff1a${item.message || '\u5237\u65b0\u5931\u8d25'}`;
         });
         const runtimeOk = runtimeResults.every((item) =>
-          item.success || item.statusCode == 404 || item.statusCode == 405);
+          item.success || item.errorType == 'core_not_running' || item.statusCode == 404 || item.statusCode == 405);
         const allOk = res.success && runtimeOk;
+        const archiveStatus = (String(res.content || '').match(/(?:^|\n)RECOVERY_ARCHIVE_STATUS=([^\n]+)/) || [])[1] || 'unknown';
+        const archiveLine = archiveStatus == 'retained'
+          ? '离线自愈包：已保留'
+          : archiveStatus == 'removed_invalid'
+            ? '离线自愈包：损坏文件已清理'
+            : '离线自愈包：当前不存在';
         createToast(
-          `${allOk ? '\u7f13\u5b58\u5df2\u6e05\u7406' : '\u7f13\u5b58\u6e05\u7406\u90e8\u5206\u5b8c\u6210'}<br>${textToHtml([...runtimeLines, res.success ? '\u4e34\u65f6\u6587\u4ef6\uff1a\u5df2\u6e05\u7406' : '\u4e34\u65f6\u6587\u4ef6\uff1a\u6e05\u7406\u5931\u8d25'].join('\n'))}`,
+          `${allOk ? '\u7f13\u5b58\u5df2\u6e05\u7406' : '\u7f13\u5b58\u6e05\u7406\u90e8\u5206\u5b8c\u6210'}<br>${textToHtml([...runtimeLines, archiveLine, res.success ? '\u4e34\u65f6\u6587\u4ef6\uff1a\u5df2\u6e05\u7406' : '\u4e34\u65f6\u6587\u4ef6\uff1a\u6e05\u7406\u5931\u8d25'].join('\n'))}`,
           allOk ? 'green' : 'yellow',
           8000,
         );
@@ -8503,35 +8638,17 @@ ${expectedProviderChecks}
       diagnosticSummary,
       repairable,
     }) => {
-      const providerResult = providerUpdateResult || buildProviderUpdateResult([]);
-      const providerNotRun = !!providerResult.notRunReason;
-      const providerExpected = configValidationResult.providerCount > 0;
-      const providerOk = providerResult.total > 0
-        ? providerResult.failed == 0
-        : !providerExpected;
-      const failedProviders = providerResult.providers.filter((item) => !item.ok);
-      const confirmedNoCache = failedProviders.length > 0 && failedProviders.every((item) => item.proxyCount === 0);
-      const noUsableProvider = providerResult.total > 0 && providerResult.success == 0 && failedProviders.every(
-        (item) => item.proxyCount === 0 || item.errorType == 'provider_missing',
-      );
-      const allOk = configValidationResult.ok && providerOk;
-      const title = !configValidationResult.ok
-        ? '订阅配置检查异常'
-        : providerNotRun
-          ? '订阅配置检查通过，节点来源未执行'
-        : allOk
-          ? '订阅更新成功'
-          : providerResult.success > 0
-            ? '订阅更新部分成功'
-            : '配置已应用，但节点来源更新失败';
-      const color = !configValidationResult.ok || (!providerNotRun && (confirmedNoCache || noUsableProvider)) ? 'red' : allOk ? 'green' : 'yellow';
-      const summary = !configValidationResult.ok
-        ? '订阅配置检查异常，请查看详细结果。'
-        : providerNotRun
-          ? providerResult.notRunReason
-        : allOk
-          ? `订阅更新成功：节点来源 ${providerResult.success}/${providerResult.total}`
-          : `配置检查通过，节点来源更新 ${providerResult.success}/${providerResult.total}`;
+      const outcome = deriveSubscriptionUpdateOutcome(configValidationResult, providerUpdateResult);
+      const {
+        providerResult,
+        providerNotRun,
+        providerOk,
+        failedProviders,
+        allOk,
+        title,
+        color,
+        summary,
+      } = outcome;
       createToast(summary, color, 7000);
 
       const providerRows = providerResult.total > 0
@@ -8576,7 +8693,7 @@ ${expectedProviderChecks}
           </div>
           <div style="margin-top:12px;text-align:right;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
             ${repairable ? `<button style="font-size:.64rem" id="${repairId}">应用模板修复</button>` : ''}
-            ${failedProviders.length > 0 ? `<button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${retryId}">${providerNotRun ? '修复并启动核心后重试' : '重新更新失败项'}</button>` : ''}
+            ${failedProviders.length > 0 ? `<button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${retryId}">${providerNotRun ? '启动核心并重试节点来源' : '重新更新失败项'}</button>` : ''}
             <button style="font-size:.64rem" id="${closeId}">关闭</button>
           </div>
         </div>`,
@@ -8627,7 +8744,7 @@ ${expectedProviderChecks}
           }
         };
       }
-      return { allOk, providerOk, color };
+      return { allOk, providerOk, configOk: outcome.configOk, color };
     };
 
     const showSubscriptionUpdateSelfCheck = async (
@@ -8698,7 +8815,7 @@ ${expectedProviderChecks}
 
     refreshSubscriptionAfterRestore = async () => {
       const sources = await readCurrentSubSources();
-      const mode = readCurrentSubRuleMode();
+      const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
       const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
       await showSubscriptionUpdateSelfCheck(sources, mode, providerUpdate, null, convertMode);

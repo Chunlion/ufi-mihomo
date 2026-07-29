@@ -111,6 +111,7 @@ const EXPORTS = [
 const GO_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
+  'deriveSubscriptionUpdateOutcome',
 ];
 
 function runFor(label, file) {
@@ -246,8 +247,35 @@ function runFor(label, file) {
         'boot cleanup does not use fuzzy service-line deletion');
       chk(source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
         true, 'self-heal preserves user data and has rollback');
+      chk(
+        source.includes('controller_from_cached_archive')
+          && source.includes('"$UNZIP" -p "$RECOVERY_ARCHIVE" "$ARCHIVE_CONTROLLER"'),
+        true,
+        'runtime preflight can restore a missing ABI controller from the validated cached archive',
+      );
       chk(source.includes('not_run_core_stopped') && source.includes('ok: configCheck.ok'),
         true, 'subscription config health remains independent from core/API health');
+      const stoppedProviderOutcome = api.deriveSubscriptionUpdateOutcome(
+        { ok: true, providerCount: 1 },
+        {
+          total: 1,
+          success: 0,
+          failed: 1,
+          providers: [{
+            name: 'Provider1', ok: false, errorType: 'not_run_core_stopped',
+            proxyCount: null,
+          }],
+          notRunReason: '未执行：核心未运行',
+        },
+      );
+      chk(stoppedProviderOutcome.configOk, true,
+        'stopped core does not turn a valid subscription config into a config failure');
+      chk(stoppedProviderOutcome.allOk, false,
+        'provider refresh is still reported as not completed when the core is stopped');
+      chk(stoppedProviderOutcome.title, '订阅配置正常 · 节点来源未更新',
+        'subscription result title separates config health from provider runtime state');
+      chk(stoppedProviderOutcome.color, 'yellow',
+        'stopped-core provider refresh is a warning instead of a config error');
       chk(
         source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
           && !source.includes('raw.githubusercontent.com/Chunlion/ufi-mihomo'),
@@ -255,6 +283,10 @@ function runFor(label, file) {
         'runtime downloads the Go helper only from the Gitee release',
       );
       chk(source.includes('df -k /data /tmp'), false, 'diagnostics do not pass a missing /tmp to df');
+      chk(source.includes('RECOVERY_ARCHIVE_STATUS=retained') && source.includes('离线自愈包：已保留'),
+        true, 'cache cleanup preserves a valid offline recovery archive');
+      chk(source.includes("item.errorType == 'core_not_running'"),
+        true, 'cache cleanup treats stopped-core API flushes as skipped');
       chk(source.includes('iptables -F') || source.includes('iptables -t nat -F'), false,
         'network rescue does not globally flush firewall tables');
     });

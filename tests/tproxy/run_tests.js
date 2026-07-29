@@ -248,6 +248,12 @@ function runFor(label, file) {
         true, 'self-heal preserves user data and has rollback');
       chk(source.includes('not_run_core_stopped') && source.includes('ok: configCheck.ok'),
         true, 'subscription config health remains independent from core/API health');
+      chk(
+        source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
+          && !source.includes('raw.githubusercontent.com/Chunlion/ufi-mihomo'),
+        true,
+        'runtime downloads the Go helper only from the Gitee release',
+      );
       chk(source.includes('df -k /data /tmp'), false, 'diagnostics do not pass a missing /tmp to df');
       chk(source.includes('iptables -F') || source.includes('iptables -t nat -F'), false,
         'network rescue does not globally flush firewall tables');

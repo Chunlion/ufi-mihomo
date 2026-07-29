@@ -75,7 +75,7 @@
   const KANO_HELPER_SIZE = 5177506;
   const KANO_HELPER_SHA256 = 'a9dfd9ea21d145238030ef7f3f1da2bac7ccd888b003e9d421b2d96e412d5a9f';
   const KANO_HELPER_DOWNLOAD_URL =
-    'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/dist/kano-f50-helper-linux-arm64';
+    'https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
 
   // ===== Basic helpers =====

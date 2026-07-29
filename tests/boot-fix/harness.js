@@ -137,7 +137,7 @@ function loadPlugin(sandbox, { rootExpected = true } = {}) {
       disabled: false,
       id: '',
       appendChild() {},
-      insertAdjacentElement() {},
+      insertAdjacentElement(position, node) { this.insertedElement = node; },
       addEventListener() {},
       querySelector(sel) {
         if (!elements.has(sel)) elements.set(sel, makeEl('button'));

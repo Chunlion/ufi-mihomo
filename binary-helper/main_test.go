@@ -30,6 +30,15 @@ func TestTailLines(t *testing.T) {
 	}
 }
 
+func TestExistingFilesystemPaths(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	actual := existingFilesystemPaths(dir, missing)
+	if len(actual) != 1 || actual[0] != dir {
+		t.Fatalf("existingFilesystemPaths returned %#v", actual)
+	}
+}
+
 func TestConvertClashSubscription(t *testing.T) {
 	input, err := os.ReadFile(filepath.Join("testdata", "clash.yaml"))
 	if err != nil {

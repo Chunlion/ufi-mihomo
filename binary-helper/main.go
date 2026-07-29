@@ -22,7 +22,7 @@ import (
 
 const (
 	name                = "kano-f50-helper"
-	version             = "0.2.1"
+	version             = "0.2.2"
 	defaultConfigPath   = "/data/clash/Proxy/config.yaml"
 	maxSubscriptionSize = 32 * 1024 * 1024
 )
@@ -448,7 +448,13 @@ func runNetworkStatus(args []string) {
 			}
 		}
 	}
-	output.WriteString(commandOutput("df", "-k", "/data", "/tmp") + "\n")
+	dfPaths := existingFilesystemPaths("/data", "/tmp")
+	if len(dfPaths) > 0 {
+		output.WriteString(commandOutput("df", append([]string{"-k"}, dfPaths...)...) + "\n")
+	}
+	if _, err := os.Stat("/tmp"); os.IsNotExist(err) {
+		output.WriteString("note: /tmp is unavailable; managed runtime directories under /data are used\n")
+	}
 
 	output.WriteString("\n[yq runtime]\n")
 	if info, err := os.Stat(*yqRuntime); err == nil {
@@ -626,6 +632,16 @@ func commandOutput(command string, args ...string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(output))
+}
+
+func existingFilesystemPaths(paths ...string) []string {
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			result = append(result, path)
+		}
+	}
+	return result
 }
 
 func readText(path string) string {

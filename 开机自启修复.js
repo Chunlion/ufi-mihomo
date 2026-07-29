@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '2.1.0';
+  const MANAGER_VERSION = '2.2.0';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -10,6 +10,7 @@
   const FIX_MARKER = `${FIX_DIR}/last_completed_boot_id`;
   const FIX_STATE = `${FIX_DIR}/last_run.txt`;
   const FIX_CONFIG = `${FIX_DIR}/config`;
+  const MANAGER_LOCK_DIR = '/data/local/tmp/f50_plugin_boot_manager.lock';
   const SERVICE_D_DIR = '/data/adb/service.d';
   const SERVICE_D_HOOK = `${SERVICE_D_DIR}/f50_boot_fix.sh`;
   // 门标记必须与历史版本保持一致，升级时才能原地替换而不是重复安装。
@@ -32,6 +33,23 @@
   // sed 用 # 作分隔符，所以 / 不需要转义（转了反而影响可读性与后续处理）
   const sedEscape = (value) =>
     String(value).replace(/[\\^$.*[\]&#]/g, (ch) => `\\${ch}`);
+
+  const rejectIfManagerActiveCmd = () => `
+      active_lock=${shellQuote(MANAGER_LOCK_DIR)}
+      active_tag=$(cat "$active_lock/tag" 2>/dev/null || true)
+      active_boot=\${active_tag%.*}
+      active_pid=\${active_tag##*.}
+      current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
+      [ -n "$current_boot" ] || current_boot=$(grep '^btime ' /proc/stat 2>/dev/null | awk '{print $2}')
+      [ -n "$current_boot" ] || current_boot=unknown
+      case "$active_pid" in
+        "" | *[!0-9]*) active_pid= ;;
+      esac
+      if [ "$active_boot" = "$current_boot" ] && [ -n "$active_pid" ] && kill -0 "$active_pid" 2>/dev/null; then
+        echo "F50_MANAGER_BUSY: 已有一轮开机启动任务正在执行(pid=$active_pid)"
+        exit 9
+      fi
+    `;
 
   const escapeHtml = (value = '') =>
     String(value).replace(/[&<>"']/g, (ch) => ({
@@ -76,7 +94,7 @@
     `CONFIG_FILE=${shellQuote(FIX_CONFIG)}`,
     `BEGIN_MARK=${shellQuote(BOOT_BEGIN)}`,
     `END_MARK=${shellQuote(BOOT_END)}`,
-    'LOCK_DIR=/data/local/tmp/f50_plugin_boot_manager.lock',
+    `LOCK_DIR=${shellQuote(MANAGER_LOCK_DIR)}`,
     '',
     'PATH=/sbin:/system/sbin:/system/bin:/system/xbin:/vendor/bin:/vendor/xbin:/data/local/bin:$PATH',
     'export PATH',
@@ -166,7 +184,10 @@
     'acquire_lock() {',
     '  LOCK_TAG="$BOOT_ID.$$"',
     '  if mkdir "$LOCK_DIR" 2>/dev/null; then',
-    '    printf "%s\\n" "$LOCK_TAG" > "$LOCK_DIR/tag" 2>/dev/null || true',
+    '    if ! printf "%s\\n" "$LOCK_TAG" > "$LOCK_DIR/tag" 2>/dev/null; then',
+    '      rmdir "$LOCK_DIR" 2>/dev/null || true',
+    '      return 1',
+    '    fi',
     '    HAVE_LOCK=1',
     '    return 0',
     '  fi',
@@ -180,8 +201,21 @@
     '  if [ "$old_boot" = "$BOOT_ID" ] && [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then',
     '    return 1',
     '  fi',
-    '  log_line "note: 接管过期锁 tag=${old_tag:-none}"',
-    '  printf "%s\\n" "$LOCK_TAG" > "$LOCK_DIR/tag" 2>/dev/null || true',
+    '  # 过期锁必须先原子移走再重新 mkdir。直接覆盖 tag 会让两个同时到达的',
+    '  # 触发器都误以为自己拿到了锁，导致同一批插件被并行启动两次。',
+    '  stale_lock="$LOCK_DIR.stale.$$"',
+    '  if mv "$LOCK_DIR" "$stale_lock" 2>/dev/null; then',
+    '    rm -f "$stale_lock/tag" 2>/dev/null || true',
+    '    rmdir "$stale_lock" 2>/dev/null || true',
+    '  fi',
+    '  if ! mkdir "$LOCK_DIR" 2>/dev/null; then',
+    '    return 1',
+    '  fi',
+    '  if ! printf "%s\\n" "$LOCK_TAG" > "$LOCK_DIR/tag" 2>/dev/null; then',
+    '    rmdir "$LOCK_DIR" 2>/dev/null || true',
+    '    return 1',
+    '  fi',
+    '  log_line "note: 已原子接管过期锁 tag=${old_tag:-none}"',
     '  HAVE_LOCK=1',
     '  return 0',
     '}',
@@ -489,7 +523,7 @@
     'load_config',
     '',
     'if [ "$MODE" = "list" ]; then',
-    '  prepare_work worklist || exit 1',
+    '  prepare_work "worklist.$$" || exit 1',
     '  if ! extract_payload; then',
     '    printf "LIST_MODE=whole\\n"',
     '    printf "LIST_ERROR=门标记不闭合\\n"',
@@ -626,7 +660,7 @@
     '# 手工删除本段即可完全恢复原始行为。',
     'if [ "${F50_BOOT_REPLAY:-0}" != "1" ]; then',
     `  if [ -x ${FIX_SCRIPT} ]; then`,
-    `    ( ${FIX_SCRIPT} --trigger=bootfile >/dev/null 2>&1 </dev/null & )`,
+    `    ( trap '' HUP; exec ${FIX_SCRIPT} --trigger=bootfile ) </dev/null >/dev/null 2>&1 &`,
     '    return 0 2>/dev/null || exit 0',
     '  fi',
     'fi',
@@ -637,7 +671,9 @@
     '#!/system/bin/sh',
     '# 由插件「全插件开机自启修复」写入：与启动文件里的门互为备份，',
     '# 管理器内部有 boot_id 标记 + 文件锁，重复触发只会执行一次。',
-    `[ -x ${FIX_SCRIPT} ] && ( ${FIX_SCRIPT} --trigger=service.d >/dev/null 2>&1 </dev/null & )`,
+    `if [ -x ${FIX_SCRIPT} ]; then`,
+    `  ( trap '' HUP; exec ${FIX_SCRIPT} --trigger=service.d ) </dev/null >/dev/null 2>&1 &`,
+    'fi',
     'exit 0',
   ].join('\n');
 
@@ -754,6 +790,7 @@
       BOOT_NEW="$BOOT.new.$$"
       PAYLOAD="$FIX_DIR/payload.$$"
       SRC="$FIX_DIR/src.$$"
+      BOOT_ORIG="$FIX_DIR/boot.orig.$$"
       BEGIN=${shellQuote(BOOT_BEGIN)}
       END=${shellQuote(BOOT_END)}
       OLD_FIX=${shellQuote(OLD_FIX_SCRIPT)}
@@ -762,13 +799,14 @@
       COMMITTED=0
       cleanup() {
         rc=$?
-        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$SRC" 2>/dev/null || true
+        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$SRC" "$BOOT_ORIG" 2>/dev/null || true
         if [ "$rc" != "0" ] && [ "$COMMITTED" = "0" ]; then
           echo "F50_ABORT: 安装中断(rc=$rc)，启动文件未被改动；备份：$MANAGER_BACKUP"
         fi
       }
       trap cleanup EXIT
       mkdir -p "$FIX_DIR"
+${rejectIfManagerActiveCmd()}
 
       # ---------- 1. 安装管理器 ----------
       cat > "$FIX_NEW" <<'F50_BOOT_FIX_EOF'
@@ -783,15 +821,16 @@ F50_BOOT_FIX_EOF
 
       # ---------- 2. 备份共享启动文件 ----------
       touch "$BOOT"
+      cat "$BOOT" > "$BOOT_ORIG"
       if [ ! -f "$MANAGER_BACKUP" ]; then
-        cat "$BOOT" > "$MANAGER_BACKUP"
+        cat "$BOOT_ORIG" > "$MANAGER_BACKUP"
       fi
-      cat "$BOOT" > "$ROLLING_BACKUP"
-      boot_size_before=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
+      cat "$BOOT_ORIG" > "$ROLLING_BACKUP"
+      boot_size_before=$(wc -c < "$BOOT_ORIG" 2>/dev/null | tr -d ' ' || true)
 
       # ---------- 3. 先统一换行符，再比对门标记 ----------
       # 文件里只要混进 CRLF，门标记就会「看起来不存在」，从而被重复安装一遍。
-      sed 's/\\r$//' "$BOOT" > "$SRC"
+      sed 's/\\r$//' "$BOOT_ORIG" > "$SRC"
       begin_count=$(grep -cxF "$BEGIN" "$SRC" 2>/dev/null || true)
       end_count=$(grep -cxF "$END" "$SRC" 2>/dev/null || true)
       [ -n "$begin_count" ] || begin_count=0
@@ -874,7 +913,13 @@ F50_BOOT_GATE_EOF
       chmod "$boot_mode" "$BOOT_NEW" 2>/dev/null || true
       # 处理期间别的插件可能刚好往同一个文件追加了自己的自启行，写回去会把它吞掉。
       boot_size_now=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
-      if [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
+      boot_changed=0
+      if command -v cmp >/dev/null 2>&1; then
+        cmp -s "$BOOT" "$BOOT_ORIG" || boot_changed=1
+      elif [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
+        boot_changed=1
+      fi
+      if [ "$boot_changed" = "1" ]; then
         echo "F50_ABORT: 启动文件在处理过程中被其它插件改动，已中止且未改动原文件，请重新点击一次；备份：$MANAGER_BACKUP"
         exit 1
       fi
@@ -922,11 +967,14 @@ F50_SERVICE_D_EOF
       BOOT_NEW="$BOOT.new.$$"
       PAYLOAD="$BOOT.payload.$$"
       SRC="$BOOT.src.$$"
+      BOOT_ORIG="$BOOT.orig.$$"
       MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
-      trap 'rm -f "$BOOT_NEW" "$PAYLOAD" "$SRC" 2>/dev/null || true' EXIT
+      trap 'rm -f "$BOOT_NEW" "$PAYLOAD" "$SRC" "$BOOT_ORIG" 2>/dev/null || true' EXIT
+${rejectIfManagerActiveCmd()}
       touch "$BOOT"
-      cat "$BOOT" > "$BOOT.f50_last"
-      sed 's/\\r$//' "$BOOT" > "$SRC"
+      cat "$BOOT" > "$BOOT_ORIG"
+      cat "$BOOT_ORIG" > "$BOOT.f50_last"
+      sed 's/\\r$//' "$BOOT_ORIG" > "$SRC"
       begin_count=$(grep -cxF "$BEGIN" "$SRC" 2>/dev/null || true)
       end_count=$(grep -cxF "$END" "$SRC" 2>/dev/null || true)
       [ -n "$begin_count" ] || begin_count=0
@@ -969,6 +1017,20 @@ F50_SERVICE_D_EOF
           "" | *[!0-7]*) boot_mode=755 ;;
         esac
         chmod "$boot_mode" "$BOOT_NEW" 2>/dev/null || true
+        boot_changed=0
+        if command -v cmp >/dev/null 2>&1; then
+          cmp -s "$BOOT" "$BOOT_ORIG" || boot_changed=1
+        else
+          boot_size_before=$(wc -c < "$BOOT_ORIG" 2>/dev/null | tr -d ' ' || true)
+          boot_size_now=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
+          if [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
+            boot_changed=1
+          fi
+        fi
+        if [ "$boot_changed" = "1" ]; then
+          echo "F50_ABORT: 启动文件在卸载过程中被其它插件改动，已中止且未改动原文件，请重新点击一次；备份：$MANAGER_BACKUP"
+          exit 1
+        fi
         mv -f "$BOOT_NEW" "$BOOT"
         sync 2>/dev/null || true
       fi
@@ -996,12 +1058,17 @@ F50_SERVICE_D_EOF
         echo "F50_NO_MANAGER"
         exit 0
       fi
+${rejectIfManagerActiveCmd()}
       rm -f ${shellQuote(FIX_STATE)} 2>/dev/null || true
-      ( "$FIX" --now --trigger=manual >/dev/null 2>&1 </dev/null & )
+      ( trap '' HUP; exec "$FIX" --now --trigger=manual ) </dev/null >/dev/null 2>&1 &
       echo "F50_STARTED"
     `, 10000);
     if (start.content.includes('F50_NO_MANAGER')) {
       toast('尚未安装管理器，请先点击「安装 / 修复」。', 'yellow', 6000);
+      return null;
+    }
+    if (start.content.includes('F50_MANAGER_BUSY')) {
+      toast('已有一轮开机启动任务正在执行，请稍后检查状态。', 'yellow', 6000);
       return null;
     }
     if (!start.success || !start.content.includes('F50_STARTED')) {
@@ -1142,6 +1209,8 @@ F50_SERVICE_D_EOF
     const uninstallBtn = section.querySelector(`#${ROOT_ID}_uninstall`);
     const statusEl = section.querySelector(`#${ROOT_ID}_state`);
     const detailEl = section.querySelector(`#${ROOT_ID}_detail`);
+    const actionButtons = [installBtn, statusBtn, runBtn, uninstallBtn].filter(Boolean);
+    let actionBusy = false;
 
     const showStatus = async () => {
       if (!(await checkRoot())) {
@@ -1162,8 +1231,14 @@ F50_SERVICE_D_EOF
 
     const withBusy = (button, busyText, task) => async () => {
       if (!guardHost()) return;
+      if (actionBusy) {
+        toast('已有一项开机自启操作正在进行，请等待完成。', 'yellow', 4000);
+        return;
+      }
+      actionBusy = true;
       const raw = button.textContent;
-      button.disabled = true;
+      const disabledStates = actionButtons.map((item) => item.disabled);
+      actionButtons.forEach((item) => { item.disabled = true; });
       button.textContent = busyText;
       try {
         await task();
@@ -1171,8 +1246,9 @@ F50_SERVICE_D_EOF
         console.error('[f50_boot_fix] 操作异常', e);
         toast(`操作异常：${escapeHtml((e && e.message) || String(e))}`, 'red', 8000);
       } finally {
-        button.disabled = false;
+        actionButtons.forEach((item, index) => { item.disabled = disabledStates[index]; });
         button.textContent = raw;
+        actionBusy = false;
       }
     };
 

@@ -233,7 +233,7 @@ function runFor(label, file) {
       chk(apiStopped.errorType, 'core_not_running', 'provider/control API request is not run when core is stopped');
       chk(lastShellCommand, shellBeforeStoppedApi, 'stopped-core API check does not invoke curl');
 
-      chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=managed\nMANAGER_VERSION=2.1.0\n' }).state,
+      chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=managed\nMANAGER_VERSION=2.2.0\n' }).state,
         'managed', 'boot manager state is parsed');
       chk(api.parseBootIntegrationResult({ content: 'BOOT_STATE=direct\n' }).state,
         'direct', 'direct boot state is distinguished');

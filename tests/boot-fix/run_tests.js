@@ -579,6 +579,17 @@ const gateOf = (text) => {
     assert(app.toasts.some((item) => /已有一项开机自启操作/.test(item.msg)), '第二个操作被明确拒绝');
   });
 
+  await test('T27 管理器面板默认收起，并可由原生 details 控件展开或隐藏', async () => {
+    await waitQuiet();
+    sbx.reset();
+    sbx.writeBoot(MULTI);
+    const app = loadPlugin(sbx);
+    const html = String(app.container.insertedElement?.innerHTML || '');
+    assert(/<details id="f50_boot_fix_standalone_panel">/.test(html), '操作区使用可展开的 details 容器');
+    assert(/<summary[^>]*>[\s\S]*全插件开机自启修复[\s\S]*<\/summary>/.test(html), '标题作为展开和隐藏入口');
+    assert(!/<details[^>]*\sopen(?:\s|>)/.test(html), '面板默认保持收起以节省空间');
+  });
+
   // -------------------------------------------------------------------------
   const passed = results.filter((r) => r.ok).length;
   console.log(`\n=== 结果: ${passed}/${results.length} 通过 ===`);

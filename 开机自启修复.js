@@ -1191,15 +1191,19 @@ ${rejectIfManagerActiveCmd()}
     section.id = ROOT_ID;
     section.style.marginTop = '10px';
     section.innerHTML = `
-      <div class="title" style="margin:6px 0"><strong>全插件开机自启修复</strong></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn" id="${ROOT_ID}_install">安装 / 修复</button>
-        <button class="btn" id="${ROOT_ID}_status">检查状态</button>
-        <button class="btn" id="${ROOT_ID}_run">立即执行一次</button>
-        <button class="btn" id="${ROOT_ID}_uninstall">卸载</button>
-      </div>
-      <div id="${ROOT_ID}_state" style="margin-top:8px;font-size:.62rem;opacity:.78">状态：未检查 · 统一托管所有插件的开机自启命令</div>
-      <div id="${ROOT_ID}_detail"></div>
+      <details id="${ROOT_ID}_panel">
+        <summary class="title" style="margin:6px 0;cursor:pointer"><strong>全插件开机自启修复</strong></summary>
+        <div style="padding-top:4px">
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn" id="${ROOT_ID}_install">安装 / 修复</button>
+            <button class="btn" id="${ROOT_ID}_status">检查状态</button>
+            <button class="btn" id="${ROOT_ID}_run">立即执行一次</button>
+            <button class="btn" id="${ROOT_ID}_uninstall">卸载</button>
+          </div>
+          <div id="${ROOT_ID}_state" style="margin-top:8px;font-size:.62rem;opacity:.78">状态：未检查 · 统一托管所有插件的开机自启命令</div>
+          <div id="${ROOT_ID}_detail"></div>
+        </div>
+      </details>
     `;
     functions.insertAdjacentElement('afterend', section);
 

@@ -180,16 +180,41 @@ function runFor(label, file) {
 
   {
     console.log(`--- ${isGo ? 'Go' : 'Shell'} runtime preflight / API / boot behavior ---`);
+    const runtimeManager = api.buildRuntimeManagerScript();
     const runtimeSyntax = spawnSync('sh', ['-n'], {
-      input: api.buildRuntimeManagerScript(),
+      input: runtimeManager,
       encoding: 'utf8',
     });
     const bashSyntax = runtimeSyntax.status === 0 ? null : spawnSync('bash', ['-n'], {
-      input: api.buildRuntimeManagerScript(),
+      input: runtimeManager,
       encoding: 'utf8',
     });
     const syntaxDetail = [runtimeSyntax.stderr, bashSyntax && bashSyntax.stderr].filter(Boolean).join(' ').trim();
     chk(runtimeSyntax.status, 0, `generated runtime manager passes sh -n${syntaxDetail ? `: ${syntaxDetail}` : ''}`);
+    chk(
+      runtimeManager.includes('TOOLBOX_BIN=/data/kano_tproxy_tools/bin')
+        && runtimeManager.includes('[ ! -d "$TOOLBOX_BIN" ] || PATH="$TOOLBOX_BIN:$PATH"')
+        && runtimeManager.includes('export PATH TMPDIR'),
+      true,
+      'boot runtime restores the managed toolbox PATH before probing curl',
+    );
+    chk(
+      runtimeManager.includes('CURL_BIN=/data/data/com.minikano.f50_sms/files/curl')
+        && runtimeManager.includes('[ -x "$CURL_BIN" ] || CURL_BIN="$TOOLBOX_BIN/curl"'),
+      true,
+      'boot runtime probes the UFI-TOOLS curl binary before PATH fallbacks',
+    );
+    chk(
+      runtimeManager.includes('[ "$action" != "--boot" ] || attempt_limit=60'),
+      true,
+      'boot runtime allows a longer API startup window',
+    );
+    chk(
+      runtimeManager.includes('if [ "$action" = "--boot" ] && [ -n "$pid" ]; then')
+        && runtimeManager.includes('核心进程已启动，开机阶段保留运行并交由后台继续检查'),
+      true,
+      'boot runtime never kills an already-running core only because API probing is unavailable',
+    );
     const stopped = api.parseRuntimePreflightResult({
       success: true,
       content: 'PREFLIGHT_STATE=installed_stopped\nABI=arm64\nCONFIG_VALID=1\nREPAIRED=controller:chmod\nCORE_PID=\n',

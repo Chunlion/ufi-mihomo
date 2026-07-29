@@ -51,7 +51,7 @@
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
   const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.1';
+  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.3';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_MANAGER_VERSION = '2.2.0';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
@@ -467,10 +467,12 @@ CONFIG=${CLASH_CONFIG}
 YQ=${CLASH_DIR}/Tools/yq_linux_arm64
 POLICY=${CLASH_POLICY_SCRIPT}
 RECOVERY_ARCHIVE=${DOWNLOAD_ZIP}
+TOOLBOX_BIN=${KANO_INSTALL_TOOLBOX_BIN}
 DIAG=/data/kano_diag_runtime
 TMPDIR="$DIAG/tmp"
 HOME="$DIAG/home"
-export TMPDIR TMP="$TMPDIR" TEMP="$TMPDIR" HOME XDG_CONFIG_HOME="$HOME"
+[ ! -d "$TOOLBOX_BIN" ] || PATH="$TOOLBOX_BIN:$PATH"
+export PATH TMPDIR TMP="$TMPDIR" TEMP="$TMPDIR" HOME XDG_CONFIG_HOME="$HOME"
 mkdir -p "$TMPDIR" "$HOME" 2>/dev/null || {
   echo "PREFLIGHT_STATE=damaged"
   echo "PROBE_ERRORS=runtime_directory"
@@ -784,11 +786,16 @@ start_runtime() {
     localhost:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^[^:]*://')" ;;
     \\[::\\]:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^.*://')" ;;
   esac
-  CURL_BIN="$(command -v curl 2>/dev/null)"
+  CURL_BIN=${F50_FILES_DIR}/curl
+  [ -x "$CURL_BIN" ] || CURL_BIN="$TOOLBOX_BIN/curl"
+  [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
+  [ -x "$CURL_BIN" ] || CURL_BIN=""
   last_status=unavailable
   last_http=000
   attempt=0
-  while [ "$attempt" -lt 20 ]; do
+  attempt_limit=20
+  [ "$action" != "--boot" ] || attempt_limit=60
+  while [ "$attempt" -lt "$attempt_limit" ]; do
     attempt=$((attempt + 1))
     pid="$(find_core_pid)"
     if [ -n "$pid" ] && [ -n "$CURL_BIN" ]; then
@@ -809,12 +816,18 @@ start_runtime() {
       last_status=core_not_running
     else
       last_status=curl_missing
+      break
     fi
     sleep 1
   done
+  pid="$(find_core_pid)"
   echo "START_STATE=running_api_unavailable"
   echo "API_STATUS=$last_status"
   echo "HTTP_CODE=$last_http"
+  if [ "$action" = "--boot" ] && [ -n "$pid" ]; then
+    echo "MESSAGE=核心进程已启动，开机阶段保留运行并交由后台继续检查"
+    return 0
+  fi
   echo "MESSAGE=核心未在等待时间内通过控制 API 健康检查"
   rescue_runtime
   return 5

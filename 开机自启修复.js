@@ -856,15 +856,21 @@ F50_BOOT_FIX_EOF
 ${legacyRewriteSed}
 
       # ---------- 5. 无损校验：提取出来的行数必须和预期完全一致 ----------
-      src_lines=$(grep -c -v -e '^[[:space:]]*$' "$SRC" 2>/dev/null || true)
-      pay_lines=$(grep -c -v -e '^[[:space:]]*$' "$PAYLOAD" 2>/dev/null || true)
+      src_lines=$(awk 'NF { count++ } END { print count + 0 }' "$SRC" 2>/dev/null || true)
+      pay_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
       gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
         $0 == b { inside=1 }
         inside && NF { count++ }
         $0 == e { inside=0 }
         END { print count + 0 }
       ' "$SRC" 2>/dev/null || true)
-      old_lines=$(grep -c -F "$OLD_FIX" "$SRC" 2>/dev/null || true)
+      # 提取器用 awk 的 index() 识别旧入口，校验也必须使用完全相同的判定。
+      # 部分 F50 固件里的 grep -F 会在该文件上返回 0，导致旧入口已被正确
+      # 移除后仍误报「得到 0 行，应为 1 行」。
+      old_lines=$(awk -v old_fix="$OLD_FIX" '
+        index($0, old_fix) { count++ }
+        END { print count + 0 }
+      ' "$SRC" 2>/dev/null || true)
       [ -n "$src_lines" ] || src_lines=0
       [ -n "$pay_lines" ] || pay_lines=0
       [ -n "$gate_lines" ] || gate_lines=0
@@ -994,8 +1000,8 @@ ${rejectIfManagerActiveCmd()}
           echo "F50_ABORT: 提取失败，未改动启动文件；备份：$MANAGER_BACKUP"
           exit 1
         fi
-        src_lines=$(grep -c -v -e '^[[:space:]]*$' "$SRC" 2>/dev/null || true)
-        pay_lines=$(grep -c -v -e '^[[:space:]]*$' "$PAYLOAD" 2>/dev/null || true)
+        src_lines=$(awk 'NF { count++ } END { print count + 0 }' "$SRC" 2>/dev/null || true)
+        pay_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
         gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
           $0 == b { inside=1 }
           inside && NF { count++ }

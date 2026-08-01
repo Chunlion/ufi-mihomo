@@ -442,20 +442,44 @@ const gateOf = (text) => {
     // 模拟真断电后固件用旧模板重建 /sdcard：门和用户后来启用的插件入口一起消失。
     sbx.writeBoot(`touch ${S}/probe/stale_cold_template\n`);
     sbx.setBootId('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    sbx.setBootCompleted('0');
+    sbx.setUptime(5);
+    clearProbes();
+    sbx.runShell(`( ${manager} --trigger=service.d >/dev/null 2>&1 </dev/null & )`, 10000, { rewrite: false });
+    await sleep(1500);
+    const restored = sbx.readBoot() || '';
+    assert(restored.includes('# F50_BOOT_FIX_BEGIN'), '未等 uptime 45 秒就恢复了被覆盖的管理门');
+    assert(restored.includes(added), '后来启用的插件入口已恢复');
+    assert(probes().length === 0, '启动文件提前恢复，但插件命令仍等待系统就绪');
     sbx.setBootCompleted('1');
     sbx.setUptime(60);
-    clearProbes();
-    const cold = sbx.runShell(`${manager} --trigger=service.d`, 30000, { rewrite: false });
-    assert(cold.status === 0, `冷启动管理器正常返回，实际 rc=${cold.status}`);
-    const restored = sbx.readBoot() || '';
-    assert(restored.includes('# F50_BOOT_FIX_BEGIN'), '被冷启动覆盖掉的管理门已恢复');
-    assert(restored.includes(added), '后来启用的插件入口已恢复');
+    const completed = await waitForState(sbx, 30000);
+    assert(completed && /(^|\n)DONE=1(\n|$)/.test(completed), '冷启动管理器最终正常完成');
     const state = parseState(sbx.read('data/f50_boot_fix/last_run.txt'));
     assert(state.meta.RESTORED === '1', '状态明确记录本次执行发生过持久快照恢复');
     const p = probes();
     assert(p.includes('a1_cleanup') && p.includes('c2_mine') && p.includes('persisted_after_install'),
       `恢复后全部底层插件都被执行，实测: ${p.join(',')}`);
     assert(!p.includes('stale_cold_template'), '冷启动写回的旧模板没有冒充当前配置执行');
+  });
+
+  await test('T14c 固件复用 boot_id 时：启动文件被清空仍恢复并执行，不能被幂等标记跳过', async () => {
+    await freshInstall(MULTI);
+    const manager = `${S}/data/f50_boot_fix/boot_manager.sh`;
+    const bootId = (sbx.read('proc/sys/kernel/random/boot_id') || '').trim();
+    fs.writeFileSync(sbx.p('data/f50_boot_fix/last_completed_boot_id'), `${bootId}\n`);
+    sbx.writeBoot(`touch ${S}/probe/reused_id_stale_template\n`);
+    sbx.setBootCompleted('1');
+    sbx.setUptime(60);
+    clearProbes();
+    const run = sbx.runShell(`${manager} --trigger=service.d`, 30000, { rewrite: false });
+    assert(run.status === 0, `复用 boot_id 的恢复执行正常返回，实际 rc=${run.status}`);
+    const state = parseState(sbx.read('data/f50_boot_fix/last_run.txt'));
+    assert(state.meta.RESTORED === '1', '同 boot_id 但管理门丢失时仍执行快照恢复');
+    assert(state.meta.DONE === '1', '发生恢复后没有被旧幂等标记跳过');
+    const p = probes();
+    assert(p.includes('a1_cleanup') && p.includes('c2_mine'), `恢复后的插件指令已执行，实测: ${p.join(',')}`);
+    assert(!p.includes('reused_id_stale_template'), '复用 boot_id 的旧模板没有被执行');
   });
 
   await test('T15 多个触发点同时触发（启动文件 + service.d）也只执行一次', async () => {

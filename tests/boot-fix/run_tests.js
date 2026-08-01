@@ -179,6 +179,24 @@ const gateOf = (text) => {
     assert(after.startsWith('# F50_BOOT_FIX_BEGIN'), '新门仍在最顶部');
   });
 
+  await test('T3b 只有旧版启动入口且 grep -F 漏计时：安装不会被行数校验误杀', async () => {
+    await waitQuiet();
+    sbx.reset(); clearProbes();
+    sbx.writeBoot(`${S}/data/f50_boot_fix/clash_boot.sh`);
+    sbx.writeBin('grep', `
+case "$*" in
+  *clash_boot.sh*) echo 0; exit 1 ;;
+esac
+exec /usr/bin/grep "$@"
+    `.trim());
+    const app = loadPlugin(sbx);
+    await app.click('install');
+    const after = sbx.readBoot();
+    assert((after.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '新门安装成功');
+    assert(!after.includes('clash_boot.sh'), '旧版启动入口已清理');
+    assert(!app.toasts.some((item) => /提取结果异常/.test(item.msg)), '没有行数校验假报警');
+  });
+
   await test('T4 启动文件门标记损坏（只有 BEGIN 没有 END）：拒绝写入，原文件零改动', async () => {
     const broken = [
       '# F50_BOOT_FIX_BEGIN',

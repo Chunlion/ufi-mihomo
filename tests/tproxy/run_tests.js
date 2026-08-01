@@ -269,6 +269,10 @@ function runFor(label, file) {
         true, 'boot and manual operations share the runtime preflight starter');
       chk(source.includes("sed -i '/\\/data\\/clash\\/Scripts\\/Clash.Service start/d'"), false,
         'boot cleanup does not use fuzzy service-line deletion');
+      chk(source.includes("LEGACY_BOOT_FIX_WRAPPER_LINE") && source.includes("$0 != legacy_wrapper"), true,
+        'boot cleanup precisely removes the obsolete boot-fix wrapper');
+      chk(source.includes("migrateLegacyBootIntegration"), true,
+        'legacy boot integration is migrated automatically');
       chk(
         source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
         true,

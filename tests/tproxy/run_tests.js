@@ -132,6 +132,15 @@ function runFor(label, file) {
   chk(missing, [], `全部待测函数均已导出 (${exportNames.length} 个)`);
   if (missing.length) return;
 
+  chk(
+    source.includes("boot_on.textContent = '开机自启';")
+      && !source.includes('开机自启（已托管）')
+      && !source.includes('开机自启（直接执行）')
+      && !source.includes('开机自启（管理器异常）'),
+    true,
+    '开机自启按钮不再追加状态提示词',
+  );
+
   console.log('--- installer controller hardening ---');
   chk(
     source.includes('arm64-v8a|aarch64|armv8*|*arm64*')

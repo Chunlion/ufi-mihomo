@@ -111,7 +111,7 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
-  'deriveSubscriptionUpdateOutcome',
+  'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd',
 ];
 
 function runFor(label, file) {
@@ -153,6 +153,20 @@ function runFor(label, file) {
       && source.includes('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller'),
     true,
     'installed controller and service wrapper are checked after chmod',
+  );
+  const bootLines = api.addBootLinesCmd();
+  const removeBootLines = api.removeBootLinesCmd();
+  chk(
+    bootLines.includes('mkdir -p "/data/clash/Clash" && inotifyd /data/clash/Scripts/Clash.Inotify')
+      && source.includes("mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} || exit 1"),
+    true,
+    'installer and boot entry create the inotify watch directory before starting the watcher',
+  );
+  chk(
+    removeBootLines.includes('-v legacy_inotify=')
+      && removeBootLines.includes('$0 != legacy_inotify'),
+    true,
+    'boot integration removes the legacy inotify entry before writing the repaired one',
   );
   const permissionProbe = source.indexOf('INSTALL_PERMISSION_FAILED: Clash.Service cannot resolve controller');
   const serviceStart = source.indexOf('await startClashServiceClean({ stopFirst: false', permissionProbe);

@@ -14,6 +14,7 @@ const FAST_CONFIG = [
   'ENTRY_TIMEOUT=3',
   'WHOLE_TIMEOUT=10',
   'RETRY_DELAY=1',
+  'WATCH_INTERVAL=0',
   '',
 ].join('\n');
 
@@ -97,9 +98,9 @@ const freshInstall = async (bootContent) => {
   sbx.reset();
   clearProbes();
   sbx.writeBoot(bootContent);
+  writeConfig();
   const app = loadPlugin(sbx);
   await app.click('install');
-  writeConfig();
   return app;
 };
 
@@ -424,6 +425,37 @@ const gateOf = (text) => {
     const { entries } = parseState(state);
     assert(entries.length === 5, `新追加的行被自动纳管，共 5 条，实际 ${entries.length}`);
     assert(probes().includes('newplugin_z'), '新插件被启动');
+  });
+
+  await test('T14b 物理冷启动覆盖 /sdcard 后：从 /data 持久快照恢复全部底层插件', async () => {
+    await freshInstall(MULTI);
+    const snapshot = sbx.read('data/f50_boot_fix/boot_file.snapshot');
+    assert(snapshot === sbx.readBoot(), '安装时已把完整托管启动文件持久化到 /data');
+
+    const added = `touch ${S}/probe/persisted_after_install`;
+    fs.appendFileSync(sbx.bootFile(), `${added}\n`);
+    const manager = `${S}/data/f50_boot_fix/boot_manager.sh`;
+    const synced = sbx.runShell(`${manager} --sync`, 10000, { rewrite: false });
+    assert(synced.status === 0, '插件修改共享启动文件后可立即同步持久快照');
+    assert((sbx.read('data/f50_boot_fix/boot_file.snapshot') || '').includes(added), '新增的任意插件入口已写入持久快照');
+
+    // 模拟真断电后固件用旧模板重建 /sdcard：门和用户后来启用的插件入口一起消失。
+    sbx.writeBoot(`touch ${S}/probe/stale_cold_template\n`);
+    sbx.setBootId('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    sbx.setBootCompleted('1');
+    sbx.setUptime(60);
+    clearProbes();
+    const cold = sbx.runShell(`${manager} --trigger=service.d`, 30000, { rewrite: false });
+    assert(cold.status === 0, `冷启动管理器正常返回，实际 rc=${cold.status}`);
+    const restored = sbx.readBoot() || '';
+    assert(restored.includes('# F50_BOOT_FIX_BEGIN'), '被冷启动覆盖掉的管理门已恢复');
+    assert(restored.includes(added), '后来启用的插件入口已恢复');
+    const state = parseState(sbx.read('data/f50_boot_fix/last_run.txt'));
+    assert(state.meta.RESTORED === '1', '状态明确记录本次执行发生过持久快照恢复');
+    const p = probes();
+    assert(p.includes('a1_cleanup') && p.includes('c2_mine') && p.includes('persisted_after_install'),
+      `恢复后全部底层插件都被执行，实测: ${p.join(',')}`);
+    assert(!p.includes('stale_cold_template'), '冷启动写回的旧模板没有冒充当前配置执行');
   });
 
   await test('T15 多个触发点同时触发（启动文件 + service.d）也只执行一次', async () => {

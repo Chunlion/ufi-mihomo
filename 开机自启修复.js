@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '2.3.0';
+  const MANAGER_VERSION = '2.4.0';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -10,6 +10,9 @@
   const FIX_MARKER = `${FIX_DIR}/last_completed_boot_id`;
   const FIX_STATE = `${FIX_DIR}/last_run.txt`;
   const FIX_CONFIG = `${FIX_DIR}/config`;
+  const FIX_BOOT_SNAPSHOT = `${FIX_DIR}/boot_file.snapshot`;
+  const FIX_SNAPSHOT_BOOT_ID = `${FIX_DIR}/boot_file.snapshot.boot_id`;
+  const FIX_WATCHER_TAG = `${FIX_DIR}/boot_watcher.tag`;
   const MANAGER_LOCK_DIR = '/data/local/tmp/f50_plugin_boot_manager.lock';
   const SERVICE_D_DIR = '/data/adb/service.d';
   const SERVICE_D_HOOK = `${SERVICE_D_DIR}/f50_boot_fix.sh`;
@@ -79,6 +82,9 @@
     `MARKER_FILE=${shellQuote(FIX_MARKER)}`,
     `STATE_FILE=${shellQuote(FIX_STATE)}`,
     `CONFIG_FILE=${shellQuote(FIX_CONFIG)}`,
+    `SNAPSHOT_FILE=${shellQuote(FIX_BOOT_SNAPSHOT)}`,
+    `SNAPSHOT_BOOT_FILE=${shellQuote(FIX_SNAPSHOT_BOOT_ID)}`,
+    `WATCHER_TAG=${shellQuote(FIX_WATCHER_TAG)}`,
     `BEGIN_MARK=${shellQuote(BOOT_BEGIN)}`,
     `END_MARK=${shellQuote(BOOT_END)}`,
     `LOCK_DIR=${shellQuote(MANAGER_LOCK_DIR)}`,
@@ -98,6 +104,7 @@
     'RETRY_FAILED=1',
     'RETRY_DELAY=15',
     'MAX_ENTRIES=300',
+    'WATCH_INTERVAL=2',
     '',
     'HAVE_LOCK=0',
     'LOCK_TAG=',
@@ -149,7 +156,7 @@
     '  [ -f "$CONFIG_FILE" ] || return 0',
     '  while IFS= read -r cfg_line || [ -n "$cfg_line" ]; do',
     '    case "$cfg_line" in',
-    '      MIN_UPTIME=* | MAX_WAIT=* | FILE_MAX_WAIT=* | ENTRY_TIMEOUT=* | WHOLE_TIMEOUT=* | RETRY_FAILED=* | RETRY_DELAY=* | MAX_ENTRIES=*)',
+    '      MIN_UPTIME=* | MAX_WAIT=* | FILE_MAX_WAIT=* | ENTRY_TIMEOUT=* | WHOLE_TIMEOUT=* | RETRY_FAILED=* | RETRY_DELAY=* | MAX_ENTRIES=* | WATCH_INTERVAL=*)',
     '        cfg_val=${cfg_line#*=}',
     '        case "$cfg_val" in',
     '          "" | *[!0-9]*) ;;',
@@ -266,6 +273,113 @@
     '    { sub(/\\r$/, ""); print }',
     '    END { if (depth > 0) exit 3 }',
     "  ' \"$BOOT_FILE\" > \"$PAYLOAD\" 2>/dev/null",
+    '}',
+    '',
+    '# /sdcard 在部分固件的物理冷启动中会被旧模板覆盖。这里把完整的托管启动文件',
+    '# 持久化到 /data；不识别插件名称，所有底层插件共用同一份真实启动入口。',
+    'managed_boot_valid() {',
+    '  mb_file="$1"',
+    '  [ -s "$mb_file" ] || return 1',
+    '  mb_begin=$(grep -cxF "$BEGIN_MARK" "$mb_file" 2>/dev/null || true)',
+    '  mb_end=$(grep -cxF "$END_MARK" "$mb_file" 2>/dev/null || true)',
+    '  [ "$mb_begin" = "1" ] && [ "$mb_end" = "1" ] || return 1',
+    '  awk -v b="$BEGIN_MARK" -v e="$END_MARK" \'' ,
+    '    $0 == b { seen=1; next }',
+    '    $0 == e { if (seen == 1) { closed=1; exit 0 }; exit 1 }',
+    '    END { exit(closed == 1 ? 0 : 1) }',
+    "  ' \"$mb_file\" >/dev/null 2>&1",
+    '}',
+    '',
+    'files_equal() {',
+    '  fe_a="$1"',
+    '  fe_b="$2"',
+    '  [ -f "$fe_a" ] && [ -f "$fe_b" ] || return 1',
+    '  if command -v cmp >/dev/null 2>&1; then',
+    '    cmp -s "$fe_a" "$fe_b"',
+    '    return $?',
+    '  fi',
+    '  fe_as=$(wc -c < "$fe_a" 2>/dev/null | tr -d " ")',
+    '  fe_bs=$(wc -c < "$fe_b" 2>/dev/null | tr -d " ")',
+    '  [ -n "$fe_as" ] && [ "$fe_as" = "$fe_bs" ]',
+    '}',
+    '',
+    'save_boot_snapshot() {',
+    '  sb_reason="$1"',
+    '  sb_tmp="$SNAPSHOT_FILE.tmp.$$"',
+    '  sb_ok=0',
+    '  if managed_boot_valid "$BOOT_FILE"; then',
+    '    if cat "$BOOT_FILE" > "$sb_tmp" 2>/dev/null && files_equal "$BOOT_FILE" "$sb_tmp"; then',
+    '      if files_equal "$sb_tmp" "$SNAPSHOT_FILE"; then',
+    '        sb_ok=1',
+    '      else',
+    '        chmod 600 "$sb_tmp" 2>/dev/null || true',
+    '        if mv -f "$sb_tmp" "$SNAPSHOT_FILE" 2>/dev/null; then',
+    '          sync 2>/dev/null || true',
+    '          log_line "持久启动快照已更新 trigger=$sb_reason"',
+    '          sb_ok=1',
+    '        fi',
+    '      fi',
+    '    fi',
+    '  fi',
+    '  rm -f "$sb_tmp" 2>/dev/null || true',
+    '  if [ "$sb_ok" = "1" ] && [ -n "$BOOT_ID" ] && [ "$(cat "$SNAPSHOT_BOOT_FILE" 2>/dev/null)" != "$BOOT_ID" ]; then',
+    '    if printf "%s\n" "$BOOT_ID" > "$SNAPSHOT_BOOT_FILE.tmp.$$" 2>/dev/null && mv -f "$SNAPSHOT_BOOT_FILE.tmp.$$" "$SNAPSHOT_BOOT_FILE" 2>/dev/null; then',
+    '      sync 2>/dev/null || true',
+    '    fi',
+    '  fi',
+    '  rm -f "$SNAPSHOT_BOOT_FILE.tmp.$$" 2>/dev/null || true',
+    '  [ "$sb_ok" = "1" ]',
+    '}',
+    '',
+    'restore_boot_snapshot() {',
+    '  RESTORED_SNAPSHOT=0',
+    '  managed_boot_valid "$SNAPSHOT_FILE" || return 0',
+    '  rb_snapshot_boot=$(cat "$SNAPSHOT_BOOT_FILE" 2>/dev/null || true)',
+    '  [ -n "$BOOT_ID" ] && [ "$BOOT_ID" = "$rb_snapshot_boot" ] && return 0',
+    '  files_equal "$BOOT_FILE" "$SNAPSHOT_FILE" && return 0',
+    '  rb_original="$WORK_DIR/boot.before_restore"',
+    '  rb_new="$WORK_DIR/boot.restored"',
+    '  cat "$BOOT_FILE" > "$rb_original" 2>/dev/null || return 1',
+    '  cat "$SNAPSHOT_FILE" > "$rb_new" 2>/dev/null || return 1',
+    '  files_equal "$SNAPSHOT_FILE" "$rb_new" || return 1',
+    '  rb_mode=$(stat -c %a "$BOOT_FILE" 2>/dev/null || true)',
+    '  case "$rb_mode" in "" | *[!0-7]*) rb_mode=755 ;; esac',
+    '  chmod "$rb_mode" "$rb_new" 2>/dev/null || true',
+    '  files_equal "$BOOT_FILE" "$rb_original" || { log_line "warning: 恢复前启动文件又被改动，本次不覆盖"; return 1; }',
+    '  cat "$rb_original" > "$FIX_DIR/boot_file.cold_replaced" 2>/dev/null || true',
+    '  if mv -f "$rb_new" "$BOOT_FILE" 2>/dev/null; then',
+    '    sync 2>/dev/null || true',
+    '    RESTORED_SNAPSHOT=1',
+    '    log_line "已从 /data 持久快照恢复被冷启动覆盖的共享启动文件"',
+    '    return 0',
+    '  fi',
+    '  return 1',
+    '}',
+    '',
+    'start_watcher() {',
+    '  [ "$WATCH_INTERVAL" -gt 0 ] 2>/dev/null || return 0',
+    '  sw_tag=$(cat "$WATCHER_TAG" 2>/dev/null || true)',
+    '  sw_boot=${sw_tag%.*}',
+    '  sw_pid=${sw_tag##*.}',
+    '  case "$sw_pid" in "" | *[!0-9]*) sw_pid= ;; esac',
+    '  if [ "$sw_boot" = "$BOOT_ID" ] && [ -n "$sw_pid" ] && kill -0 "$sw_pid" 2>/dev/null; then',
+    '    return 0',
+    '  fi',
+    '  ( trap "" HUP; exec "$0" --watch --trigger=watcher ) </dev/null >/dev/null 2>&1 &',
+    '  sw_pid=$!',
+    '  printf "%s.%s\n" "$BOOT_ID" "$sw_pid" > "$WATCHER_TAG" 2>/dev/null || true',
+    '  return 0',
+    '}',
+    '',
+    'run_watcher() {',
+    '  rw_boot="$BOOT_ID"',
+    '  while [ "$WATCH_INTERVAL" -gt 0 ] 2>/dev/null; do',
+    '    sleep "$WATCH_INTERVAL"',
+    '    resolve_boot_id',
+    '    [ "$BOOT_ID" = "$rw_boot" ] || exit 0',
+    '    save_boot_snapshot watcher || true',
+    '  done',
+    '  exit 0',
     '}',
     '',
     'entry_has_code() {',
@@ -497,6 +611,8 @@
     '    --force) FORCE=1 ;;',
     '    --now) FORCE=1; MODE=now ;;',
     '    --list) MODE=list ;;',
+    '    --sync) MODE=sync ;;',
+    '    --watch) MODE=watch ;;',
     '    --version) printf "%s\\n" "$MANAGER_VERSION"; exit 0 ;;',
     '    --trigger=*) TRIGGER=${arg#--trigger=} ;;',
     '    *) ;;',
@@ -508,6 +624,18 @@
     'mkdir -p /data/local/tmp 2>/dev/null || true',
     '[ -d "$FIX_DIR" ] || exit 1',
     'load_config',
+    '',
+    'if [ "$MODE" = "sync" ]; then',
+    '  resolve_boot_id',
+    '  save_boot_snapshot explicit || exit $?',
+    '  start_watcher',
+    '  exit 0',
+    'fi',
+    '',
+    'if [ "$MODE" = "watch" ]; then',
+    '  resolve_boot_id',
+    '  run_watcher',
+    'fi',
     '',
     'if [ "$MODE" = "list" ]; then',
     '  prepare_work "worklist.$$" || exit 1',
@@ -541,6 +669,7 @@
     'LAST_BOOT_ID=$(cat "$MARKER_FILE" 2>/dev/null)',
     'if [ "$FORCE" != "1" ] && [ "$BOOT_ID" != "unknown" ] && [ "$BOOT_ID" = "$LAST_BOOT_ID" ]; then',
     '  log_line "skip: 本次开机($BOOT_ID)已完成过插件自启"',
+    '  start_watcher',
     '  trim_file "$LOG_FILE" 400 250',
     '  exit 0',
     'fi',
@@ -591,6 +720,12 @@
     'state_line "STARTED=$(now_stamp)"',
     'state_line "READY=$READY_STATE uptime=${READY_UPTIME}s"',
     '',
+    'RESTORED_SNAPSHOT=0',
+    'if [ "$MODE" = "boot" ]; then',
+    '  restore_boot_snapshot || log_line "warning: 冷启动持久快照恢复失败，保留当前启动文件"',
+    'fi',
+    'state_line "RESTORED=$RESTORED_SNAPSHOT"',
+    '',
     'RUN_MODE=entries',
     'RUN_NOTE=',
     'if ! extract_payload; then',
@@ -616,6 +751,9 @@
     '  state_line "ENTRIES=$ENTRY_COUNT"',
     '  run_entries',
     'fi',
+    '',
+    'save_boot_snapshot manager || log_line "warning: 当前共享启动文件未生成有效持久快照"',
+    'start_watcher',
     '',
     'if [ "$BOOT_ID" = "unknown" ]; then',
     '  rm -f "$MARKER_FILE" 2>/dev/null || true',
@@ -789,12 +927,14 @@
       BEGIN=${shellQuote(BOOT_BEGIN)}
       END=${shellQuote(BOOT_END)}
       RECOVERY_MARKER=${shellQuote(BACKUP_RECOVERY_MARKER)}
-      MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
-      ROLLING_BACKUP="$BOOT.f50_last"
+      SNAPSHOT=${shellQuote(FIX_BOOT_SNAPSHOT)}
+      MANAGER_BACKUP="$FIX_DIR/boot.before_f50_boot_manager"
+      ROLLING_BACKUP="$FIX_DIR/boot_file.before_install"
+      LEGACY_MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
       COMMITTED=0
       cleanup() {
         rc=$?
-        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$BACKUP_PAYLOAD" "$SRC" "$BOOT_ORIG" 2>/dev/null || true
+        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$BACKUP_PAYLOAD" "$SRC" "$BOOT_ORIG" "$SNAPSHOT.new.$$" 2>/dev/null || true
         if [ "$rc" != "0" ] && [ "$COMMITTED" = "0" ]; then
           echo "F50_ABORT: 安装中断(rc=$rc)，启动文件未被改动；备份：$MANAGER_BACKUP"
         fi
@@ -818,9 +958,18 @@ F50_BOOT_FIX_EOF
       touch "$BOOT"
       cat "$BOOT" > "$BOOT_ORIG"
       if [ ! -f "$MANAGER_BACKUP" ]; then
-        cat "$BOOT_ORIG" > "$MANAGER_BACKUP"
+        if [ -s "$LEGACY_MANAGER_BACKUP" ]; then
+          cat "$LEGACY_MANAGER_BACKUP" > "$MANAGER_BACKUP"
+        else
+          cat "$BOOT_ORIG" > "$MANAGER_BACKUP"
+        fi
+        chmod 600 "$MANAGER_BACKUP" 2>/dev/null || true
+      elif [ ! -s "$MANAGER_BACKUP" ] && [ -s "$LEGACY_MANAGER_BACKUP" ]; then
+        cat "$LEGACY_MANAGER_BACKUP" > "$MANAGER_BACKUP"
+        chmod 600 "$MANAGER_BACKUP" 2>/dev/null || true
       fi
       cat "$BOOT_ORIG" > "$ROLLING_BACKUP"
+      chmod 600 "$ROLLING_BACKUP" 2>/dev/null || true
       boot_size_before=$(wc -c < "$BOOT_ORIG" 2>/dev/null | tr -d ' ' || true)
 
       # ---------- 3. 先统一换行符，再比对门标记 ----------
@@ -945,6 +1094,11 @@ F50_BOOT_GATE_EOF
       fi
       mv -f "$BOOT_NEW" "$BOOT"
       COMMITTED=1
+      # 完整托管文件必须落在 /data；/sdcard 上的同目录备份会和主文件一起被冷启动覆盖。
+      SNAPSHOT_NEW="$SNAPSHOT.new.$$"
+      cat "$BOOT" > "$SNAPSHOT_NEW"
+      chmod 600 "$SNAPSHOT_NEW" 2>/dev/null || true
+      mv -f "$SNAPSHOT_NEW" "$SNAPSHOT"
       # 本版本首次安装时完成一次恢复判定；之后尊重用户对共享启动文件的修改。
       : > "$RECOVERY_MARKER"
       sync 2>/dev/null || true
@@ -958,6 +1112,8 @@ F50_SERVICE_D_EOF
         sync 2>/dev/null || true
         echo "F50_EXTRA_TRIGGER=1"
       fi
+
+      "$FIX" --sync >/dev/null 2>&1 || true
 
       echo "F50_ENTRY_HINT=$("$FIX" --list 2>/dev/null | grep -c '^LIST|' || true)"
       echo "F50_BOOT_FIX_INSTALLED"
@@ -990,12 +1146,16 @@ F50_SERVICE_D_EOF
       PAYLOAD="$BOOT.payload.$$"
       SRC="$BOOT.src.$$"
       BOOT_ORIG="$BOOT.orig.$$"
-      MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
+      FIX_DIR=${shellQuote(FIX_DIR)}
+      MANAGER_BACKUP="$FIX_DIR/boot.before_f50_boot_manager"
+      ROLLING_BACKUP="$FIX_DIR/boot_file.before_uninstall"
+      WATCHER_TAG=${shellQuote(FIX_WATCHER_TAG)}
       trap 'rm -f "$BOOT_NEW" "$PAYLOAD" "$SRC" "$BOOT_ORIG" 2>/dev/null || true' EXIT
 ${rejectIfManagerActiveCmd()}
       touch "$BOOT"
       cat "$BOOT" > "$BOOT_ORIG"
-      cat "$BOOT_ORIG" > "$BOOT.f50_last"
+      cat "$BOOT_ORIG" > "$ROLLING_BACKUP"
+      chmod 600 "$ROLLING_BACKUP" 2>/dev/null || true
       sed 's/\\r$//' "$BOOT_ORIG" > "$SRC"
       begin_count=$(grep -cxF "$BEGIN" "$SRC" 2>/dev/null || true)
       end_count=$(grep -cxF "$END" "$SRC" 2>/dev/null || true)
@@ -1055,6 +1215,15 @@ ${rejectIfManagerActiveCmd()}
         fi
         mv -f "$BOOT_NEW" "$BOOT"
         sync 2>/dev/null || true
+      fi
+      watcher_tag=$(cat "$WATCHER_TAG" 2>/dev/null || true)
+      watcher_boot=\${watcher_tag%.*}
+      watcher_pid=\${watcher_tag##*.}
+      current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
+      case "$watcher_pid" in "" | *[!0-9]*) watcher_pid= ;; esac
+      if [ -n "$watcher_pid" ] && [ "$watcher_boot" = "$current_boot" ] && kill -0 "$watcher_pid" 2>/dev/null; then
+        watcher_cmd=$(tr '\\000' ' ' < "/proc/$watcher_pid/cmdline" 2>/dev/null || true)
+        case "$watcher_cmd" in *boot_manager.sh*--watch*) kill "$watcher_pid" 2>/dev/null || true ;; esac
       fi
       rm -f ${shellQuote(SERVICE_D_HOOK)} 2>/dev/null || true
       rm -rf ${shellQuote(FIX_DIR)} 2>/dev/null || true

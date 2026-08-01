@@ -59,6 +59,7 @@
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   const BOOT_SERVICE_LINE = `${CLASH_RUNTIME_MANAGER} --boot`;
   const LEGACY_BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
+  const LEGACY_BOOT_FIX_WRAPPER_LINE = '/data/f50_boot_fix/clash_boot.sh >/dev/null 2>&1 &';
   const BOOT_INOTIFY_LINE =
     `inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_DIR}/Clash" >> /dev/null &`;
   const BOOT_POLICY_TOOLS_LINE = `sleep 8; ${CLASH_POLICY_SCRIPT} apply`;
@@ -328,10 +329,11 @@ ${script}`,
             -v cleanup=${shellQuote(BOOT_CLEANUP_LINE)} \
             -v runtime=${shellQuote(BOOT_SERVICE_LINE)} \
             -v service=${shellQuote(LEGACY_BOOT_SERVICE_LINE)} \
+            -v legacy_wrapper=${shellQuote(LEGACY_BOOT_FIX_WRAPPER_LINE)} \
             -v inotify=${shellQuote(BOOT_INOTIFY_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '$0 != cleanup && $0 != runtime && $0 != service && $0 != inotify && $0 != policy && $0 != mac { print }' \
+            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != inotify && $0 != policy && $0 != mac { print }' \
             ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
             mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
           BOOT_RC=$?
@@ -945,7 +947,8 @@ KANO_RUNTIME_MANAGER_EOF
     const legacy = await runShellWithRoot(`
       BOOT=${shellQuote(BOOT_FILE)}
       if [ -f "$BOOT" ] &&
-         grep -qxF ${shellQuote(LEGACY_BOOT_SERVICE_LINE)} "$BOOT" &&
+         { grep -qxF ${shellQuote(LEGACY_BOOT_SERVICE_LINE)} "$BOOT" ||
+           grep -qxF ${shellQuote(LEGACY_BOOT_FIX_WRAPPER_LINE)} "$BOOT"; } &&
          ! grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} "$BOOT"; then
         echo LEGACY_BOOT_PRESENT
       fi

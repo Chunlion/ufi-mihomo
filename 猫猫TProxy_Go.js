@@ -7953,13 +7953,7 @@ KANO_POLICY_TOOLS_EOF
       const status = state && state.state || 'disabled';
       boot_on.dataset.bootState = status;
       boot_on.style.background = status == 'disabled' ? '' : 'var(--dark-btn-color-active)';
-      boot_on.textContent = status == 'managed'
-        ? '开机自启（已托管）'
-        : status == 'direct'
-          ? '开机自启（直接执行）'
-          : status == 'manager_damaged'
-            ? '开机自启（管理器异常）'
-            : '开机自启';
+      boot_on.textContent = '开机自启';
       boot_on.title = state && state.message || '';
     };
     boot_on.addEventListener('click', async () => {

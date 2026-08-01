@@ -50,7 +50,9 @@ const check = (name, ok, detail = '') => {
   check('抽出管理器脚本', manager.length > 2000, `长度 ${manager.length}`);
   check('抽出门代码', gate.includes('F50_BOOT_FIX_BEGIN'), gate.slice(0, 80));
   check('抽出 service.d 钩子', hook.includes('boot_manager.sh'));
-  check('后台入口在 exec 前忽略 HUP', gate.includes("trap '' HUP; exec") && hook.includes("trap '' HUP; exec"));
+  check('启动文件后台入口在 exec 前忽略 HUP', gate.includes("trap '' HUP; exec"));
+  check('service.d 前台等待管理器', hook.includes('"$FIX" --trigger="$trigger"') && !/boot_manager\.sh[^\n]*&/.test(hook));
+  check('service.d 冷启动失败补触发', hook.includes('service.d-retry'));
   check('状态查询使用独立工作目录', manager.includes('prepare_work "worklist.$$"'));
   check('过期锁通过原子改名接管', manager.includes('mv "$LOCK_DIR" "$stale_lock"'));
 

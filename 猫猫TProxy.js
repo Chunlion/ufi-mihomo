@@ -53,7 +53,7 @@
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_RUNTIME_MANAGER_VERSION = '1.0.3';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
-  const BOOT_MANAGER_VERSION = '2.2.0';
+  const BOOT_MANAGER_VERSION = '2.3.0';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
   const BOOT_GATE_END = '# F50_BOOT_FIX_END';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;

@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '2.2.0';
+  const MANAGER_VERSION = '2.3.0';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -657,11 +657,22 @@
   const serviceDHook = [
     '#!/system/bin/sh',
     '# 由插件「全插件开机自启修复」写入：与启动文件里的门互为备份，',
-    '# 管理器内部有 boot_id 标记 + 文件锁，重复触发只会执行一次。',
-    `if [ -x ${FIX_SCRIPT} ]; then`,
-    `  ( trap '' HUP; exec ${FIX_SCRIPT} --trigger=service.d ) </dev/null >/dev/null 2>&1 &`,
-    'fi',
-    'exit 0',
+    '# service.d 本身运行在非阻塞的 late_start service 阶段，这里必须前台等待管理器。',
+    '# 冷启动时若再放到后台，钩子退出后子进程可能被启动环境回收。',
+    `FIX=${shellQuote(FIX_SCRIPT)}`,
+    'attempt=1',
+    'last_rc=1',
+    'while [ "$attempt" -le 2 ]; do',
+    '  [ -x "$FIX" ] || exit 1',
+    '  trigger=service.d',
+    '  [ "$attempt" = "1" ] || trigger=service.d-retry',
+    '  "$FIX" --trigger="$trigger" </dev/null >/dev/null 2>&1',
+    '  last_rc=$?',
+    '  [ "$last_rc" = "0" ] && exit 0',
+    '  attempt=$((attempt + 1))',
+    '  [ "$attempt" -le 2 ] && sleep 30',
+    'done',
+    'exit "$last_rc"',
   ].join('\n');
 
   const checkRoot = async () => {
@@ -944,6 +955,7 @@ F50_BOOT_GATE_EOF
 ${serviceDHook}
 F50_SERVICE_D_EOF
         chmod 755 ${shellQuote(SERVICE_D_HOOK)} 2>/dev/null || true
+        sync 2>/dev/null || true
         echo "F50_EXTRA_TRIGGER=1"
       fi
 

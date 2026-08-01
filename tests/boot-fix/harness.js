@@ -32,7 +32,7 @@ class Sandbox {
   }
 
   reset() {
-    fs.rmSync(this.root, { recursive: true, force: true });
+    fs.rmSync(this.root, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
     for (const d of ['sdcard', 'data', 'data/local/tmp', 'proc', 'proc/sys/kernel/random',
       'bin', 'tmp', 'prop', 'probe']) {
       fs.mkdirSync(path.join(this.root, d), { recursive: true });

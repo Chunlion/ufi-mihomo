@@ -151,8 +151,8 @@ const gateOf = (text) => {
     assert((second.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '仍然只有一个门');
   });
 
-  await test('T3 从旧版本升级：旧门被替换，历史遗留行被清理，其它行不丢', async () => {
-    const legacyClash = `sleep 25; pidof Clash.Core >/dev/null 2>&1 || ${S}/data/clash/Scripts/Clash.Service start`;
+  await test('T3 从旧版本升级：除管理器自己的门外，所有底层插件行原样保留', async () => {
+    const legacyPlugin = `sleep 25; ${S}/data/plugin_legacy/start.sh --boot`;
     const old = [
       '# F50_BOOT_FIX_BEGIN',
       'if [ "${F50_BOOT_REPLAY:-0}" != "1" ]; then',
@@ -161,8 +161,8 @@ const gateOf = (text) => {
       'fi',
       '# F50_BOOT_FIX_END',
       '',
-      `${S}/data/f50_boot_fix/clash_boot.sh`,
-      legacyClash,
+      `${S}/data/plugin_old/start.sh`,
+      legacyPlugin,
       `touch ${S}/probe/other_plugin`,
       '',
     ].join('\n');
@@ -172,51 +172,47 @@ const gateOf = (text) => {
     await app.click('install');
     const after = sbx.readBoot();
     assert((after.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '门没有重复');
-    assert(!after.includes('clash_boot.sh'), '旧的 clash_boot.sh 行已清除');
-    assert(!after.includes('sleep 25; pidof'), '遗留的 sleep 25 行已按迁移表改写');
-    assert(after.includes(`${S}/data/clash/Scripts/Clash.Service start`), '改写后的服务启动行保留');
+    assert(after.includes(`${S}/data/plugin_old/start.sh`), '不识别或删除特定插件入口');
+    assert(after.includes(legacyPlugin), '不改写特定插件的历史启动命令');
     assert(after.includes(`touch ${S}/probe/other_plugin`), '其它插件的行完好');
     assert(after.startsWith('# F50_BOOT_FIX_BEGIN'), '新门仍在最顶部');
   });
 
-  await test('T3b 只有旧版启动入口且 grep -F 漏计时：迁移为实际 Clash 启动命令', async () => {
+  await test('T3b 任意底层插件只有一条启动入口：不按插件名称过滤', async () => {
     await waitQuiet();
     sbx.reset(); clearProbes();
-    sbx.writeBoot(`${S}/data/f50_boot_fix/clash_boot.sh`);
-    sbx.writeBin('grep', `
-case "$*" in
-  *clash_boot.sh*) echo 0; exit 1 ;;
-esac
-exec /usr/bin/grep "$@"
-    `.trim());
+    const pluginEntry = `${S}/data/other_plugin/start.sh --boot`;
+    sbx.writeBoot(pluginEntry);
     const app = loadPlugin(sbx);
     await app.click('install');
     const after = sbx.readBoot();
     assert((after.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '新门安装成功');
-    assert(!after.includes('clash_boot.sh'), '旧版启动入口已清理');
-    assert(after.includes(`${S}/data/clash/Scripts/Clash.Service start`), '旧入口已迁移为实际 Clash 启动命令');
-    assert(!app.toasts.some((item) => /提取结果异常/.test(item.msg)), '没有行数校验假报警');
+    assert(after.includes(pluginEntry), '任意插件入口逐字保留');
   });
 
-  await test('T3c 已被 v2.2.0 清空时：从首次安装备份恢复旧版 Clash 入口且只恢复一次', async () => {
+  await test('T3c 共享启动内容已被清空时：从首次安装备份恢复全部插件且只恢复一次', async () => {
     await waitQuiet();
     sbx.reset(); clearProbes();
-    const oldEntry = `${S}/data/f50_boot_fix/clash_boot.sh`;
-    sbx.writeBoot(oldEntry);
-    const first = loadPlugin(sbx);
-    await first.click('install');
-    fs.writeFileSync(sbx.p('sdcard/ufi_tools_boot.sh.before_f50_boot_manager'), oldEntry);
-    sbx.writeBoot(gateOf(sbx.readBoot()));
-    fs.rmSync(sbx.p('data/f50_boot_fix/legacy_clash_migrated'), { force: true });
+    const backupEntries = [
+      `${S}/data/plugin_a/start.sh`,
+      `sh ${S}/data/plugin_b/boot.sh --late`,
+      `touch ${S}/probe/plugin_c`,
+      '',
+    ].join('\n');
+    await freshInstall('');
+    fs.writeFileSync(sbx.p('sdcard/ufi_tools_boot.sh.before_f50_boot_manager'), backupEntries);
+    fs.rmSync(sbx.p('data/f50_boot_fix/boot_backup_recovered'), { force: true });
     const repair = loadPlugin(sbx);
     await repair.click('install');
     const recovered = sbx.readBoot();
-    assert(recovered.includes(`${S}/data/clash/Scripts/Clash.Service start`), '从首次安装备份恢复实际启动命令');
-    assert(sbx.exists('data/f50_boot_fix/legacy_clash_migrated'), '写入一次性迁移标记');
+    backupEntries.split('\n').filter(Boolean).forEach((line) => {
+      assert(recovered.includes(line), `恢复底层插件启动行: ${line}`);
+    });
+    assert(sbx.exists('data/f50_boot_fix/boot_backup_recovered'), '写入一次性恢复标记');
 
     sbx.writeBoot(gateOf(recovered));
     await repair.click('install');
-    assert(!sbx.readBoot().includes('Clash.Service start'), '迁移完成后不会反复恢复用户主动清空的启动项');
+    assert(!sbx.readBoot().includes('plugin_a/start.sh'), '恢复完成后不会反复加回用户主动清空的启动项');
   });
 
   await test('T4 启动文件门标记损坏（只有 BEGIN 没有 END）：拒绝写入，原文件零改动', async () => {

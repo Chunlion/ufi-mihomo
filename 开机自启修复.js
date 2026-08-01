@@ -16,25 +16,10 @@
   // 门标记必须与历史版本保持一致，升级时才能原地替换而不是重复安装。
   const BOOT_BEGIN = '# F50_BOOT_FIX_BEGIN';
   const BOOT_END = '# F50_BOOT_FIX_END';
-  const OLD_FIX_SCRIPT = `${FIX_DIR}/clash_boot.sh`;
-  const LEGACY_CLASH_START = '/data/clash/Scripts/Clash.Service start';
-  const LEGACY_MIGRATION_MARKER = `${FIX_DIR}/legacy_clash_migrated`;
-  // 历史遗留行迁移表：只按整行精确匹配替换，用于清理早期插件写入的
-  // 「自己等系统就绪」的行（管理器已统一负责等待）。与核心逻辑解耦，
-  // 不做任何模糊改写，避免破坏其它插件的执行顺序。
-  const LEGACY_LINE_REWRITES = [
-    {
-      from: 'sleep 25; pidof Clash.Core >/dev/null 2>&1 || /data/clash/Scripts/Clash.Service start',
-      to: '/data/clash/Scripts/Clash.Service start',
-    },
-  ];
+  const BACKUP_RECOVERY_MARKER = `${FIX_DIR}/boot_backup_recovered`;
 
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
-
-  // sed 用 # 作分隔符，所以 / 不需要转义（转了反而影响可读性与后续处理）
-  const sedEscape = (value) =>
-    String(value).replace(/[\\^$.*[\]&#]/g, (ch) => `\\${ch}`);
 
   const rejectIfManagerActiveCmd = () => `
       active_lock=${shellQuote(MANAGER_LOCK_DIR)}
@@ -679,10 +664,6 @@
     'exit 0',
   ].join('\n');
 
-  const legacyRewriteSed = LEGACY_LINE_REWRITES.map(
-    (rule) => `      sed -i 's#^${sedEscape(rule.from)}$#${sedEscape(rule.to)}#' "$PAYLOAD"`,
-  ).join('\n');
-
   const checkRoot = async () => {
     try {
       const result = await runShellWithRoot('whoami', 5000);
@@ -791,19 +772,18 @@
       FIX_NEW="$FIX.new.$$"
       BOOT_NEW="$BOOT.new.$$"
       PAYLOAD="$FIX_DIR/payload.$$"
+      BACKUP_PAYLOAD="$FIX_DIR/backup_payload.$$"
       SRC="$FIX_DIR/src.$$"
       BOOT_ORIG="$FIX_DIR/boot.orig.$$"
       BEGIN=${shellQuote(BOOT_BEGIN)}
       END=${shellQuote(BOOT_END)}
-      OLD_FIX=${shellQuote(OLD_FIX_SCRIPT)}
-      OLD_START=${shellQuote(LEGACY_CLASH_START)}
-      MIGRATION_MARKER=${shellQuote(LEGACY_MIGRATION_MARKER)}
+      RECOVERY_MARKER=${shellQuote(BACKUP_RECOVERY_MARKER)}
       MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
       ROLLING_BACKUP="$BOOT.f50_last"
       COMMITTED=0
       cleanup() {
         rc=$?
-        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$SRC" "$BOOT_ORIG" 2>/dev/null || true
+        rm -f "$FIX_NEW" "$BOOT_NEW" "$PAYLOAD" "$PAYLOAD.rest" "$BACKUP_PAYLOAD" "$SRC" "$BOOT_ORIG" 2>/dev/null || true
         if [ "$rc" != "0" ] && [ "$COMMITTED" = "0" ]; then
           echo "F50_ABORT: 安装中断(rc=$rc)，启动文件未被改动；备份：$MANAGER_BACKUP"
         fi
@@ -845,37 +825,39 @@ F50_BOOT_FIX_EOF
       fi
 
       # ---------- 4. 提取各插件的启动指令 ----------
-      if ! awk -v b="$BEGIN" -v e="$END" -v old_fix="$OLD_FIX" -v old_start="$OLD_START" '
-        NR == FNR { if (index($0, old_start)) has_start=1; next }
+      if ! awk -v b="$BEGIN" -v e="$END" '
         $0 == b { depth++; next }
         $0 == e { if (depth > 0) depth--; next }
         depth > 0 { next }
-        index($0, old_fix) {
-          if (!has_start && !migrated) { print old_start; migrated=1 }
-          next
-        }
         { print }
         END { if (depth > 0) exit 3 }
-      ' "$SRC" "$SRC" > "$PAYLOAD"; then
+      ' "$SRC" > "$PAYLOAD"; then
         echo "F50_ABORT: 启动指令提取失败（门标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
 
-${legacyRewriteSed}
-
-      # v2.2.0 的首次修复可能已把唯一的旧入口删掉。只恢复一次，并以首次
-      # 安装前的只读备份为依据，避免后续用户主动清空启动项时被反复加回。
-      legacy_recovered=0
-      payload_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
-      backup_old_lines=$(awk -v old_fix="$OLD_FIX" '
-        index($0, old_fix) { count++ }
-        END { print count + 0 }
-      ' "$MANAGER_BACKUP" 2>/dev/null || true)
-      [ -n "$payload_lines" ] || payload_lines=0
-      [ -n "$backup_old_lines" ] || backup_old_lines=0
-      if [ ! -f "$MIGRATION_MARKER" ] && [ "$payload_lines" = "0" ] && [ "$backup_old_lines" -gt 0 ]; then
-        printf '%s\n' "$OLD_START" >> "$PAYLOAD"
-        legacy_recovered=1
+      # 旧版若已把共享启动内容清空，则从首次安装前的只读备份整体恢复一次。
+      # 这里只剥离本管理器自己的门，其余内容完全原样保留，不识别插件名称、
+      # 安装目录或启动命令，确保任意底层插件都走同一套逻辑。
+      backup_recovered=0
+      backup_lines=0
+      payload_code_lines=$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
+      [ -n "$payload_code_lines" ] || payload_code_lines=0
+      if [ ! -f "$RECOVERY_MARKER" ] && [ "$payload_code_lines" = "0" ] && [ -f "$MANAGER_BACKUP" ]; then
+        if awk -v b="$BEGIN" -v e="$END" '
+          $0 == b { depth++; next }
+          $0 == e { if (depth > 0) depth--; next }
+          depth > 0 { next }
+          { print }
+          END { if (depth > 0) exit 3 }
+        ' "$MANAGER_BACKUP" > "$BACKUP_PAYLOAD"; then
+          backup_code_lines=$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' "$BACKUP_PAYLOAD" 2>/dev/null || true)
+          [ -n "$backup_code_lines" ] || backup_code_lines=0
+          if [ "$backup_code_lines" -gt 0 ]; then
+            cat "$BACKUP_PAYLOAD" > "$PAYLOAD"
+            backup_recovered=1
+          fi
+        fi
       fi
 
       # ---------- 5. 无损校验：提取出来的行数必须和预期完全一致 ----------
@@ -887,27 +869,16 @@ ${legacyRewriteSed}
         $0 == e { inside=0 }
         END { print count + 0 }
       ' "$SRC" 2>/dev/null || true)
-      # 提取器用 awk 的 index() 识别旧入口，校验也必须使用完全相同的判定。
-      # 部分 F50 固件里的 grep -F 会在该文件上返回 0，导致旧入口已被正确
-      # 移除后仍误报「得到 0 行，应为 1 行」。
-      old_lines=$(awk -v old_fix="$OLD_FIX" '
-        index($0, old_fix) { count++ }
-        END { print count + 0 }
-      ' "$SRC" 2>/dev/null || true)
-      old_start_lines=$(awk -v old_start="$OLD_START" '
-        index($0, old_start) { count++ }
-        END { print count + 0 }
-      ' "$SRC" 2>/dev/null || true)
       [ -n "$src_lines" ] || src_lines=0
       [ -n "$pay_lines" ] || pay_lines=0
       [ -n "$gate_lines" ] || gate_lines=0
-      [ -n "$old_lines" ] || old_lines=0
-      [ -n "$old_start_lines" ] || old_start_lines=0
-      replacement_lines=0
-      if [ "$old_lines" -gt 0 ] && [ "$old_start_lines" = "0" ]; then
-        replacement_lines=1
+      if [ "$backup_recovered" = "1" ]; then
+        backup_lines=$(awk 'NF { count++ } END { print count + 0 }' "$BACKUP_PAYLOAD" 2>/dev/null || true)
+        [ -n "$backup_lines" ] || backup_lines=0
+        expect_lines="$backup_lines"
+      else
+        expect_lines=$((src_lines - gate_lines))
       fi
-      expect_lines=$((src_lines - gate_lines - old_lines + replacement_lines + legacy_recovered))
       [ "$expect_lines" -ge 0 ] || expect_lines=0
       if [ "$pay_lines" != "$expect_lines" ]; then
         echo "F50_ABORT: 启动指令提取结果异常(得到 $pay_lines 行，应为 $expect_lines 行)，已中止且未改动原文件；备份：$MANAGER_BACKUP"
@@ -963,9 +934,8 @@ F50_BOOT_GATE_EOF
       fi
       mv -f "$BOOT_NEW" "$BOOT"
       COMMITTED=1
-      if [ "$old_lines" -gt 0 ] || [ "$legacy_recovered" = "1" ]; then
-        : > "$MIGRATION_MARKER"
-      fi
+      # 本版本首次安装时完成一次恢复判定；之后尊重用户对共享启动文件的修改。
+      : > "$RECOVERY_MARKER"
       sync 2>/dev/null || true
 
       # ---------- 7. 备用触发点（有 Magisk 时才装，管理器本身幂等）----------
@@ -977,7 +947,6 @@ F50_SERVICE_D_EOF
         echo "F50_EXTRA_TRIGGER=1"
       fi
 
-      rm -f "$OLD_FIX" 2>/dev/null || true
       echo "F50_ENTRY_HINT=$("$FIX" --list 2>/dev/null | grep -c '^LIST|' || true)"
       echo "F50_BOOT_FIX_INSTALLED"
     `, 30000);

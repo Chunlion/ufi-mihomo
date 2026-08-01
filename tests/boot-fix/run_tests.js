@@ -179,7 +179,7 @@ const gateOf = (text) => {
     assert(after.startsWith('# F50_BOOT_FIX_BEGIN'), '新门仍在最顶部');
   });
 
-  await test('T3b 只有旧版启动入口且 grep -F 漏计时：安装不会被行数校验误杀', async () => {
+  await test('T3b 只有旧版启动入口且 grep -F 漏计时：迁移为实际 Clash 启动命令', async () => {
     await waitQuiet();
     sbx.reset(); clearProbes();
     sbx.writeBoot(`${S}/data/f50_boot_fix/clash_boot.sh`);
@@ -194,7 +194,29 @@ exec /usr/bin/grep "$@"
     const after = sbx.readBoot();
     assert((after.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '新门安装成功');
     assert(!after.includes('clash_boot.sh'), '旧版启动入口已清理');
+    assert(after.includes(`${S}/data/clash/Scripts/Clash.Service start`), '旧入口已迁移为实际 Clash 启动命令');
     assert(!app.toasts.some((item) => /提取结果异常/.test(item.msg)), '没有行数校验假报警');
+  });
+
+  await test('T3c 已被 v2.2.0 清空时：从首次安装备份恢复旧版 Clash 入口且只恢复一次', async () => {
+    await waitQuiet();
+    sbx.reset(); clearProbes();
+    const oldEntry = `${S}/data/f50_boot_fix/clash_boot.sh`;
+    sbx.writeBoot(oldEntry);
+    const first = loadPlugin(sbx);
+    await first.click('install');
+    fs.writeFileSync(sbx.p('sdcard/ufi_tools_boot.sh.before_f50_boot_manager'), oldEntry);
+    sbx.writeBoot(gateOf(sbx.readBoot()));
+    fs.rmSync(sbx.p('data/f50_boot_fix/legacy_clash_migrated'), { force: true });
+    const repair = loadPlugin(sbx);
+    await repair.click('install');
+    const recovered = sbx.readBoot();
+    assert(recovered.includes(`${S}/data/clash/Scripts/Clash.Service start`), '从首次安装备份恢复实际启动命令');
+    assert(sbx.exists('data/f50_boot_fix/legacy_clash_migrated'), '写入一次性迁移标记');
+
+    sbx.writeBoot(gateOf(recovered));
+    await repair.click('install');
+    assert(!sbx.readBoot().includes('Clash.Service start'), '迁移完成后不会反复恢复用户主动清空的启动项');
   });
 
   await test('T4 启动文件门标记损坏（只有 BEGIN 没有 END）：拒绝写入，原文件零改动', async () => {
@@ -526,6 +548,7 @@ exec /usr/bin/grep "$@"
     // 标签上限 200 字符；沙盒路径本身就有 110+ 字符，所以只挑落在前 200 字符内的
     assert(/b1_service/.test(detail) && /c1_mine/.test(detail), '列出了各插件的启动指令');
     assert(/成功/.test(detail), '显示了执行结果');
+    assert(/管理器运行日志/.test(detail) && /本次插件自启处理完成/.test(detail), '显示最近的具体运行日志');
     assert(!/⚠/.test(detail), `健康状态下没有告警，实际: ${(detail.match(/⚠[^<]*/g) || []).join(' | ')}`);
   });
 

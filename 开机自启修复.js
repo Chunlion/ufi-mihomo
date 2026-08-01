@@ -17,6 +17,8 @@
   const BOOT_BEGIN = '# F50_BOOT_FIX_BEGIN';
   const BOOT_END = '# F50_BOOT_FIX_END';
   const OLD_FIX_SCRIPT = `${FIX_DIR}/clash_boot.sh`;
+  const LEGACY_CLASH_START = '/data/clash/Scripts/Clash.Service start';
+  const LEGACY_MIGRATION_MARKER = `${FIX_DIR}/legacy_clash_migrated`;
   // 历史遗留行迁移表：只按整行精确匹配替换，用于清理早期插件写入的
   // 「自己等系统就绪」的行（管理器已统一负责等待）。与核心逻辑解耦，
   // 不做任何模糊改写，避免破坏其它插件的执行顺序。
@@ -794,6 +796,8 @@
       BEGIN=${shellQuote(BOOT_BEGIN)}
       END=${shellQuote(BOOT_END)}
       OLD_FIX=${shellQuote(OLD_FIX_SCRIPT)}
+      OLD_START=${shellQuote(LEGACY_CLASH_START)}
+      MIGRATION_MARKER=${shellQuote(LEGACY_MIGRATION_MARKER)}
       MANAGER_BACKUP="$BOOT.before_f50_boot_manager"
       ROLLING_BACKUP="$BOOT.f50_last"
       COMMITTED=0
@@ -841,19 +845,38 @@ F50_BOOT_FIX_EOF
       fi
 
       # ---------- 4. 提取各插件的启动指令 ----------
-      if ! awk -v b="$BEGIN" -v e="$END" -v old_fix="$OLD_FIX" '
+      if ! awk -v b="$BEGIN" -v e="$END" -v old_fix="$OLD_FIX" -v old_start="$OLD_START" '
+        NR == FNR { if (index($0, old_start)) has_start=1; next }
         $0 == b { depth++; next }
         $0 == e { if (depth > 0) depth--; next }
         depth > 0 { next }
-        index($0, old_fix) { next }
+        index($0, old_fix) {
+          if (!has_start && !migrated) { print old_start; migrated=1 }
+          next
+        }
         { print }
         END { if (depth > 0) exit 3 }
-      ' "$SRC" > "$PAYLOAD"; then
+      ' "$SRC" "$SRC" > "$PAYLOAD"; then
         echo "F50_ABORT: 启动指令提取失败（门标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
 
 ${legacyRewriteSed}
+
+      # v2.2.0 的首次修复可能已把唯一的旧入口删掉。只恢复一次，并以首次
+      # 安装前的只读备份为依据，避免后续用户主动清空启动项时被反复加回。
+      legacy_recovered=0
+      payload_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
+      backup_old_lines=$(awk -v old_fix="$OLD_FIX" '
+        index($0, old_fix) { count++ }
+        END { print count + 0 }
+      ' "$MANAGER_BACKUP" 2>/dev/null || true)
+      [ -n "$payload_lines" ] || payload_lines=0
+      [ -n "$backup_old_lines" ] || backup_old_lines=0
+      if [ ! -f "$MIGRATION_MARKER" ] && [ "$payload_lines" = "0" ] && [ "$backup_old_lines" -gt 0 ]; then
+        printf '%s\n' "$OLD_START" >> "$PAYLOAD"
+        legacy_recovered=1
+      fi
 
       # ---------- 5. 无损校验：提取出来的行数必须和预期完全一致 ----------
       src_lines=$(awk 'NF { count++ } END { print count + 0 }' "$SRC" 2>/dev/null || true)
@@ -871,11 +894,20 @@ ${legacyRewriteSed}
         index($0, old_fix) { count++ }
         END { print count + 0 }
       ' "$SRC" 2>/dev/null || true)
+      old_start_lines=$(awk -v old_start="$OLD_START" '
+        index($0, old_start) { count++ }
+        END { print count + 0 }
+      ' "$SRC" 2>/dev/null || true)
       [ -n "$src_lines" ] || src_lines=0
       [ -n "$pay_lines" ] || pay_lines=0
       [ -n "$gate_lines" ] || gate_lines=0
       [ -n "$old_lines" ] || old_lines=0
-      expect_lines=$((src_lines - gate_lines - old_lines))
+      [ -n "$old_start_lines" ] || old_start_lines=0
+      replacement_lines=0
+      if [ "$old_lines" -gt 0 ] && [ "$old_start_lines" = "0" ]; then
+        replacement_lines=1
+      fi
+      expect_lines=$((src_lines - gate_lines - old_lines + replacement_lines + legacy_recovered))
       [ "$expect_lines" -ge 0 ] || expect_lines=0
       if [ "$pay_lines" != "$expect_lines" ]; then
         echo "F50_ABORT: 启动指令提取结果异常(得到 $pay_lines 行，应为 $expect_lines 行)，已中止且未改动原文件；备份：$MANAGER_BACKUP"
@@ -931,6 +963,9 @@ F50_BOOT_GATE_EOF
       fi
       mv -f "$BOOT_NEW" "$BOOT"
       COMMITTED=1
+      if [ "$old_lines" -gt 0 ] || [ "$legacy_recovered" = "1" ]; then
+        : > "$MIGRATION_MARKER"
+      fi
       sync 2>/dev/null || true
 
       # ---------- 7. 备用触发点（有 Magisk 时才装，管理器本身幂等）----------
@@ -1127,7 +1162,12 @@ ${rejectIfManagerActiveCmd()}
       meta.NOTE ? `说明：${meta.NOTE}` : '',
       meta.DONE === '1' ? '' : '（执行中…）',
     ].filter(Boolean).map((t) => escapeHtml(t)).join(' · ');
-    if (!entries.length) return `<div>${head}</div>`;
+    if (!entries.length) {
+      const empty = meta.ENTRIES === '0' && meta.DONE === '1'
+        ? '<div style="opacity:.7">本次未发现可执行的插件启动指令（0 条）。</div>'
+        : '';
+      return `<div>${head}</div>${empty}`;
+    }
     const rows = entries.map((e) => {
       const [text, color] = STATUS_LABEL[e.status] || [e.status, '#888'];
       return `<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;border-top:1px solid rgba(128,128,128,.18)">
@@ -1156,6 +1196,10 @@ ${rejectIfManagerActiveCmd()}
       return { idx: parts[1], label: parts.slice(2).join('|') };
     });
     const stateText = section(content, 'STATE');
+    const logText = section(content, 'LOG').trim();
+    const logHtml = logText
+      ? `<div style="white-space:pre-wrap;word-break:break-all;font-family:monospace;line-height:1.45">${escapeHtml(logText)}</div>`
+      : '<div style="opacity:.7">暂无管理器运行日志。</div>';
 
     const warnings = [];
     const [begin, end] = String(gate).split('/');
@@ -1185,6 +1229,8 @@ ${rejectIfManagerActiveCmd()}
         <div style="margin-left:2px">${listHtml}</div>
         <div style="margin-top:6px"><strong>最近一次执行结果：</strong></div>
         <div style="margin-left:2px">${renderState(stateText)}</div>
+        <div style="margin-top:6px"><strong>管理器运行日志（最近 14 行）：</strong></div>
+        <div style="margin-left:2px">${logHtml}</div>
       </div>`;
   };
 

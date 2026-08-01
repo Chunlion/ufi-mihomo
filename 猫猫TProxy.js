@@ -60,8 +60,11 @@
   const BOOT_SERVICE_LINE = `${CLASH_RUNTIME_MANAGER} --boot`;
   const LEGACY_BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
   const LEGACY_BOOT_FIX_WRAPPER_LINE = '/data/f50_boot_fix/clash_boot.sh >/dev/null 2>&1 &';
+  const CLASH_INOTIFY_DIR = `${CLASH_DIR}/Clash`;
+  const LEGACY_BOOT_INOTIFY_LINE =
+    `inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >> /dev/null &`;
   const BOOT_INOTIFY_LINE =
-    `inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_DIR}/Clash" >> /dev/null &`;
+    `mkdir -p "${CLASH_INOTIFY_DIR}" && inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >> /dev/null &`;
   const BOOT_POLICY_TOOLS_LINE = `sleep 8; ${CLASH_POLICY_SCRIPT} apply`;
   const LEGACY_BOOT_MAC_BYPASS_LINE = `${CLASH_MAC_BYPASS_SCRIPT} apply`;
   const SUB_RULE_MODE_TEMPLATE = 'template';
@@ -330,10 +333,11 @@ ${script}`,
             -v runtime=${shellQuote(BOOT_SERVICE_LINE)} \
             -v service=${shellQuote(LEGACY_BOOT_SERVICE_LINE)} \
             -v legacy_wrapper=${shellQuote(LEGACY_BOOT_FIX_WRAPPER_LINE)} \
+            -v legacy_inotify=${shellQuote(LEGACY_BOOT_INOTIFY_LINE)} \
             -v inotify=${shellQuote(BOOT_INOTIFY_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != inotify && $0 != policy && $0 != mac { print }' \
+            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != policy && $0 != mac { print }' \
             ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
             mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
           BOOT_RC=$?
@@ -5480,6 +5484,7 @@ KANO_BOOTSTRAP_CONFIG
 
       createToast('\u6b63\u5728\u5b89\u88c5\u732b\u732b\uff0c\u8bbe\u7f6eClash\u81ea\u542f\u52a8...');
       const res5 = await runShellWithRoot(`
+        mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} || exit 1
         if [ -d ${shellQuote(CLASH_DIR)} ]; then
           find ${shellQuote(CLASH_DIR)} -type d -exec chmod 755 {} \\;
           find ${shellQuote(CLASH_DIR)} -type f -exec chmod 644 {} \\;

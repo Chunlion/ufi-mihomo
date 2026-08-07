@@ -4,12 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
   shell: path.join(ROOT, '猫猫TProxy.js'),
   go: path.join(ROOT, '猫猫TProxy_Go.js'),
+  helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
 };
 
 let pass = 0;
@@ -111,7 +113,8 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
-  'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd',
+  'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
+  'readCurrentModeStatus',
 ];
 
 function runFor(label, file) {
@@ -119,7 +122,9 @@ function runFor(label, file) {
   const source = fs.readFileSync(file, 'utf8');
   let shellReply = { success: true, content: '' };
   let lastShellCommand = '';
+  let shellCallCount = 0;
   const handler = async (command) => {
+    shellCallCount++;
     lastShellCommand = String(command || '');
     return shellReply;
   };
@@ -140,6 +145,57 @@ function runFor(label, file) {
     true,
     '开机自启按钮不再追加状态提示词',
   );
+
+  const modeStatusSource = source.slice(
+    source.indexOf('const readCurrentModeStatus = async () => {'),
+    source.indexOf('const refreshRuleModeStatus = async () => {'),
+  );
+  chk(
+    (modeStatusSource.match(/\$YQ"? e /g) || []).length,
+    1,
+    'configuration summary uses a single yq process',
+  );
+  const policyReaderSource = source.slice(
+    source.indexOf('const readPolicyState = async () => {'),
+    source.indexOf('const updateModeBadge = (mode) => {'),
+  );
+  chk(
+    policyReaderSource.includes('syncUnifiedDeviceBypassStorage'),
+    false,
+    'reading policy state does not rewrite files or scan firewall chains',
+  );
+  const runningStatusSource = source.slice(
+    source.indexOf('const isMMRunning = async () => {'),
+    source.indexOf('const askConfirm = ('),
+  );
+  chk(
+    runningStatusSource.includes("{ corePid: pid }"),
+    true,
+    'API health check reuses the already detected core PID',
+  );
+  if (isGo) {
+    const snapshotReaderSource = source.slice(
+      source.indexOf('const readBinarySnapshot = async ('),
+      source.indexOf('const invalidateBinarySnapshot = () => {'),
+    );
+    chk(
+      !snapshotReaderSource.includes("'--device'")
+        && !snapshotReaderSource.includes("'--direct-domain'")
+        && policyReaderSource.includes("runBinaryHelperJson('policy-read'"),
+      true,
+      'hot-path snapshot omits policy files that are loaded on demand',
+    );
+    const clientReaderSource = source.slice(
+      source.indexOf('const readClientListText = async () => {'),
+      source.indexOf('const showPolicyStatus = async () => {'),
+    );
+    chk(
+      clientReaderSource.includes("runBinaryHelperJson('clients')")
+        && !clientReaderSource.includes('readBinarySnapshot'),
+      true,
+      'client discovery runs only when the client list is requested',
+    );
+  }
 
   console.log('--- installer controller hardening ---');
   chk(
@@ -331,6 +387,15 @@ function runFor(label, file) {
       chk(stoppedProviderOutcome.color, 'yellow',
         'stopped-core provider refresh is a warning instead of a config error');
       if (isGo) {
+        const helperBinary = fs.readFileSync(FILES.helper);
+        const expectedHelperSize = Number((source.match(/const KANO_HELPER_SIZE = (\d+);/) || [])[1]);
+        const expectedHelperHash = (source.match(/const KANO_HELPER_SHA256 = '([a-f0-9]+)'/) || [])[1];
+        chk(helperBinary.length, expectedHelperSize, 'embedded Go helper size matches the installer manifest');
+        chk(
+          crypto.createHash('sha256').update(helperBinary).digest('hex'),
+          expectedHelperHash,
+          'embedded Go helper checksum matches the installer manifest',
+        );
         chk(
           source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
             && !source.includes('raw.githubusercontent.com/Chunlion/ufi-mihomo'),
@@ -384,6 +449,17 @@ function runFor(label, file) {
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {
     await goBehaviorPromise;
+    shellReply = { success: true, content: 'root' };
+    chk(await api.checkAdvanceFunc({ fresh: true }), true, 'advanced access probe detects root');
+    const callsAfterFreshAccessProbe = shellCallCount;
+    chk(await api.checkAdvanceFunc(), true, 'advanced access cache preserves the successful result');
+    chk(shellCallCount, callsAfterFreshAccessProbe, 'cached advanced access avoids a second root shell call');
+
+    shellReply = { success: true, content: '' };
+    await api.readCurrentModeStatus();
+    const modeStatusSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
+    chk(modeStatusSyntax.status, 0, `generated configuration-summary shell passes sh -n: ${modeStatusSyntax.stderr.trim()}`);
+
     shellReply = { success: true, content: '0' };
     const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });
     chk(

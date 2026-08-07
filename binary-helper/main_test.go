@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestSnapshotJSONOmitsOnDemandData(t *testing.T) {
+	content, err := json.Marshal(snapshotResult{result: ok()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"clients", "deviceBypass", "directDomain", "directIp", "proxyDomain", "rejectDomain"} {
+		if strings.Contains(string(content), field) {
+			t.Fatalf("snapshot unexpectedly includes on-demand field %q: %s", field, content)
+		}
+	}
+}
 
 func TestYAMLScalar(t *testing.T) {
 	tests := map[string]string{

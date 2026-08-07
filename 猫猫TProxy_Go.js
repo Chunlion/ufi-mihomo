@@ -74,10 +74,12 @@
   const KANO_PROVIDER_USER_AGENT = 'Mozilla/5.0';
   const POLICY_SCRIPT_VERSION = '6.3';
   const CONTROLLER_INFO_CACHE_TTL = 250;
+  const ADVANCED_ACCESS_CACHE_TTL = 30 * 1000;
+  const ADVANCED_ACCESS_FAILURE_CACHE_TTL = 2 * 1000;
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
-  const KANO_HELPER_VERSION = '0.2.2';
+  const KANO_HELPER_VERSION = '0.2.3';
   const KANO_HELPER_SIZE = 5177506;
-  const KANO_HELPER_SHA256 = 'a9dfd9ea21d145238030ef7f3f1da2bac7ccd888b003e9d421b2d96e412d5a9f';
+  const KANO_HELPER_SHA256 = '9467e8d5d1e04d276768622f449a848145328d10b81725b2af4d99d17cf88ae0';
   const KANO_HELPER_DOWNLOAD_URL =
     'https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
@@ -1315,13 +1317,35 @@ KANO_RUNTIME_MANAGER_EOF
     }
   };
 
-  const checkAdvanceFunc = async () => {
+  let advancedAccessCache = null;
+  let advancedAccessCacheExpiresAt = 0;
+  let advancedAccessLoadPromise = null;
+
+  const checkAdvanceFunc = async ({ fresh = false } = {}) => {
+    const now = Date.now();
+    if (!fresh && advancedAccessCache !== null && advancedAccessCacheExpiresAt > now) {
+      return advancedAccessCache;
+    }
+    if (!fresh && advancedAccessLoadPromise) return advancedAccessLoadPromise;
+    const loadPromise = (async () => {
+      try {
+        const res = await runShellWithRoot('whoami');
+        return !!(res.success && String(res.content || '').includes('root'));
+      } catch (e) {
+        console.error(e);
+        return false;
+      }
+    })();
+    if (!fresh) advancedAccessLoadPromise = loadPromise;
     try {
-      const res = await runShellWithRoot('whoami');
-      return !!(res.success && String(res.content || '').includes('root'));
-    } catch (e) {
-      console.error(e);
-      return false;
+      const allowed = await loadPromise;
+      advancedAccessCache = allowed;
+      advancedAccessCacheExpiresAt = Date.now() + (allowed
+        ? ADVANCED_ACCESS_CACHE_TTL
+        : ADVANCED_ACCESS_FAILURE_CACHE_TTL);
+      return allowed;
+    } finally {
+      if (advancedAccessLoadPromise == loadPromise) advancedAccessLoadPromise = null;
     }
   };
 
@@ -1492,11 +1516,6 @@ KANO_RUNTIME_MANAGER_EOF
     const loadPromise = runBinaryHelperJson('snapshot', [
       '--config', CLASH_CONFIG,
       '--options', CLASH_POLICY_OPTIONS_FILE,
-      '--device', CLASH_DEVICE_BYPASS_FILE,
-      '--direct-domain', CLASH_DIRECT_DOMAIN_FILE,
-      '--direct-ip', CLASH_DIRECT_IP_FILE,
-      '--proxy-domain', CLASH_PROXY_DOMAIN_FILE,
-      '--reject-domain', CLASH_REJECT_DOMAIN_FILE,
     ]);
     if (!fresh) binarySnapshotLoadPromise = loadPromise;
     try {
@@ -4361,11 +4380,16 @@ KANO_WRITE_CHECK_EOF
         proxy_providers_count=
         if [ -s "$CONFIG" ]; then
           if [ -x "$YQ" ]; then
-            if "$YQ" e '.' "$CONFIG" >/dev/null 2>/dev/null; then
-              config_read_status=yq
-              rules_count="$($YQ e '(.rules // []) | length' "$CONFIG" 2>/dev/null)"
-              proxy_groups_count="$($YQ e '(."proxy-groups" // []) | length' "$CONFIG" 2>/dev/null)"
-              proxy_providers_count="$($YQ e '(."proxy-providers" // {}) | length' "$CONFIG" 2>/dev/null)"
+            if counts="$("$YQ" e '[((.rules // []) | length), ((."proxy-groups" // []) | length), ((."proxy-providers" // {}) | length)] | join(" ")' "$CONFIG" 2>/dev/null)"; then
+              set -- $counts
+              if [ "$#" -eq 3 ]; then
+                config_read_status=yq
+                rules_count="$1"
+                proxy_groups_count="$2"
+                proxy_providers_count="$3"
+              else
+                config_read_status=invalid
+              fi
             else
               config_read_status=invalid
             fi
@@ -4494,7 +4518,7 @@ KANO_WRITE_CHECK_EOF
     const running_mm = document.querySelector('#running_mm');
     let apiOk = false;
     if (pid) {
-      const version = await callMihomoApi('/version', 'GET');
+      const version = await callMihomoApi('/version', 'GET', null, null, 8, { corePid: pid });
       apiOk = !!version.success;
     }
     if (running_mm) {
@@ -6634,16 +6658,22 @@ KANO_POLICY_TOOLS_EOF
   };
 
   const readPolicyState = async () => {
-    await syncUnifiedDeviceBypassStorage();
-    const snapshot = await readBinarySnapshot();
-    if (snapshot) {
+    const helperResult = await runBinaryHelperJson('policy-read', [
+      '--options', CLASH_POLICY_OPTIONS_FILE,
+      '--device', CLASH_DEVICE_BYPASS_FILE,
+      '--direct-domain', CLASH_DIRECT_DOMAIN_FILE,
+      '--direct-ip', CLASH_DIRECT_IP_FILE,
+      '--proxy-domain', CLASH_PROXY_DOMAIN_FILE,
+      '--reject-domain', CLASH_REJECT_DOMAIN_FILE,
+    ]);
+    if (helperResult) {
       return {
-        options: parsePolicyOptionsText(snapshot.options || ''),
-        deviceBypass: String(snapshot.deviceBypass || ''),
-        directDomain: String(snapshot.directDomain || ''),
-        directIp: String(snapshot.directIp || ''),
-        proxyDomain: String(snapshot.proxyDomain || ''),
-        rejectDomain: String(snapshot.rejectDomain || ''),
+        options: parsePolicyOptionsText(helperResult.options || ''),
+        deviceBypass: String(helperResult.deviceBypass || ''),
+        directDomain: String(helperResult.directDomain || ''),
+        directIp: String(helperResult.directIp || ''),
+        proxyDomain: String(helperResult.proxyDomain || ''),
+        rejectDomain: String(helperResult.rejectDomain || ''),
       };
     }
     const res = await runShellWithRoot(`
@@ -6904,8 +6934,8 @@ KANO_POLICY_TOOLS_EOF
 
 
   const readClientListText = async () => {
-    const snapshot = await readBinarySnapshot();
-    if (snapshot) return String(snapshot.clients || '');
+    const helperResult = await runBinaryHelperJson('clients');
+    if (helperResult) return String(helperResult.text || '');
     const res = await runShellWithRoot(`
         echo "IP MAC SOURCE"
         awk 'NR>1 && $1 != "IP" && $4 != "00:00:00:00:00:00" {print $1, $4, "arp"}' /proc/net/arp 2>/dev/null

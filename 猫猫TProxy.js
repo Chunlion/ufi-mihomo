@@ -71,6 +71,8 @@
   const SUB_DISABLED_MARKER = '# KANO_SUB_DISABLED ';
   const POLICY_SCRIPT_VERSION = '6.2';
   const CONTROLLER_INFO_CACHE_TTL = 250;
+  const ADVANCED_ACCESS_CACHE_TTL = 30 * 1000;
+  const ADVANCED_ACCESS_FAILURE_CACHE_TTL = 2 * 1000;
 
   // ===== Basic helpers =====
   const runShellWithRoot = (script = '', timeout) =>
@@ -1263,13 +1265,35 @@ KANO_RUNTIME_MANAGER_EOF
     }
   };
 
-  const checkAdvanceFunc = async () => {
+  let advancedAccessCache = null;
+  let advancedAccessCacheExpiresAt = 0;
+  let advancedAccessLoadPromise = null;
+
+  const checkAdvanceFunc = async ({ fresh = false } = {}) => {
+    const now = Date.now();
+    if (!fresh && advancedAccessCache !== null && advancedAccessCacheExpiresAt > now) {
+      return advancedAccessCache;
+    }
+    if (!fresh && advancedAccessLoadPromise) return advancedAccessLoadPromise;
+    const loadPromise = (async () => {
+      try {
+        const res = await runShellWithRoot('whoami');
+        return !!(res.success && String(res.content || '').includes('root'));
+      } catch (e) {
+        console.error(e);
+        return false;
+      }
+    })();
+    if (!fresh) advancedAccessLoadPromise = loadPromise;
     try {
-      const res = await runShellWithRoot('whoami');
-      return !!(res.success && String(res.content || '').includes('root'));
-    } catch (e) {
-      console.error(e);
-      return false;
+      const allowed = await loadPromise;
+      advancedAccessCache = allowed;
+      advancedAccessCacheExpiresAt = Date.now() + (allowed
+        ? ADVANCED_ACCESS_CACHE_TTL
+        : ADVANCED_ACCESS_FAILURE_CACHE_TTL);
+      return allowed;
+    } finally {
+      if (advancedAccessLoadPromise == loadPromise) advancedAccessLoadPromise = null;
     }
   };
 
@@ -3800,11 +3824,16 @@ KANO_WRITE_CHECK_EOF
         proxy_providers_count=
         if [ -s "$CONFIG" ]; then
           if [ -x "$YQ" ]; then
-            if "$YQ" e '.' "$CONFIG" >/dev/null 2>/dev/null; then
-              config_read_status=yq
-              rules_count="$($YQ e '(.rules // []) | length' "$CONFIG" 2>/dev/null)"
-              proxy_groups_count="$($YQ e '(."proxy-groups" // []) | length' "$CONFIG" 2>/dev/null)"
-              proxy_providers_count="$($YQ e '(."proxy-providers" // {}) | length' "$CONFIG" 2>/dev/null)"
+            if counts="$("$YQ" e '[((.rules // []) | length), ((."proxy-groups" // []) | length), ((."proxy-providers" // {}) | length)] | join(" ")' "$CONFIG" 2>/dev/null)"; then
+              set -- $counts
+              if [ "$#" -eq 3 ]; then
+                config_read_status=yq
+                rules_count="$1"
+                proxy_groups_count="$2"
+                proxy_providers_count="$3"
+              else
+                config_read_status=invalid
+              fi
             else
               config_read_status=invalid
             fi
@@ -3933,7 +3962,7 @@ KANO_WRITE_CHECK_EOF
     const running_mm = document.querySelector('#running_mm');
     let apiOk = false;
     if (pid) {
-      const version = await callMihomoApi('/version', 'GET');
+      const version = await callMihomoApi('/version', 'GET', null, null, 8, { corePid: pid });
       apiOk = !!version.success;
     }
     if (running_mm) {
@@ -6115,7 +6144,6 @@ KANO_POLICY_TOOLS_EOF
   };
 
   const readPolicyState = async () => {
-    await syncUnifiedDeviceBypassStorage();
     const res = await runShellWithRoot(`
         emit_policy_file() {
           name="$1"

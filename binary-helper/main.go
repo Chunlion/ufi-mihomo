@@ -22,7 +22,7 @@ import (
 
 const (
 	name                = "kano-f50-helper"
-	version             = "0.2.2"
+	version             = "0.2.3"
 	defaultConfigPath   = "/data/clash/Proxy/config.yaml"
 	maxSubscriptionSize = 32 * 1024 * 1024
 )
@@ -88,11 +88,10 @@ type probeResult struct {
 type snapshotResult struct {
 	result
 	controllerFields
-	policyFields
 	PID          string `json:"pid"`
 	ConfigExists bool   `json:"configExists"`
 	ConfigSize   int64  `json:"configSize"`
-	Clients      string `json:"clients"`
+	Options      string `json:"options"`
 }
 
 func main() {
@@ -273,11 +272,10 @@ func runSnapshot(args []string) {
 	writeJSON(snapshotResult{
 		result:           ok(),
 		controllerFields: controller,
-		policyFields:     policy.read(),
 		PID:              findCorePID(),
 		ConfigExists:     configExists,
 		ConfigSize:       configSize,
-		Clients:          clientListText(),
+		Options:          readText(*policy.options),
 	})
 }
 

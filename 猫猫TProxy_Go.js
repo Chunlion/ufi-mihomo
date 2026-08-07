@@ -5443,16 +5443,25 @@ KANO_WRITE_CHECK_EOF
     const pidPromise = getCorePid();
     const runtimeStatePromise = checkInstallState({ fresh: true });
     const bootStatePromise = inspectBootIntegration();
-    const configPromise = runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_CONFIG)} ]; then
-          size="$(wc -c < ${shellQuote(CLASH_CONFIG)} 2>/dev/null | tr -d ' ')"
-          echo "exists=1"
-          echo "size=\${size:-0}"
-        else
-          echo "exists=0"
-          echo "size=0"
-        fi
-        `);
+    const configPromise = readBinarySnapshot().then((snapshot) => {
+      if (snapshot) {
+        const size = Number(snapshot.configSize);
+        return {
+          success: true,
+          content: `exists=${snapshot.configExists === true ? 1 : 0}\nsize=${Number.isFinite(size) && size >= 0 ? size : 0}`,
+        };
+      }
+      return runShellWithRoot(`
+          if [ -f ${shellQuote(CLASH_CONFIG)} ]; then
+            size="$(wc -c < ${shellQuote(CLASH_CONFIG)} 2>/dev/null | tr -d ' ')"
+            echo "exists=1"
+            echo "size=\${size:-0}"
+          else
+            echo "exists=0"
+            echo "size=0"
+          fi
+          `);
+    });
     const logPromise = runShellWithRoot(`
         if [ -f ${shellQuote(LOG_FILE)} ]; then
           timeout 2s awk '{print}' ${shellQuote(LOG_FILE)} | tail -n 20

@@ -337,6 +337,13 @@ function runFor(label, file) {
           true,
           'runtime downloads the Go helper only from the Gitee release',
         );
+        chk(
+          source.includes('const configPromise = readBinarySnapshot().then((snapshot) => {')
+            && source.includes('snapshot.configExists === true')
+            && source.includes('Number(snapshot.configSize)'),
+          true,
+          'status diagnostics reuse config metadata from the shared Go snapshot',
+        );
       }
       chk(source.includes('df -k /data /tmp'), false, 'diagnostics do not pass a missing /tmp to df');
       chk(source.includes('RECOVERY_ARCHIVE_STATUS=retained') && source.includes('离线自愈包：已保留'),

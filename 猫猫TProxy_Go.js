@@ -88,7 +88,7 @@
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
   const KANO_HELPER_BUNDLED_DIR = `${CLASH_DIR}/Tools`;
   const KANO_HELPER_CONVERTER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper-converter`;
-  const KANO_HELPER_VERSION = '0.3.2';
+  const KANO_HELPER_MIN_VERSION = '0.3.2';
   const KANO_HELPER_REQUIRED_COMMANDS = [
     'version', 'snapshot', 'clients', 'network-status', 'policy-read', 'convert-subscription',
   ];
@@ -1634,6 +1634,20 @@ EOF_KANO_SERVICE
     return null;
   };
 
+  const compareHelperVersions = (current, minimum) => {
+    const parse = (value) => {
+      const match = String(value || '').trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+      return match ? match.slice(1).map(Number) : null;
+    };
+    const currentParts = parse(current);
+    const minimumParts = parse(minimum);
+    if (!currentParts || !minimumParts) return null;
+    for (let i = 0; i < 3; i++) {
+      if (currentParts[i] != minimumParts[i]) return currentParts[i] > minimumParts[i] ? 1 : -1;
+    }
+    return 0;
+  };
+
   const runBinaryHelperJson = async (command, args = [], timeout = 15 * 1000) => {
     const commandArgs = [command, ...args].map((value) => shellQuote(String(value))).join(' ');
     const res = await runShellWithRoot(
@@ -1673,13 +1687,18 @@ EOF_KANO_SERVICE
     if (state == 'present') {
       if (!res.success || rc !== 0 || !info || info.ok !== true || !info.version) {
         state = 'invalid';
-      } else if (String(info.version) != KANO_HELPER_VERSION) {
-        state = 'outdated';
       } else {
-        const commands = Array.isArray(info.commands) ? info.commands.map(String) : [];
-        state = KANO_HELPER_REQUIRED_COMMANDS.every((command) => commands.includes(command))
-          ? 'installed'
-          : 'invalid';
+        const versionComparison = compareHelperVersions(info.version, KANO_HELPER_MIN_VERSION);
+        if (versionComparison === null) {
+          state = 'invalid';
+        } else if (versionComparison < 0) {
+          state = 'outdated';
+        } else {
+          const commands = Array.isArray(info.commands) ? info.commands.map(String) : [];
+          state = KANO_HELPER_REQUIRED_COMMANDS.every((command) => commands.includes(command))
+            ? 'installed'
+            : 'invalid';
+        }
       }
     }
     return { state, info, rc, content, shellSuccess: !!res.success };
@@ -1731,7 +1750,7 @@ EOF_KANO_SERVICE
       STAGE=${shellQuote(stagePath)}
       TARGET=${shellQuote(KANO_HELPER_PATH)}
       CONVERTER=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
-      EXPECTED_VERSION_JSON=${shellQuote(`"version":"${KANO_HELPER_VERSION}"`)}
+      MIN_VERSION=${shellQuote(KANO_HELPER_MIN_VERSION)}
       cleanup_helper_install() {
         rc=$?
         rm -f "$SOURCE" "$STAGE" 2>/dev/null || true
@@ -1761,9 +1780,24 @@ EOF_KANO_SERVICE
         echo "HELPER_VERSION_PROBE_FAILED=$helper_rc"
         exit 1
       }
-      printf '%s\n' "$VERSION_OUT" | grep -Fq "$EXPECTED_VERSION_JSON" || {
+      HELPER_VERSION="$(printf '%s\n' "$VERSION_OUT" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)".*/\\1/p' | head -n 1)"
+      [ -n "$HELPER_VERSION" ] || {
         printf '%s\n' "$VERSION_OUT"
-        echo "HELPER_VERSION_MISMATCH=expected_${KANO_HELPER_VERSION}"
+        echo "HELPER_VERSION_INVALID"
+        exit 1
+      }
+      helper_version_at_least() {
+        awk -v current="$1" -v minimum="$2" 'BEGIN {
+          split(current, c, "."); split(minimum, m, ".")
+          for (i = 1; i <= 3; i++) {
+            if ((c[i] + 0) > (m[i] + 0)) exit 0
+            if ((c[i] + 0) < (m[i] + 0)) exit 1
+          }
+          exit 0
+        }'
+      }
+      helper_version_at_least "$HELPER_VERSION" "$MIN_VERSION" || {
+        echo "HELPER_VERSION_TOO_OLD=current_$HELPER_VERSION,min_$MIN_VERSION"
         exit 1
       }
       for expected_command in ${KANO_HELPER_REQUIRED_COMMANDS.map((command) => shellQuote(command)).join(' ')}; do
@@ -8606,7 +8640,7 @@ KANO_POLICY_TOOLS_EOF
         binaryHelperBtn.title = 'Go辅助内核运行正常；点击可检查更新或重新安装';
       } else if (probe.state == 'outdated') {
         binaryHelperBtn.textContent = version ? `Go内核 ↑ ${version}` : 'Go内核 ↑';
-        binaryHelperBtn.title = `Go辅助内核需要更新到 ${KANO_HELPER_VERSION}；点击更新`;
+        binaryHelperBtn.title = `Go辅助内核需要更新到 ${KANO_HELPER_MIN_VERSION} 或更高版本；点击更新`;
       } else if (probe.state == 'missing') {
         binaryHelperBtn.textContent = 'Go内核';
         binaryHelperBtn.title = 'Go辅助内核未安装；点击后下载安装';
@@ -8644,7 +8678,7 @@ KANO_POLICY_TOOLS_EOF
         const confirmed = await askConfirm(
           `mm_binary_helper_update_${createRandomString(4)}`,
           healthy ? '检查并重新安装 Go内核？' : '更新或修复 Go内核？',
-          `更新优先从 Gitee 下载，失败后使用本地运行包；安装验证版本 ${KANO_HELPER_VERSION}，不绑定固定大小或 SHA。`,
+          `更新优先从 Gitee 下载，失败后使用本地运行包；要求版本不低于 ${KANO_HELPER_MIN_VERSION}，不绑定固定大小或 SHA。`,
           healthy ? '重新安装' : '更新修复',
           '取消',
         );

@@ -406,8 +406,8 @@ function runFor(label, file) {
           success: true,
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
-        chk((await api.probeBinaryHelperState()).state, 'outdated',
-          'helper probe marks a healthy older helper as outdated');
+        chk((await api.probeBinaryHelperState()).state, 'installed',
+          'helper probe accepts a healthy older semantic version without a fixed floor');
         shellReply = {
           success: true,
           content: 'KANO_HELPER_STATE=present\n/system/bin/sh: helper: inaccessible\nKANO_HELPER_RC=126\n',
@@ -430,14 +430,14 @@ function runFor(label, file) {
         chk(helperInstallSyntax.status, 0,
           `generated helper-install shell passes sh -n: ${helperInstallSyntax.stderr.trim()}`);
         const helperInstallSource = lastShellCommand;
-        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_TOO_OLD');
+        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_NOT_NEWER');
         const protocolValidation = helperInstallSource.indexOf('HELPER_COMMAND_MISSING');
         const helperCommit = helperInstallSource.indexOf('mv -f "$STAGE" "$TARGET"');
         chk(
           versionValidation >= 0 && protocolValidation > versionValidation
             && helperCommit > protocolValidation,
           true,
-          'helper minimum version and command protocol are checked before activation',
+          'helper update requires a version newer than the installed helper before activation',
         );
         const helperButtonSource = source.slice(
           source.indexOf('binaryHelperBtn.onclick = async () => {'),
@@ -445,7 +445,7 @@ function runFor(label, file) {
         );
         chk(
           helperButtonSource.includes("const isUpdate = current.state != 'missing'")
-            && helperButtonSource.includes("healthy ? '重新安装' : '更新修复'")
+            && helperButtonSource.includes("healthy ? '检查更新' : '更新修复'")
             && helperButtonSource.includes('preferGitee: isUpdate')
             && !helperButtonSource.includes("createToast('Go内核已安装'"),
           true,

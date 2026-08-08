@@ -469,11 +469,23 @@ function runFor(label, file) {
           source.indexOf('btn_disabled.onclick = async () => {'),
         );
         const helperAutoInstall = mainInstallSource.indexOf('installBinaryHelperPreferred({ quiet: true })');
-        const helperButtonRefresh = mainInstallSource.indexOf('await refreshBinaryHelperButton()');
+        const helperButtonRefresh = mainInstallSource.indexOf('scheduleBinaryHelperButtonRefresh()');
         chk(
           helperAutoInstall >= 0 && helperButtonRefresh > helperAutoInstall,
           true,
-          'main installation activates the bundled helper and refreshes its button state',
+          'main installation activates the bundled helper and schedules its button refresh',
+        );
+        const delayedHelperRefreshSource = source.slice(
+          source.indexOf('const scheduleBinaryHelperButtonRefresh ='),
+          source.indexOf('helperUploadEl.onchange = async'),
+        );
+        chk(
+          delayedHelperRefreshSource.includes('delay = 1000')
+            && delayedHelperRefreshSource.includes('retryDelay = 1500')
+            && delayedHelperRefreshSource.includes('setTimeout(() => run(true), delay)')
+            && delayedHelperRefreshSource.includes("probe.state != 'installed'"),
+          true,
+          'post-install helper status refresh is delayed, non-blocking, and retried once',
         );
         const helperBinary = fs.readFileSync(FILES.helper);
         chk(

@@ -6688,7 +6688,7 @@ EOF_KANO_SERVICE
         createToast('核心已启动，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
       }
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
-      await refreshBinaryHelperButton();
+      scheduleBinaryHelperButtonRefresh();
       if (!helperReadyAfterInstall) {
         createToast('基础代理已安装；Go辅助内核自动安装失败，可稍后点击“Go内核”重试。', 'yellow', 9000);
       }
@@ -8643,10 +8643,24 @@ KANO_POLICY_TOOLS_EOF
         binaryHelperBtn.title = 'Go辅助内核文件存在但无法设置执行权限；点击后重新安装';
       }
     };
-    const refreshBinaryHelperButton = async () => {
-      const probe = await probeBinaryHelperState();
+    const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {
+      const probe = await probeBinaryHelperState(timeout);
       applyBinaryHelperButtonState(probe);
       return probe;
+    };
+    const scheduleBinaryHelperButtonRefresh = ({ delay = 1000, retryDelay = 1500 } = {}) => {
+      const run = async (retry) => {
+        let probe = null;
+        try {
+          probe = await refreshBinaryHelperButton(6 * 1000);
+        } catch (e) {
+          console.error('Go内核延迟状态探测失败', e);
+        }
+        if (retry && (!probe || probe.state != 'installed')) {
+          setTimeout(() => run(false), retryDelay);
+        }
+      };
+      setTimeout(() => run(true), delay);
     };
     helperUploadEl.onchange = async (event) => {
       try {

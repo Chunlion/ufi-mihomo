@@ -15,6 +15,7 @@ const FAST_CONFIG = [
   'WHOLE_TIMEOUT=10',
   'RETRY_DELAY=1',
   'WATCH_INTERVAL=0',
+  'NATIVE_GRACE_UPTIME=20',
   '',
 ].join('\n');
 
@@ -125,20 +126,20 @@ const gateOf = (text) => {
     '',
   ].join('\n');
 
-  await test('T1 安装后：门在最顶部，其它插件的每一行都原样保留', async () => {
+  await test('T1 安装后：增强尾钩在末尾，其它插件的每一行都原样保留', async () => {
     await freshInstall(MULTI);
     const after = sbx.readBoot();
     assert(after, '启动文件仍存在');
-    assert(after.startsWith('# F50_BOOT_FIX_BEGIN'), '门写在文件最顶部');
+    assert(after.trimEnd().endsWith('# F50_BOOT_FIX_END'), '增强尾钩写在文件末尾');
     assert((after.match(/# F50_BOOT_FIX_BEGIN/g) || []).length === 1, '只有一个 BEGIN 标记');
     assert((after.match(/# F50_BOOT_FIX_END/g) || []).length === 1, '只有一个 END 标记');
     MULTI.split('\n').filter((l) => l.trim()).forEach((line) => {
       assert(after.includes(line), `原始行仍在: ${line.slice(0, 40)}`);
     });
-    const payload = after.slice(after.indexOf('# F50_BOOT_FIX_END') + 18);
+    const payload = after.slice(0, after.indexOf('# F50_BOOT_FIX_BEGIN'));
     const orig = MULTI.split('\n').filter((l) => l.trim());
     const got = payload.split('\n').filter((l) => l.trim());
-    assert(JSON.stringify(got) === JSON.stringify(orig), `门以下内容与原文件逐行一致 (${got.length} vs ${orig.length})`);
+    assert(JSON.stringify(got) === JSON.stringify(orig), `尾钩以前内容与原文件逐行一致 (${got.length} vs ${orig.length})`);
     assert(sbx.exists('data/f50_boot_fix/boot_manager.sh'), '管理器已安装');
   });
 
@@ -169,6 +170,7 @@ const gateOf = (text) => {
     ].join('\n');
     sbx.reset(); clearProbes();
     sbx.writeBoot(old);
+    writeConfig();
     const app = loadPlugin(sbx);
     await app.click('install');
     const after = sbx.readBoot();
@@ -176,7 +178,7 @@ const gateOf = (text) => {
     assert(after.includes(`${S}/data/plugin_old/start.sh`), '不识别或删除特定插件入口');
     assert(after.includes(legacyPlugin), '不改写特定插件的历史启动命令');
     assert(after.includes(`touch ${S}/probe/other_plugin`), '其它插件的行完好');
-    assert(after.startsWith('# F50_BOOT_FIX_BEGIN'), '新门仍在最顶部');
+    assert(after.trimEnd().endsWith('# F50_BOOT_FIX_END'), '新增强尾钩位于末尾');
   });
 
   await test('T3b 任意底层插件只有一条启动入口：不按插件名称过滤', async () => {
@@ -184,6 +186,7 @@ const gateOf = (text) => {
     sbx.reset(); clearProbes();
     const pluginEntry = `${S}/data/other_plugin/start.sh --boot`;
     sbx.writeBoot(pluginEntry);
+    writeConfig();
     const app = loadPlugin(sbx);
     await app.click('install');
     const after = sbx.readBoot();
@@ -216,7 +219,7 @@ const gateOf = (text) => {
     assert(!sbx.readBoot().includes('plugin_a/start.sh'), '恢复完成后不会反复加回用户主动清空的启动项');
   });
 
-  await test('T4 启动文件门标记损坏（只有 BEGIN 没有 END）：拒绝写入，原文件零改动', async () => {
+  await test('T4 启动文件尾钩标记损坏（只有 BEGIN 没有 END）：拒绝写入，原文件零改动', async () => {
     const broken = [
       '# F50_BOOT_FIX_BEGIN',
       'if [ "${F50_BOOT_REPLAY:-0}" != "1" ]; then',
@@ -226,34 +229,30 @@ const gateOf = (text) => {
     ].join('\n');
     sbx.reset(); clearProbes();
     sbx.writeBoot(broken);
+    writeConfig();
     const before = sbx.readBoot();
     const app = loadPlugin(sbx);
     await app.click('install');
     assert(sbx.readBoot() === before, '启动文件一字未动');
     const red = app.toasts.filter((t) => t.color === 'red');
     assert(red.length > 0, '有失败提示');
-    assert(/门标记异常/.test(red.map((t) => t.msg).join(' ')), '提示里说明了门标记异常');
+    assert(/尾钩标记异常/.test(red.map((t) => t.msg).join(' ')), '提示里说明了尾钩标记异常');
   });
 
-  await test('T5 开机场景：门推迟执行，管理器等系统就绪后跑完所有插件', async () => {
+  await test('T5 开机场景：UFI 原生顺序不被接管，尾钩记录完成并同步快照', async () => {
     await freshInstall(MULTI);
     clearProbes();
     sbx.setBootCompleted('0');
     const boot = simulateBoot({ uptime: 5, bootCompleted: '0' });
     assert(/HOST_RC=0/.test(boot.stdout), '启动文件本身立刻返回 0');
-    assert(probes().length === 0, '此刻还没有任何插件被执行（已推迟）');
-    await sleep(1200);
-    sbx.setBootCompleted('1');
-    const state = await waitForState(sbx, 30000);
-    const { meta, entries } = parseState(state);
-    assert(meta.DONE === '1', '管理器执行完成');
-    assert(meta.RUN_MODE === 'entries', '走的是逐条隔离模式');
-    assert(entries.length === 4, `识别出 4 条插件指令，实际 ${entries.length}`);
-    assert(entries.every((e) => e.status === 'ok'), '4 条全部成功');
     const p = probes();
     ['a1_cleanup', 'b1_service', 'b2_after_sleep', 'c1_mine', 'c2_mine'].forEach((f) => {
       assert(p.includes(f), `插件动作已发生: ${f}`);
     });
+    const bootId = (sbx.read('proc/sys/kernel/random/boot_id') || '').trim();
+    assert((sbx.read('data/f50_boot_fix/native_tail_boot_id') || '').trim() === bootId, '尾钩记录本次 boot_id');
+    await sleep(500);
+    assert(sbx.read('data/f50_boot_fix/boot_file.snapshot') === sbx.readBoot(), '尾钩异步同步完整启动快照');
   });
 
   await test('T6 关键：某个插件的指令 exit，后面所有插件照常启动', async () => {
@@ -272,10 +271,10 @@ const gateOf = (text) => {
     assert(rawProbes.includes('p1') && !rawProbes.includes('p3'),
       `旧做法（整条文件一起跑）确实会丢掉后面的插件，实测: ${rawProbes.join(',')}`);
 
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 30000);
+    await app.click('run');
+    const state = sbx.read('data/f50_boot_fix/last_run.txt');
     const { entries } = parseState(state);
     const p = probes();
     assert(p.includes('p1') && p.includes('p3') && p.includes('p4'),
@@ -291,10 +290,10 @@ const gateOf = (text) => {
       `touch ${S}/probe/h3`,
       '',
     ].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 40000);
+    await app.click('run');
+    const state = sbx.read('data/f50_boot_fix/last_run.txt');
     const { entries } = parseState(state);
     const p = probes();
     assert(p.includes('h1') && p.includes('h3'), `卡死指令之后的插件仍然启动，实测: ${p.join(',')}`);
@@ -309,10 +308,10 @@ const gateOf = (text) => {
       `touch ${S}/probe/r3`,
       '',
     ].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 40000);
+    await app.click('run');
+    const state = sbx.read('data/f50_boot_fix/last_run.txt');
     const { entries } = parseState(state);
     const p = probes();
     assert(p.includes('retry_ok'), '重试确实执行了');
@@ -336,10 +335,10 @@ const gateOf = (text) => {
       'my_func',
       '',
     ].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 30000);
+    await app.click('run');
+    const state = sbx.read('data/f50_boot_fix/last_run.txt');
     const { entries } = parseState(state);
     const p = probes();
     assert(p.includes('m1') && p.includes('m2'), 'if/fi 块被完整执行');
@@ -358,16 +357,15 @@ const gateOf = (text) => {
       `touch ${S}/probe/v_after`,
       '',
     ].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    await waitForState(sbx, 30000);
+    await app.click('run');
     const p = probes();
     assert(p.includes('v1'), `赋值对后面的指令仍然可见，实测: ${p.join(',')}`);
     assert(p.includes('v_after'), '后续指令照常执行');
   });
 
-  await test('T10 兜底：管理器被删除（/data 被清理）时，门自动放行，绝不出现「什么都不启动」', async () => {
+  await test('T10 兜底：管理器被删除（/data 被清理）时，UFI 原生启动仍不受影响', async () => {
     await freshInstall(MULTI);
     clearProbes();
     fs.rmSync(sbx.p('data/f50_boot_fix'), { recursive: true, force: true });
@@ -384,18 +382,16 @@ const gateOf = (text) => {
     assert(/HOST_CONTINUED rc=0/.test(r.stdout), `宿主脚本在门之后继续运行，实测输出: ${r.stdout.trim().slice(0, 120)}`);
   });
 
-  await test('T12 宿主较晚调用启动文件：仍由管理器托管，不会因 uptime 较大而绕过修复', async () => {
+  await test('T12 宿主较晚调用启动文件：仍按 UFI 原生顺序执行并记录尾钩', async () => {
     await freshInstall(MULTI);
     clearProbes();
     await waitQuiet();
     fs.rmSync(sbx.p('data/f50_boot_fix/last_run.txt'), { force: true });
     simulateBoot({ uptime: 9999, bootCompleted: '1' });
-    const state = await waitForState(sbx, 30000);
-    const { meta } = parseState(state);
     const p = probes();
     assert(p.includes('a1_cleanup') && p.includes('c2_mine'), `所有插件仍被执行，实测: ${p.join(',')}`);
-    assert(meta.DONE === '1', '较晚触发仍走管理器并完整结束');
-    assert(meta.TRIGGER === 'bootfile', `触发来源仍为启动文件，实际 ${meta.TRIGGER}`);
+    const bootId = (sbx.read('proc/sys/kernel/random/boot_id') || '').trim();
+    assert((sbx.read('data/f50_boot_fix/native_tail_boot_id') || '').trim() === bootId, '较晚调用仍记录尾钩完成');
   });
 
   await test('T13 /sdcard 挂载晚于管理器启动：管理器会等文件出现再执行', async () => {
@@ -414,17 +410,18 @@ const gateOf = (text) => {
     assert(probes().includes('b1_service'), `插件最终被启动，实测: ${probes().join(',')}`);
   });
 
-  await test('T14 安装之后其它插件再追加自启行：无需重装即可自动纳管', async () => {
+  await test('T14 安装之后其它插件再追加自启行：UFI 仍执行，状态面板提示重排尾钩', async () => {
     await freshInstall(MULTI);
     clearProbes();
     // 模拟另一个插件用 grep -qxF || echo >> 追加自己的启动行
     const newLine = `touch ${S}/probe/newplugin_z`;
     sbx.runShell(`grep -qxF '${newLine}' "${S}/sdcard/ufi_tools_boot.sh" || echo '${newLine}' >> "${S}/sdcard/ufi_tools_boot.sh"`, 10000, { rewrite: false });
     simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 30000);
-    const { entries } = parseState(state);
-    assert(entries.length === 5, `新追加的行被自动纳管，共 5 条，实际 ${entries.length}`);
     assert(probes().includes('newplugin_z'), '新插件被启动');
+    const app = loadPlugin(sbx);
+    await app.click('status');
+    const detail = app.elements.get('#f50_boot_fix_standalone_detail').innerHTML;
+    assert(/尾钩不在启动文件末尾/.test(detail), '面板提示重新把增强尾钩排到末尾');
   });
 
   await test('T14b 物理冷启动覆盖 /sdcard 后：从 /data 持久快照恢复全部底层插件', async () => {
@@ -442,19 +439,15 @@ const gateOf = (text) => {
     // 模拟真断电后固件用旧模板重建 /sdcard：门和用户后来启用的插件入口一起消失。
     sbx.writeBoot(`touch ${S}/probe/stale_cold_template\n`);
     sbx.setBootId('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
-    sbx.setBootCompleted('0');
-    sbx.setUptime(5);
-    clearProbes();
-    sbx.runShell(`( ${manager} --trigger=service.d >/dev/null 2>&1 </dev/null & )`, 10000, { rewrite: false });
-    await sleep(1500);
-    const restored = sbx.readBoot() || '';
-    assert(restored.includes('# F50_BOOT_FIX_BEGIN'), '未等 uptime 45 秒就恢复了被覆盖的管理门');
-    assert(restored.includes(added), '后来启用的插件入口已恢复');
-    assert(probes().length === 0, '启动文件提前恢复，但插件命令仍等待系统就绪');
     sbx.setBootCompleted('1');
     sbx.setUptime(60);
+    clearProbes();
+    sbx.runShell(`( ${manager} --trigger=service.d >/dev/null 2>&1 </dev/null & )`, 10000, { rewrite: false });
     const completed = await waitForState(sbx, 30000);
     assert(completed && /(^|\n)DONE=1(\n|$)/.test(completed), '冷启动管理器最终正常完成');
+    const restored = sbx.readBoot() || '';
+    assert(restored.includes('# F50_BOOT_FIX_BEGIN'), '故障转移恢复被覆盖的增强尾钩');
+    assert(restored.includes(added), '后来启用的插件入口已恢复');
     const state = parseState(sbx.read('data/f50_boot_fix/last_run.txt'));
     assert(state.meta.RESTORED === '1', '状态明确记录本次执行发生过持久快照恢复');
     const p = probes();
@@ -482,10 +475,10 @@ const gateOf = (text) => {
     assert(!p.includes('reused_id_stale_template'), '复用 boot_id 的旧模板没有被执行');
   });
 
-  await test('T15 多个触发点同时触发（启动文件 + service.d）也只执行一次', async () => {
+  await test('T15 多个管理器触发点同时触发也只执行一次', async () => {
     const counter = `${S}/probe/count`;
     const content = [`printf x >> ${counter}`, ''].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     clearProbes();
     sbx.setBootCompleted('1');
     sbx.setUptime(5);
@@ -500,7 +493,7 @@ const gateOf = (text) => {
   await test('T15b 过期空锁存在时，多个触发点也只有一个能原子接管', async () => {
     const counter = `${S}/probe/stale_count`;
     const content = [`sleep 2; printf x >> ${counter}`, ''].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     await waitQuiet();
     clearProbes();
     fs.rmSync(sbx.p('data/f50_boot_fix/last_completed_boot_id'), { force: true });
@@ -525,17 +518,15 @@ const gateOf = (text) => {
       `touch ${S}/probe/s2`,
       '',
     ].join('\n');
-    await freshInstall(content);
+    const app = await freshInstall(content);
     const after = sbx.readBoot();
     assert(after.includes(`touch ${S}/probe/s1`) && after.includes('if [ 1 -eq 1 ]; then'), '原内容一行没丢');
-    const warned = loadPlugin(sbx);
     clearProbes();
-    simulateBoot({ uptime: 5, bootCompleted: '1' });
-    const state = await waitForState(sbx, 30000);
+    await app.click('run');
+    const state = sbx.read('data/f50_boot_fix/last_run.txt');
     const { meta } = parseState(state);
     assert(meta.DONE === '1', '管理器正常结束而不是卡死');
     assert(meta.RUN_MODE === 'whole', `退回整体重放，实际 ${meta.RUN_MODE}`);
-    void warned;
   });
 
   await test('T17 CRLF 换行的启动文件：自动规整，行不丢且能正常执行', async () => {
@@ -550,7 +541,6 @@ const gateOf = (text) => {
     assert(after.includes(`touch ${S}/probe/w1`) && after.includes(`touch ${S}/probe/w2`), '两行都在');
     clearProbes();
     simulateBoot({ uptime: 5, bootCompleted: '1' });
-    await waitForState(sbx, 30000);
     assert(probes().includes('w1') && probes().includes('w2'), '都被执行');
   });
 
@@ -570,6 +560,7 @@ const gateOf = (text) => {
     sbx.reset(); clearProbes();
     fs.mkdirSync(sbx.p('data/adb/service.d'), { recursive: true });
     sbx.writeBoot(MULTI);
+    writeConfig();
     const app = loadPlugin(sbx);
     await app.click('install');
     const hook = sbx.read('data/adb/service.d/f50_boot_fix.sh') || '';
@@ -581,6 +572,7 @@ const gateOf = (text) => {
     writeConfig();
     clearProbes();
     sbx.setBootCompleted('1');
+    sbx.setUptime(60);
     const hookRun = sbx.runShell(`${DASH} "${S}/data/adb/service.d/f50_boot_fix.sh"`, 30000, { rewrite: false });
     assert(hookRun.status === 0, '冷启动 service.d 入口能前台完成');
     const coldProbes = probes();
@@ -615,21 +607,20 @@ const gateOf = (text) => {
     assert(!/⚠/.test(detail), `健康状态下没有告警，实际: ${(detail.match(/⚠[^<]*/g) || []).join(' | ')}`);
   });
 
-  await test('T23 启动文件带 #! 头时，shebang 仍留在第一行（门插在它后面）', async () => {
+  await test('T23 启动文件带 #! 头时，shebang 仍留在第一行且尾钩仍在末尾', async () => {
     const content = ['#!/system/bin/sh', `touch ${S}/probe/sb1`, `touch ${S}/probe/sb2`, ''].join('\n');
     await freshInstall(content);
     const after = sbx.readBoot();
     assert(after.split('\n')[0] === '#!/system/bin/sh', `第一行仍是 shebang，实际: ${after.split('\n')[0]}`);
-    assert(after.split('\n')[1] === '# F50_BOOT_FIX_BEGIN', '门紧跟在 shebang 之后');
+    assert(after.trimEnd().endsWith('# F50_BOOT_FIX_END'), '增强尾钩位于末尾');
     assert((after.match(/#!\/system\/bin\/sh/g) || []).length === 1, 'shebang 没有重复');
     clearProbes();
     simulateBoot({ uptime: 5, bootCompleted: '1' });
-    await waitForState(sbx, 30000);
     assert(probes().includes('sb1') && probes().includes('sb2'), '插件照常启动');
     const app = loadPlugin(sbx);
     await app.click('status');
     const detail = app.elements.get('#f50_boot_fix_standalone_detail').innerHTML;
-    assert(!/不在启动文件最顶部/.test(detail), '不会误报「门不在顶部」');
+    assert(!/尾钩不在启动文件末尾/.test(detail), '不会误报「尾钩不在末尾」');
   });
 
   await test('T24 CRLF 换行 + 已装门：不会因为匹配不上而重复安装第二个门', async () => {
@@ -644,7 +635,6 @@ const gateOf = (text) => {
     assert(!after.includes('\r'), 'CRLF 已被规整');
     clearProbes();
     simulateBoot({ uptime: 5, bootCompleted: '1' });
-    await waitForState(sbx, 30000);
     assert(probes().includes('b1_service'), '插件照常启动');
   });
 
@@ -661,19 +651,20 @@ const gateOf = (text) => {
     assert(probes().includes('b1_service'), '插件最终被启动');
   });
 
-  await test('T22 门被其它插件整体重写覆盖后，状态面板能报警', async () => {
+  await test('T22 尾钩被其它插件整体重写覆盖后，状态面板能报警', async () => {
     await freshInstall(MULTI);
     sbx.writeBoot(`${MULTI}\ntouch ${S}/probe/rewritten\n`);
     const app = loadPlugin(sbx);
     await app.click('status');
     const detail = app.elements.get('#f50_boot_fix_standalone_detail').innerHTML;
-    assert(/门.*不见了|⚠/.test(detail), '面板给出了告警');
+    assert(/尾钩.*不见了|⚠/.test(detail), '面板给出了告警');
   });
 
   await test('T26 页面操作使用同一把忙锁，不允许安装与卸载并发执行', async () => {
     await waitQuiet();
     sbx.reset();
     sbx.writeBoot(MULTI);
+    writeConfig();
     const app = loadPlugin(sbx);
     const installing = app.click('install');
     const uninstalling = app.click('uninstall');

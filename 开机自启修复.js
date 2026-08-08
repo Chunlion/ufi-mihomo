@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '2.4.1';
+  const MANAGER_VERSION = '3.1.0';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -13,6 +13,7 @@
   const FIX_BOOT_SNAPSHOT = `${FIX_DIR}/boot_file.snapshot`;
   const FIX_SNAPSHOT_BOOT_ID = `${FIX_DIR}/boot_file.snapshot.boot_id`;
   const FIX_WATCHER_TAG = `${FIX_DIR}/boot_watcher.tag`;
+  const FIX_NATIVE_TAIL_MARKER = `${FIX_DIR}/native_tail_boot_id`;
   const MANAGER_LOCK_DIR = '/data/local/tmp/f50_plugin_boot_manager.lock';
   const SERVICE_D_DIR = '/data/adb/service.d';
   const SERVICE_D_HOOK = `${SERVICE_D_DIR}/f50_boot_fix.sh`;
@@ -64,7 +65,7 @@
 
   // ==========================================================================
   // 开机自启管理器：/data/f50_boot_fix/boot_manager.sh
-  // 职责：等系统真正就绪 -> 把启动文件里所有插件的启动指令逐条隔离执行。
+  // 职责：UFI 原生启动未到达尾钩时作为故障转移；手动重放时逐条隔离执行。
   // 关键设计：
   //   * 逐条隔离：某个插件的指令 exit / 卡死 / 报错，都不会连累后面的插件。
   //   * 看门狗：单条指令超时后不杀进程（可能是常驻服务），只是不再等待。
@@ -85,6 +86,7 @@
     `SNAPSHOT_FILE=${shellQuote(FIX_BOOT_SNAPSHOT)}`,
     `SNAPSHOT_BOOT_FILE=${shellQuote(FIX_SNAPSHOT_BOOT_ID)}`,
     `WATCHER_TAG=${shellQuote(FIX_WATCHER_TAG)}`,
+    `NATIVE_TAIL_MARKER=${shellQuote(FIX_NATIVE_TAIL_MARKER)}`,
     `BEGIN_MARK=${shellQuote(BOOT_BEGIN)}`,
     `END_MARK=${shellQuote(BOOT_END)}`,
     `LOCK_DIR=${shellQuote(MANAGER_LOCK_DIR)}`,
@@ -104,7 +106,8 @@
     'RETRY_FAILED=1',
     'RETRY_DELAY=15',
     'MAX_ENTRIES=300',
-    'WATCH_INTERVAL=2',
+    'WATCH_INTERVAL=10',
+    'NATIVE_GRACE_UPTIME=180',
     '',
     'HAVE_LOCK=0',
     'LOCK_TAG=',
@@ -156,7 +159,7 @@
     '  [ -f "$CONFIG_FILE" ] || return 0',
     '  while IFS= read -r cfg_line || [ -n "$cfg_line" ]; do',
     '    case "$cfg_line" in',
-    '      MIN_UPTIME=* | MAX_WAIT=* | FILE_MAX_WAIT=* | ENTRY_TIMEOUT=* | WHOLE_TIMEOUT=* | RETRY_FAILED=* | RETRY_DELAY=* | MAX_ENTRIES=* | WATCH_INTERVAL=*)',
+    '      MIN_UPTIME=* | MAX_WAIT=* | FILE_MAX_WAIT=* | ENTRY_TIMEOUT=* | WHOLE_TIMEOUT=* | RETRY_FAILED=* | RETRY_DELAY=* | MAX_ENTRIES=* | WATCH_INTERVAL=* | NATIVE_GRACE_UPTIME=*)',
     '        cfg_val=${cfg_line#*=}',
     '        case "$cfg_val" in',
     '          "" | *[!0-9]*) ;;',
@@ -173,6 +176,28 @@
     '  BOOT_ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)',
     '  [ -n "$BOOT_ID" ] || BOOT_ID=$(grep "^btime " /proc/stat 2>/dev/null | awk "{print \\$2}")',
     '  [ -n "$BOOT_ID" ] || BOOT_ID=unknown',
+    '}',
+    '',
+    'native_tail_completed() {',
+    '  [ -n "$BOOT_ID" ] && [ "$BOOT_ID" != "unknown" ] || return 1',
+    '  [ "$(cat "$NATIVE_TAIL_MARKER" 2>/dev/null)" = "$BOOT_ID" ]',
+    '}',
+    '',
+    '# UFI-TOOLS 原生 samba_exec.sh 只在开机早期窗口执行共享启动文件。',
+    '# service.d 必须先让出这个窗口；否则会在原生执行前抢先重放，造成双核心/双 inotify。',
+    'wait_native_grace() {',
+    '  ng_waited=0',
+    '  while :; do',
+    '    native_tail_completed && return 0',
+    '    ng_up=$(uptime_seconds)',
+    '    case "$ng_up" in "" | *[!0-9]*) ng_up=0 ;; esac',
+    '    [ "$ng_up" -lt "$NATIVE_GRACE_UPTIME" ] || return 1',
+    '    # /proc/uptime 极端情况下不可读时也不能永久挂住 service.d。',
+    '    [ "$ng_waited" -lt 150 ] || return 1',
+    '    sleep 2',
+    '    ng_waited=$((ng_waited + 2))',
+    '    resolve_boot_id',
+    '  done',
     '}',
     '',
     'acquire_lock() {',
@@ -273,8 +298,8 @@
     '  return 0',
     '}',
     '',
-    '# 抽取「门」以外的全部内容 = 各插件真正的启动指令。',
-    '# 门标记不闭合时返回 3，由调用方退回整体重放，绝不吞掉任何一行。',
+    '# 抽取增强尾钩以外的全部内容 = 各插件真正的启动指令。',
+    '# 增强尾钩标记不闭合时返回 3，由调用方退回整体重放，绝不吞掉任何一行。',
     'extract_payload() {',
     '  awk -v b="$BEGIN_MARK" -v e="$END_MARK" \'',
     '    $0 == b { depth++; next }',
@@ -308,6 +333,12 @@
     '    cmp -s "$fe_a" "$fe_b"',
     '    return $?',
     '  fi',
+    '  if command -v cksum >/dev/null 2>&1; then',
+    '    set -- $(cksum "$fe_a" 2>/dev/null); fe_ac="$1:$2"',
+    '    set -- $(cksum "$fe_b" 2>/dev/null); fe_bc="$1:$2"',
+    '    [ -n "$fe_ac" ] && [ "$fe_ac" = "$fe_bc" ]',
+    '    return $?',
+    '  fi',
     '  fe_as=$(wc -c < "$fe_a" 2>/dev/null | tr -d " ")',
     '  fe_bs=$(wc -c < "$fe_b" 2>/dev/null | tr -d " ")',
     '  [ -n "$fe_as" ] && [ "$fe_as" = "$fe_bs" ]',
@@ -333,7 +364,7 @@
     '  fi',
     '  rm -f "$sb_tmp" 2>/dev/null || true',
     '  if [ "$sb_ok" = "1" ] && [ -n "$BOOT_ID" ] && [ "$(cat "$SNAPSHOT_BOOT_FILE" 2>/dev/null)" != "$BOOT_ID" ]; then',
-    '    if printf "%s\n" "$BOOT_ID" > "$SNAPSHOT_BOOT_FILE.tmp.$$" 2>/dev/null && mv -f "$SNAPSHOT_BOOT_FILE.tmp.$$" "$SNAPSHOT_BOOT_FILE" 2>/dev/null; then',
+    '    if printf "%s\\n" "$BOOT_ID" > "$SNAPSHOT_BOOT_FILE.tmp.$$" 2>/dev/null && mv -f "$SNAPSHOT_BOOT_FILE.tmp.$$" "$SNAPSHOT_BOOT_FILE" 2>/dev/null; then',
     '      sync 2>/dev/null || true',
     '    fi',
     '  fi',
@@ -541,7 +572,7 @@
     '  return 0',
     '}',
     '',
-    '# 兜底：整体重放启动文件（门会因 F50_BOOT_REPLAY=1 放行）。',
+    '# 兜底：整体重放启动文件（尾钩会因 F50_BOOT_REPLAY=1 跳过）。',
     'whole_replay() {',
     '  wr_rc="$WORK_DIR/rc.whole"',
     '  rm -f "$wr_rc" "$wr_rc.tmp" 2>/dev/null || true',
@@ -653,7 +684,7 @@
     '  prepare_work "worklist.$$" || exit 1',
     '  if ! extract_payload; then',
     '    printf "LIST_MODE=whole\\n"',
-    '    printf "LIST_ERROR=门标记不闭合\\n"',
+    '    printf "LIST_ERROR=增强尾钩标记不闭合\\n"',
     '    exit 0',
     '  fi',
     '  if ! sh -n "$PAYLOAD" 2>/dev/null; then',
@@ -678,6 +709,19 @@
     'fi',
     '',
     'resolve_boot_id',
+    '# service.d 是纯故障转移触发器：先让 UFI 原生启动窗口完整结束。',
+    'case "$TRIGGER" in',
+    '  service.d*)',
+    '    if wait_native_grace; then',
+    '      log_line "skip: UFI 原生启动已到达尾钩，本次 service.d 不重放"',
+    '      save_boot_snapshot native-tail-observed || true',
+    '      start_watcher',
+    '      printf "%s\\n" "$BOOT_ID" > "$MARKER_FILE" 2>/dev/null || true',
+    '      exit 0',
+    '    fi',
+    '    log_line "warning: uptime>=${NATIVE_GRACE_UPTIME}s 仍未观察到 UFI 原生尾钩，进入故障转移检查"',
+    '    ;;',
+    'esac',
     'if ! acquire_lock; then',
     '  log_line "skip: 已有管理器实例在运行"',
     '  trim_file "$LOG_FILE" 400 250',
@@ -705,6 +749,27 @@
     '  trim_file "$LOG_FILE" 400 250',
     '  exit 1',
     'fi',
+    '',
+    '# service.d 可能比 UFI 原生启动更早进入等待；这里再次检查尾钩标记，避免竞态双启动。',
+    'case "$TRIGGER" in',
+    '  service.d*)',
+    '    if native_tail_completed; then',
+    '      : > "$STATE_FILE" 2>/dev/null || true',
+    '      state_line "VERSION=$MANAGER_VERSION"',
+    '      state_line "BOOT_ID=$BOOT_ID"',
+    '      state_line "MODE=$MODE"',
+    '      state_line "TRIGGER=$TRIGGER"',
+    '      state_line "RUN_MODE=native-complete"',
+    '      state_line "ENTRIES=0"',
+    '      state_line "DONE=1"',
+    '      log_line "skip: 等待期间 UFI 原生启动已到达尾钩，不再重放"',
+    '      save_boot_snapshot native-tail-after-wait || true',
+    '      start_watcher',
+    '      printf "%s\\n" "$BOOT_ID" > "$MARKER_FILE" 2>/dev/null || true',
+    '      exit 0',
+    '    fi',
+    '    ;;',
+    'esac',
     '',
     '# 冷启动会先用旧模板重建 /sdcard。恢复必须在 45 秒就绪等待之前完成，',
     '# 否则页面和其它启动消费者会在窗口期内看到空文件。插件命令仍在系统就绪后执行。',
@@ -739,6 +804,20 @@
     '  fi',
     'fi',
     '',
+    '# 最后一次竞态检查：故障转移等待期间若 UFI 原生脚本刚好完成，则立即退出，绝不双跑。',
+    'case "$TRIGGER" in',
+    '  service.d*)',
+    '    resolve_boot_id',
+    '    if native_tail_completed; then',
+    '      log_line "skip: 系统就绪等待期间 UFI 原生启动已完成，不再重放"',
+    '      save_boot_snapshot native-tail-final-check || true',
+    '      start_watcher',
+    '      printf "%s\\n" "$BOOT_ID" > "$MARKER_FILE" 2>/dev/null || true',
+    '      exit 0',
+    '    fi',
+    '    ;;',
+    'esac',
+    '',
     ': > "$RUN_LOG" 2>/dev/null || true',
     ': > "$STATE_FILE" 2>/dev/null || true',
     'state_line "VERSION=$MANAGER_VERSION"',
@@ -754,7 +833,7 @@
     'RUN_NOTE=',
     'if ! extract_payload; then',
     '  RUN_MODE=whole',
-    '  RUN_NOTE="门标记不闭合，改用整体重放"',
+    '  RUN_NOTE="增强尾钩标记不闭合，改用整体重放"',
     'elif ! sh -n "$PAYLOAD" 2>/dev/null; then',
     '  RUN_MODE=whole',
     '  RUN_NOTE="启动文件本身有语法错误，改用整体重放"',
@@ -796,21 +875,30 @@
   ].join('\n');
 
   // ==========================================================================
-  // 写入共享启动文件顶部的「门」。三条硬规则：
-  //   1. 只要管理器可用就统一托管；不能用 uptime 猜测是否手工执行，
-  //      否则宿主较晚调用启动文件时会随机绕过修复。
-  //   2. 管理器不存在或不可执行（/data 未挂载、被清理）-> 直接放行，
-  //      宁可回到「早启动」也绝不出现「什么都不启动」。
-  //   3. 被 source 时用 return，不会打断宿主后续的启动流程。
+  // UFI-TOOLS 原生增强模式：绝不接管/短路 /sdcard/ufi_tools_boot.sh。
+  // 官方 UFI-TOOLS samba_exec.sh 会在开机窗口直接执行 `sh ufi_tools_boot.sh`。
+  // 原始插件命令先照常执行；本段固定放在文件末尾，只记录成功到尾并同步快照/监督。
+  // F50_BOOT_REPLAY=1 时跳过尾钩，避免整体重放递归。
   // ==========================================================================
   const bootGate = [
     BOOT_BEGIN,
-    '# 由插件「全插件开机自启修复」写入：把所有插件的自启推迟到系统真正就绪之后。',
-    '# 手工删除本段即可完全恢复原始行为。',
+    '# F50 开机自启增强尾钩：到达这里说明 UFI 原生启动文件已完整执行到末尾。',
+    '# 先写本次 boot_id 完成标记，再只做快照/监督同步；绝不二次重放原生启动命令。',
     'if [ "${F50_BOOT_REPLAY:-0}" != "1" ]; then',
-    `  if [ -x ${FIX_SCRIPT} ]; then`,
-    `    ( trap '' HUP; exec ${FIX_SCRIPT} --trigger=bootfile ) </dev/null >/dev/null 2>&1 &`,
-    '    return 0 2>/dev/null || exit 0',
+    `  FIX=${shellQuote(FIX_SCRIPT)}`,
+    `  NATIVE_TAIL=${shellQuote(FIX_NATIVE_TAIL_MARKER)}`,
+    `  NATIVE_DIR=${shellQuote(FIX_DIR)}`,
+    '  if [ -x "$FIX" ]; then',
+    '    current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)',
+    '    [ -n "$current_boot" ] || current_boot=$(grep "^btime " /proc/stat 2>/dev/null | awk "{print \\$2}")',
+    '    if [ -n "$current_boot" ]; then',
+    '      mkdir -p "$NATIVE_DIR" 2>/dev/null || true',
+    '      if printf "%s\\n" "$current_boot" > "$NATIVE_TAIL.tmp.$$" 2>/dev/null; then',
+    '        mv -f "$NATIVE_TAIL.tmp.$$" "$NATIVE_TAIL" 2>/dev/null || true',
+    '      fi',
+    '      rm -f "$NATIVE_TAIL.tmp.$$" 2>/dev/null || true',
+    '    fi',
+    '    ( trap "" HUP; exec "$FIX" --sync --trigger=boot-tail ) </dev/null >/dev/null 2>&1 &',
     '  fi',
     'fi',
     BOOT_END,
@@ -818,7 +906,7 @@
 
   const serviceDHook = [
     '#!/system/bin/sh',
-    '# 由插件「全插件开机自启修复」写入：与启动文件里的门互为备份，',
+    '# 由插件「全插件开机自启修复」写入：作为启动文件尾钩之外的独立备用触发。',
     '# service.d 本身运行在非阻塞的 late_start service 阶段，这里必须前台等待管理器。',
     '# 冷启动时若再放到后台，钩子退出后子进程可能被启动环境回收。',
     `FIX=${shellQuote(FIX_SCRIPT)}`,
@@ -883,8 +971,7 @@
       begin_count=$(grep -cxF "$BEGIN" "$BOOT" 2>/dev/null || true)
       end_count=$(grep -cxF "$END" "$BOOT" 2>/dev/null || true)
       manager_count=$(grep -cF "$FIX" "$BOOT" 2>/dev/null || true)
-      first_line=$(head -n 1 "$BOOT" 2>/dev/null || true)
-      second_line=$(head -n 2 "$BOOT" 2>/dev/null | tail -n 1 || true)
+      last_line=$(awk 'NF { line=$0 } END { print line }' "$BOOT" 2>/dev/null || true)
       [ -n "$begin_count" ] || begin_count=0
       [ -n "$end_count" ] || end_count=0
       [ -n "$manager_count" ] || manager_count=0
@@ -895,17 +982,14 @@
       mgr_ver=$(sed -n 's/^MANAGER_VERSION=//p' "$FIX" 2>/dev/null | head -n 1)
       mgr_current=0
       [ "$mgr_ver" = ${shellQuote(MANAGER_VERSION)} ] && mgr_current=1
-      gate_first=0
-      case "$first_line" in
-        "$BEGIN") gate_first=1 ;;
-        "#!"*) [ "$second_line" = "$BEGIN" ] && gate_first=1 ;;
-      esac
+      tail_last=0
+      [ "$last_line" = "$END" ] && tail_last=1
       installed=0
       [ "$manager_ok" = "1" ] && [ "$begin_count" = "1" ] && [ "$end_count" = "1" ] && [ "$manager_count" -ge 1 ] && installed=1
       echo "F50_META_BEGIN"
       echo "INSTALLED=$installed"
       echo "MANAGER_OK=$manager_ok"
-      echo "GATE_FIRST=$gate_first"
+      echo "TAIL_LAST=$tail_last"
       echo "GATE_COUNT=$begin_count/$end_count/$manager_count"
       echo "MANAGER_VERSION=$mgr_ver"
       echo "MANAGER_CURRENT=$mgr_current"
@@ -1004,7 +1088,7 @@ F50_BOOT_FIX_EOF
       [ -n "$begin_count" ] || begin_count=0
       [ -n "$end_count" ] || end_count=0
       if [ "$begin_count" != "$end_count" ] || [ "$begin_count" -gt 1 ]; then
-        echo "F50_ABORT: 启动文件门标记异常($begin_count/$end_count)，已中止且未改动原文件；备份：$MANAGER_BACKUP"
+        echo "F50_ABORT: 启动文件增强尾钩标记异常($begin_count/$end_count)，已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
 
@@ -1016,12 +1100,12 @@ F50_BOOT_FIX_EOF
         { print }
         END { if (depth > 0) exit 3 }
       ' "$SRC" > "$PAYLOAD"; then
-        echo "F50_ABORT: 启动指令提取失败（门标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
+        echo "F50_ABORT: 启动指令提取失败（增强尾钩标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
 
       # 旧版若已把共享启动内容清空，则从首次安装前的只读备份整体恢复一次。
-      # 这里只剥离本管理器自己的门，其余内容完全原样保留，不识别插件名称、
+      # 这里只剥离本管理器自己的增强尾钩，其余内容完全原样保留，不识别插件名称、
       # 安装目录或启动命令，确保任意底层插件都走同一套逻辑。
       backup_recovered=0
       backup_lines=0
@@ -1085,13 +1169,21 @@ F50_BOOT_FIX_EOF
         tail -n +2 "$PAYLOAD" > "$PAYLOAD.rest"
         mv -f "$PAYLOAD.rest" "$PAYLOAD"
       fi
+      if [ -s "$PAYLOAD" ]; then
+        awk '
+          NF {
+            while (pending > 0) { print ""; pending-- }
+            print
+            seen=1
+            next
+          }
+          seen { pending++ }
+        ' "$PAYLOAD" >> "$BOOT_NEW"
+        printf '\n' >> "$BOOT_NEW"
+      fi
       cat >> "$BOOT_NEW" <<'F50_BOOT_GATE_EOF'
 ${bootGate}
 F50_BOOT_GATE_EOF
-      if [ -s "$PAYLOAD" ]; then
-        printf '\\n' >> "$BOOT_NEW"
-        awk 'f || NF { f=1; print }' "$PAYLOAD" >> "$BOOT_NEW"
-      fi
       if ! sh -n "$BOOT_NEW" 2>/dev/null; then
         if [ "$payload_ok" = "1" ]; then
           echo "F50_ABORT: 生成的启动文件语法自检未通过，已中止且未改动原文件；备份：$MANAGER_BACKUP"
@@ -1152,7 +1244,7 @@ F50_SERVICE_D_EOF
     const warn = result.content.includes('F50_WARN:')
       ? `<br>${escapeHtml((result.content.match(/F50_WARN:[^\n]*/) || [''])[0])}`
       : '';
-    toast(`全插件开机自启修复已安装：托管 ${escapeHtml(entries)} 条启动指令${extra}${warn}`, 'green', 7000);
+    toast(`全插件开机自启增强已安装：UFI 原生启动保持不变，可隔离重放 ${escapeHtml(entries)} 条指令${extra}${warn}`, 'green', 7000);
     return true;
   };
 
@@ -1257,7 +1349,7 @@ ${rejectIfManagerActiveCmd()}
       toast(`卸载失败：${escapeHtml(result.content || '未知错误')}`, 'red', 9000);
       return false;
     }
-    toast('已卸载：启动文件恢复为各插件原始的启动指令。', 'green', 6000);
+    toast('已卸载增强层：各插件启动指令保持原样，继续由 UFI 原生机制执行。', 'green', 6000);
     return true;
   };
 
@@ -1359,7 +1451,7 @@ ${rejectIfManagerActiveCmd()}
     const installed = /(?:^|\n)INSTALLED=1(?:\n|$)/.test(meta);
     const managerOk = parseKeyed(meta, 'MANAGER_OK') === '1';
     const gate = parseKeyed(meta, 'GATE_COUNT');
-    const gateFirst = parseKeyed(meta, 'GATE_FIRST') === '1';
+    const tailLast = parseKeyed(meta, 'TAIL_LAST') === '1';
     const version = parseKeyed(meta, 'MANAGER_VERSION');
     const serviceD = parseKeyed(meta, 'SERVICE_D') === '1';
     const listMode = parseKeyed(listBlock, 'LIST_MODE');
@@ -1377,10 +1469,10 @@ ${rejectIfManagerActiveCmd()}
 
     const warnings = [];
     const [begin, end] = String(gate).split('/');
-    if (!managerOk) warnings.push('管理器脚本缺失或不可执行 —— 此时「门」会自动放行，回到未修复状态，请点击「安装 / 修复」。');
-    if (managerOk && begin === '0') warnings.push('启动文件里的「门」不见了（可能被其它插件整体重写过），请点击「安装 / 修复」重新写入。');
-    if (begin !== end) warnings.push(`门标记不成对(${escapeHtml(String(gate))})，请点击「安装 / 修复」修正。`);
-    if (installed && !gateFirst) warnings.push('「门」不在启动文件最顶部，前面的插件指令仍会在开机极早期执行，请点击「安装 / 修复」重排。');
+    if (!managerOk) warnings.push('增强管理器缺失或不可执行；UFI 原生启动仍会照常运行，请点击「安装 / 修复」恢复重试/日志能力。');
+    if (managerOk && begin === '0') warnings.push('启动文件末尾的增强尾钩不见了（可能被其它插件整体重写过），请点击「安装 / 修复」重新写入。');
+    if (begin !== end) warnings.push(`增强尾钩标记不成对(${escapeHtml(String(gate))})，请点击「安装 / 修复」修正。`);
+    if (installed && !tailLast) warnings.push('增强尾钩不在启动文件末尾，请点击「安装 / 修复」重排。');
     if (managerOk && version !== MANAGER_VERSION) {
       warnings.push(version
         ? `设备上的管理器是 v${escapeHtml(version)}，当前插件为 v${MANAGER_VERSION}，请点击「安装 / 修复」升级。`
@@ -1396,10 +1488,10 @@ ${rejectIfManagerActiveCmd()}
       <div style="margin-top:8px;font-size:.6rem;line-height:1.7">
         <div><strong>安装状态：</strong>${installed ? '已安装' : '未安装'}
           <strong>管理器：</strong>${managerOk ? `v${escapeHtml(version || '?')}` : '缺失'}
-          <strong>门标记：</strong>${escapeHtml(gate || '-')}
+          <strong>尾钩标记：</strong>${escapeHtml(gate || '-')}
           <strong>备用触发：</strong>${serviceD ? 'service.d 已装' : '无'}</div>
         ${warnings.map((w) => `<div style="color:#d0454c">⚠ ${w}</div>`).join('')}
-        <div style="margin-top:6px"><strong>本机托管的插件启动指令（${escapeHtml(listCount || String(listItems.length))} 条${listMode === 'whole' ? '，当前为整体重放模式' : ''}）：</strong></div>
+        <div style="margin-top:6px"><strong>增强管理器可隔离重放的启动指令（${escapeHtml(listCount || String(listItems.length))} 条${listMode === 'whole' ? '，当前为整体重放模式' : ''}）：</strong></div>
         <div style="margin-left:2px">${listHtml}</div>
         <div style="margin-top:6px"><strong>最近一次执行结果：</strong></div>
         <div style="margin-left:2px">${renderState(stateText)}</div>
@@ -1426,7 +1518,7 @@ ${rejectIfManagerActiveCmd()}
             <button class="btn" id="${ROOT_ID}_run">立即执行一次</button>
             <button class="btn" id="${ROOT_ID}_uninstall">卸载</button>
           </div>
-          <div id="${ROOT_ID}_state" style="margin-top:8px;font-size:.62rem;opacity:.78">状态：未检查 · 统一托管所有插件的开机自启命令</div>
+          <div id="${ROOT_ID}_state" style="margin-top:8px;font-size:.62rem;opacity:.78">状态：未检查 · UFI 原生启动 + 延迟隔离重试增强</div>
           <div id="${ROOT_ID}_detail"></div>
         </div>
       </details>
@@ -1501,7 +1593,7 @@ ${rejectIfManagerActiveCmd()}
     });
 
     uninstallBtn.onclick = withBusy(uninstallBtn, '卸载中...', async () => {
-      if (!window.confirm('确定卸载吗？将移除启动文件顶部的门和管理器，各插件的启动指令会原样保留（恢复成开机很早就执行）。')) return;
+      if (!window.confirm('确定卸载吗？将移除启动文件末尾的增强尾钩和管理器；各插件原始启动指令会原样保留，UFI 原生启动机制不受影响。')) return;
       if (await uninstallFix()) await showStatus();
     });
 
@@ -1512,7 +1604,7 @@ ${rejectIfManagerActiveCmd()}
     let attempts = 0;
     const timer = setInterval(() => {
       attempts += 1;
-      if (mount() || attempts >= 20) clearInterval(timer);
+      if (mount() || attempts >= 60) clearInterval(timer);
     }, 500);
   }
 })();

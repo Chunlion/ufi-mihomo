@@ -1,5 +1,5 @@
 'use strict';
-// 把统一版 猫猫TProxy_Go.js 当成真实插件加载起来（DOM + 宿主 API 全部打桩），
+// 把统一版 猫猫TProxy.js 当成真实插件加载起来（DOM + 宿主 API 全部打桩），
 // 然后针对本轮修复的每个函数做行为断言。宿主 shell 调用被拦截并按用例返回伪造结果。
 const fs = require('fs');
 const path = require('path');
@@ -8,7 +8,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
-  plugin: path.join(ROOT, '猫猫TProxy_Go.js'),
+  plugin: path.join(ROOT, '猫猫TProxy.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
 };
 
@@ -657,7 +657,7 @@ function runFor(label, file) {
 
 (async () => {
   chk(fs.existsSync(FILES.plugin), true, 'repository contains the unified plugin file');
-  chk(fs.existsSync(path.join(ROOT, '猫猫TProxy.js')), false, 'parallel Shell plugin file has been removed');
+  chk(fs.existsSync(path.join(ROOT, '猫猫TProxy_Go.js')), false, 'legacy _Go plugin filename has been removed');
   await runFor('统一版', FILES.plugin);
   console.log(`\n================ 结果: ${pass} 通过 / ${fail} 失败 ================`);
   process.exit(fail ? 1 : 0);

@@ -105,7 +105,9 @@ class Sandbox {
     const body = rewrite ? this.rewrite(script) : script;
     const file = path.join(this.root, 'tmp', `run_${this.shellLog.length}.sh`);
     fs.writeFileSync(file, body);
-    const cmd = `export PATH="${this.posix}/bin:/usr/bin:/bin"; cd "${this.posix}"; exec ${DASH} "${winToPosix(file)}" 2>&1`;
+    // Long-running plugin commands intentionally outlive the manager timeout. Keep their
+    // cwd outside the sandbox so Windows can remove the previous test directory safely.
+    const cmd = `export PATH="${this.posix}/bin:/usr/bin:/bin"; cd /; exec ${DASH} "${winToPosix(file)}" 2>&1`;
     const res = spawnSync(BASH_EXE, ['-c', cmd], {
       encoding: 'utf8',
       timeout: timeoutMs,

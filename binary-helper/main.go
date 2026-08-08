@@ -2,692 +2,732 @@ package main
 
 import (
 	"bufio"
-	"cmp"
+	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"maps"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/metacubex/mihomo/common/convert"
-	"gopkg.in/yaml.v3"
+	"time"
 )
 
-const (
-	name                = "kano-f50-helper"
-	version             = "0.2.3"
-	defaultConfigPath   = "/data/clash/Proxy/config.yaml"
-	maxSubscriptionSize = 32 * 1024 * 1024
-)
+const version = "0.3.1"
+
+var commands = []string{"version", "snapshot", "clients", "network-status", "policy-read", "convert-subscription"}
 
 type result struct {
-	OK      bool   `json:"ok"`
-	Version string `json:"version,omitempty"`
-	Error   string `json:"error,omitempty"`
+	OK       bool     `json:"ok"`
+	Version  string   `json:"version,omitempty"`
+	Goarch   string   `json:"goarch,omitempty"`
+	GOOS     string   `json:"goos,omitempty"`
+	Commands []string `json:"commands,omitempty"`
+	Error    string   `json:"error,omitempty"`
 }
 
-func ok() result { return result{OK: true, Version: version} }
-
-type controllerFields struct {
+type snapshotResult struct {
+	OK                 bool   `json:"ok"`
+	Version            string `json:"version,omitempty"`
+	PID                int    `json:"pid"`
 	ExternalController string `json:"externalController"`
 	Secret             string `json:"secret"`
 	SecretSet          bool   `json:"secretSet"`
+	Options            string `json:"options"`
+	ConfigExists       bool   `json:"configExists"`
+	ConfigSize         int64  `json:"configSize"`
+	ProxyCount         int    `json:"proxyCount"`
+	CPUABI             string `json:"cpuAbi,omitempty"`
+	AndroidSDK         string `json:"androidSdk,omitempty"`
+	Error              string `json:"error,omitempty"`
 }
 
-type policyFields struct {
+type textResult struct {
+	OK    bool   `json:"ok"`
+	Text  string `json:"text"`
+	Error string `json:"error,omitempty"`
+}
+
+type policyState struct {
+	OK           bool   `json:"ok"`
 	Options      string `json:"options"`
 	DeviceBypass string `json:"deviceBypass"`
 	DirectDomain string `json:"directDomain"`
 	DirectIP     string `json:"directIp"`
 	ProxyDomain  string `json:"proxyDomain"`
 	RejectDomain string `json:"rejectDomain"`
-}
-
-type controllerInfo struct {
-	result
-	controllerFields
-}
-
-type pidInfo struct {
-	result
-	PID string `json:"pid"`
-}
-
-type policyState struct {
-	result
-	policyFields
-}
-
-type textResult struct {
-	result
-	Text string `json:"text"`
+	Error        string `json:"error,omitempty"`
 }
 
 type subscriptionResult struct {
-	result
-	Format     string `json:"format"`
+	OK         bool   `json:"ok"`
 	ProxyCount int    `json:"proxyCount"`
+	Format     string `json:"format"`
+	Error      string `json:"error,omitempty"`
 }
 
-type probeResult struct {
-	result
-	GOARCH     string            `json:"goarch"`
-	UID        int               `json:"uid"`
-	AndroidSDK string            `json:"androidSdk,omitempty"`
-	CPUABI     string            `json:"cpuAbi,omitempty"`
-	Commands   map[string]string `json:"commands"`
+func writeJSON(v any) {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
 }
 
-type snapshotResult struct {
-	result
-	controllerFields
-	PID          string `json:"pid"`
-	ConfigExists bool   `json:"configExists"`
-	ConfigSize   int64  `json:"configSize"`
-	Options      string `json:"options"`
+func fail(msg string) {
+	writeJSON(result{OK: false, Version: version, Error: msg})
+	os.Exit(1)
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		fail(errors.New("missing command"))
+		fail("missing command")
 	}
-
 	switch os.Args[1] {
 	case "version":
-		writeJSON(ok())
-	case "probe":
-		runProbe()
-	case "core-pid":
-		writeJSON(pidInfo{result: ok(), PID: findCorePID()})
-	case "controller-info":
-		runControllerInfo(os.Args[2:])
-	case "policy-read":
-		runPolicyRead(os.Args[2:])
-	case "clients":
-		runClients()
-	case "network-status":
-		runNetworkStatus(os.Args[2:])
+		writeJSON(result{OK: true, Version: version, Goarch: runtime.GOARCH, GOOS: runtime.GOOS, Commands: commands})
 	case "snapshot":
 		runSnapshot(os.Args[2:])
+	case "clients":
+		runClients(os.Args[2:])
+	case "network-status":
+		runNetworkStatus(os.Args[2:])
+	case "policy-read":
+		runPolicyRead(os.Args[2:])
 	case "convert-subscription":
 		runConvertSubscription(os.Args[2:])
 	default:
-		fail(fmt.Errorf("unsupported command: %s", os.Args[1]))
+		fail("unknown command: " + os.Args[1])
 	}
+}
+
+func runSnapshot(args []string) {
+	fs := flag.NewFlagSet("snapshot", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	config := fs.String("config", "/data/clash/Proxy/config.yaml", "")
+	options := fs.String("options", "", "")
+	if err := fs.Parse(args); err != nil {
+		fail(err.Error())
+	}
+
+	out := snapshotResult{OK: true, Version: version, PID: findCorePID()}
+	if st, err := os.Stat(*config); err == nil && !st.IsDir() {
+		out.ConfigExists = true
+		out.ConfigSize = st.Size()
+		if b, err := readLimited(*config, 8<<20); err == nil {
+			out.ExternalController, out.Secret, out.ProxyCount = parseConfigSummary(string(b))
+			out.SecretSet = out.Secret != ""
+		}
+	}
+	if *options != "" {
+		if b, err := readLimited(*options, 2<<20); err == nil {
+			out.Options = string(b)
+		}
+	}
+	out.CPUABI = getProp("ro.product.cpu.abi")
+	out.AndroidSDK = getProp("ro.build.version.sdk")
+	writeJSON(out)
+}
+
+func parseConfigSummary(text string) (controller, secret string, proxyCount int) {
+	s := bufio.NewScanner(strings.NewReader(text))
+	s.Buffer(make([]byte, 64*1024), 1024*1024)
+	inProxies := false
+	for s.Scan() {
+		raw := strings.TrimRight(s.Text(), "\r")
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
+		if indent == 0 {
+			inProxies = false
+			if k, v, ok := splitYAMLKV(trimmed); ok {
+				switch k {
+				case "external-controller":
+					controller = yamlScalar(v)
+				case "secret":
+					secret = yamlScalar(v)
+				case "proxies":
+					inProxies = true
+					if strings.HasPrefix(strings.TrimSpace(v), "[") && strings.TrimSpace(v) != "[]" {
+						proxyCount++
+					}
+				}
+			}
+			continue
+		}
+		if inProxies && strings.HasPrefix(strings.TrimSpace(raw), "-") {
+			proxyCount++
+		}
+	}
+	return
+}
+
+func splitYAMLKV(s string) (string, string, bool) {
+	i := strings.IndexByte(s, ':')
+	if i <= 0 {
+		return "", "", false
+	}
+	return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i+1:]), true
+}
+
+func yamlScalar(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "null" || v == "~" {
+		return ""
+	}
+	quote := byte(0)
+	escaped := false
+	comment := -1
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if quote == 0 {
+			if c == '\'' || c == '"' {
+				quote = c
+				continue
+			}
+			if c == '#' && (i == 0 || v[i-1] == ' ' || v[i-1] == '\t') {
+				comment = i
+				break
+			}
+			continue
+		}
+		if quote == '"' && c == '\\' && !escaped {
+			escaped = true
+			continue
+		}
+		if c == quote && !escaped {
+			quote = 0
+		}
+		escaped = false
+	}
+	if comment >= 0 {
+		v = strings.TrimSpace(v[:comment])
+	}
+	if len(v) >= 2 && ((v[0] == '\'' && v[len(v)-1] == '\'') || (v[0] == '"' && v[len(v)-1] == '"')) {
+		v = v[1 : len(v)-1]
+	}
+	return strings.TrimSpace(v)
+}
+
+func findCorePID() int {
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0
+	}
+	type candidate struct{ pid, score int }
+	var cands []candidate
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		comm, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "comm"))
+		cmd, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
+		name := strings.TrimSpace(string(comm))
+		cmdline := strings.ReplaceAll(string(cmd), "\x00", " ")
+		low := strings.ToLower(name + " " + cmdline)
+		score := 0
+		switch {
+		case strings.Contains(low, "/data/clash/proxy/clash.core"):
+			score = 100
+		case strings.EqualFold(name, "Clash.Core"):
+			score = 90
+		case strings.EqualFold(name, "mihomo"):
+			score = 80
+		case strings.Contains(low, "mihomo"):
+			score = 60
+		}
+		if score > 0 {
+			cands = append(cands, candidate{pid: pid, score: score})
+		}
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].score != cands[j].score {
+			return cands[i].score > cands[j].score
+		}
+		return cands[i].pid < cands[j].pid
+	})
+	if len(cands) == 0 {
+		return 0
+	}
+	return cands[0].pid
+}
+
+func runClients(args []string) {
+	_ = args
+	seen := map[string]bool{}
+	rows := []string{"IP MAC SOURCE"}
+	if f, err := os.Open("/proc/net/arp"); err == nil {
+		s := bufio.NewScanner(f)
+		first := true
+		for s.Scan() {
+			if first {
+				first = false
+				continue
+			}
+			p := strings.Fields(s.Text())
+			if len(p) < 4 || p[3] == "00:00:00:00:00:00" {
+				continue
+			}
+			key := p[0] + " " + strings.ToLower(p[3])
+			if !seen[key] {
+				seen[key] = true
+				rows = append(rows, key+" arp")
+			}
+		}
+		_ = f.Close()
+	}
+	if out, _ := commandOutput(1500*time.Millisecond, "ip", "neigh"); out != "" {
+		s := bufio.NewScanner(strings.NewReader(out))
+		for s.Scan() {
+			p := strings.Fields(s.Text())
+			if len(p) < 5 {
+				continue
+			}
+			ip, mac := p[0], ""
+			for i := 1; i+1 < len(p); i++ {
+				if p[i] == "lladdr" {
+					mac = strings.ToLower(p[i+1])
+					break
+				}
+			}
+			if mac == "" || mac == "00:00:00:00:00:00" {
+				continue
+			}
+			key := ip + " " + mac
+			if !seen[key] {
+				seen[key] = true
+				rows = append(rows, key+" neigh")
+			}
+		}
+	}
+	writeJSON(textResult{OK: true, Text: strings.Join(rows, "\n")})
+}
+
+func runPolicyRead(args []string) {
+	fs := flag.NewFlagSet("policy-read", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	options := fs.String("options", "", "")
+	device := fs.String("device", "", "")
+	directDomain := fs.String("direct-domain", "", "")
+	directIP := fs.String("direct-ip", "", "")
+	proxyDomain := fs.String("proxy-domain", "", "")
+	rejectDomain := fs.String("reject-domain", "", "")
+	if err := fs.Parse(args); err != nil {
+		fail(err.Error())
+	}
+	read := func(path string) string {
+		if path == "" {
+			return ""
+		}
+		b, err := readLimited(path, 2<<20)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+	writeJSON(policyState{
+		OK: true, Options: read(*options), DeviceBypass: read(*device),
+		DirectDomain: read(*directDomain), DirectIP: read(*directIP),
+		ProxyDomain: read(*proxyDomain), RejectDomain: read(*rejectDomain),
+	})
+}
+
+func runNetworkStatus(args []string) {
+	fs := flag.NewFlagSet("network-status", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	logPath := fs.String("log", "", "")
+	yqRuntime := fs.String("yq-runtime", "", "")
+	clashDir := fs.String("clash-dir", "/data/clash", "")
+	if err := fs.Parse(args); err != nil {
+		fail(err.Error())
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "[helper]\nversion=%s goos=%s goarch=%s\n", version, runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(&b, "clash_dir=%s\nyq_runtime=%s\n\n", *clashDir, *yqRuntime)
+	fmt.Fprintf(&b, "[process]\npid=%d\n\n", findCorePID())
+	fmt.Fprintf(&b, "[listen ports]\n%s\n", listenPortsText())
+	if ipt := selectExecutable([]string{"iptables", "iptables-legacy", "iptables-nft", "/system/bin/iptables", "/system/xbin/iptables", "/vendor/bin/iptables"}); ipt != "" {
+		fmt.Fprintf(&b, "\n[IPv4 firewall: %s]\n", ipt)
+		for _, spec := range [][]string{{"-t", "mangle", "-S", "PREROUTING"}, {"-t", "mangle", "-S", "OUTPUT"}, {"-t", "nat", "-S"}} {
+			if out, _ := commandOutput(2*time.Second, ipt, spec...); out != "" {
+				b.WriteString(out)
+				if !strings.HasSuffix(out, "\n") {
+					b.WriteByte('\n')
+				}
+			}
+		}
+	} else {
+		b.WriteString("\n[IPv4 firewall]\nunavailable\n")
+	}
+	if out, _ := commandOutput(2*time.Second, "ip", "rule", "show"); out != "" {
+		b.WriteString("\n[ip rule]\n")
+		b.WriteString(out)
+		if !strings.HasSuffix(out, "\n") {
+			b.WriteByte('\n')
+		}
+	}
+	if *logPath != "" {
+		b.WriteString("\n[log tail]\n")
+		b.WriteString(tailFile(*logPath, 80, 256<<10))
+	}
+	writeJSON(textResult{OK: true, Text: b.String()})
+}
+
+func listenPortsText() string {
+	wanted := map[int]bool{7788: true, 7890: true, 7891: true, 7892: true, 7893: true, 7895: true, 1053: true}
+	var rows []string
+	for _, path := range []string{"/proc/net/tcp", "/proc/net/tcp6", "/proc/net/udp", "/proc/net/udp6"} {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		s := bufio.NewScanner(f)
+		first := true
+		for s.Scan() {
+			if first {
+				first = false
+				continue
+			}
+			p := strings.Fields(s.Text())
+			if len(p) < 4 {
+				continue
+			}
+			hp := strings.Split(p[1], ":")
+			if len(hp) != 2 {
+				continue
+			}
+			n, err := strconv.ParseInt(hp[1], 16, 32)
+			if err != nil || !wanted[int(n)] {
+				continue
+			}
+			rows = append(rows, fmt.Sprintf("%s port=%d state=%s", filepath.Base(path), n, p[3]))
+		}
+		_ = f.Close()
+	}
+	if len(rows) == 0 {
+		return "none"
+	}
+	sort.Strings(rows)
+	return strings.Join(rows, "\n")
 }
 
 func runConvertSubscription(args []string) {
 	fs := flag.NewFlagSet("convert-subscription", flag.ContinueOnError)
-	inputPath := fs.String("input", "", "")
-	outputPath := fs.String("output", "", "")
+	fs.SetOutput(io.Discard)
+	input := fs.String("input", "", "")
+	output := fs.String("output", "", "")
 	if err := fs.Parse(args); err != nil {
-		fail(err)
+		fail(err.Error())
 	}
-	if *inputPath == "" || *outputPath == "" {
-		fail(errors.New("input and output are required"))
-	}
-
-	format, count, err := convertSubscriptionFile(*inputPath, *outputPath)
-	if err != nil {
-		fail(err)
-	}
-	writeJSON(subscriptionResult{
-		result:     ok(),
-		Format:     format,
-		ProxyCount: count,
-	})
-}
-
-func convertSubscriptionFile(inputPath, outputPath string) (string, int, error) {
-	info, err := os.Stat(inputPath)
-	if err != nil {
-		return "", 0, fmt.Errorf("read subscription: %w", err)
-	}
-	if info.Size() <= 0 {
-		return "", 0, errors.New("subscription is empty")
-	}
-	if info.Size() > maxSubscriptionSize {
-		return "", 0, fmt.Errorf("subscription exceeds %d bytes", maxSubscriptionSize)
+	if *input == "" || *output == "" {
+		fail("input and output are required")
 	}
 
-	content, err := os.ReadFile(inputPath)
-	if err != nil {
-		return "", 0, fmt.Errorf("read subscription: %w", err)
-	}
-
-	proxies, format := clashSubscriptionProxies(content)
-	if len(proxies) == 0 {
-		proxies, err = convert.ConvertsV2Ray(content)
-		if err != nil {
-			return "", 0, errors.New("unsupported subscription format")
+	// Preserve the full 0.2.3 Mihomo-backed converter as a cold sidecar. It is only
+	// launched for subscription conversion; all status/diagnostic hot paths stay lightweight.
+	if sidecar := findConverterSidecar(); sidecar != "" {
+		cmd := exec.Command(sidecar, "convert-subscription", "--input", *input, "--output", *output)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Run(); err == nil {
+			return
 		}
-		format = "share-links"
-	}
-	if err := validateSubscriptionProxies(proxies); err != nil {
-		return "", 0, err
 	}
 
-	output, err := yaml.Marshal(map[string]any{"proxies": proxies})
+	// Lightweight fallback: many providers already return a Clash/Mihomo YAML or JSON
+	// document. Extract/pass through its top-level proxies collection without pulling the
+	// entire Mihomo dependency graph into this Android helper.
+	b, err := readLimited(*input, 16<<20)
 	if err != nil {
-		return "", 0, fmt.Errorf("encode provider yaml: %w", err)
+		fail(err.Error())
 	}
-	if err := writeFileAtomic(outputPath, output, 0600); err != nil {
-		return "", 0, err
+	out, count, format, err := normalizeProviderDocument(b)
+	if err != nil {
+		fail("converter sidecar unavailable and input is not a Clash provider document: " + err.Error())
 	}
-	return format, len(proxies), nil
+	if err := writeFileAtomic(*output, out, 0600); err != nil {
+		fail(err.Error())
+	}
+	writeJSON(subscriptionResult{OK: true, ProxyCount: count, Format: format})
 }
 
-func clashSubscriptionProxies(content []byte) ([]map[string]any, string) {
-	var document struct {
-		Proxies []map[string]any `yaml:"proxies"`
+func findConverterSidecar() string {
+	self, _ := os.Executable()
+	self, _ = filepath.EvalSymlinks(self)
+	var cands []string
+	if p := os.Getenv("KANO_HELPER_CONVERTER"); p != "" {
+		cands = append(cands, p)
 	}
-	if err := yaml.Unmarshal(content, &document); err != nil || len(document.Proxies) == 0 {
-		return nil, ""
+	cands = append(cands,
+		"/data/clash/Tools/kano-f50-helper-converter",
+		"/data/clash/Tools/kano-f50-helper-legacy",
+	)
+	for _, p := range cands {
+		st, err := os.Stat(p)
+		if err != nil || st.IsDir() || st.Mode()&0111 == 0 {
+			continue
+		}
+		q, _ := filepath.EvalSymlinks(p)
+		if q != "" && q == self {
+			continue
+		}
+		return p
 	}
-	return document.Proxies, "clash-yaml"
+	return ""
 }
 
-func validateSubscriptionProxies(proxies []map[string]any) error {
-	if len(proxies) == 0 {
+func normalizeProviderDocument(b []byte) ([]byte, int, string, error) {
+	return normalizeProviderDocumentDepth(b, 0)
+}
+
+func normalizeProviderDocumentDepth(b []byte, depth int) ([]byte, int, string, error) {
+	if depth > 3 {
+		return nil, 0, "", errors.New("nested subscription wrapper is too deep")
+	}
+	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) == 0 {
+		return nil, 0, "", errors.New("empty input")
+	}
+
+	// JSON provider, proxy array, or common API wrapper. Some subscription panels
+	// return HTTP 200 JSON wrappers instead of the final provider document.
+	if trimmed[0] == '{' {
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &obj); err == nil {
+			if raw, ok := obj["proxies"]; ok {
+				var arr []json.RawMessage
+				if json.Unmarshal(raw, &arr) == nil {
+					if err := validateJSONProxies(arr); err != nil {
+						return nil, 0, "", err
+					}
+					normalized, _ := json.Marshal(map[string]json.RawMessage{"proxies": raw})
+					normalized = append(normalized, '\n')
+					return normalized, len(arr), "json", nil
+				}
+			}
+			for _, key := range []string{"data", "content", "subscription", "config", "result"} {
+				raw, ok := obj[key]
+				if !ok || len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+					continue
+				}
+				// Nested JSON object/array.
+				if raw[0] == '{' || raw[0] == '[' {
+					if out, count, format, err := normalizeProviderDocumentDepth(raw, depth+1); err == nil {
+						return out, count, "json-wrapper/" + format, nil
+					}
+				}
+				// String wrapper, often Base64 or an embedded YAML document.
+				var str string
+				if json.Unmarshal(raw, &str) == nil && strings.TrimSpace(str) != "" {
+					if out, count, format, err := normalizeProviderDocumentDepth([]byte(str), depth+1); err == nil {
+						return out, count, "json-wrapper/" + format, nil
+					}
+				}
+			}
+		}
+	}
+	if trimmed[0] == '[' {
+		var arr []json.RawMessage
+		if err := json.Unmarshal(trimmed, &arr); err == nil && len(arr) > 0 {
+			allObjects := true
+			for _, item := range arr {
+				if len(bytes.TrimSpace(item)) == 0 || bytes.TrimSpace(item)[0] != '{' {
+					allObjects = false
+					break
+				}
+			}
+			if allObjects {
+				if err := validateJSONProxies(arr); err != nil {
+					return nil, 0, "", err
+				}
+				raw, _ := json.Marshal(arr)
+				normalized, _ := json.Marshal(map[string]json.RawMessage{"proxies": raw})
+				normalized = append(normalized, '\n')
+				return normalized, len(arr), "json-array", nil
+			}
+		}
+	}
+
+	// Standard Clash/Mihomo YAML: keep only the top-level proxies section so the
+	// result is safe to use as a file proxy-provider.
+	lines := strings.Split(string(trimmed), "\n")
+	start := -1
+	baseIndent := 0
+	count := 0
+	var out []string
+	for i, line := range lines {
+		raw := strings.TrimRight(line, "\r")
+		if strings.TrimSpace(raw) == "" || strings.HasPrefix(strings.TrimSpace(raw), "#") {
+			continue
+		}
+		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
+		if start < 0 {
+			if indent == 0 && strings.HasPrefix(strings.TrimSpace(raw), "proxies:") {
+				start, baseIndent = i, indent
+				out = append(out, "proxies:")
+			}
+			continue
+		}
+		if i == start {
+			continue
+		}
+		if indent <= baseIndent && strings.TrimSpace(raw) != "" {
+			break
+		}
+		out = append(out, raw)
+		if strings.HasPrefix(strings.TrimSpace(raw), "-") {
+			count++
+		}
+	}
+	if start >= 0 && count > 0 {
+		return []byte(strings.Join(out, "\n") + "\n"), count, "yaml", nil
+	}
+
+	// Base64-wrapped Clash YAML/JSON is common on subscription endpoints. Try all
+	// standard and URL-safe encodings, with whitespace stripped, then recurse.
+	compact := make([]byte, 0, len(trimmed))
+	for _, c := range trimmed {
+		if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
+			compact = append(compact, c)
+		}
+	}
+	if len(compact) >= 16 {
+		encodings := []*base64.Encoding{
+			base64.StdEncoding, base64.RawStdEncoding,
+			base64.URLEncoding, base64.RawURLEncoding,
+		}
+		for _, enc := range encodings {
+			decoded := make([]byte, enc.DecodedLen(len(compact)))
+			n, err := enc.Decode(decoded, compact)
+			if err != nil || n == 0 {
+				continue
+			}
+			decoded = decoded[:n]
+			if out, count, format, err := normalizeProviderDocumentDepth(decoded, depth+1); err == nil {
+				return out, count, "base64/" + format, nil
+			}
+		}
+	}
+
+	return nil, 0, "", errors.New("proxies section not found; response is not a supported Clash provider document")
+}
+
+func validateJSONProxies(items []json.RawMessage) error {
+	if len(items) == 0 {
 		return errors.New("subscription contains no proxies")
 	}
-	names := make(map[string]struct{}, len(proxies))
-	for index, proxy := range proxies {
-		name, _ := proxy["name"].(string)
+	names := make(map[string]struct{}, len(items))
+	for i, raw := range items {
+		var proxy map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &proxy); err != nil {
+			return fmt.Errorf("proxy %d is not an object", i+1)
+		}
+		var name, proxyType string
+		_ = json.Unmarshal(proxy["name"], &name)
+		_ = json.Unmarshal(proxy["type"], &proxyType)
 		name = strings.TrimSpace(name)
-		proxyType, _ := proxy["type"].(string)
 		proxyType = strings.TrimSpace(proxyType)
 		if name == "" || proxyType == "" {
-			return fmt.Errorf("proxy %d is missing name or type", index+1)
+			return fmt.Errorf("proxy %d is missing name or type", i+1)
 		}
 		if _, exists := names[name]; exists {
-			return fmt.Errorf("duplicate proxy name at item %d", index+1)
+			return fmt.Errorf("duplicate proxy name at item %d", i+1)
 		}
 		names[name] = struct{}{}
 	}
 	return nil
 }
 
-func writeFileAtomic(path string, content []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
 	}
-	temp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create temporary output: %w", err)
+	tmp := path + ".kano_new_" + strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
 	}
-	tempPath := temp.Name()
-	committed := false
-	defer func() {
-		_ = temp.Close()
-		if !committed {
-			_ = os.Remove(tempPath)
-		}
-	}()
-	if err := temp.Chmod(mode); err != nil {
-		return fmt.Errorf("set output permissions: %w", err)
+	if err := os.Chmod(tmp, perm); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
-	if _, err := temp.Write(content); err != nil {
-		return fmt.Errorf("write output: %w", err)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
-	if err := temp.Sync(); err != nil {
-		return fmt.Errorf("sync output: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close output: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("commit output: %w", err)
-	}
-	committed = true
 	return nil
 }
 
-func runSnapshot(args []string) {
-	fs := flag.NewFlagSet("snapshot", flag.ContinueOnError)
-	configPath := fs.String("config", defaultConfigPath, "")
-	policy := registerPolicyFlags(fs)
-	if err := fs.Parse(args); err != nil {
-		fail(err)
-	}
-
-	controller, err := readControllerFields(*configPath)
+func readLimited(path string, max int64) ([]byte, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		fail(err)
+		return nil, err
 	}
-	var configExists bool
-	var configSize int64
-	if info, statErr := os.Stat(*configPath); statErr == nil {
-		configExists = true
-		configSize = info.Size()
-	}
-	writeJSON(snapshotResult{
-		result:           ok(),
-		controllerFields: controller,
-		PID:              findCorePID(),
-		ConfigExists:     configExists,
-		ConfigSize:       configSize,
-		Options:          readText(*policy.options),
-	})
-}
-
-func runProbe() {
-	commands := make(map[string]string)
-	for _, command := range []string{"sh", "iptables", "ip6tables", "curl", "timeout"} {
-		if path, err := exec.LookPath(command); err == nil {
-			commands[command] = path
-		}
-	}
-	writeJSON(probeResult{
-		result:     ok(),
-		GOARCH:     runtime.GOARCH,
-		UID:        os.Getuid(),
-		AndroidSDK: commandOutput("getprop", "ro.build.version.sdk"),
-		CPUABI:     commandOutput("getprop", "ro.product.cpu.abi"),
-		Commands:   commands,
-	})
-}
-
-func runControllerInfo(args []string) {
-	fs := flag.NewFlagSet("controller-info", flag.ContinueOnError)
-	configPath := fs.String("config", defaultConfigPath, "")
-	if err := fs.Parse(args); err != nil {
-		fail(err)
-	}
-
-	controller, err := readControllerFields(*configPath)
+	defer f.Close()
+	r := io.LimitReader(f, max+1)
+	b, err := io.ReadAll(r)
 	if err != nil {
-		fail(err)
+		return nil, err
 	}
-	writeJSON(controllerInfo{result: ok(), controllerFields: controller})
-}
-
-func runPolicyRead(args []string) {
-	fs := flag.NewFlagSet("policy-read", flag.ContinueOnError)
-	policy := registerPolicyFlags(fs)
-	if err := fs.Parse(args); err != nil {
-		fail(err)
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("file too large: %s", path)
 	}
-	writeJSON(policyState{result: ok(), policyFields: policy.read()})
+	return b, nil
 }
 
-type policyFlags struct {
-	options, device, directDomain, directIP, proxyDomain, rejectDomain *string
+func getProp(key string) string {
+	out, _ := commandOutput(1200*time.Millisecond, "getprop", key)
+	return strings.TrimSpace(out)
 }
 
-func registerPolicyFlags(fs *flag.FlagSet) policyFlags {
-	return policyFlags{
-		options:      fs.String("options", "", ""),
-		device:       fs.String("device", "", ""),
-		directDomain: fs.String("direct-domain", "", ""),
-		directIP:     fs.String("direct-ip", "", ""),
-		proxyDomain:  fs.String("proxy-domain", "", ""),
-		rejectDomain: fs.String("reject-domain", "", ""),
+func commandOutput(timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	b, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return string(b), ctx.Err()
 	}
+	return string(b), err
 }
 
-func (p policyFlags) read() policyFields {
-	return policyFields{
-		Options:      readText(*p.options),
-		DeviceBypass: readText(*p.device),
-		DirectDomain: readText(*p.directDomain),
-		DirectIP:     readText(*p.directIP),
-		ProxyDomain:  readText(*p.proxyDomain),
-		RejectDomain: readText(*p.rejectDomain),
-	}
-}
-
-func readControllerFields(configPath string) (controllerFields, error) {
-	controller, secret, err := readController(configPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return controllerFields{}, err
-	}
-	return controllerFields{
-		ExternalController: controller,
-		Secret:             secret,
-		SecretSet:          secret != "",
-	}, nil
-}
-
-func runClients() {
-	writeJSON(textResult{result: ok(), Text: clientListText()})
-}
-
-func clientListText() string {
-	rows := map[string]string{}
-	if file, err := os.Open("/proc/net/arp"); err == nil {
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			fields := strings.Fields(scanner.Text())
-			if len(fields) >= 4 && fields[0] != "IP" && fields[3] != "00:00:00:00:00:00" {
-				rows[fields[0]+" "+strings.ToUpper(fields[3])] = "arp"
+func selectExecutable(cands []string) string {
+	for _, p := range cands {
+		if strings.Contains(p, "/") {
+			if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0111 != 0 {
+				return p
 			}
-		}
-		_ = file.Close()
-	}
-
-	if output, err := exec.Command("ip", "neigh").Output(); err == nil {
-		scanner := bufio.NewScanner(strings.NewReader(string(output)))
-		for scanner.Scan() {
-			fields := strings.Fields(scanner.Text())
-			if len(fields) < 5 {
-				continue
-			}
-			for i := 1; i+1 < len(fields); i++ {
-				if fields[i] == "lladdr" {
-					rows[fields[0]+" "+strings.ToUpper(fields[i+1])] = "neigh"
-					break
-				}
-			}
-		}
-	}
-
-	keys := slices.Sorted(maps.Keys(rows))
-	var output strings.Builder
-	output.WriteString("IP MAC SOURCE\n")
-	for _, key := range keys {
-		fmt.Fprintf(&output, "%s %s\n", key, rows[key])
-	}
-	return strings.TrimSpace(output.String())
-}
-
-func runNetworkStatus(args []string) {
-	fs := flag.NewFlagSet("network-status", flag.ContinueOnError)
-	logPath := fs.String("log", "", "")
-	yqRuntime := fs.String("yq-runtime", "", "")
-	clashDir := fs.String("clash-dir", "/data/clash", "")
-	if err := fs.Parse(args); err != nil {
-		fail(err)
-	}
-
-	var output strings.Builder
-	fmt.Fprintf(&output, "[process]\npid=%s\n\n", findCorePID())
-	output.WriteString("[listen ports]\n")
-	listeners := commandOutput("ss", "-lntup")
-	if listeners == "" {
-		listeners = commandOutput("netstat", "-lntup")
-	}
-	for _, line := range strings.Split(listeners, "\n") {
-		if containsAny(line, ":7788", ":7890", ":7891", ":7892", ":7893", ":7895", ":1053") {
-			output.WriteString(line + "\n")
-		}
-	}
-
-	for _, family := range []struct {
-		name string
-		bin  string
-	}{
-		{name: "IPv4", bin: selectIPTables("iptables")},
-		{name: "IPv6", bin: selectIPTables("ip6tables")},
-	} {
-		fmt.Fprintf(&output, "\n[%s firewall: %s]\n", family.name, cmp.Or(family.bin, "unavailable"))
-		if family.bin == "" {
 			continue
 		}
-		appendFilteredCommand(&output, family.bin, []string{"-t", "mangle", "-S", "PREROUTING"}, "KANO", "TPROXY", "7895", "clash", "mihomo")
-		appendFilteredCommand(&output, family.bin, []string{"-t", "nat", "-S", "PREROUTING"}, "KANO", "1053", "789")
-		appendFilteredCommand(&output, family.bin, []string{"-t", "filter", "-S", "FORWARD"}, "KANO", "--dport 443", "443")
-	}
-
-	output.WriteString("\n[filesystem]\n")
-	if mounts := readText("/proc/mounts"); mounts != "" {
-		for _, line := range strings.Split(mounts, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && (fields[1] == "/data" || fields[1] == "/tmp") {
-				output.WriteString(line + "\n")
-			}
-		}
-	}
-	dfPaths := existingFilesystemPaths("/data", "/tmp")
-	if len(dfPaths) > 0 {
-		output.WriteString(commandOutput("df", append([]string{"-k"}, dfPaths...)...) + "\n")
-	}
-	if _, err := os.Stat("/tmp"); os.IsNotExist(err) {
-		output.WriteString("note: /tmp is unavailable; managed runtime directories under /data are used\n")
-	}
-
-	output.WriteString("\n[yq runtime]\n")
-	if info, err := os.Stat(*yqRuntime); err == nil {
-		fmt.Fprintf(&output, "%s mode=%s\n", *yqRuntime, info.Mode())
-	}
-
-	output.WriteString("\n[geodata]\n")
-	for _, base := range []string{filepath.Join(*clashDir, "Proxy"), *clashDir} {
-		for _, fileName := range []string{"Country.mmdb", "GeoIP.dat", "geoip.dat", "GeoSite.dat", "geosite.dat"} {
-			path := filepath.Join(base, fileName)
-			if info, err := os.Stat(path); err == nil {
-				fmt.Fprintf(&output, "%s %d bytes\n", path, info.Size())
-			}
-		}
-	}
-
-	output.WriteString("\n[last logs]\n")
-	output.WriteString(tailLines(readText(*logPath), 80))
-	writeJSON(textResult{result: ok(), Text: strings.TrimSpace(output.String())})
-}
-
-func readController(path string) (string, string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", "", err
-	}
-	defer file.Close()
-
-	var controller, secret string
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if controller == "" && strings.HasPrefix(line, "external-controller:") {
-			controller = yamlScalar(strings.TrimPrefix(line, "external-controller:"))
-		}
-		if secret == "" && strings.HasPrefix(line, "secret:") {
-			secret = yamlScalar(strings.TrimPrefix(line, "secret:"))
-		}
-		if controller != "" && secret != "" {
-			break
-		}
-	}
-	return controller, secret, scanner.Err()
-}
-
-func yamlScalar(value string) string {
-	value = strings.TrimSpace(value)
-	var quote rune
-	var escaped bool
-	for index, current := range value {
-		if index == 0 && (current == '\'' || current == '"') {
-			quote = current
-			continue
-		}
-		if current == '\\' && quote == '"' && !escaped {
-			escaped = true
-			continue
-		}
-		if current == quote && !escaped {
-			value = value[:index+1]
-			break
-		}
-		if current == '#' && quote == 0 {
-			value = value[:index]
-			break
-		}
-		escaped = false
-	}
-	value = strings.TrimSpace(value)
-	if len(value) >= 2 && ((value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"')) {
-		value = value[1 : len(value)-1]
-	}
-	return strings.TrimSpace(value)
-}
-
-func findCorePID() string {
-	for _, processName := range []string{"Clash.Core", "Clash", "mihomo"} {
-		fields := strings.Fields(commandOutput("pidof", processName))
-		if len(fields) > 0 {
-			return fields[0]
-		}
-	}
-
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return ""
-	}
-	type candidate struct {
-		pid  int
-		text string
-	}
-	var candidates []candidate
-	for _, entry := range entries {
-		pid, err := strconv.Atoi(entry.Name())
-		if err != nil || pid <= 0 {
-			continue
-		}
-		comm := strings.TrimSpace(readText(filepath.Join("/proc", entry.Name(), "comm")))
-		cmdlineBytes, _ := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
-		cmdline := strings.ReplaceAll(string(cmdlineBytes), "\x00", " ")
-		text := strings.ToLower(comm + " " + cmdline)
-		if strings.Contains(text, "clash.core") || strings.Contains(text, "/data/clash") || strings.Contains(text, "mihomo") {
-			candidates = append(candidates, candidate{pid: pid, text: text})
-		}
-	}
-	slices.SortFunc(candidates, func(a, b candidate) int { return cmp.Compare(a.pid, b.pid) })
-	for _, item := range candidates {
-		if !strings.Contains(item.text, name) {
-			return strconv.Itoa(item.pid)
+		if q, err := exec.LookPath(p); err == nil {
+			return q
 		}
 	}
 	return ""
 }
 
-func selectIPTables(name string) string {
-	var first string
-	for _, candidate := range commandCandidates(name) {
-		if first == "" {
-			first = candidate
-		}
-		output := commandOutput(candidate, "-t", "mangle", "-S", "PREROUTING")
-		if containsAny(strings.ToLower(output), "kano", "tproxy", "clash", "mihomo") {
-			return candidate
-		}
-	}
-	return first
-}
-
-func commandCandidates(name string) []string {
-	variants := []string{name, name + "-legacy", name + "-nft"}
-	seen := map[string]bool{}
-	var result []string
-	for _, command := range variants {
-		if path, err := exec.LookPath(command); err == nil && !seen[path] {
-			seen[path] = true
-			result = append(result, path)
-		}
-	}
-	for _, base := range []string{"/system/bin", "/system/xbin", "/vendor/bin", "/sbin"} {
-		for _, command := range variants {
-			path := filepath.Join(base, command)
-			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 && !seen[path] {
-				seen[path] = true
-				result = append(result, path)
-			}
-		}
-	}
-	return result
-}
-
-func appendFilteredCommand(output *strings.Builder, command string, args []string, markers ...string) {
-	lowered := lowerAll(markers...)
-	text := commandOutput(command, args...)
-	for _, line := range strings.Split(text, "\n") {
-		if containsAny(strings.ToLower(line), lowered...) {
-			output.WriteString(line + "\n")
-		}
-	}
-}
-
-func commandOutput(command string, args ...string) string {
-	path, err := exec.LookPath(command)
-	if err != nil && !filepath.IsAbs(command) {
-		return ""
-	}
-	if err == nil {
-		command = path
-	}
-	output, err := exec.Command(command, args...).CombinedOutput()
-	if err != nil && len(output) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func existingFilesystemPaths(paths ...string) []string {
-	result := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			result = append(result, path)
-		}
-	}
-	return result
-}
-
-func readText(path string) string {
-	if path == "" {
-		return ""
-	}
-	content, err := os.ReadFile(path)
+func tailFile(path string, lines int, maxBytes int64) string {
+	b, err := readLimited(path, maxBytes)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimRight(string(content), "\r\n")
-}
-
-func tailLines(text string, count int) string {
-	lines := strings.Split(strings.TrimRight(text, "\r\n"), "\n")
-	if len(lines) > count {
-		lines = lines[len(lines)-count:]
+	parts := strings.Split(strings.TrimRight(string(b), "\r\n"), "\n")
+	if len(parts) > lines {
+		parts = parts[len(parts)-lines:]
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(parts, "\n")
 }
 
-func containsAny(value string, markers ...string) bool {
-	for _, marker := range markers {
-		if strings.Contains(value, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func lowerAll(values ...string) []string {
-	result := make([]string, len(values))
-	for index, value := range values {
-		result[index] = strings.ToLower(value)
-	}
-	return result
-}
-
-func writeJSON(value any) {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(value); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func fail(err error) {
-	writeJSON(result{OK: false, Version: version, Error: err.Error()})
-	os.Exit(1)
-}
+// Keep net imported on Android builds as a cheap runtime sanity check for the stdlib network stack.
+var _ = net.IPv4len

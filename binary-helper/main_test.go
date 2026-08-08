@@ -7,12 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 func TestSnapshotJSONOmitsOnDemandData(t *testing.T) {
-	content, err := json.Marshal(snapshotResult{result: ok()})
+	content, err := json.Marshal(snapshotResult{OK: true, Version: version})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +27,7 @@ func TestYAMLScalar(t *testing.T) {
 		`"0.0.0.0:7788" # controller`:      "0.0.0.0:7788",
 		`'secret-with-#-character' # note`: "secret-with-#-character",
 		"plain-secret # note":              "plain-secret",
+		"null":                             "",
 	}
 	for input, expected := range tests {
 		if actual := yamlScalar(input); actual != expected {
@@ -37,105 +36,111 @@ func TestYAMLScalar(t *testing.T) {
 	}
 }
 
-func TestTailLines(t *testing.T) {
-	if actual := tailLines("a\nb\nc\n", 2); actual != "b\nc" {
-		t.Fatalf("tailLines returned %q", actual)
+func TestParseConfigSummary(t *testing.T) {
+	config := `external-controller: "0.0.0.0:7788" # API
+secret: 'abc#123' # keep the hash inside quotes
+proxies:
+  - {name: one, type: ss}
+  - name: two
+    type: vless
+proxy-groups: []
+`
+	controller, secret, count := parseConfigSummary(config)
+	if controller != "0.0.0.0:7788" || secret != "abc#123" || count != 2 {
+		t.Fatalf("controller=%q secret=%q count=%d", controller, secret, count)
 	}
 }
 
-func TestExistingFilesystemPaths(t *testing.T) {
-	dir := t.TempDir()
-	missing := filepath.Join(dir, "missing")
-	actual := existingFilesystemPaths(dir, missing)
-	if len(actual) != 1 || actual[0] != dir {
-		t.Fatalf("existingFilesystemPaths returned %#v", actual)
-	}
-}
-
-func TestConvertClashSubscription(t *testing.T) {
-	input, err := os.ReadFile(filepath.Join("testdata", "clash.yaml"))
+func TestNormalizeYAMLProvider(t *testing.T) {
+	input := []byte("mixed-port: 7890\nproxies:\n  - {name: test-node, type: ss}\nproxy-groups: []\n")
+	output, count, format, err := normalizeProviderDocument(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	format, count, output := convertSubscriptionForTest(t, input)
-	if format != "clash-yaml" || count != 1 {
+	if format != "yaml" || count != 1 {
 		t.Fatalf("format=%q count=%d", format, count)
 	}
-	assertProviderOutput(t, output, "test-node", "ss")
+	if string(output) != "proxies:\n  - {name: test-node, type: ss}\n" {
+		t.Fatalf("unexpected output: %q", output)
+	}
 }
 
-func TestConvertBase64ShareLinks(t *testing.T) {
-	link, err := os.ReadFile(filepath.Join("testdata", "vless.txt"))
+func TestNormalizeJSONWrapper(t *testing.T) {
+	input := []byte(`{"data":{"proxies":[{"name":"node","type":"vless"}]}}`)
+	output, count, format, err := normalizeProviderDocument(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := []byte(base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(string(link)))))
-	format, count, output := convertSubscriptionForTest(t, input)
-	if format != "share-links" || count != 1 {
+	if format != "json-wrapper/json" || count != 1 {
 		t.Fatalf("format=%q count=%d", format, count)
 	}
-	assertProviderOutput(t, output, "test-vless", "vless")
-}
-
-func TestConvertSubscriptionRejectsInvalidInput(t *testing.T) {
-	dir := t.TempDir()
-	inputPath := filepath.Join(dir, "input.txt")
-	outputPath := filepath.Join(dir, "provider.yaml")
-	if err := os.WriteFile(inputPath, []byte("not a subscription"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := convertSubscriptionFile(inputPath, outputPath); err == nil {
-		t.Fatal("expected invalid subscription to fail")
-	}
-	if _, err := os.Stat(outputPath); !os.IsNotExist(err) {
-		t.Fatalf("output should not exist after failure: %v", err)
-	}
-}
-
-func TestConvertSubscriptionRejectsDuplicateNames(t *testing.T) {
-	input := []byte("proxies:\n  - {name: duplicate, type: ss}\n  - {name: duplicate, type: trojan}\n")
-	dir := t.TempDir()
-	inputPath := filepath.Join(dir, "input.yaml")
-	outputPath := filepath.Join(dir, "provider.yaml")
-	if err := os.WriteFile(inputPath, input, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := convertSubscriptionFile(inputPath, outputPath); err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("expected duplicate-name error, got %v", err)
-	}
-}
-
-func convertSubscriptionForTest(t *testing.T, input []byte) (string, int, []byte) {
-	t.Helper()
-	dir := t.TempDir()
-	inputPath := filepath.Join(dir, "input.txt")
-	outputPath := filepath.Join(dir, "provider.yaml")
-	if err := os.WriteFile(inputPath, input, 0600); err != nil {
-		t.Fatal(err)
-	}
-	format, count, err := convertSubscriptionFile(inputPath, outputPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	output, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return format, count, output
-}
-
-func assertProviderOutput(t *testing.T, content []byte, expectedName, expectedType string) {
-	t.Helper()
 	var document struct {
-		Proxies []map[string]any `yaml:"proxies"`
+		Proxies []map[string]any `json:"proxies"`
 	}
-	if err := yaml.Unmarshal(content, &document); err != nil {
+	if err := json.Unmarshal(output, &document); err != nil {
 		t.Fatal(err)
 	}
-	if len(document.Proxies) != 1 {
-		t.Fatalf("proxy count=%d", len(document.Proxies))
+	if len(document.Proxies) != 1 || document.Proxies[0]["name"] != "node" {
+		t.Fatalf("unexpected output: %s", output)
 	}
-	if document.Proxies[0]["name"] != expectedName || document.Proxies[0]["type"] != expectedType {
-		t.Fatalf("unexpected proxy: %#v", document.Proxies[0])
+}
+
+func TestNormalizeBase64YAML(t *testing.T) {
+	raw := []byte("proxies:\n  - {name: encoded, type: trojan}\n")
+	input := []byte(base64.StdEncoding.EncodeToString(raw))
+	_, count, format, err := normalizeProviderDocument(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if format != "base64/yaml" || count != 1 {
+		t.Fatalf("format=%q count=%d", format, count)
+	}
+}
+
+func TestNormalizeRejectsInvalidProviders(t *testing.T) {
+	tests := map[string]string{
+		"empty yaml":     "proxies: []\n",
+		"empty json":     `{"proxies":[]}`,
+		"missing type":   `{"proxies":[{"name":"node"}]}`,
+		"duplicate name": `{"proxies":[{"name":"node","type":"ss"},{"name":"node","type":"trojan"}]}`,
+		"not provider":   "not a subscription",
+	}
+	for name, input := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, _, _, err := normalizeProviderDocument([]byte(input)); err == nil {
+				t.Fatal("expected input to be rejected")
+			}
+		})
+	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nested", "provider.yaml")
+	if err := writeFileAtomic(path, []byte("first"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileAtomic(path, []byte("second"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "second" {
+		t.Fatalf("content=%q", content)
+	}
+}
+
+func TestReadLimitedAndTailFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "log.txt")
+	if err := os.WriteFile(path, []byte("a\nb\nc\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if actual := tailFile(path, 2, 1024); actual != "b\nc" {
+		t.Fatalf("tailFile returned %q", actual)
+	}
+	if _, err := readLimited(path, 3); err == nil {
+		t.Fatal("expected size limit error")
 	}
 }

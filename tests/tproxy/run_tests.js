@@ -395,13 +395,13 @@ function runFor(label, file) {
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
         chk((await api.probeBinaryHelperState()).state, 'installed',
-          'helper probe accepts only the expected executable protocol version');
+          'helper probe accepts a healthy executable protocol');
         shellReply = {
           success: true,
-          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version"]}\nKANO_HELPER_RC=0\n',
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
-        chk((await api.probeBinaryHelperState()).state, 'outdated',
-          'helper probe marks an older helper for update');
+        chk((await api.probeBinaryHelperState()).state, 'installed',
+          'helper probe does not reject a healthy helper by version number');
         shellReply = {
           success: true,
           content: 'KANO_HELPER_STATE=present\n/system/bin/sh: helper: inaccessible\nKANO_HELPER_RC=126\n',
@@ -424,12 +424,13 @@ function runFor(label, file) {
         chk(helperInstallSyntax.status, 0,
           `generated helper-install shell passes sh -n: ${helperInstallSyntax.stderr.trim()}`);
         const helperInstallSource = lastShellCommand;
-        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_MISMATCH');
+        const protocolValidation = helperInstallSource.indexOf('HELPER_PROTOCOL_INVALID');
         const helperCommit = helperInstallSource.indexOf('mv -f "$STAGE" "$TARGET"');
         chk(
-          versionValidation >= 0 && helperCommit > versionValidation,
+          protocolValidation >= 0 && helperCommit > protocolValidation
+            && !helperInstallSource.includes('HELPER_VERSION_MISMATCH'),
           true,
-          'helper version and command protocol are validated before replacing the installed helper',
+          'helper health and command protocol are validated without pinning a version',
         );
         const helperButtonSource = source.slice(
           source.indexOf('binaryHelperBtn.onclick = async () => {'),

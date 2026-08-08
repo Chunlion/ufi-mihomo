@@ -90,11 +90,10 @@
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
   const KANO_HELPER_BUNDLED_DIR = `${CLASH_DIR}/Tools`;
   const KANO_HELPER_CONVERTER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper-converter`;
-  const KANO_HELPER_VERSION = '0.3.2';
   const KANO_HELPER_REQUIRED_COMMANDS = [
     'version', 'snapshot', 'clients', 'network-status', 'policy-read', 'convert-subscription',
   ];
-  // Size and SHA remain updateable, but the executable protocol version is checked before activation.
+  // Version, size, and SHA remain updateable; only executable health and command protocol are required.
   const KANO_HELPER_DOWNLOAD_URL =
     'https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
@@ -1675,8 +1674,6 @@ EOF_KANO_SERVICE
     if (state == 'present') {
       if (!res.success || rc !== 0 || !info || info.ok !== true || !info.version) {
         state = 'invalid';
-      } else if (String(info.version) != KANO_HELPER_VERSION) {
-        state = 'outdated';
       } else {
         const commands = Array.isArray(info.commands) ? info.commands.map(String) : [];
         state = KANO_HELPER_REQUIRED_COMMANDS.every((command) => commands.includes(command))
@@ -1733,7 +1730,6 @@ EOF_KANO_SERVICE
       STAGE=${shellQuote(stagePath)}
       TARGET=${shellQuote(KANO_HELPER_PATH)}
       CONVERTER=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
-      EXPECTED_VERSION_JSON=${shellQuote(`"version":"${KANO_HELPER_VERSION}"`)}
       cleanup_helper_install() {
         rc=$?
         rm -f "$SOURCE" "$STAGE" 2>/dev/null || true
@@ -1763,9 +1759,14 @@ EOF_KANO_SERVICE
         echo "HELPER_VERSION_PROBE_FAILED=$helper_rc"
         exit 1
       }
-      printf '%s\n' "$VERSION_OUT" | grep -Fq "$EXPECTED_VERSION_JSON" || {
+      printf '%s\n' "$VERSION_OUT" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || {
         printf '%s\n' "$VERSION_OUT"
-        echo "HELPER_VERSION_MISMATCH=expected_${KANO_HELPER_VERSION}"
+        echo "HELPER_PROTOCOL_INVALID=ok"
+        exit 1
+      }
+      printf '%s\n' "$VERSION_OUT" | grep -Eq '"version"[[:space:]]*:[[:space:]]*"[^"]+"' || {
+        printf '%s\n' "$VERSION_OUT"
+        echo "HELPER_PROTOCOL_INVALID=version"
         exit 1
       }
       for expected_command in ${KANO_HELPER_REQUIRED_COMMANDS.map((command) => shellQuote(command)).join(' ')}; do
@@ -8669,9 +8670,6 @@ KANO_POLICY_TOOLS_EOF
       if (installed) {
         binaryHelperBtn.textContent = version ? `Go内核 ✓ ${version}` : 'Go内核 ✓';
         binaryHelperBtn.title = 'Go辅助内核运行正常；点击可检查更新或重新安装';
-      } else if (probe.state == 'outdated') {
-        binaryHelperBtn.textContent = version ? `Go内核 ↑ ${version}` : 'Go内核 ↑';
-        binaryHelperBtn.title = `Go辅助内核需要更新到 ${KANO_HELPER_VERSION}；点击更新`;
       } else if (probe.state == 'missing') {
         binaryHelperBtn.textContent = 'Go内核';
         binaryHelperBtn.title = 'Go辅助内核未安装；点击后下载安装';
@@ -8708,7 +8706,7 @@ KANO_POLICY_TOOLS_EOF
         const confirmed = await askConfirm(
           `mm_binary_helper_update_${createRandomString(4)}`,
           healthy ? '检查并重新安装 Go内核？' : '更新或修复 Go内核？',
-          `将优先使用本地运行包，否则从 Gitee 下载，并验证版本 ${KANO_HELPER_VERSION}；不绑定固定大小或 SHA。`,
+          '将优先使用本地运行包，否则从 Gitee 下载，并验证可执行性和命令协议；不绑定固定版本、大小或 SHA。',
           healthy ? '重新安装' : '更新修复',
           '取消',
         );

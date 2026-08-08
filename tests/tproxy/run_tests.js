@@ -128,7 +128,11 @@ function runFor(label, file) {
     return shellReply;
   };
   const isGo = file === FILES.go;
-  const exportNames = [...EXPORTS, ...RUNTIME_EXPORTS];
+  const exportNames = [
+    ...EXPORTS,
+    ...RUNTIME_EXPORTS,
+    ...(isGo ? ['probeBinaryHelperState', 'installBinaryHelperFromDevicePath'] : []),
+  ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
 
@@ -332,7 +336,7 @@ function runFor(label, file) {
     const shellBeforeStoppedApi = lastShellCommand;
     goBehaviorPromise = Promise.resolve(api.callMihomoApi('/version', 'GET', null, {
       apiBase: 'http://127.0.0.1:7788', secret: '', secretSet: false,
-    }, 2, { corePid: '' })).then((apiStopped) => {
+    }, 2, { corePid: '' })).then(async (apiStopped) => {
       chk(apiStopped.errorType, 'core_not_running', 'provider/control API request is not run when core is stopped');
       chk(lastShellCommand, shellBeforeStoppedApi, 'stopped-core API check does not invoke curl');
 
@@ -386,6 +390,58 @@ function runFor(label, file) {
       chk(stoppedProviderOutcome.color, 'yellow',
         'stopped-core provider refresh is a warning instead of a config error');
       if (isGo) {
+        shellReply = {
+          success: true,
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
+        };
+        chk((await api.probeBinaryHelperState()).state, 'installed',
+          'helper probe accepts only the expected executable protocol version');
+        shellReply = {
+          success: true,
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version"]}\nKANO_HELPER_RC=0\n',
+        };
+        chk((await api.probeBinaryHelperState()).state, 'outdated',
+          'helper probe marks an older helper for update');
+        shellReply = {
+          success: true,
+          content: 'KANO_HELPER_STATE=present\n/system/bin/sh: helper: inaccessible\nKANO_HELPER_RC=126\n',
+        };
+        chk((await api.probeBinaryHelperState()).state, 'invalid',
+          'helper probe rejects a file whose version command cannot execute');
+        shellReply = {
+          success: false,
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
+        };
+        chk((await api.probeBinaryHelperState()).state, 'invalid',
+          'helper probe rejects incomplete root-shell transactions');
+        shellReply = { success: true, content: 'HELPER_INSTALLED=1\n' };
+        chk(await api.installBinaryHelperFromDevicePath({ sourcePath: '/data/helper-test' }), true,
+          'helper installer accepts a successfully validated staged executable');
+        const helperInstallSyntax = spawnSync('sh', ['-n'], {
+          input: lastShellCommand,
+          encoding: 'utf8',
+        });
+        chk(helperInstallSyntax.status, 0,
+          `generated helper-install shell passes sh -n: ${helperInstallSyntax.stderr.trim()}`);
+        const helperInstallSource = lastShellCommand;
+        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_MISMATCH');
+        const helperCommit = helperInstallSource.indexOf('mv -f "$STAGE" "$TARGET"');
+        chk(
+          versionValidation >= 0 && helperCommit > versionValidation,
+          true,
+          'helper version and command protocol are validated before replacing the installed helper',
+        );
+        const helperButtonSource = source.slice(
+          source.indexOf('binaryHelperBtn.onclick = async () => {'),
+          source.indexOf('binaryHelperUploadBtn.onclick = async () => {'),
+        );
+        chk(
+          helperButtonSource.includes("if (current.state != 'missing')")
+            && helperButtonSource.includes("healthy ? '重新安装' : '更新修复'")
+            && !helperButtonSource.includes("createToast('Go内核已安装'"),
+          true,
+          'installed helper button keeps the confirmed online reinstall path reachable',
+        );
         const helperBinary = fs.readFileSync(FILES.helper);
         chk(
           helperBinary.length > 1024

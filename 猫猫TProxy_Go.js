@@ -90,7 +90,11 @@
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
   const KANO_HELPER_BUNDLED_DIR = `${CLASH_DIR}/Tools`;
   const KANO_HELPER_CONVERTER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper-converter`;
-  // The installer deliberately does not pin helper version, size, or SHA.
+  const KANO_HELPER_VERSION = '0.3.2';
+  const KANO_HELPER_REQUIRED_COMMANDS = [
+    'version', 'snapshot', 'clients', 'network-status', 'policy-read', 'convert-subscription',
+  ];
+  // Size and SHA remain updateable, but the executable protocol version is checked before activation.
   const KANO_HELPER_DOWNLOAD_URL =
     'https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64';
   const KANO_HELPER_SNAPSHOT_TTL = 500;
@@ -1654,7 +1658,7 @@ EOF_KANO_SERVICE
         echo "KANO_HELPER_STATE=not_executable"
         exit 0
       fi
-      echo "KANO_HELPER_STATE=installed"
+      echo "KANO_HELPER_STATE=present"
       VERSION_OUT="$("$TARGET" version 2>&1)"
       helper_rc=$?
       printf '%s\n' "$VERSION_OUT"
@@ -1666,10 +1670,21 @@ EOF_KANO_SERVICE
     const stateMatches = [...content.matchAll(/(?:^|\n)KANO_HELPER_STATE=([^\r\n]+)/g)];
     const stateMatch = stateMatches.length ? stateMatches[stateMatches.length - 1] : null;
     const rcMatch = content.match(/(?:^|\n)KANO_HELPER_RC=(\d+)/);
-    return {
-      state: stateMatch ? stateMatch[1].trim() : (res.success ? 'unknown' : 'probe_failed'),
-      info, rc: rcMatch ? Number(rcMatch[1]) : null, content, shellSuccess: !!res.success,
-    };
+    const rc = rcMatch ? Number(rcMatch[1]) : null;
+    let state = stateMatch ? stateMatch[1].trim() : (res.success ? 'unknown' : 'probe_failed');
+    if (state == 'present') {
+      if (!res.success || rc !== 0 || !info || info.ok !== true || !info.version) {
+        state = 'invalid';
+      } else if (String(info.version) != KANO_HELPER_VERSION) {
+        state = 'outdated';
+      } else {
+        const commands = Array.isArray(info.commands) ? info.commands.map(String) : [];
+        state = KANO_HELPER_REQUIRED_COMMANDS.every((command) => commands.includes(command))
+          ? 'installed'
+          : 'invalid';
+      }
+    }
+    return { state, info, rc, content, shellSuccess: !!res.success };
   };
 
   const readBinarySnapshot = async ({ fresh = false } = {}) => {
@@ -1718,6 +1733,7 @@ EOF_KANO_SERVICE
       STAGE=${shellQuote(stagePath)}
       TARGET=${shellQuote(KANO_HELPER_PATH)}
       CONVERTER=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
+      EXPECTED_VERSION_JSON=${shellQuote(`"version":"${KANO_HELPER_VERSION}"`)}
       cleanup_helper_install() {
         rc=$?
         rm -f "$SOURCE" "$STAGE" 2>/dev/null || true
@@ -1741,6 +1757,23 @@ EOF_KANO_SERVICE
       mv -f "$SOURCE" "$STAGE"
       chmod 700 "$STAGE" || { echo "HELPER_CHMOD_FAILED"; exit 1; }
       [ -x "$STAGE" ] || { echo "HELPER_NOT_EXECUTABLE"; exit 1; }
+      VERSION_OUT="$("$STAGE" version 2>&1)" || {
+        helper_rc=$?
+        printf '%s\n' "$VERSION_OUT"
+        echo "HELPER_VERSION_PROBE_FAILED=$helper_rc"
+        exit 1
+      }
+      printf '%s\n' "$VERSION_OUT" | grep -Fq "$EXPECTED_VERSION_JSON" || {
+        printf '%s\n' "$VERSION_OUT"
+        echo "HELPER_VERSION_MISMATCH=expected_${KANO_HELPER_VERSION}"
+        exit 1
+      }
+      for expected_command in ${KANO_HELPER_REQUIRED_COMMANDS.map((command) => shellQuote(command)).join(' ')}; do
+        printf '%s\n' "$VERSION_OUT" | grep -Fq "\"$expected_command\"" || {
+          echo "HELPER_COMMAND_MISSING=$expected_command"
+          exit 1
+        }
+      done
       mv -f "$STAGE" "$TARGET"
       chmod 700 "$TARGET" || { echo "HELPER_TARGET_CHMOD_FAILED"; exit 1; }
       rm -f "$TARGET.verified" 2>/dev/null || true
@@ -8635,75 +8668,58 @@ KANO_POLICY_TOOLS_EOF
       binaryHelperBtn.style.background = installed ? 'var(--dark-btn-color-active)' : '';
       if (installed) {
         binaryHelperBtn.textContent = version ? `Go内核 ✓ ${version}` : 'Go内核 ✓';
-        binaryHelperBtn.title = probe.rc === 0
-          ? 'Go辅助内核已安装'
-          : `Go辅助内核文件已安装；当前 version 探测 rc=${probe.rc === null || probe.rc === undefined ? '?' : probe.rc}，不影响安装状态`;
+        binaryHelperBtn.title = 'Go辅助内核运行正常；点击可检查更新或重新安装';
+      } else if (probe.state == 'outdated') {
+        binaryHelperBtn.textContent = version ? `Go内核 ↑ ${version}` : 'Go内核 ↑';
+        binaryHelperBtn.title = `Go辅助内核需要更新到 ${KANO_HELPER_VERSION}；点击更新`;
       } else if (probe.state == 'missing') {
         binaryHelperBtn.textContent = 'Go内核';
         binaryHelperBtn.title = 'Go辅助内核未安装；点击后下载安装';
+      } else if (probe.state == 'invalid') {
+        binaryHelperBtn.textContent = 'Go内核 ⚠';
+        binaryHelperBtn.title = 'Go辅助内核无法正常执行或协议不完整；点击修复';
       } else {
         binaryHelperBtn.textContent = 'Go内核 ⚠';
         binaryHelperBtn.title = 'Go辅助内核文件存在但无法设置执行权限；点击后重新安装';
       }
-      return installed;
-    };
-    const markBinaryHelperInstalled = () => {
-      const probe = { state: 'installed', info: null, rc: null, shellSuccess: true };
-      applyBinaryHelperButtonState(probe);
-      return { ok: true };
     };
     const refreshBinaryHelperButton = async () => {
       const probe = await probeBinaryHelperState();
-      return applyBinaryHelperButtonState(probe) ? (probe.info || { ok: true }) : null;
+      applyBinaryHelperButtonState(probe);
+      return probe;
     };
     helperUploadEl.onchange = async (event) => {
-      let installedOk = false;
       try {
         const file = event && event.target && event.target.files && event.target.files[0];
         if (!file) return;
         setButtonBusy(binaryHelperUploadBtn, true, '安装中...');
-        installedOk = await installBinaryHelperFromFile(file);
+        await installBinaryHelperFromFile(file);
       } finally {
         helperUploadEl.value = '';
         setButtonBusy(binaryHelperUploadBtn, false);
-        if (installedOk) {
-          markBinaryHelperInstalled();
-          // Do not schedule a second health probe that can visually undo a successful installation.
-        } else {
-          await refreshBinaryHelperButton();
-        }
+        await refreshBinaryHelperButton();
       }
     };
     binaryHelperBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const current = await refreshBinaryHelperButton();
-      if (current) {
-        createToast('Go内核已安装', 'green', 4000);
-        return;
-      }
-      if (current) {
+      if (current.state != 'missing') {
+        const healthy = current.state == 'installed';
         const confirmed = await askConfirm(
           `mm_binary_helper_update_${createRandomString(4)}`,
-          '从 Gitee 更新 Go内核？',
-          '将下载并安装 Go辅助内核；不绑定固定版本、大小或 SHA。',
-          '下载更新',
+          healthy ? '检查并重新安装 Go内核？' : '更新或修复 Go内核？',
+          `将优先使用本地运行包，否则从 Gitee 下载，并验证版本 ${KANO_HELPER_VERSION}；不绑定固定大小或 SHA。`,
+          healthy ? '重新安装' : '更新修复',
           '取消',
         );
         if (!confirmed) return;
       }
       setButtonBusy(binaryHelperBtn, true, '下载中...');
-      let installedOk = false;
       try {
-        installedOk = await installBinaryHelperPreferred();
+        await installBinaryHelperPreferred();
       } finally {
         setButtonBusy(binaryHelperBtn, false);
-        if (installedOk) {
-          // File was copied to the target and made executable; that is the install condition.
-          markBinaryHelperInstalled();
-          // Do not schedule a second health probe that can visually undo a successful installation.
-        } else {
-          await refreshBinaryHelperButton();
-        }
+        await refreshBinaryHelperButton();
       }
     };
     binaryHelperUploadBtn.onclick = async () => {

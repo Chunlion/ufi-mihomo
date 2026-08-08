@@ -1819,7 +1819,7 @@ EOF_KANO_SERVICE
       return false;
     }
     invalidateBinarySnapshot();
-    createToast(successMessage, 'green', 5000);
+    if (!quiet) createToast(successMessage, 'green', 5000);
     return true;
   };
 
@@ -6697,6 +6697,11 @@ EOF_KANO_SERVICE
       }
       if (policyReadyAfterInstall && !(await reapplyPolicyRulesSilent({ ensureScript: false }))) {
         createToast('核心已启动，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+      }
+      const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
+      await refreshBinaryHelperButton();
+      if (!helperReadyAfterInstall) {
+        createToast('基础代理已安装；Go辅助内核自动安装失败，可稍后点击“Go内核”重试。', 'yellow', 9000);
       }
 
       disabled_btn_enabled = false;

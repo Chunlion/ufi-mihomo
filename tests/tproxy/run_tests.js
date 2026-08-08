@@ -464,6 +464,17 @@ function runFor(label, file) {
           true,
           'helper update is Gitee-first while initial installation remains bundled-first',
         );
+        const mainInstallSource = source.slice(
+          source.indexOf('btn_enabled.onclick = async () => {'),
+          source.indexOf('btn_disabled.onclick = async () => {'),
+        );
+        const helperAutoInstall = mainInstallSource.indexOf('installBinaryHelperPreferred({ quiet: true })');
+        const helperButtonRefresh = mainInstallSource.indexOf('await refreshBinaryHelperButton()');
+        chk(
+          helperAutoInstall >= 0 && helperButtonRefresh > helperAutoInstall,
+          true,
+          'main installation activates the bundled helper and refreshes its button state',
+        );
         const helperBinary = fs.readFileSync(FILES.helper);
         chk(
           helperBinary.length > 1024

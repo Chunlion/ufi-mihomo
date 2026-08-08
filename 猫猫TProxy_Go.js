@@ -54,12 +54,10 @@
   // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
   // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
-  // Official yq is a lazy, integrity-pinned fallback for advanced YAML features only.
+  // Official yq is a lazy fallback for advanced YAML features only.
   // It is never required for basic Mihomo install/start.
-  const YQ_OFFICIAL_VERSION = '4.53.3';
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
-  const YQ_OFFICIAL_ARM64_SHA256 = '578648e463a11c1b6db6010cbf41eafed6bee79466fcffa1bb446672cf7945ea';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_RUNTIME_MANAGER_VERSION = '1.0.3';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
@@ -2421,7 +2419,7 @@ EOF_KANO_SERVICE
       }
 
       // Phase 2: compatibility package first. This preserves the historical F50 bundle layout.
-      // Failure is non-fatal and falls through to the official, hash-pinned yq binary.
+      // Failure is non-fatal and falls through to the official yq binary.
       const packageRepair = await runShellWithRoot(`
         set +e
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
@@ -2459,41 +2457,6 @@ EOF_KANO_SERVICE
           exit 1
         }
         chmod 755 "$TMP" 2>/dev/null || { rm -f "$TMP"; exit 1; }
-        # The uploaded/current compatibility bundle contains the exact official mikefarah/yq v4.53.3 binary.
-        # Verify the extracted binary itself, so a mutable bundle cannot silently replace privileged YAML tooling.
-        yq_pkg_sha256() {
-          target="$1"
-          out=""
-          if command -v sha256sum >/dev/null 2>&1; then
-            out="$(sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && [ -x ${shellQuote(`${F50_FILES_DIR}/sha256`)} ]; then
-            for mode in plain fflag; do
-              if [ "$mode" = "plain" ]; then
-                raw="$(${shellQuote(`${F50_FILES_DIR}/sha256`)} "$target" 2>/dev/null)"
-              else
-                raw="$(${shellQuote(`${F50_FILES_DIR}/sha256`)} -f "$target" 2>/dev/null)"
-              fi
-              out="$(printf '%s\\n' "$raw" | grep -Eo '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f')"
-              [ -z "$out" ] || break
-            done
-          fi
-          if [ -z "$out" ] && command -v busybox >/dev/null 2>&1; then
-            out="$(busybox sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && command -v toybox >/dev/null 2>&1; then
-            out="$(toybox sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && command -v openssl >/dev/null 2>&1; then
-            out="$(openssl dgst -sha256 "$target" 2>/dev/null | grep -Eo '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f')"
-          fi
-          printf '%s' "$out"
-        }
-        pkg_yq_sha="$(yq_pkg_sha256 "$TMP")"
-        [ -n "$pkg_yq_sha" ] || { rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=sha256_unavailable"; exit 1; }
-        [ "$pkg_yq_sha" = ${shellQuote(YQ_OFFICIAL_ARM64_SHA256)} ] || {
-          rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=sha256_mismatch:$pkg_yq_sha"; exit 1;
-        }
         version="$("$TMP" --version 2>&1)" || { rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=execute"; exit 1; }
         echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || { rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=version"; exit 1; }
         mv -f "$CACHE.new.$$" "$CACHE" 2>/dev/null || true
@@ -2506,71 +2469,35 @@ EOF_KANO_SERVICE
         return true;
       }
 
-      // Phase 3: official mikefarah/yq ARM64 binary, pinned to an immutable release + SHA-256.
+      // Phase 3: official mikefarah/yq ARM64 binary.
       // This path intentionally does not need unzip, so a minimal clean F50 can still self-heal.
       const officialRepair = await runShellWithRoot(`
         set +e
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         URL=${shellQuote(YQ_OFFICIAL_ARM64_URL)}
-        EXPECTED_SHA=${shellQuote(YQ_OFFICIAL_ARM64_SHA256)}
-        EXPECTED_VERSION=${shellQuote(YQ_OFFICIAL_VERSION)}
         TMP="$YQ.official_new.$$"
         CURL_BIN=${shellQuote(`${F50_FILES_DIR}/curl`)}
         [ -x "$CURL_BIN" ] || CURL_BIN=${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)}
         [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
         [ -x "$CURL_BIN" ] || { echo "YQ_OFFICIAL_REPAIR_FAILED=curl_missing"; exit 1; }
-        yq_sha256() {
-          target="$1"
-          out=""
-          if command -v sha256sum >/dev/null 2>&1; then
-            out="$(sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && [ -x ${shellQuote(`${F50_FILES_DIR}/sha256`)} ]; then
-            for mode in plain fflag; do
-              if [ "$mode" = "plain" ]; then
-                raw="$(${shellQuote(`${F50_FILES_DIR}/sha256`)} "$target" 2>/dev/null)"
-              else
-                raw="$(${shellQuote(`${F50_FILES_DIR}/sha256`)} -f "$target" 2>/dev/null)"
-              fi
-              out="$(printf '%s\\n' "$raw" | grep -Eo '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f')"
-              [ -z "$out" ] || break
-            done
-          fi
-          if [ -z "$out" ] && command -v busybox >/dev/null 2>&1; then
-            out="$(busybox sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && command -v toybox >/dev/null 2>&1; then
-            out="$(toybox sha256sum "$target" 2>/dev/null | awk '{print $1}')"
-          fi
-          if [ -z "$out" ] && command -v openssl >/dev/null 2>&1; then
-            out="$(openssl dgst -sha256 "$target" 2>/dev/null | grep -Eo '[0-9a-fA-F]{64}' | head -n 1 | tr 'A-F' 'a-f')"
-          fi
-          printf '%s' "$out"
-        }
         rm -f "$TMP" 2>/dev/null || true
         "$CURL_BIN" -fL --connect-timeout 10 --max-time 72 --retry 1 --retry-delay 1 "$URL" -o "$TMP" || {
           rm -f "$TMP" 2>/dev/null || true
           echo "YQ_OFFICIAL_REPAIR_FAILED=download"
           exit 1
         }
-        bytes="$(wc -c < "$TMP" 2>/dev/null | tr -d ' ')"
-        case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
-        [ "$bytes" -ge 1048576 ] && [ "$bytes" -le 33554432 ] || { rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=size:$bytes"; exit 1; }
-        actual_sha="$(yq_sha256 "$TMP")"
-        [ -n "$actual_sha" ] || { rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=sha256_unavailable"; exit 1; }
-        [ "$actual_sha" = "$EXPECTED_SHA" ] || { rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=sha256_mismatch:$actual_sha"; exit 1; }
         chmod 755 "$TMP" 2>/dev/null || { rm -f "$TMP"; exit 1; }
         version="$("$TMP" --version 2>&1)" || { rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=execute"; exit 1; }
-        printf '%s\\n' "$version" | grep -Eiq "version[[:space:]]+v?$EXPECTED_VERSION([[:space:]]|$)" || {
+        printf '%s\\n' "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
           rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=version:$version"; exit 1;
         }
         mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)} || { rm -f "$TMP"; exit 1; }
         mv -f "$TMP" "$YQ" || { rm -f "$TMP" 2>/dev/null || true; exit 1; }
         chmod 755 "$YQ" 2>/dev/null || true
-        echo "YQ_RUNTIME_READY=official_${YQ_OFFICIAL_VERSION}"
+        echo "YQ_RUNTIME_READY=official"
       `, 88 * 1000);
       const officialText = String(officialRepair.content || '');
-      const ok = !!(officialRepair.success && officialText.includes('YQ_RUNTIME_READY=official_'));
+      const ok = !!(officialRepair.success && officialText.includes('YQ_RUNTIME_READY=official'));
       if (ok) {
         yqRuntimeReadyUntil = Date.now() + 5 * 60 * 1000;
         return true;

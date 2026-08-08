@@ -5073,6 +5073,7 @@ KANO_WRITE_CHECK_EOF
     const id = `kano_controller_settings_${createRandomString(4)}`;
     const controllerId = `${id}_controller`;
     const secretId = `${id}_secret`;
+    const secretToggleId = `${id}_secret_toggle`;
     const statusId = `${id}_status`;
     const checkId = `${id}_check`;
     const saveId = `${id}_save`;
@@ -5095,10 +5096,13 @@ KANO_WRITE_CHECK_EOF
             <span style="display:block;margin-bottom:4px;">\u63a7\u5236\u5730\u5740\uff08external-controller\uff09</span>
             <input id="${controllerId}" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
           </label>
-          <label style="display:block;margin-bottom:8px;">
+          <div style="display:block;margin-bottom:8px;">
             <span style="display:block;margin-bottom:4px;">\u8bbf\u95ee\u5bc6\u94a5\uff08secret\uff09</span>
-            <input id="${secretId}" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
-          </label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="${secretId}" type="password" autocomplete="off" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
+              <button id="${secretToggleId}" type="button" aria-controls="${secretId}" aria-pressed="false" title="\u663e\u793a\u5bc6\u7801" style="flex:0 0 auto;font-size:.64rem;white-space:nowrap;">\u663e\u793a</button>
+            </div>
+          </div>
         </div>
         <div style="margin-top:12px;text-align:right;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
           <button style="font-size:.64rem" id="${checkId}">\u6d4b\u8bd5\u8fde\u63a5</button>
@@ -5109,17 +5113,25 @@ KANO_WRITE_CHECK_EOF
     );
     const controllerInput = el.querySelector(`#${controllerId}`);
     const secretInput = el.querySelector(`#${secretId}`);
+    const secretToggleBtn = el.querySelector(`#${secretToggleId}`);
     const statusEl = el.querySelector(`#${statusId}`);
     const checkBtn = el.querySelector(`#${checkId}`);
     const saveBtn = el.querySelector(`#${saveId}`);
     const closeBtn = el.querySelector(`#${closeId}`);
-    if (!controllerInput || !secretInput || !statusEl || !checkBtn || !saveBtn || !closeBtn) {
+    if (!controllerInput || !secretInput || !secretToggleBtn || !statusEl || !checkBtn || !saveBtn || !closeBtn) {
       close();
       return;
     }
     controllerInput.value = info.externalController;
     secretInput.value = info.secret;
     closeBtn.onclick = close;
+    secretToggleBtn.onclick = () => {
+      const show = secretInput.type === 'password';
+      secretInput.type = show ? 'text' : 'password';
+      secretToggleBtn.textContent = show ? '\u9690\u85cf' : '\u663e\u793a';
+      secretToggleBtn.title = show ? '\u9690\u85cf\u5bc6\u7801' : '\u663e\u793a\u5bc6\u7801';
+      secretToggleBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+    };
 
     const setStatus = (message, color = '') => {
       statusEl.innerHTML = textToHtml(message);

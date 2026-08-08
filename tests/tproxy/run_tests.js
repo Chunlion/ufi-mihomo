@@ -140,6 +140,19 @@ function runFor(label, file) {
   chk(missing, [], `全部待测函数均已导出 (${exportNames.length} 个)`);
   if (missing.length) return;
 
+  const controllerSettingsSource = source.slice(
+    source.indexOf('const showControllerSettingsDialog = async'),
+    source.indexOf('const showStatusDiagnostic = async'),
+  );
+  chk(
+    controllerSettingsSource.includes('const secretToggleId =')
+      && controllerSettingsSource.includes('type="password"')
+      && controllerSettingsSource.includes("secretInput.type = show ? 'text' : 'password'")
+      && controllerSettingsSource.includes("secretToggleBtn.setAttribute('aria-pressed'"),
+    true,
+    'Web panel secret input has a show/hide toggle',
+  );
+
   chk(
     source.includes("boot_on.textContent = '开机自启';")
       && !source.includes('开机自启（已托管）')

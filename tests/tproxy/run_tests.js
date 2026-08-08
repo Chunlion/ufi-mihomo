@@ -400,8 +400,8 @@ function runFor(label, file) {
           success: true,
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
-        chk((await api.probeBinaryHelperState()).state, 'installed',
-          'helper probe does not reject a healthy helper by version number');
+        chk((await api.probeBinaryHelperState()).state, 'outdated',
+          'helper probe marks a healthy older helper as outdated');
         shellReply = {
           success: true,
           content: 'KANO_HELPER_STATE=present\n/system/bin/sh: helper: inaccessible\nKANO_HELPER_RC=126\n',
@@ -424,24 +424,39 @@ function runFor(label, file) {
         chk(helperInstallSyntax.status, 0,
           `generated helper-install shell passes sh -n: ${helperInstallSyntax.stderr.trim()}`);
         const helperInstallSource = lastShellCommand;
-        const protocolValidation = helperInstallSource.indexOf('HELPER_PROTOCOL_INVALID');
+        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_MISMATCH');
+        const protocolValidation = helperInstallSource.indexOf('HELPER_COMMAND_MISSING');
         const helperCommit = helperInstallSource.indexOf('mv -f "$STAGE" "$TARGET"');
         chk(
-          protocolValidation >= 0 && helperCommit > protocolValidation
-            && !helperInstallSource.includes('HELPER_VERSION_MISMATCH'),
+          versionValidation >= 0 && protocolValidation > versionValidation
+            && helperCommit > protocolValidation,
           true,
-          'helper health and command protocol are validated without pinning a version',
+          'helper version and command protocol are checked before activation',
         );
         const helperButtonSource = source.slice(
           source.indexOf('binaryHelperBtn.onclick = async () => {'),
           source.indexOf('binaryHelperUploadBtn.onclick = async () => {'),
         );
         chk(
-          helperButtonSource.includes("if (current.state != 'missing')")
+          helperButtonSource.includes("const isUpdate = current.state != 'missing'")
             && helperButtonSource.includes("healthy ? '重新安装' : '更新修复'")
+            && helperButtonSource.includes('preferGitee: isUpdate')
             && !helperButtonSource.includes("createToast('Go内核已安装'"),
           true,
-          'installed helper button keeps the confirmed online reinstall path reachable',
+          'helper update uses the confirmed Gitee-first reinstall path',
+        );
+        const helperPreferredSource = source.slice(
+          source.indexOf('const installBinaryHelperPreferred = async'),
+          source.indexOf('let autoEnsureHelperDone = false'),
+        );
+        const firstGitee = helperPreferredSource.indexOf('installBinaryHelperFromGitee');
+        const firstBundled = helperPreferredSource.indexOf('installBinaryHelperFromBundled');
+        const fallbackGitee = helperPreferredSource.lastIndexOf('installBinaryHelperFromGitee');
+        chk(
+          helperPreferredSource.includes('if (preferGitee)')
+            && firstGitee >= 0 && firstGitee < firstBundled && firstBundled < fallbackGitee,
+          true,
+          'helper update is Gitee-first while initial installation remains bundled-first',
         );
         const helperBinary = fs.readFileSync(FILES.helper);
         chk(

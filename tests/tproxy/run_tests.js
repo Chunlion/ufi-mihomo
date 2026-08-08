@@ -398,6 +398,12 @@ function runFor(label, file) {
           'helper probe accepts a healthy executable protocol');
         shellReply = {
           success: true,
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.3","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
+        };
+        chk((await api.probeBinaryHelperState()).state, 'installed',
+          'helper probe accepts a healthy newer helper version');
+        shellReply = {
+          success: true,
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.1","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
         chk((await api.probeBinaryHelperState()).state, 'outdated',
@@ -424,14 +430,14 @@ function runFor(label, file) {
         chk(helperInstallSyntax.status, 0,
           `generated helper-install shell passes sh -n: ${helperInstallSyntax.stderr.trim()}`);
         const helperInstallSource = lastShellCommand;
-        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_MISMATCH');
+        const versionValidation = helperInstallSource.indexOf('HELPER_VERSION_TOO_OLD');
         const protocolValidation = helperInstallSource.indexOf('HELPER_COMMAND_MISSING');
         const helperCommit = helperInstallSource.indexOf('mv -f "$STAGE" "$TARGET"');
         chk(
           versionValidation >= 0 && protocolValidation > versionValidation
             && helperCommit > protocolValidation,
           true,
-          'helper version and command protocol are checked before activation',
+          'helper minimum version and command protocol are checked before activation',
         );
         const helperButtonSource = source.slice(
           source.indexOf('binaryHelperBtn.onclick = async () => {'),

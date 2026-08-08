@@ -1,5 +1,5 @@
 'use strict';
-// 把 猫猫TProxy.js / 猫猫TProxy_Go.js 当成真实插件加载起来（DOM + 宿主 API 全部打桩），
+// 把统一版 猫猫TProxy_Go.js 当成真实插件加载起来（DOM + 宿主 API 全部打桩），
 // 然后针对本轮修复的每个函数做行为断言。宿主 shell 调用被拦截并按用例返回伪造结果。
 const fs = require('fs');
 const path = require('path');
@@ -8,8 +8,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
-  shell: path.join(ROOT, '猫猫TProxy.js'),
-  go: path.join(ROOT, '猫猫TProxy_Go.js'),
+  plugin: path.join(ROOT, '猫猫TProxy_Go.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
 };
 
@@ -127,11 +126,11 @@ function runFor(label, file) {
     lastShellCommand = String(command || '');
     return shellReply;
   };
-  const isGo = file === FILES.go;
+  const hasBinaryHelper = source.includes('const KANO_HELPER_PATH =');
   const exportNames = [
     ...EXPORTS,
     ...RUNTIME_EXPORTS,
-    ...(isGo ? ['probeBinaryHelperState', 'installBinaryHelperFromDevicePath'] : []),
+    'probeBinaryHelperState', 'installBinaryHelperFromDevicePath',
   ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
@@ -189,7 +188,18 @@ function runFor(label, file) {
     true,
     'API health check reuses the already detected core PID',
   );
-  if (isGo) {
+  chk(hasBinaryHelper, true, 'unified plugin includes the optional Go helper capability');
+  if (hasBinaryHelper) {
+    const controllerReaderSource = source.slice(
+      source.indexOf('const readControllerInfo = async () => {'),
+      source.indexOf('const buildControllerInfo = async ('),
+    );
+    chk(
+      controllerReaderSource.includes('const snapshot = await readBinarySnapshot()')
+        && controllerReaderSource.includes('const res = await runShellWithRoot('),
+      true,
+      'controller settings use Go first and retain their Shell fallback',
+    );
     const snapshotReaderSource = source.slice(
       source.indexOf('const readBinarySnapshot = async ('),
       source.indexOf('const invalidateBinarySnapshot = () => {'),
@@ -207,9 +217,22 @@ function runFor(label, file) {
     );
     chk(
       clientReaderSource.includes("runBinaryHelperJson('clients')")
+        && clientReaderSource.includes('runShellWithRoot(')
         && !clientReaderSource.includes('readBinarySnapshot'),
       true,
-      'client discovery runs only when the client list is requested',
+      'client discovery uses Go first and retains its Shell fallback',
+    );
+    const networkReaderSource = source.slice(
+      source.indexOf('const collectNetworkStatus = async () => {'),
+      source.indexOf('const networkRescue = async ('),
+    );
+    chk(
+      networkReaderSource.includes("runBinaryHelperJson('network-status'")
+        && networkReaderSource.includes('runShellWithRoot(')
+        && policyReaderSource.includes("runBinaryHelperJson('policy-read'")
+        && policyReaderSource.includes('runShellWithRoot('),
+      true,
+      'network and policy reads use Go first and retain their Shell fallbacks',
     );
   }
 
@@ -258,11 +281,8 @@ function runFor(label, file) {
     'service preflight runs before the first service start',
   );
   chk(
-    isGo
-      ? source.includes('const archive = await downloadCoreArchive({ allowCached: false })')
-        && source.includes('command -v unzip >/dev/null 2>&1')
-      : source.includes('const res0 = await runShellWithRoot')
-        && source.includes('command -v unzip >/dev/null 2>&1'),
+    source.includes('const archive = await downloadCoreArchive({ allowCached: false })')
+      && source.includes('command -v unzip >/dev/null 2>&1'),
     true,
     'required download and archive tools are checked at their use sites',
   );
@@ -274,7 +294,7 @@ function runFor(label, file) {
   );
 
   {
-    console.log(`--- ${isGo ? 'Go' : 'Shell'} runtime preflight / API / boot behavior ---`);
+    console.log('--- unified runtime preflight / API / boot behavior ---');
     const runtimeManager = api.buildRuntimeManagerScript();
     const runtimeSyntax = spawnSync('sh', ['-n'], {
       input: runtimeManager,
@@ -402,7 +422,7 @@ function runFor(label, file) {
         'subscription result title separates config health from provider runtime state');
       chk(stoppedProviderOutcome.color, 'yellow',
         'stopped-core provider refresh is a warning instead of a config error');
-      if (isGo) {
+      if (hasBinaryHelper) {
         shellReply = {
           success: true,
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
@@ -463,6 +483,17 @@ function runFor(label, file) {
             && !helperButtonSource.includes("createToast('Go内核已安装'"),
           true,
           'helper update uses the confirmed Gitee-first reinstall path',
+        );
+        const helperStateSource = source.slice(
+          source.indexOf('const applyBinaryHelperButtonState ='),
+          source.indexOf('const refreshBinaryHelperButton ='),
+        );
+        chk(
+          helperStateSource.includes("binaryHelperBtn.textContent = 'Shell模式'")
+            && helperStateSource.includes("binaryHelperBtn.textContent = 'Shell模式 ⚠'")
+            && helperStateSource.includes('当前使用 Shell 兼容路径'),
+          true,
+          'missing or invalid helper is exposed as automatic Shell compatibility mode',
         );
         const helperPreferredSource = source.slice(
           source.indexOf('const installBinaryHelperPreferred = async'),
@@ -625,8 +656,9 @@ function runFor(label, file) {
 }
 
 (async () => {
-  await runFor('Shell 版', FILES.shell);
-  await runFor('Go 版', FILES.go);
+  chk(fs.existsSync(FILES.plugin), true, 'repository contains the unified plugin file');
+  chk(fs.existsSync(path.join(ROOT, '猫猫TProxy.js')), false, 'parallel Shell plugin file has been removed');
+  await runFor('统一版', FILES.plugin);
   console.log(`\n================ 结果: ${pass} 通过 / ${fail} 失败 ================`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e.message); process.exit(2); });

@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy_Go v7.3.7 FINAL - UFI 4.1.1 + validated multi-UA local subscription fallback
+// 猫猫TProxy v7.4.0 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -6702,7 +6702,7 @@ EOF_KANO_SERVICE
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
       scheduleBinaryHelperButtonRefresh();
       if (!helperReadyAfterInstall) {
-        createToast('基础代理已安装；Go辅助内核自动安装失败，可稍后点击“Go内核”重试。', 'yellow', 9000);
+        createToast('基础代理已安装；Go辅助内核自动安装失败，当前使用 Shell 兼容模式，可稍后点击“Shell模式”重试。', 'yellow', 9000);
       }
 
       disabled_btn_enabled = false;
@@ -8645,14 +8645,14 @@ KANO_POLICY_TOOLS_EOF
         binaryHelperBtn.textContent = version ? `Go内核 ✓ ${version}` : 'Go内核 ✓';
         binaryHelperBtn.title = 'Go辅助内核运行正常；点击检查更高版本';
       } else if (probe.state == 'missing') {
-        binaryHelperBtn.textContent = 'Go内核';
-        binaryHelperBtn.title = 'Go辅助内核未安装；点击后下载安装';
+        binaryHelperBtn.textContent = 'Shell模式';
+        binaryHelperBtn.title = 'Go辅助内核未安装，当前使用 Shell 兼容路径；点击后下载安装';
       } else if (probe.state == 'invalid') {
-        binaryHelperBtn.textContent = 'Go内核 ⚠';
-        binaryHelperBtn.title = 'Go辅助内核无法正常执行或协议不完整；点击修复';
+        binaryHelperBtn.textContent = 'Shell模式 ⚠';
+        binaryHelperBtn.title = 'Go辅助内核无法正常执行或协议不完整，当前使用 Shell 兼容路径；点击修复';
       } else {
-        binaryHelperBtn.textContent = 'Go内核 ⚠';
-        binaryHelperBtn.title = 'Go辅助内核文件存在但无法设置执行权限；点击后重新安装';
+        binaryHelperBtn.textContent = 'Shell模式 ⚠';
+        binaryHelperBtn.title = 'Go辅助内核不可用，当前使用 Shell 兼容路径；点击后重新安装';
       }
     };
     const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {

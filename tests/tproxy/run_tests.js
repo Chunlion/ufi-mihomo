@@ -131,6 +131,7 @@ function runFor(label, file) {
     ...EXPORTS,
     ...RUNTIME_EXPORTS,
     'probeBinaryHelperState', 'installBinaryHelperFromDevicePath',
+    'convertSubscriptionsLocally',
   ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
@@ -258,6 +259,11 @@ function runFor(label, file) {
       && source.includes('INSTALL_PERMISSION_FAILED: Clash.Service cannot execute'),
     true,
     'installed core and service wrapper are checked after chmod',
+  );
+  chk(
+    source.includes('${shellQuote(KANO_HELPER_CONVERTER_PATH)}; do'),
+    true,
+    'package installation restores execute permission on the bundled subscription converter',
   );
   const bootLines = api.addBootLinesCmd();
   const removeBootLines = api.removeBootLinesCmd();
@@ -507,6 +513,33 @@ function runFor(label, file) {
             && firstGitee >= 0 && firstGitee < firstBundled && firstBundled < fallbackGitee,
           true,
           'helper update is Gitee-first while initial installation remains bundled-first',
+        );
+        const localConverterSource = source.slice(
+          source.indexOf('const ensureLocalSubscriptionConverter = async'),
+          source.indexOf('const readCurrentModeStatus = async'),
+        );
+        chk(
+          localConverterSource.includes('chmod 700 "$CONVERTER" || exit 1')
+            && localConverterSource.includes('if http_code="$("$CURL_BIN"')
+            && localConverterSource.includes('2>"$err_tmp")"; then')
+            && localConverterSource.includes('if CONVERT_JSON="$("$HELPER"')
+            && localConverterSource.includes('2>"$conv_err")"; then'),
+          true,
+          'local conversion repairs sidecar permissions and handles expected curl/converter failures under set -e',
+        );
+        shellReply = {
+          success: true,
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
+        };
+        await api.convertSubscriptionsLocally([{ url: 'https://example.test/subscription' }]);
+        const localConversionSyntax = spawnSync('sh', ['-n'], {
+          input: lastShellCommand,
+          encoding: 'utf8',
+        });
+        chk(
+          localConversionSyntax.status,
+          0,
+          `generated local-conversion shell passes sh -n: ${localConversionSyntax.stderr.trim()}`,
         );
         const mainInstallSource = source.slice(
           source.indexOf('btn_enabled.onclick = async () => {'),

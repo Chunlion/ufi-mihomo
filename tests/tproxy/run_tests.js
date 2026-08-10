@@ -59,7 +59,7 @@ function buildContext(shellHandler) {
     clearTimeout() {}, setInterval: () => 0, clearInterval() {},
     fetch: async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '' }),
     FormData: class { append() {} },
-    Date, Math, JSON, String, Number, Boolean, Array, Object, Promise, RegExp, Error, Set, Map,
+    Date, Math, JSON, String, Number, Boolean, Array, Object, Promise, RegExp, Error, Set, Map, URL,
     encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN,
     // 宿主 API
     runShellWithRoot: async (cmd, timeout) => shellHandler(cmd, timeout),
@@ -104,9 +104,10 @@ function loadPlugin(file, shellHandler, exportNames, { lexicalHostOnly = false }
 // ---- 用例 ---------------------------------------------------------------
 const EXPORTS = [
   'removeLegacyManagedRulePrefix', 'applyManagedRules', 'validateManagedConfigObject',
+  'validateConfigObjectStructure',
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
   'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
-  'ensureInstallToolbox',
+  'ensureInstallToolbox', 'sanitizeSubscriptionSecrets',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
@@ -486,7 +487,7 @@ function runFor(label, file) {
           helperButtonSource.includes("const isUpdate = current.state != 'missing'")
             && helperButtonSource.includes("healthy ? '检查更新' : '更新修复'")
             && helperButtonSource.includes('preferGitee: isUpdate')
-            && !helperButtonSource.includes("createToast('Go内核已安装'"),
+            && !helperButtonSource.includes("createToast('辅助内核已安装'"),
           true,
           'helper update uses the confirmed Gitee-first reinstall path',
         );
@@ -495,9 +496,9 @@ function runFor(label, file) {
           source.indexOf('const refreshBinaryHelperButton ='),
         );
         chk(
-          helperStateSource.includes("binaryHelperBtn.textContent = 'Shell模式'")
-            && helperStateSource.includes("binaryHelperBtn.textContent = 'Shell模式 ⚠'")
-            && helperStateSource.includes('当前使用 Shell 兼容路径'),
+          helperStateSource.includes("binaryHelperBtn.textContent = 'Shell兼容'")
+            && helperStateSource.includes("binaryHelperBtn.textContent = 'Shell兼容 ⚠'")
+            && helperStateSource.includes('使用 Shell 兼容模式'),
           true,
           'missing or invalid helper is exposed as automatic Shell compatibility mode',
         );
@@ -621,6 +622,51 @@ function runFor(label, file) {
       { expectedProviderCount: 0, requireProviderUrls: false });
   } catch (e) { threw = e.message; }
   chk(/rules 为空/.test(threw), true, '空 rules 被拒绝: ' + (threw || '(未抛出)'));
+
+  console.log('--- config.yaml 结构检查 ---');
+  chk(api.validateConfigObjectStructure({
+    proxies: [],
+    'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],
+    rules: ['MATCH,Proxy'],
+    'proxy-providers': {},
+    dns: { enable: true },
+  }), true, '合法配置结构通过');
+  threw = '';
+  try {
+    api.validateConfigObjectStructure({ 'proxy-groups': {}, rules: [] });
+  } catch (e) { threw = e.message; }
+  chk(/proxy-groups 必须是数组/.test(threw), true, '拒绝错误的 proxy-groups 类型');
+  threw = '';
+  try {
+    api.validateConfigObjectStructure({
+      'proxy-groups': [{ name: 'Proxy' }, { name: 'Proxy' }],
+      rules: [],
+    });
+  } catch (e) { threw = e.message; }
+  chk(/重复组名/.test(threw), true, '拒绝重复策略组名');
+  const configFileValidationSource = source.slice(
+    source.indexOf('const validateConfigFileStructure = async'),
+    source.indexOf('const buildDefaultOverrideJs ='),
+  );
+  chk(
+    configFileValidationSource.includes('const read = await readYamlObject(configPath, label)')
+      && configFileValidationSource.includes('validateConfigObjectStructure(read.value, label)'),
+    true,
+    '配置文件检查会解析 YAML 并校验结构',
+  );
+  chk(source.includes('testConfigWithCore'), false, '不再把结构检查描述为核心校验');
+  chk(source.includes('config.yaml 已校验并热加载'), false, '热加载结果文案不再声称已完成核心校验');
+  const sanitizedLog = api.sanitizeSubscriptionSecrets(
+    'url=https://example.test/sub/token?key=value Authorization: Bearer abc secret=xyz',
+  );
+  chk(
+    sanitizedLog.includes('https://example.test/sub/***?key=***')
+      && !sanitizedLog.includes('value')
+      && !sanitizedLog.includes('Bearer abc')
+      && !sanitizedLog.includes('secret=xyz'),
+    true,
+    '界面和下载日志会隐藏订阅地址及访问密钥',
+  );
 
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {

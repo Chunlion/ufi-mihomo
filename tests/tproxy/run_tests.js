@@ -164,6 +164,66 @@ function runFor(label, file) {
     '开机自启按钮不再追加状态提示词',
   );
 
+  const panelUiStart = source.indexOf("style.id = 'kano_mm_style'");
+  const panelUiSource = source.slice(
+    panelUiStart,
+    source.indexOf('collapseGen(', panelUiStart),
+  );
+  const actionGroupButtonLists = [
+    'quickRunBtn, webPanelToggleBtn, open, refresh, btn_restart, controllerSettingsBtn',
+    'subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn',
+    'policyToolsBtn, macBypassBtn, binaryHelperBtn, binaryHelperUploadBtn',
+    'showLogBtn, rescueBtn, boot_on, clearCacheBtn, stopBtn, btn_disabled',
+  ];
+  const actionGroupButtonCounts = actionGroupButtonLists
+    .filter((buttons) => panelUiSource.includes(`[${buttons}]`))
+    .map((buttons) => buttons.split(',').length);
+  chk(
+    panelUiSource.includes('grid-template-columns:repeat(4,minmax(0,1fr))')
+      && panelUiSource.includes('@media (max-width:1100px){#mm_action_box{grid-template-columns:repeat(2,minmax(0,1fr))')
+      && panelUiSource.includes('@media (max-width:600px){#mm_action_box{grid-template-columns:1fr;}')
+      && !panelUiSource.includes('repeat(auto-fit,minmax(220px,1fr))'),
+    true,
+    '四组折叠面板按 4/2/1 列稳定换行，不产生 3+1 布局',
+  );
+  chk(
+    actionGroupButtonCounts,
+    [6, 6, 4, 6],
+    '四组操作按钮均保持成对数量',
+  );
+  chk(
+    panelUiSource.includes('.kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:36px;')
+      && panelUiSource.includes('.kano-dialog-actions>button{width:100%;min-width:0;min-height:34px;}'),
+    true,
+    '主面板和二级菜单按钮使用等宽、居中和统一高度',
+  );
+  chk(
+    source.includes("const statusEl = document.querySelector('#mm_task_status');")
+      && source.includes("statusEl.textContent = label ? `任务：${label}` : '任务：空闲';")
+      && source.includes('activeCriticalOperation = { label: String(label')
+      && source.includes('activeCriticalOperation = null;\n      syncCriticalOperationStatus();'),
+    true,
+    '任务状态只显示当前关键操作或空闲状态',
+  );
+  chk(
+    panelUiSource.includes('.kano-dialog-actions.kano-actions-3,.kano-dialog-actions.kano-actions-5{grid-template-columns:1fr;}')
+      && source.includes('#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}')
+      && source.includes("row.style.gridTemplateColumns = 'minmax(0,1fr) repeat(2,56px)';"),
+    true,
+    '二级菜单的奇数操作区、三标签和订阅行保持对称',
+  );
+  chk(
+    panelUiSource.includes("open.textContent = '新窗口打开面板';")
+      && panelUiSource.includes("refresh.textContent = '刷新面板';")
+      && panelUiSource.includes("controllerSettingsBtn.textContent = '面板连接';")
+      && panelUiSource.includes("showLogBtn.textContent = '日志与诊断';")
+      && panelUiSource.includes("quickRunBtn.textContent = '安装或启动核心';")
+      && !panelUiSource.includes('新窗口打开 Web 面板')
+      && !/setButtonBusy\([^\n]*\.\.\./.test(source),
+    true,
+    '按钮文案去除重复词，并统一进行中状态标点',
+  );
+
   const modeStatusSource = source.slice(
     source.indexOf('const readCurrentModeStatus = async () => {'),
     source.indexOf('const refreshRuleModeStatus = async () => {'),

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestSnapshotJSONOmitsOnDemandData(t *testing.T) {
@@ -60,8 +63,12 @@ func TestNormalizeYAMLProvider(t *testing.T) {
 	if format != "yaml" || count != 1 {
 		t.Fatalf("format=%q count=%d", format, count)
 	}
-	if string(output) != "proxies:\n  - {name: test-node, type: ss}\n" {
-		t.Fatalf("unexpected output: %q", output)
+	var document map[string][]map[string]any
+	if err := yaml.Unmarshal(output, &document); err != nil {
+		t.Fatal(err)
+	}
+	if len(document) != 1 || len(document["proxies"]) != 1 || document["proxies"][0]["name"] != "test-node" {
+		t.Fatalf("unexpected output: %s", output)
 	}
 }
 
@@ -97,13 +104,53 @@ func TestNormalizeBase64YAML(t *testing.T) {
 	}
 }
 
+func TestNormalizeAcceptedWrappers(t *testing.T) {
+	urlSafe := base64.RawURLEncoding.EncodeToString([]byte("proxies:\n  - {name: wrapped\U0010FFFF, type: vless}\n"))
+	if !strings.ContainsAny(urlSafe, "-_") {
+		t.Fatal("URL-safe Base64 fixture does not exercise the URL-safe alphabet")
+	}
+	tests := map[string]struct {
+		input      string
+		wantFormat string
+	}{
+		"URL-safe Base64": {
+			input:      urlSafe,
+			wantFormat: "base64/yaml",
+		},
+		"JSON string wrapper": {
+			input:      `{"content":"proxies:\n  - {name: wrapped, type: vless}\n"}`,
+			wantFormat: "json-wrapper/yaml",
+		},
+		"JSON proxy array": {
+			input:      `[{"name":"wrapped","type":"vless"}]`,
+			wantFormat: "json-array",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, count, format, err := normalizeProviderDocument([]byte(test.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 || format != test.wantFormat {
+				t.Fatalf("format=%q count=%d", format, count)
+			}
+		})
+	}
+}
+
 func TestNormalizeRejectsInvalidProviders(t *testing.T) {
 	tests := map[string]string{
-		"empty yaml":     "proxies: []\n",
-		"empty json":     `{"proxies":[]}`,
-		"missing type":   `{"proxies":[{"name":"node"}]}`,
-		"duplicate name": `{"proxies":[{"name":"node","type":"ss"},{"name":"node","type":"trojan"}]}`,
-		"not provider":   "not a subscription",
+		"empty yaml":          "proxies: []\n",
+		"empty json":          `{"proxies":[]}`,
+		"missing JSON type":   `{"proxies":[{"name":"node"}]}`,
+		"duplicate JSON name": `{"proxies":[{"name":"node","type":"ss"},{"name":"node","type":"trojan"}]}`,
+		"missing YAML type":   "proxies:\n  - name: node\n",
+		"null YAML name":      "proxies:\n  - {name: null, type: ss}\n",
+		"duplicate YAML name": "proxies:\n  - {name: node, type: ss}\n  - {name: node, type: trojan}\n",
+		"HTML response":       "<!doctype html><html><body>login required</body></html>",
+		"Base64 HTML":         base64.StdEncoding.EncodeToString([]byte("<html>not a subscription</html>")),
+		"not provider":        "not a subscription",
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -111,6 +158,58 @@ func TestNormalizeRejectsInvalidProviders(t *testing.T) {
 				t.Fatal("expected input to be rejected")
 			}
 		})
+	}
+}
+
+func TestNormalizeRejectsDeepJSONWrappers(t *testing.T) {
+	input := "proxies:\n  - {name: node, type: ss}\n"
+	for range 5 {
+		wrapped, err := json.Marshal(map[string]string{"data": input})
+		if err != nil {
+			t.Fatal(err)
+		}
+		input = string(wrapped)
+	}
+	if _, _, _, err := normalizeProviderDocument([]byte(input)); err == nil {
+		t.Fatal("expected deeply nested wrapper to be rejected")
+	}
+}
+
+func TestNormalizeRegressionFixtures(t *testing.T) {
+	provider, err := os.ReadFile(filepath.Join("testdata", "clash.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, count, format, err := normalizeProviderDocument(provider); err != nil || count != 1 || format != "yaml" {
+		t.Fatalf("Clash fixture: format=%q count=%d err=%v", format, count, err)
+	}
+	shareLinks, err := os.ReadFile(filepath.Join("testdata", "vless.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := normalizeProviderDocument(shareLinks); err == nil {
+		t.Fatal("share-link fixture must be delegated to the converter sidecar")
+	}
+}
+
+func TestFindConverterSidecarRequiresExecutableFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "converter")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KANO_HELPER_CONVERTER", path)
+	if found := findConverterSidecar(); found != "" {
+		t.Fatalf("non-executable sidecar selected: %q", found)
+	}
+	if err := os.Chmod(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if found := findConverterSidecar(); found != path {
+		t.Fatalf("findConverterSidecar() = %q, want %q", found, path)
 	}
 }
 

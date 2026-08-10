@@ -19,9 +19,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
-const version = "0.3.2"
+const version = "0.3.3"
 
 var commands = []string{"version", "snapshot", "clients", "network-status", "policy-read", "convert-subscription"}
 
@@ -560,39 +562,13 @@ func normalizeProviderDocumentDepth(b []byte, depth int) ([]byte, int, string, e
 		}
 	}
 
-	// Standard Clash/Mihomo YAML: keep only the top-level proxies section so the
-	// result is safe to use as a file proxy-provider.
-	lines := strings.Split(string(trimmed), "\n")
-	start := -1
-	baseIndent := 0
-	count := 0
-	var out []string
-	for i, line := range lines {
-		raw := strings.TrimRight(line, "\r")
-		if strings.TrimSpace(raw) == "" || strings.HasPrefix(strings.TrimSpace(raw), "#") {
-			continue
+	// Standard Clash/Mihomo YAML: parse the document and keep only the top-level
+	// proxies sequence so unrelated settings cannot leak into a file provider.
+	if out, count, found, err := normalizeYAMLProvider(trimmed); found {
+		if err != nil {
+			return nil, 0, "", err
 		}
-		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
-		if start < 0 {
-			if indent == 0 && strings.HasPrefix(strings.TrimSpace(raw), "proxies:") {
-				start, baseIndent = i, indent
-				out = append(out, "proxies:")
-			}
-			continue
-		}
-		if i == start {
-			continue
-		}
-		if indent <= baseIndent && strings.TrimSpace(raw) != "" {
-			break
-		}
-		out = append(out, raw)
-		if strings.HasPrefix(strings.TrimSpace(raw), "-") {
-			count++
-		}
-	}
-	if start >= 0 && count > 0 {
-		return []byte(strings.Join(out, "\n") + "\n"), count, "yaml", nil
+		return out, count, "yaml", nil
 	}
 
 	// Base64-wrapped Clash YAML/JSON is common on subscription endpoints. Try all
@@ -622,6 +598,72 @@ func normalizeProviderDocumentDepth(b []byte, depth int) ([]byte, int, string, e
 	}
 
 	return nil, 0, "", errors.New("proxies section not found; response is not a supported Clash provider document")
+}
+
+func normalizeYAMLProvider(input []byte) ([]byte, int, bool, error) {
+	var document yaml.Node
+	if err := yaml.Unmarshal(input, &document); err != nil || len(document.Content) == 0 {
+		return nil, 0, false, nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil, 0, false, nil
+	}
+
+	var proxies *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "proxies" {
+			proxies = root.Content[i+1]
+			break
+		}
+	}
+	if proxies == nil {
+		return nil, 0, false, nil
+	}
+	if proxies.Kind != yaml.SequenceNode || len(proxies.Content) == 0 {
+		return nil, 0, true, errors.New("subscription contains no proxies")
+	}
+
+	names := make(map[string]struct{}, len(proxies.Content))
+	for i, item := range proxies.Content {
+		if item.Kind != yaml.MappingNode {
+			return nil, 0, true, fmt.Errorf("proxy %d is not a mapping", i+1)
+		}
+		name, proxyType := "", ""
+		for j := 0; j+1 < len(item.Content); j += 2 {
+			value := item.Content[j+1]
+			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
+				continue
+			}
+			switch item.Content[j].Value {
+			case "name":
+				name = strings.TrimSpace(value.Value)
+			case "type":
+				proxyType = strings.TrimSpace(value.Value)
+			}
+		}
+		if name == "" || proxyType == "" {
+			return nil, 0, true, fmt.Errorf("proxy %d requires non-empty name and type", i+1)
+		}
+		if _, exists := names[name]; exists {
+			return nil, 0, true, fmt.Errorf("duplicate proxy name: %s", name)
+		}
+		names[name] = struct{}{}
+	}
+
+	provider := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "proxies"},
+			proxies,
+		},
+	}
+	out, err := yaml.Marshal(&yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{provider}})
+	if err != nil {
+		return nil, 0, true, err
+	}
+	return out, len(proxies.Content), true, nil
 }
 
 func validateJSONProxies(items []json.RawMessage) error {

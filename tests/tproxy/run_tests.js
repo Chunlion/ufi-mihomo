@@ -10,6 +10,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
   plugin: path.join(ROOT, '猫猫TProxy.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
+  package: path.join(ROOT, 'tproxy-yq.zip'),
 };
 
 let pass = 0;
@@ -337,6 +338,23 @@ function runFor(label, file) {
       true,
       'boot runtime never kills an already-running core only because API probing is unavailable',
     );
+    const startVerificationSource = source.slice(
+      source.indexOf('const waitForRunningCoreApi = async'),
+      source.indexOf('const createConfigRollbackPoint = async'),
+    );
+    const restartSource = source.slice(
+      source.indexOf('const restartClash = async'),
+      source.indexOf('const btn_restart ='),
+    );
+    chk(
+      startVerificationSource.includes('return await waitForCoreApi(12, 1000)')
+        && !startVerificationSource.includes('acceptRunningCoreWithSlowApi')
+        && restartSource.includes('const trafficModeOk = await ensureRuntimeTrafficMode')
+        && restartSource.includes('const rulesOk = await reapplyPolicyRulesSilent()')
+        && restartSource.includes('return false;'),
+      true,
+      'runtime success requires API readiness, traffic-mode convergence, and policy application',
+    );
     const stopped = api.parseRuntimePreflightResult({
       success: true,
       content: 'PREFLIGHT_STATE=installed_stopped\nABI=arm64\nCONFIG_VALID=1\nREPAIRED=controller:chmod\nCORE_PID=\n',
@@ -528,6 +546,26 @@ function runFor(label, file) {
           true,
           'local conversion repairs sidecar permissions and handles expected curl/converter failures under set -e',
         );
+        const cacheProbe = localConverterSource.indexOf('${cacheProbeCommands}');
+        const downloads = localConverterSource.indexOf('${downloadCommands}');
+        const snapshots = localConverterSource.indexOf('${snapshotCommands}');
+        const commits = localConverterSource.indexOf('${commitCommands}');
+        chk(
+          cacheProbe >= 0 && downloads > cacheProbe && snapshots > downloads && commits > snapshots
+            && localConverterSource.includes('last_stage=download')
+            && localConverterSource.includes('last_stage=convert')
+            && localConverterSource.includes('existingCache.get(source.name) === true')
+            && localConverterSource.includes('${restoreCommands}'),
+          true,
+          'local conversion classifies failures and commits all provider caches transactionally',
+        );
+        chk(
+          localConverterSource.includes("downloadCoreArchive({ allowCached: true })")
+            && localConverterSource.includes('CONVERTER_ARCHIVE_ENTRY_INVALID')
+            && localConverterSource.includes('CONVERTER_REPAIRED'),
+          true,
+          'missing subscription converter is repaired from a validated installation archive',
+        );
         shellReply = {
           success: true,
           content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.2","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
@@ -572,6 +610,17 @@ function runFor(label, file) {
             && helperBinary.readUInt16LE(18) === 0xb7,
           true,
           'bundled Go helper is a non-empty AArch64 ELF binary',
+        );
+        const archivedHelper = spawnSync(
+          'unzip',
+          ['-p', FILES.package, 'Tools/kano-f50-helper-bundled'],
+          { encoding: null, maxBuffer: 16 * 1024 * 1024 },
+        );
+        chk(
+          archivedHelper.status === 0 && Buffer.isBuffer(archivedHelper.stdout)
+            && archivedHelper.stdout.equals(helperBinary),
+          true,
+          'installation package embeds the same helper binary as dist',
         );
         chk(
           source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')
@@ -656,6 +705,39 @@ function runFor(label, file) {
   );
   chk(source.includes('testConfigWithCore'), false, '不再把结构检查描述为核心校验');
   chk(source.includes('config.yaml 已校验并热加载'), false, '热加载结果文案不再声称已完成核心校验');
+  chk(
+    !source.includes('CONFIG_TEST_SKIPPED')
+      && !source.includes('CORE_TEST_SKIPPED')
+      && !source.includes('coreTestResult')
+      && !source.includes('coreTest:')
+      && !source.includes('coreTimeout:'),
+    true,
+    '删除未执行核心校验却写入跳过或通过状态的历史分支',
+  );
+  const packageRestoreSource = source.slice(
+    source.indexOf('const restoreConfigPackageFromFile = async'),
+    source.indexOf('const packageUploadEl ='),
+  );
+  chk(
+    packageRestoreSource.includes('package contains unsupported file types')
+      && packageRestoreSource.includes("jq -e 'type == \"object\"'")
+      && packageRestoreSource.includes('override.js exceeds 20 KiB')
+      && packageRestoreSource.includes('validateConfigFileStructure(CLASH_CONFIG'),
+    true,
+    '配置包导入检查归档文件类型、JSON 根类型、脚本大小和 config.yaml 结构',
+  );
+  const localEditorSource = source.slice(
+    source.indexOf('const writeEditableLocalFile = async'),
+    source.indexOf('const showEditableLocalFilesDialog = async'),
+  );
+  chk(
+    localEditorSource.includes('return await saveJsOverrideText(content)')
+      && localEditorSource.includes('JSON.parse(content)')
+      && localEditorSource.includes('invalidLineIndex')
+      && localEditorSource.includes('safeTextToHtml'),
+    true,
+    '本地文件编辑器复用 JS、订阅和 JSON 校验并对错误输出脱敏',
+  );
   const sanitizedLog = api.sanitizeSubscriptionSecrets(
     'url=https://example.test/sub/token?key=value Authorization: Bearer abc secret=xyz',
   );

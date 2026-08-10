@@ -4551,10 +4551,19 @@ KANO_WRITE_CHECK_EOF
 
   const ensureLocalSubscriptionConverter = async () => {
     const probe = await probeBinaryHelperState();
-    if (probe.state == 'installed') return true;
-    if (!(await installBinaryHelperPreferred({ preferGitee: probe.state != 'missing' }))) return false;
-    const installed = await probeBinaryHelperState();
-    return installed.state == 'installed';
+    if (probe.state != 'installed') {
+      if (!(await installBinaryHelperPreferred({ preferGitee: probe.state != 'missing' }))) return false;
+      const installed = await probeBinaryHelperState();
+      if (installed.state != 'installed') return false;
+    }
+    const permission = await runShellWithRoot(`
+      CONVERTER=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
+      if [ -s "$CONVERTER" ]; then
+        chmod 700 "$CONVERTER" || exit 1
+        [ -x "$CONVERTER" ] || exit 1
+      fi
+    `, 10 * 1000);
+    return permission.success;
   };
 
   const convertSubscriptionsLocally = async (sources = []) => {
@@ -4645,18 +4654,24 @@ KANO_WRITE_CHECK_EOF
         }
         for LOCAL_UA in ${localFetchUserAgentShell}; do
           rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-          http_code="$("$CURL_BIN" -sS -L $CURL_COMPRESSED --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
+          if http_code="$("$CURL_BIN" -sS -L $CURL_COMPRESSED --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
             -H 'Accept: application/yaml, text/yaml, application/x-yaml, text/plain, application/json, */*' \
-            -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"
-          curl_rc=$?
+            -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"; then
+            curl_rc=0
+          else
+            curl_rc=$?
+          fi
           last_http="\${http_code:-000}"
           last_ua="$LOCAL_UA"
           case "$http_code" in
             2??)
               if [ "$curl_rc" -eq 0 ] && [ -s "$raw_tmp" ]; then
                 last_kind="$(classify_candidate "$raw_tmp")"
-                CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"
-                convert_rc=$?
+                if CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"; then
+                  convert_rc=0
+                else
+                  convert_rc=$?
+                fi
                 if [ "$convert_rc" -eq 0 ] && printf '%s' "$CONVERT_JSON" | grep -q '"ok":true' && [ -s "$out_tmp" ]; then
                   mv -f "$raw_tmp" "${rawPath}"
                   mv -f "$out_tmp" "${outputPath}"
@@ -6638,7 +6653,8 @@ EOF_KANO_SERVICE
           ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_armv7`)} \
           ${shellQuote(`${CLASH_DIR}/Scripts/clashctl`)} \
           ${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)} \
-          ${shellQuote(`${CLASH_DIR}/Tools/mosdns_arm64`)}; do
+          ${shellQuote(`${CLASH_DIR}/Tools/mosdns_arm64`)} \
+          ${shellQuote(KANO_HELPER_CONVERTER_PATH)}; do
           [ ! -f "$EXECUTABLE" ] || chmod 755 "$EXECUTABLE" || exit 1
         done
         DEVICE_ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"

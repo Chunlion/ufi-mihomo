@@ -1720,7 +1720,7 @@ EOF_KANO_SERVICE
 
   const installBinaryHelperFromDevicePath = async ({
     sourcePath, prepareCommand = '', timeout = 30 * 1000,
-    label = 'install_binary_helper', successMessage = 'Go内核已安装', quiet = false,
+    label = 'install_binary_helper', successMessage = '辅助内核已安装', quiet = false,
   } = {}) => {
     if (!sourcePath) return false;
     const stagePath = `${KANO_HELPER_PATH}.kano_new_${Date.now()}_${createRandomString(4)}`;
@@ -1804,7 +1804,7 @@ EOF_KANO_SERVICE
     `, timeout, label);
     if (!installResult.success) {
       if (quiet) console.error('binary helper install failed', installResult.content || '');
-      else createToast(`Go内核安装失败<br>${textToHtml(installResult.content || '')}`, 'red', 9000);
+      else createToast(`辅助内核安装失败<br>${textToHtml(installResult.content || '')}`, 'red', 9000);
       return false;
     }
     invalidateBinarySnapshot();
@@ -1831,7 +1831,7 @@ EOF_KANO_SERVICE
         cp "$BUNDLED" "$SOURCE"
       `,
       timeout: 35 * 1000, label: 'install_binary_helper_bundled',
-      successMessage: 'Go内核已从本地运行包安装',
+      successMessage: '辅助内核已从本地安装包安装',
     });
   };
 
@@ -1847,7 +1847,7 @@ EOF_KANO_SERVICE
       `,
       timeout: 110 * 1000,
       label: 'install_binary_helper_gitee',
-      successMessage: 'Go内核已从 Gitee 安装',
+      successMessage: '辅助内核已从 Gitee 安装',
     });
   };
 
@@ -1886,7 +1886,7 @@ EOF_KANO_SERVICE
   const installBinaryHelperFromFile = async (file) => {
     if (!file) return false;
     if (file.size === 0) {
-      createToast('Go内核文件为空', 'red', 5000);
+      createToast('辅助内核文件为空', 'red', 5000);
       return false;
     }
     const formData = new FormData();
@@ -1901,7 +1901,7 @@ EOF_KANO_SERVICE
       uploadResult = await response.json();
       if (!response.ok || !uploadResult.url) throw new Error(uploadResult.error || `HTTP ${response.status}`);
     } catch (e) {
-      createToast(`Go内核上传失败<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
+      createToast(`辅助内核上传失败<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
       return false;
     }
 
@@ -3129,6 +3129,40 @@ EOF_KANO_SERVICE
     return true;
   };
 
+  const validateConfigObjectStructure = (config, label = '配置') => {
+    assertYamlRootMap(config, label);
+    ['proxies', 'proxy-groups', 'rules', 'listeners'].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(config, key) && !Array.isArray(config[key])) {
+        throw new Error(`${key} 必须是数组`);
+      }
+    });
+    ['proxy-providers', 'rule-providers', 'dns', 'tun', 'profile', 'hosts'].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(config, key) && !isPlainYamlObject(config[key])) {
+        throw new Error(`${key} 必须是映射对象`);
+      }
+    });
+
+    const names = new Set();
+    (config['proxy-groups'] || []).forEach((group, index) => {
+      if (!isPlainYamlObject(group)) throw new Error(`proxy-groups[${index}] 必须是映射对象`);
+      const name = String(group.name || '').trim();
+      if (!name) throw new Error(`proxy-groups[${index}] 缺少 name`);
+      if (names.has(name)) throw new Error(`proxy-groups 存在重复组名：${name}`);
+      names.add(name);
+    });
+    Object.entries(config['proxy-providers'] || {}).forEach(([name, provider]) => {
+      if (!name.trim() || !isPlainYamlObject(provider)) {
+        throw new Error(`proxy-provider ${name || '<empty>'} 格式无效`);
+      }
+    });
+    Object.entries(config['rule-providers'] || {}).forEach(([name, provider]) => {
+      if (!name.trim() || !isPlainYamlObject(provider)) {
+        throw new Error(`rule-provider ${name || '<empty>'} 格式无效`);
+      }
+    });
+    return true;
+  };
+
   const normalizeManagedTemplateObject = (rawConfig, sources = [], {
     generated = false,
     emptyProviderUrls = true,
@@ -3229,10 +3263,20 @@ EOF_KANO_SERVICE
   };
 
 
-  const testConfigWithCore = async (configPath = CLASH_CONFIG) => {
-    // FINAL relaxed mode: never spawn `Clash.Core -t`. Runtime/API errors are handled after start.
-    void configPath;
-    return true;
+  const validateConfigFileStructure = async (configPath = CLASH_CONFIG, label = 'config.yaml') => {
+    const read = await readYamlObject(configPath, label);
+    if (!read.ok) {
+      return { ok: false, message: sanitizeSubscriptionSecrets(read.message || `${label} 解析失败`) };
+    }
+    try {
+      validateConfigObjectStructure(read.value, label);
+      return { ok: true, message: '' };
+    } catch (e) {
+      return {
+        ok: false,
+        message: sanitizeSubscriptionSecrets(e && e.message ? e.message : String(e || `${label} 结构无效`)),
+      };
+    }
   };
 
 
@@ -4604,26 +4648,6 @@ KANO_WRITE_CHECK_EOF
     const localFetchUserAgentShell = localFetchUserAgents.map((value) => shellQuote(value)).join(' ');
     const txName = `.kano_local_subscription_${Date.now()}_${createRandomString(6)}`;
     const txDir = `${CLASH_PROXY_DIR}/proxies/${txName}`;
-    const testConfigPath = `${CLASH_PROXY_DIR}/.kano_local_provider_test_${Date.now()}_${createRandomString(4)}.yaml`;
-    const validationConfigText = [
-      'mixed-port: 7890',
-      'mode: rule',
-      'log-level: silent',
-      'proxies: []',
-      'proxy-providers:',
-      ...cleanSources.flatMap((source) => [
-        `  ${source.name}:`,
-        '    type: file',
-        `    path: ./proxies/${txName}/${source.name}.yaml`,
-      ]),
-      'proxy-groups:',
-      '  - name: LocalValidation',
-      '    type: select',
-      `    use: [${cleanSources.map((source) => source.name).join(', ')}]`,
-      'rules:',
-      '  - MATCH,LocalValidation',
-      '',
-    ].join('\n');
     const downloadCommands = cleanSources.map((source, index) => {
       const rawPath = `$TX/raw_${index + 1}`;
       const outputPath = `$TX/${source.name}.yaml`;
@@ -4729,8 +4753,6 @@ KANO_WRITE_CHECK_EOF
         set -e
         TX=${shellQuote(txDir)}
         HELPER=${shellQuote(KANO_HELPER_PATH)}
-        CORE=${shellQuote(CLASH_CORE)}
-        TEST_CONFIG=${shellQuote(testConfigPath)}
         committing=0
         umask 077
         cleanup_local_conversion() {
@@ -4738,7 +4760,6 @@ KANO_WRITE_CHECK_EOF
           if [ "$committing" = 1 ]; then
             ${restoreCommands}
           fi
-          rm -f "$TEST_CONFIG" 2>/dev/null || true
           rm -rf "$TX" 2>/dev/null || true
           trap - EXIT
           exit "$rc"
@@ -4747,8 +4768,6 @@ KANO_WRITE_CHECK_EOF
         mkdir -p "$TX" ${shellQuote(`${CLASH_PROXY_DIR}/proxies`)}
         ${getCurlBinCmd()}
         ${downloadCommands}
-        printf '%s' ${shellQuote(validationConfigText)} > "$TEST_CONFIG"
-        echo "LOCAL_CONVERT_CORE_TEST_SKIPPED=relaxed_mode"
         ${snapshotCommands}
         committing=1
         ${commitCommands}
@@ -4773,8 +4792,6 @@ KANO_WRITE_CHECK_EOF
       const ok = committed && !!item;
       const message = ok
         ? ''
-        : failedName == 'ProviderSet' && failedStage == 'validate'
-          ? '转换结果未通过 Mihomo 核心校验'
         : source.name == failedName
           ? (failedStage == 'download'
             ? `订阅下载失败${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}`
@@ -5029,12 +5046,12 @@ KANO_WRITE_CHECK_EOF
         state = await checkInstallState({ fresh: true });
         if (!['not_installed', 'damaged'].includes(state.state)) return true;
       }
-      createToast('安装自愈失败，未继续执行当前操作。', 'red', 10000);
+      createToast('安装自愈失败，已取消当前操作', 'red', 10000);
       return false;
     }
     createToast(
       state.state == 'not_installed'
-        ? '\u6ca1\u6709\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5\uff01'
+        ? '\u672a\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5'
         : `猫猫安装不可用<br>${textToHtml(state.message || state.content)}`,
       'red',
       9000,
@@ -5192,10 +5209,9 @@ KANO_WRITE_CHECK_EOF
     if (showOutput) {
       showInfoDialog(
         'mm_network_rescue',
-        '\u65ad\u7f51\u6062\u590d\u7ed3\u679c',
+        res.success ? '\u7f51\u7edc\u6062\u590d\u5b8c\u6210' : '\u7f51\u7edc\u6062\u590d\u5931\u8d25',
         `<pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '\u5df2\u6267\u884c')}</pre>`,
       );
-      createToast(res.success ? '\u65ad\u7f51\u6062\u590d\u5df2\u6267\u884c' : '\u65ad\u7f51\u6062\u590d\u6267\u884c\u5f02\u5e38\uff0c\u8bf7\u770b\u8f93\u51fa', res.success ? 'green' : 'red', 7000);
     }
     return res.success;
   };
@@ -5590,8 +5606,9 @@ KANO_WRITE_CHECK_EOF
       }))) {
         throw 'JS/UI \u8986\u5199\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
       }
-      if (!(await testConfigWithCore(txTemplate))) {
-        throw '\u6a21\u677f\u6838\u5fc3\u914d\u7f6e\u6d4b\u8bd5\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
+      const templateCheck = await validateConfigFileStructure(txTemplate, 'template.yaml');
+      if (!templateCheck.ok) {
+        throw `模板结构检查失败，原 template.base.yaml / template.yaml 未改动\n${templateCheck.message || ''}`.trim();
       }
       if (templateSubSourcesToPersist.length > 0) {
         const subBackupRes = await runShellWithRoot(`
@@ -5675,7 +5692,11 @@ KANO_WRITE_CHECK_EOF
           chmod 600 "$SUB" 2>/dev/null || true
         `, 10 * 1000);
       }
-      createToast(`\u6a21\u677f\u4e0a\u4f20\u5931\u8d25<br>${textToHtml(e && e.message ? e.message : e || '\u672a\u77e5\u9519\u8bef')}`, 'red', 9000);
+      createToast(
+        `\u6a21\u677f\u4e0a\u4f20\u5931\u8d25<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e || '\u672a\u77e5\u9519\u8bef'))}`,
+        'red',
+        9000,
+      );
       return false;
     } finally {
       await runShellWithRoot(`
@@ -5694,7 +5715,7 @@ KANO_WRITE_CHECK_EOF
     const id_clear = 'clear_btn_' + createRandomString(4);
     const id_refresh = 'refresh_btn_' + createRandomString(4);
     const id_pause = 'pause_btn_' + createRandomString(4);
-    const rawMessage = String(message || '');
+    const rawMessage = sanitizeSubscriptionSecrets(message || '');
     const message1 = textToHtml(rawMessage);
     const { el, close } = createFixedToast(
       containerId,
@@ -5794,7 +5815,7 @@ KANO_WRITE_CHECK_EOF
       );
       if (closed || !msg_el) return;
       if (res.success) {
-        msg_el.innerHTML = textToHtml(res.content || '');
+        msg_el.innerHTML = textToHtml(sanitizeSubscriptionSecrets(res.content || ''));
         flag && createToast('\u65e5\u5fd7\u5df2\u5237\u65b0');
       } else {
         flag && createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
@@ -6111,7 +6132,7 @@ KANO_WRITE_CHECK_EOF
       '运行日志/诊断',
       `${rowHtml}
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
-      <pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(logRes.content || '暂无日志')}</pre>`,
+      <pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,
     );
   };
 
@@ -6240,9 +6261,9 @@ KANO_WRITE_CHECK_EOF
     }
     if (showToast) {
       createToast(
-        `配置自检/修复完成<br>traffic_mode=${escapeHtml(trafficMode)} ipv6=${ipv6Enabled ? 'on' : 'off'} tproxy-port=${tproxyPort}<br>${textToHtml(write.content || '')}`,
+        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '开启' : '关闭'} · 端口 ${tproxyPort}`,
         'green',
-        8000,
+        6000,
       );
     }
     return true;
@@ -6703,7 +6724,7 @@ EOF_KANO_SERVICE
       const bootWrite = await runShellWithRoot(addBootLinesCmd());
       if (!bootWrite.success) return await failInstalledPackage('设置开机启动失败', bootWrite.content || '');
 
-      createToast('\u542f\u52a8Clash...');
+      createToast('\u6b63\u5728\u542f\u52a8\u6838\u5fc3...');
       const res6 = await startClashServiceClean({ stopFirst: false, reason: '首次启动' });
       if (!res6.success) {
         await networkRescue({ stopService: true, showOutput: false, reason: '\u9996\u6b21\u542f\u52a8\u5931\u8d25' });
@@ -6718,7 +6739,7 @@ EOF_KANO_SERVICE
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
       scheduleBinaryHelperButtonRefresh();
       if (!helperReadyAfterInstall) {
-        createToast('基础代理已安装；Go辅助内核自动安装失败，当前使用 Shell 兼容模式，可稍后点击“Shell模式”重试。', 'yellow', 9000);
+        createToast('基础代理已安装；辅助内核安装失败，当前使用 Shell 兼容模式。', 'yellow', 8000);
       }
 
       disabled_btn_enabled = false;
@@ -6736,12 +6757,11 @@ EOF_KANO_SERVICE
         isMMRunning();
       }, 3000);
 
-      await askConfirm(
+      showInfoDialog(
         'mm_installed_confirm_1',
-        '\u542f\u52a8Clash\u6210\u529f',
+        '\u6838\u5fc3\u5df2\u542f\u52a8',
         `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥可在“Web 面板连接”中查看或修改。要使用代理，请进入“订阅管理”。`,
-        'OK',
+        访问密钥在“Web 面板连接”中管理；节点在“订阅管理”中添加。`,
       );
     } finally {
       disabled_btn_enabled = false;
@@ -6805,11 +6825,8 @@ EOF_KANO_SERVICE
           echo "\u5df2\u5220\u9664 /data/kano_* \u8c03\u8bd5\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7"
           echo "UNINSTALL_NO_BACKUP_DONE"
           `, 60 * 1000);
-      if (!res.success) return createToast('\u5378\u8f7d\u5931\u8d25\uff01', 'red');
-      createToast(`<div style="width:320px;text-align:center">
-          \u5378\u8f7d\u5b8c\u6210<br/>
-          ${textToHtml(res.content || '')}
-          </div>`, 'green');
+      if (!res.success) return createToast('\u5378\u8f7d\u5931\u8d25', 'red');
+      createToast('\u5378\u8f7d\u5b8c\u6210', 'green');
       await isMMRunning();
     } finally {
       setButtonBusy(btn_disabled, false);
@@ -7919,12 +7936,7 @@ KANO_POLICY_TOOLS_EOF
       return false;
     }
     if (showOutput) {
-      createToast(
-        `<div style="width:300px;text-align:center">
-            ${textToHtml(res.content || '')}
-        </div>`,
-        'green',
-      );
+      createToast('核心已停止，插件规则已清理', 'green');
     }
     await isMMRunning();
     return true;
@@ -7941,20 +7953,16 @@ KANO_POLICY_TOOLS_EOF
     const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
     if (!res.success) {
       await networkRescue({ stopService: true, showOutput: false, reason: '\u91cd\u542f\u5931\u8d25' });
-      createToast('\u91cd\u542f\u5931\u8d25\uff0c\u5df2\u81ea\u52a8\u6e05\u7406\u89c4\u5219\uff01', 'red');
+      createToast('\u91cd\u542f\u5931\u8d25\uff0c\u5df2\u81ea\u52a8\u6e05\u7406\u89c4\u5219', 'red');
       return false;
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
     await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
     const rulesOk = await reapplyPolicyRulesSilent();
-    createToast(
-      `<div style="width:300px;text-align:center">
-            ${textToHtml(res.content || '')}
-        </div>`,
-      'green',
-    );
     if (!rulesOk) {
       createToast('核心已重启，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+    } else {
+      createToast('核心已重启', 'green');
     }
     await isMMRunning();
     return true;
@@ -8236,7 +8244,7 @@ KANO_POLICY_TOOLS_EOF
     const packageRollbackDir = ((restoreOutput.split('\n').find((line) => line.startsWith('RESTORE_ROLLBACK_DIR=')) || '')
       .replace(/^RESTORE_ROLLBACK_DIR=/, '')
       .trim());
-    const rollbackRestoredPackage = async (context = '配置包导入') => {
+    const rollbackRestoredPackage = async (context = '配置包导入', detail = '') => {
       if (!packageRollbackDir) {
         if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, context);
         return false;
@@ -8252,10 +8260,14 @@ KANO_POLICY_TOOLS_EOF
       `, 45 * 1000);
       if (!rollbackRes.success || !String(rollbackRes.content || '').includes('PACKAGE_RESTORE_ROLLED_BACK')) {
         if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, context);
-        createToast(`${escapeHtml(context)}失败，完整配置包回滚失败<br>${textToHtml(rollbackRes.content || '')}`, 'red', 10000);
+        createToast(`${escapeHtml(context)}失败，且完整配置包回滚失败<br>${textToHtml(rollbackRes.content || detail || '')}`, 'red', 10000);
         return false;
       }
-      createToast(`${escapeHtml(context)}失败，已恢复导入前的全部配置文件。`, 'yellow', 9000);
+      createToast(
+        `${escapeHtml(context)}失败，已恢复导入前的配置${detail ? `<br>${textToHtml(detail)}` : ''}`,
+        'yellow',
+        9000,
+      );
       return true;
     };
 
@@ -8264,8 +8276,9 @@ KANO_POLICY_TOOLS_EOF
       await reloadConfigHot(oldControllerInfo);
       return false;
     }
-    if (!(await testConfigWithCore(CLASH_CONFIG))) {
-      await rollbackRestoredPackage('导入配置包测试');
+    const packageCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
+    if (!packageCheck.ok) {
+      await rollbackRestoredPackage('导入配置包结构检查', packageCheck.message);
       await reloadConfigHot(oldControllerInfo);
       return false;
     }
@@ -8647,10 +8660,10 @@ KANO_POLICY_TOOLS_EOF
 
     const binaryHelperBtn = document.createElement('button');
     binaryHelperBtn.classList.add('btn');
-    binaryHelperBtn.textContent = 'Go内核';
+    binaryHelperBtn.textContent = '辅助内核';
     const binaryHelperUploadBtn = document.createElement('button');
     binaryHelperUploadBtn.classList.add('btn');
-    binaryHelperUploadBtn.textContent = '本地选择文件';
+    binaryHelperUploadBtn.textContent = '导入辅助内核';
     const applyBinaryHelperButtonState = (probe = {}) => {
       const installed = probe.state == 'installed';
       const info = probe.info || null;
@@ -8658,17 +8671,17 @@ KANO_POLICY_TOOLS_EOF
       binaryHelperBtn.dataset.helperState = probe.state || 'unknown';
       binaryHelperBtn.style.background = installed ? 'var(--dark-btn-color-active)' : '';
       if (installed) {
-        binaryHelperBtn.textContent = version ? `Go内核 ✓ ${version}` : 'Go内核 ✓';
-        binaryHelperBtn.title = 'Go辅助内核运行正常；点击检查更高版本';
+        binaryHelperBtn.textContent = version ? `辅助内核 ✓ ${version}` : '辅助内核 ✓';
+        binaryHelperBtn.title = '辅助内核正常；点击检查更新';
       } else if (probe.state == 'missing') {
-        binaryHelperBtn.textContent = 'Shell模式';
-        binaryHelperBtn.title = 'Go辅助内核未安装，当前使用 Shell 兼容路径；点击后下载安装';
+        binaryHelperBtn.textContent = 'Shell兼容';
+        binaryHelperBtn.title = '使用 Shell 兼容模式；点击安装辅助内核';
       } else if (probe.state == 'invalid') {
-        binaryHelperBtn.textContent = 'Shell模式 ⚠';
-        binaryHelperBtn.title = 'Go辅助内核无法正常执行或协议不完整，当前使用 Shell 兼容路径；点击修复';
+        binaryHelperBtn.textContent = 'Shell兼容 ⚠';
+        binaryHelperBtn.title = '辅助内核异常；点击修复';
       } else {
-        binaryHelperBtn.textContent = 'Shell模式 ⚠';
-        binaryHelperBtn.title = 'Go辅助内核不可用，当前使用 Shell 兼容路径；点击后重新安装';
+        binaryHelperBtn.textContent = 'Shell兼容 ⚠';
+        binaryHelperBtn.title = '辅助内核不可用；点击重装';
       }
     };
     const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {
@@ -8682,7 +8695,7 @@ KANO_POLICY_TOOLS_EOF
         try {
           probe = await refreshBinaryHelperButton(6 * 1000);
         } catch (e) {
-          console.error('Go内核延迟状态探测失败', e);
+          console.error('辅助内核延迟状态探测失败', e);
         }
         if (retry && (!probe || probe.state != 'installed')) {
           setTimeout(() => run(false), retryDelay);
@@ -8710,8 +8723,8 @@ KANO_POLICY_TOOLS_EOF
         const healthy = current.state == 'installed';
         const confirmed = await askConfirm(
           `mm_binary_helper_update_${createRandomString(4)}`,
-          healthy ? '检查 Go内核更新？' : '更新或修复 Go内核？',
-          '更新优先从 Gitee 下载，失败后使用本地运行包；设备已有有效版本时，只安装版本号更高的文件，不绑定固定版本、大小或 SHA。',
+          healthy ? '检查辅助内核更新？' : '修复辅助内核？',
+          '优先从 Gitee 下载，失败后使用本地安装包；可用版本只升级不降级。',
           healthy ? '检查更新' : '更新修复',
           '取消',
         );
@@ -8730,7 +8743,7 @@ KANO_POLICY_TOOLS_EOF
       helperUploadEl.click();
     };
     // Read-only status probe on page load. Never downloads or installs the optional helper automatically.
-    refreshBinaryHelperButton().catch((e) => console.error('Go内核状态探测失败', e));
+    refreshBinaryHelperButton().catch((e) => console.error('辅助内核状态探测失败', e));
 
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
@@ -8745,7 +8758,7 @@ KANO_POLICY_TOOLS_EOF
           <div style="pointer-events:all;width:86vw;max-width:720px;">
             <div class="title" style="margin:0">订阅 User-Agent</div>
             <div style="margin:14px 0 8px;font-size:.62rem;line-height:1.55;opacity:.82;">
-              自定义订阅 Provider 的请求 User-Agent。留空使用默认值 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}；保存后在下次保存或更新订阅时生效。
+              设置订阅请求的 User-Agent。留空使用 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}，下次更新时生效。
             </div>
             <input id="mm_provider_user_agent_input" type="text" maxlength="512" spellcheck="false"
               placeholder="${escapeHtml(KANO_PROVIDER_USER_AGENT)}"
@@ -8773,7 +8786,7 @@ KANO_POLICY_TOOLS_EOF
           }
           createToast(
             result.custom
-              ? '订阅 User-Agent 已保存，下次保存或更新订阅时生效'
+              ? '订阅 User-Agent 已保存，下次更新时生效'
               : `已恢复默认 User-Agent：${escapeHtml(KANO_PROVIDER_USER_AGENT)}`,
             'green',
             6000,
@@ -8795,7 +8808,7 @@ KANO_POLICY_TOOLS_EOF
       const confirmed = await askConfirm(
         'mm_network_rescue_confirm',
         '\u6267\u884c\u65ad\u7f51\u6062\u590d\uff1f',
-        '\u4f1a\u505c\u6b62\u732b\u732b\u6838\u5fc3\uff0c\u5e76\u6e05\u7406\u63d2\u4ef6\u521b\u5efa\u7684 KANO_* iptables \u89c4\u5219\u3002\u7528\u4e8e\u5904\u7406\u201c\u542f\u52a8\u540e\u65e0\u6cd5\u4e0a\u7f51 / \u505c\u6b62\u540e\u4ecd\u65e0\u6cd5\u4e0a\u7f51 / \u89c4\u5219\u6b8b\u7559\u201d\u3002',
+        '\u5c06\u505c\u6b62\u6838\u5fc3\u5e76\u6e05\u7406\u63d2\u4ef6\u521b\u5efa\u7684 KANO_* iptables \u89c4\u5219\uff0c\u7528\u4e8e\u6062\u590d\u89c4\u5219\u6b8b\u7559\u5bfc\u81f4\u7684\u65ad\u7f51\u3002',
         '\u6267\u884c\u6062\u590d',
         '\u53d6\u6d88',
       );
@@ -10028,9 +10041,10 @@ ${expectedProviderChecks}
         createToast(`配置暂存失败，原 config.yaml 未改动<br>${textToHtml(stageRes.content || '')}`, 'red', 9000);
         return false;
       }
-      if (!(await testConfigWithCore(stagePath))) {
+      const stageCheck = await validateConfigFileStructure(stagePath, 'config.yaml');
+      if (!stageCheck.ok) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
-        createToast('上传的 config.yaml 未通过核心校验，原 config.yaml 未改动。', 'red', 10000);
+        createToast(`配置结构检查失败，原 config.yaml 未改动<br>${textToHtml(stageCheck.message || '')}`, 'red', 10000);
         return false;
       }
       const commitRes = await runShellWithRoot(`
@@ -10050,13 +10064,15 @@ ${expectedProviderChecks}
         await restoreConfigRollbackPoint(rollbackPath, '上传配置自检');
         return false;
       }
-      if (!(await testConfigWithCore(CLASH_CONFIG))) {
+      const committedCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
+      if (!committedCheck.ok) {
         await restoreConfigRollbackPoint(rollbackPath, '上传配置校验');
+        createToast(`配置结构检查失败，已恢复上一份 config.yaml<br>${textToHtml(committedCheck.message || '')}`, 'red', 10000);
         return false;
       }
       const reloadRes = await reloadConfigHot(controllerInfo);
       if (reloadRes.success) {
-        createToast('config.yaml 已校验并热加载', 'green', 7000);
+        createToast('config.yaml 已通过结构检查并热加载', 'green', 7000);
         await isMMRunning();
         return true;
       }
@@ -10070,7 +10086,7 @@ ${expectedProviderChecks}
         const uploadedPath = await uploadEditorContent(content, 'config.yaml');
         return await commitUploadedConfigWithValidation(uploadedPath, controllerInfo);
       } catch (e) {
-        createToast(`配置上传失败<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
+        createToast(`配置上传失败<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e))}`, 'red', 9000);
         return false;
       }
     };

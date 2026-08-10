@@ -33,6 +33,8 @@
 
 订阅配置检查、核心状态、控制 API 和 Provider 更新分别显示。核心未运行时不会请求 Provider API，也不会把 API 故障误报为配置或订阅地址失效。
 
+配置写入前执行 YAML 解析和结构检查；实际运行状态由热加载或启动后的 API 检查确认，失败时恢复上一份 `config.yaml`。
+
 设备没有 `/tmp` 时属于受支持场景。插件使用 `/data/kano_yq_runtime/tmp` 和 `/data/kano_diag_runtime/tmp`，诊断只检查真实存在的文件系统路径。
 
 ## 更新与卸载

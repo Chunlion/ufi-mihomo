@@ -30,17 +30,13 @@
   const KANO_SUBSCRIPTION_RAW = '/data/kano_subscription_config.raw';
   const KANO_SUBSCRIPTION_YAML = '/data/kano_subscription_config.yaml';
   const KANO_SUBSCRIPTION_MODE_CHECK = '/data/kano_subscription_mode_check.out';
-  const KANO_SUBSCRIPTION_CONFIG_TEST = '/data/kano_subscription_config_test.out';
   const CLASH_SAFE_POLICY_DIR = `${CLASH_PROXY_DIR}/Policy`;
   const CLASH_SAFE_DIRECT_DOMAIN_FILE = `${CLASH_SAFE_POLICY_DIR}/direct_domain.list`;
   const CLASH_SAFE_DIRECT_IP_FILE = `${CLASH_SAFE_POLICY_DIR}/direct_ip.list`;
   const CLASH_SAFE_PROXY_DOMAIN_FILE = `${CLASH_SAFE_POLICY_DIR}/proxy_domain.list`;
   const CLASH_SAFE_REJECT_DOMAIN_FILE = `${CLASH_SAFE_POLICY_DIR}/reject_domain.list`;
-  const CLASH_RUNTIME_TEST_OUT = '/data/kano_runtime_config_test.out';
   const KANO_TEMPLATE_WRITE_CHECK = '/data/kano_template_write_check.out';
   const KANO_TEMPLATE_FLOW_DEBUG = '/data/kano_template_flow_debug.out';
-  const CLASH_TEMPLATE_OVERWRITE_TEST_OUT = '/data/kano_template_overwrite_test.out';
-  const CLASH_CONFIG_TEST_OUT = '/data/kano_config_test.out';
   const KANO_YQ_RUNTIME_DIR = '/data/kano_yq_runtime';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const F50_FILES_DIR = '/data/data/com.minikano.f50_sms/files';
@@ -114,7 +110,7 @@ ${script}`,
         mkdir -p /data
         {
           printf '%s ' "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null || cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-          printf '%s\n' ${shellQuote(String(message || '').replace(/[\r\n]+/g, ' '))}
+          printf '%s\n' ${shellQuote(sanitizeSubscriptionSecrets(String(message || '')).replace(/[\r\n]+/g, ' '))}
         } >> ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
       `, 5000);
     } catch (e) {
@@ -161,6 +157,8 @@ ${script}`,
     .replace(/https?:\/\/[^\s"'<>)}\]]+/gi, (url) => maskSubscriptionUrl(url) || '[订阅地址已隐藏]')
     .replace(/\bbearer\s+[^\s,;"']+/gi, 'Bearer ***')
     .replace(/(["']?(?:token|secret|authorization|access[_-]?(?:key|token))["']?\s*[=:]\s*["']?)[^\s,;&}"']+/gi, '$1***');
+
+  const safeTextToHtml = (value = '') => textToHtml(sanitizeSubscriptionSecrets(value));
 
   const setText = (el, value = '') => {
     if (el) el.textContent = String(value || '');
@@ -1301,7 +1299,6 @@ EOF_KANO_SERVICE
             exit 1
           }
         fi
-        echo "REPAIR_CONFIG_CORE_TEST_SKIPPED=relaxed_mode"
       else
         echo "REPAIR_FAILED=preserved_config_missing"
         exit 1
@@ -1356,19 +1353,19 @@ EOF_KANO_SERVICE
     if (state.state != 'damaged' || !state.repairable) return false;
     const archive = await downloadCoreArchive({ allowCached: true });
     if (!archive.ok) {
-      createToast(`安装自愈失败（${escapeHtml(archive.stage)}）<br>${textToHtml(archive.content || archive.message)}`, 'red', 12000);
+      createToast(`安装自愈失败（${escapeHtml(archive.stage)}）<br>${safeTextToHtml(archive.content || archive.message)}`, 'red', 12000);
       return false;
     }
     const committed = await stageAndCommitRepairArchive();
     if (!committed.ok) {
-      createToast(`安装自愈提交失败<br>${textToHtml(committed.content)}`, 'red', 12000);
+      createToast(`安装自愈提交失败<br>${safeTextToHtml(committed.content)}`, 'red', 12000);
       return false;
     }
     const failAndRollback = async (stage, detail = '') => {
       const rollback = await rollbackRepairedInstall(committed.targetBackup, stage);
       runtimePreflightCache = null;
       createToast(
-        `安装自愈在 ${escapeHtml(stage)} 阶段失败<br>${textToHtml(detail)}<br>${rollback.success ? '已恢复修复前安装目录。' : `回滚失败：${textToHtml(rollback.content || '')}`}`,
+        `安装自愈在 ${escapeHtml(stage)} 阶段失败<br>${safeTextToHtml(detail)}<br>${rollback.success ? '已恢复修复前安装目录。' : `回滚失败：${safeTextToHtml(rollback.content || '')}`}`,
         'red',
         14000,
       );
@@ -1804,7 +1801,7 @@ EOF_KANO_SERVICE
     `, timeout, label);
     if (!installResult.success) {
       if (quiet) console.error('binary helper install failed', installResult.content || '');
-      else createToast(`辅助内核安装失败<br>${textToHtml(installResult.content || '')}`, 'red', 9000);
+      else createToast(`辅助内核安装失败<br>${safeTextToHtml(installResult.content || '')}`, 'red', 9000);
       return false;
     }
     invalidateBinarySnapshot();
@@ -1901,7 +1898,7 @@ EOF_KANO_SERVICE
       uploadResult = await response.json();
       if (!response.ok || !uploadResult.url) throw new Error(uploadResult.error || `HTTP ${response.status}`);
     } catch (e) {
-      createToast(`辅助内核上传失败<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
+      createToast(`辅助内核上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
       return false;
     }
 
@@ -2074,7 +2071,7 @@ EOF_KANO_SERVICE
         echo "SUB_RULE_MODE_SET:${cleanMode}"
         `, 15 * 1000);
     if (!res.success) {
-      createToast(`\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 9000);
+      createToast(`\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
     }
     return true;
@@ -2169,7 +2166,7 @@ EOF_KANO_SERVICE
     const cleanSources = normalizeSubSourceList(sources);
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
-      createToast(`准备模板目录失败<br>${textToHtml(storage.content || '')}`, 'red', 9000);
+      createToast(`准备模板目录失败<br>${safeTextToHtml(storage.content || '')}`, 'red', 9000);
       return false;
     }
 
@@ -2192,7 +2189,7 @@ EOF_KANO_SERVICE
     } else {
       const read = await readYamlObject(templatePath, 'template.yaml');
       if (!read.ok) {
-        createToast(`模板自动处理失败<br>${textToHtml(read.message || '')}`, 'red', 10000);
+        createToast(`模板自动处理失败<br>${safeTextToHtml(read.message || '')}`, 'red', 10000);
         return false;
       }
       baseObject = read.value;
@@ -2211,7 +2208,7 @@ EOF_KANO_SERVICE
         tproxyPort,
       });
     } catch (e) {
-      createToast(`模板结构不兼容，未改写原文件<br>${textToHtml(e.message || e)}`, 'red', 10000);
+      createToast(`模板结构不兼容，未改写原文件<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
       return false;
     }
 
@@ -2220,16 +2217,15 @@ EOF_KANO_SERVICE
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
       backup: exists,
       backupTag: 'f50_template',
-      coreTest: false,
     });
     if (!write.ok) {
-      createToast(`模板自动处理失败，原文件未被覆盖<br>${textToHtml(write.content || '')}`, 'red', 10000);
+      createToast(`模板自动处理失败，原文件未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
       return false;
     }
 
     if (showToast) {
       createToast(
-        `模板已处理为 F50 可用格式<br>YAML_BRIDGE=${YAML_BRIDGE_VERSION}<br>providers=${escapeHtml(normalized.providerNames.join(','))}<br>${textToHtml(write.content || '')}`,
+        `模板已处理为 F50 可用格式，节点来源 ${normalized.providerNames.length} 个`,
         'green',
         7000,
       );
@@ -2444,7 +2440,7 @@ EOF_KANO_SERVICE
         return true;
       }
       if (!probeText.includes('YQ_RUNTIME_NEEDS_REPAIR=arm64')) {
-        if (!quiet) createToast(`YAML 运行组件不可用：当前 CPU ABI 不受自动修复支持。<br>${textToHtml(probeText)}`, 'red', 9000);
+        if (!quiet) createToast(`YAML 运行组件不可用：当前 CPU ABI 不受自动修复支持。<br>${safeTextToHtml(probeText)}`, 'red', 9000);
         return false;
       }
 
@@ -2536,8 +2532,8 @@ EOF_KANO_SERVICE
         const packageText = String(packageRepair.content || '').trim();
         createToast(
           `YAML 运行组件自动修复失败；基础代理不受影响。<br>` +
-          `兼容包：${textToHtml(packageText || '不可用')}<br>` +
-          `官方 yq：${textToHtml(officialText || '不可用')}`,
+          `兼容包：${safeTextToHtml(packageText || '不可用')}<br>` +
+          `官方 yq：${safeTextToHtml(officialText || '不可用')}`,
           'red',
           12000,
         );
@@ -2695,23 +2691,19 @@ EOF_KANO_SERVICE
     label = 'YAML',
     backup = true,
     backupTag = 'yaml_bridge',
-    coreTest = false,
-    coreTimeout = 90,
   }) => {
     const safeTag = String(backupTag || 'yaml_bridge').replace(/[^A-Za-z0-9_.-]+/g, '_');
-    const testOut = `/data/kano_yaml_bridge_core_${Date.now()}_${createRandomString(6)}.out`;
     const res = await runShellWithRoot(`
         set -e
         TARGET=${shellQuote(targetPath)}
         STAGE=${shellQuote(stagePath)}
         LABEL=${shellQuote(label)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        CORE=${shellQuote(CLASH_CORE)}
-        TEST_OUT=${shellQuote(testOut)}
+        PARSE_OUT="$STAGE.kano_parse.$$"
         ${prepareYqRuntimeCmd()}
         cleanup_yaml_bridge() {
           rc=$?
-          rm -f "$TEST_OUT" 2>/dev/null || true
+          rm -f "$PARSE_OUT" 2>/dev/null || true
           if [ "$rc" -ne 0 ]; then rm -f "$STAGE" 2>/dev/null || true; fi
           trap - EXIT
           exit "$rc"
@@ -2725,14 +2717,11 @@ EOF_KANO_SERVICE
           echo "YQ_VERSION_UNSUPPORTED: $version"
           exit 1
         }
-        "$YQ" e '.' "$STAGE" >/dev/null 2>"$TEST_OUT" || {
+        "$YQ" e '.' "$STAGE" >/dev/null 2>"$PARSE_OUT" || {
           echo "YAML_STAGE_PARSE_FAILED: $LABEL"
-          cat "$TEST_OUT" 2>/dev/null || true
+          cat "$PARSE_OUT" 2>/dev/null || true
           exit 1
         }
-        if [ ${coreTest ? '1' : '0'} = '1' ]; then
-          echo "CONFIG_TEST_SKIPPED=relaxed_mode"
-        fi
         hash_file() {
           file="$1"
           if command -v sha256sum >/dev/null 2>&1; then sha256sum "$file" 2>/dev/null | awk '{print $1}'
@@ -2785,7 +2774,7 @@ EOF_KANO_SERVICE
         echo "YAML_OLD_SIZE=$old_size"
         echo "YAML_NEW_SIZE=$new_size"
         echo "YAML_STAGE_SIZE=$stage_size"
-        `, (Number(coreTimeout) + 45) * 1000);
+        `, 45 * 1000);
     const content = String(res.content || '');
     return {
       ok: !!res.success && (/YAML_COMMIT_OK=1/.test(content) || /YAML_COMMIT_UNCHANGED=1/.test(content)),
@@ -2803,8 +2792,6 @@ EOF_KANO_SERVICE
     marker = '',
     backup = true,
     backupTag = 'yaml_bridge',
-    coreTest = false,
-    coreTimeout = 90,
   } = {}) => {
     try {
       assertYamlRootMap(objectValue, label);
@@ -2821,8 +2808,6 @@ EOF_KANO_SERVICE
       label,
       backup,
       backupTag,
-      coreTest,
-      coreTimeout,
     });
   };
 
@@ -3257,7 +3242,7 @@ EOF_KANO_SERVICE
         trap - EXIT
         `);
     if (!res.success) {
-      createToast(`保存图形化规则失败<br>${textToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`保存图形化规则失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
     }
     return !!res.success;
   };
@@ -3348,7 +3333,7 @@ EOF_KANO_SERVICE
         trap - EXIT
         `);
     if (!res.success) {
-      createToast(`保存 JS 覆写失败<br>${textToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`保存 JS 覆写失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
     }
     return !!res.success;
   };
@@ -3478,7 +3463,7 @@ EOF_KANO_SERVICE
         fi
         `, 20 * 1000);
     if (!pre.success) {
-      createToast(`\u51c6\u5907\u57fa\u7840\u6a21\u677f\u5931\u8d25<br>${textToHtml(pre.content || '')}`, 'red', 8000);
+      createToast(`\u51c6\u5907\u57fa\u7840\u6a21\u677f\u5931\u8d25<br>${safeTextToHtml(pre.content || '')}`, 'red', 8000);
       return false;
     }
     return await ensureTemplateForF50(cleanSources, { showToast: false, templatePath });
@@ -3511,7 +3496,7 @@ EOF_KANO_SERVICE
 
     const read = await readYamlObject(templatePath, 'template.yaml');
     if (!read.ok) {
-      createToast(`读取模板失败<br>${textToHtml(read.message || '')}`, 'red', 9000);
+      createToast(`读取模板失败<br>${safeTextToHtml(read.message || '')}`, 'red', 9000);
       return false;
     }
 
@@ -3526,7 +3511,7 @@ EOF_KANO_SERVICE
       applyOverrideSafetyFields(outputObj, preservedSecret);
       assertYamlRootMap(outputObj, 'template.yaml 覆写结果');
     } catch (e) {
-      createToast(`覆写执行失败<br>${textToHtml(e.message || e)}`, 'red', 9000);
+      createToast(`覆写执行失败<br>${safeTextToHtml(e.message || e)}`, 'red', 9000);
       return false;
     }
 
@@ -3540,14 +3525,13 @@ EOF_KANO_SERVICE
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
       backup: true,
       backupTag: 'override',
-      coreTest: false,
     });
     if (!write.ok) {
-      createToast(`写入覆写结果失败，原模板未被覆盖<br>${textToHtml(write.content || '')}`, 'red', 10000);
+      createToast(`写入覆写结果失败，原模板未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
       return false;
     }
     if (showToast) {
-      createToast(`覆写已应用到 template.yaml<br>${textToHtml(write.content || '')}`, 'green', 7000);
+      createToast('覆写已应用到 template.yaml', 'green', 7000);
     }
     if (restart) return await restartClash({ skipCheck: true });
     return true;
@@ -3585,7 +3569,7 @@ KANO_WRITE_CHECK_EOF
     };
 
     const fail = async (step, message) => {
-      const detail = String(message || 'unknown error');
+      const detail = sanitizeSubscriptionSecrets(String(message || 'unknown error'));
       await runShellWithRoot(`
         {
           echo 'failed_rc=1'
@@ -3596,7 +3580,7 @@ KANO_WRITE_CHECK_EOF
       await appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate failed step=${step} detail=${detail.replace(/[\r\n]+/g, ' ').slice(0, 500)}`);
       const checkRes = await runShellWithRoot(`cat ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} 2>/dev/null || true`, 10 * 1000);
       createToast(
-        `生成运行配置失败，config.yaml 未提交<br>${textToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${textToHtml(checkRes.content || '')}`,
+        `生成运行配置失败，config.yaml 未提交<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
         'red',
         12000,
       );
@@ -3635,8 +3619,6 @@ KANO_WRITE_CHECK_EOF
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
       backup,
       backupTag: 'runtime',
-      coreTest: false,
-      coreTimeout: 120,
     });
     if (!write.ok) return fail('validate_or_commit_runtime', write.content || '运行配置验证或提交失败');
 
@@ -3670,7 +3652,7 @@ KANO_WRITE_CHECK_EOF
     await appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate committed json_bridge=1 providers=${normalized.providerNames.join(',')} unchanged=${write.unchanged ? '1' : '0'}`);
     if (showToast) {
       createToast(
-        `运行配置已生成并通过核心测试<br>YAML_BRIDGE=${YAML_BRIDGE_VERSION}<br>${textToHtml(write.content || '')}`,
+        '运行配置已通过结构检查并原子写入',
         'green',
         8000,
       );
@@ -3946,6 +3928,9 @@ KANO_WRITE_CHECK_EOF
 
     const oldInfo = await buildControllerInfo();
     const rollbackPath = await createConfigRollbackPoint('controller_settings');
+    if (rollbackPath === null) {
+      return { ...checked, ok: false, message: '无法创建 config.yaml 回滚点，未保存设置' };
+    }
     const configRead = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!configRead.ok) {
       return { ...checked, ok: false, message: configRead.message || 'config.yaml 读取失败' };
@@ -3974,13 +3959,30 @@ KANO_WRITE_CHECK_EOF
     }
 
     let templateWrite = null;
+    const restoreTemplateWrite = async () => {
+      if (!templateWrite || templateWrite.unchanged) return true;
+      if (!templateWrite.backupPath) return false;
+      const restored = await runShellWithRoot(`
+        set -e
+        BACKUP=${shellQuote(templateWrite.backupPath)}
+        TARGET=${shellQuote(CLASH_TEMPLATE)}
+        RESTORE="$TARGET.kano_restore.$$"
+        trap 'rm -f "$RESTORE" 2>/dev/null || true' EXIT
+        [ -s "$BACKUP" ] || exit 1
+        cp "$BACKUP" "$RESTORE"
+        chmod 644 "$RESTORE" 2>/dev/null || true
+        mv -f "$RESTORE" "$TARGET"
+        trap - EXIT
+        echo TEMPLATE_ROLLBACK_RESTORED
+      `, 20 * 1000);
+      return restored.success && String(restored.content || '').includes('TEMPLATE_ROLLBACK_RESTORED');
+    };
     if (templateObject) {
       templateWrite = await writeYamlObjectAtomic(CLASH_TEMPLATE, templateObject, {
         label: 'template.yaml',
         marker: templateGenerated ? GENERATED_TEMPLATE_MARKER : '',
         backup: true,
         backupTag: 'controller',
-        coreTest: false,
       });
       if (!templateWrite.ok) {
         return {
@@ -3995,20 +3997,20 @@ KANO_WRITE_CHECK_EOF
       label: 'config.yaml',
       backup: true,
       backupTag: 'controller',
-      coreTest: false,
-      coreTimeout: 90,
     });
     if (!configWrite.ok) {
-      if (templateWrite && templateWrite.backupPath) {
-        await runShellWithRoot(`
-          [ -s ${shellQuote(templateWrite.backupPath)} ] && cp ${shellQuote(templateWrite.backupPath)} ${shellQuote(CLASH_TEMPLATE)} && chmod 644 ${shellQuote(CLASH_TEMPLATE)} || true
-        `);
-      }
-      if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, '控制 API 设置');
+      const templateRestored = await restoreTemplateWrite();
+      const configRestored = rollbackPath
+        ? await restoreConfigRollbackPoint(rollbackPath, '控制 API 设置', { showToast: false })
+        : false;
       return {
         ...checked,
         ok: false,
-        message: `保存 config.yaml 控制 API 设置失败\n${configWrite.content || ''}`.trim(),
+        message: sanitizeSubscriptionSecrets([
+          '保存 config.yaml 控制 API 设置失败',
+          configRestored && templateRestored ? '已恢复原配置' : '原配置回滚未完整完成',
+          configWrite.content || '',
+        ].filter(Boolean).join('\n')),
       };
     }
 
@@ -4026,14 +4028,15 @@ KANO_WRITE_CHECK_EOF
       ? await callMihomoApi('/version', 'GET', null, checked.info)
       : { success: false, statusCode: 0, responseText: 'reload failed' };
     if (!reloadRes.success || !checkRes.success) {
-      if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, '控制 API 设置');
-      if (templateWrite && templateWrite.backupPath) {
-        await runShellWithRoot(`
-          [ -s ${shellQuote(templateWrite.backupPath)} ] && cp ${shellQuote(templateWrite.backupPath)} ${shellQuote(CLASH_TEMPLATE)} && chmod 644 ${shellQuote(CLASH_TEMPLATE)} || true
-        `);
-      }
-      const rollbackReload = await reloadConfigHot(checked.info);
-      if (!rollbackReload.success) await restartClash({ skipCheck: true });
+      const configRestored = rollbackPath
+        ? await restoreConfigRollbackPoint(rollbackPath, '控制 API 设置', { showToast: false })
+        : false;
+      const templateRestored = await restoreTemplateWrite();
+      const rollbackReload = configRestored ? await reloadConfigHot(oldInfo) : { success: false };
+      const runtimeRecovered = rollbackReload.success || (configRestored && await restartClash({ skipCheck: true }));
+      const rollbackSummary = configRestored && templateRestored
+        ? (runtimeRecovered ? '已恢复原配置，核心运行正常' : '已恢复原配置，但核心未能恢复运行')
+        : '原配置回滚未完整完成';
       return {
         ...checked,
         ok: false,
@@ -4041,7 +4044,7 @@ KANO_WRITE_CHECK_EOF
         shell: res,
         reload: reloadRes,
         connectivity: checkRes,
-        message: `新控制 API 设置无法生效，已恢复原配置。\n${reloadRes.responseText || checkRes.responseText || ''}`.trim(),
+        message: sanitizeSubscriptionSecrets(`新控制 API 设置无法生效；${rollbackSummary}\n${reloadRes.responseText || checkRes.responseText || ''}`.trim()),
       };
     }
     return {
@@ -4241,12 +4244,10 @@ KANO_WRITE_CHECK_EOF
         10,
       );
       if (!patched.success) {
-        createToast(`TUN 运行态同步失败 HTTP ${patched.statusCode || 0}`, 'red', 9000);
         return false;
       }
       const verified = await readCoreTunEnabled(info);
       if (verified !== want) {
-        createToast('核心未接受 TUN 设置，请查看内核日志。', 'red', 10000);
         return false;
       }
       await appendTemplateFlowDebug(`runtime tun converged want=${want ? '1' : '0'}`);
@@ -4605,9 +4606,41 @@ KANO_WRITE_CHECK_EOF
       if [ -s "$CONVERTER" ]; then
         chmod 700 "$CONVERTER" || exit 1
         [ -x "$CONVERTER" ] || exit 1
+        echo CONVERTER_READY
+      else
+        exit 2
       fi
     `, 10 * 1000);
-    return permission.success;
+    if (permission.success && String(permission.content || '').includes('CONVERTER_READY')) return true;
+
+    const archive = await downloadCoreArchive({ allowCached: true });
+    if (!archive.ok) {
+      await appendTemplateFlowDebug(`local_converter_repair archive_failed stage=${archive.stage || 'unknown'}`);
+      return true;
+    }
+    const repaired = await runDangerousShellWithRoot(`
+      set -e
+      ZIP=${shellQuote(DOWNLOAD_ZIP)}
+      TARGET=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
+      STAGE="$TARGET.kano_repair.$$"
+      trap 'rm -f "$STAGE" 2>/dev/null || true' EXIT
+      entry="$(unzip -Z1 "$ZIP" 2>/dev/null | awk '/(^|\/)Tools\/kano-f50-helper-converter$/ { print }')"
+      [ "$(printf '%s\n' "$entry" | sed '/^$/d' | wc -l | tr -d ' ')" = '1' ] || {
+        echo CONVERTER_ARCHIVE_ENTRY_INVALID
+        exit 1
+      }
+      unzip -p "$ZIP" "$entry" > "$STAGE"
+      [ -s "$STAGE" ] || exit 1
+      chmod 700 "$STAGE"
+      info="$("$STAGE" version 2>/dev/null)" || exit 1
+      printf '%s' "$info" | grep -q '"ok":true' || exit 1
+      printf '%s' "$info" | grep -q '"convert-subscription"' || exit 1
+      mv -f "$STAGE" "$TARGET"
+      trap - EXIT
+      echo CONVERTER_REPAIRED
+    `, 45 * 1000, 'repair_local_subscription_converter');
+    await appendTemplateFlowDebug(`local_converter_repair result=${repaired.success ? 'success' : 'failed'}`);
+    return true;
   };
 
   const convertSubscriptionsLocally = async (sources = []) => {
@@ -4615,6 +4648,10 @@ KANO_WRITE_CHECK_EOF
     if (cleanSources.length == 0) return buildProviderUpdateResult([]);
     await loadProviderUserAgent();
     if (!(await ensureLocalSubscriptionConverter())) {
+      const cacheProbe = await runShellWithRoot(cleanSources.map((source) => `
+        [ -s ${shellQuote(`${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`)} ] && echo ${shellQuote(source.name)} || true
+      `).join('\n'), 10 * 1000);
+      const cachedNames = new Set(String(cacheProbe.content || '').split('\n').map((line) => line.trim()).filter(Boolean));
       return buildProviderUpdateResult(cleanSources.map((source) => ({
         type: 'proxy-provider',
         name: source.name,
@@ -4625,7 +4662,7 @@ KANO_WRITE_CHECK_EOF
         rawMessage: '',
         urlMasked: '',
         proxyCount: null,
-        cacheAvailable: false,
+        cacheAvailable: cachedNames.has(source.name),
       })), { via: 'local' });
     }
 
@@ -4648,6 +4685,16 @@ KANO_WRITE_CHECK_EOF
     const localFetchUserAgentShell = localFetchUserAgents.map((value) => shellQuote(value)).join(' ');
     const txName = `.kano_local_subscription_${Date.now()}_${createRandomString(6)}`;
     const txDir = `${CLASH_PROXY_DIR}/proxies/${txName}`;
+    const cacheProbeCommands = cleanSources.map((source) => {
+      const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
+      return `
+        if [ -s ${shellQuote(target)} ]; then
+          echo ${shellQuote(`LOCAL_CACHE_STATE=${source.name}|1`)}
+        else
+          echo ${shellQuote(`LOCAL_CACHE_STATE=${source.name}|0`)}
+        fi
+      `;
+    }).join('\n');
     const downloadCommands = cleanSources.map((source, index) => {
       const rawPath = `$TX/raw_${index + 1}`;
       const outputPath = `$TX/${source.name}.yaml`;
@@ -4657,6 +4704,7 @@ KANO_WRITE_CHECK_EOF
         last_ua=''
         last_kind=unknown
         last_convert=''
+        last_stage=download
         raw_tmp="${rawPath}.tmp"
         out_tmp="${outputPath}.tmp"
         err_tmp="${rawPath}.err"
@@ -4678,6 +4726,8 @@ KANO_WRITE_CHECK_EOF
         }
         for LOCAL_UA in ${localFetchUserAgentShell}; do
           rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
+          last_stage=download
+          last_convert=''
           if http_code="$("$CURL_BIN" -sS -L $CURL_COMPRESSED --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
             -H 'Accept: application/yaml, text/yaml, application/x-yaml, text/plain, application/json, */*' \
             -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"; then
@@ -4691,6 +4741,7 @@ KANO_WRITE_CHECK_EOF
             2??)
               if [ "$curl_rc" -eq 0 ] && [ -s "$raw_tmp" ]; then
                 last_kind="$(classify_candidate "$raw_tmp")"
+                last_stage=convert
                 if CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"; then
                   convert_rc=0
                 else
@@ -4711,11 +4762,14 @@ KANO_WRITE_CHECK_EOF
               fi
               ;;
           esac
+          if [ "$last_stage" = 'download' ]; then
+            last_convert="$(tail -n 2 "$err_tmp" 2>/dev/null | tr '\\r\\n' '  ' | cut -c1-260)"
+          fi
         done
         rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
         if [ "$candidate_ok" != '1' ]; then
-          [ -n "$last_convert" ] || last_convert='no convertible provider document'
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|convert|`)}"$last_http|$last_kind|$last_convert"
+          [ -n "$last_convert" ] || last_convert='no usable subscription response'
+          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|`)}"$last_stage|$last_http|$last_kind|$last_convert"
           exit 22
         fi
       `;
@@ -4766,6 +4820,7 @@ KANO_WRITE_CHECK_EOF
         }
         trap cleanup_local_conversion EXIT
         mkdir -p "$TX" ${shellQuote(`${CLASH_PROXY_DIR}/proxies`)}
+        ${cacheProbeCommands}
         ${getCurlBinCmd()}
         ${downloadCommands}
         ${snapshotCommands}
@@ -4777,6 +4832,11 @@ KANO_WRITE_CHECK_EOF
 
     const lines = String(res.content || '').split('\n').map((line) => line.trim()).filter(Boolean);
     const converted = new Map();
+    const existingCache = new Map();
+    lines.filter((line) => line.startsWith('LOCAL_CACHE_STATE=')).forEach((line) => {
+      const [name, available] = line.replace(/^LOCAL_CACHE_STATE=/, '').split('|');
+      existingCache.set(name, available == '1');
+    });
     lines.filter((line) => line.startsWith('LOCAL_CONVERT_OK=')).forEach((line) => {
       const [name, count, format] = line.replace(/^LOCAL_CONVERT_OK=/, '').split('|');
       converted.set(name, { count: Number(count) || 0, format: format || '' });
@@ -4804,10 +4864,10 @@ KANO_WRITE_CHECK_EOF
         attempts: 1,
         errorType: ok ? '' : (failedStage || 'local_commit_failed'),
         message,
-        rawMessage: source.name == failedName ? String(failedDetail || '') : '',
+        rawMessage: source.name == failedName ? sanitizeSubscriptionSecrets(failedDetail || '') : '',
         urlMasked: source.name == failedName ? maskSubscriptionUrl(source.url) : '',
-        proxyCount: item ? item.count : null,
-        cacheAvailable: !ok,
+        proxyCount: ok && item ? item.count : null,
+        cacheAvailable: ok || existingCache.get(source.name) === true,
         format: item ? item.format : '',
         via: 'local',
       };
@@ -4822,9 +4882,6 @@ KANO_WRITE_CHECK_EOF
         SOURCE_FILE=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
         CHECK=${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)}
         WRITE_CHECK=${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
-        CONFIG_TEST=${shellQuote(CLASH_CONFIG_TEST_OUT)}
-        RUNTIME_TEST=${shellQuote(CLASH_RUNTIME_TEST_OUT)}
-        SUB_TEST=${shellQuote(KANO_SUBSCRIPTION_CONFIG_TEST)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
         mode=${shellQuote(SUB_RULE_MODE_TEMPLATE)}
@@ -4889,13 +4946,6 @@ KANO_WRITE_CHECK_EOF
         last_reason="$(grep -m 1 '^reason=' "$CHECK" 2>/dev/null | tail -n 1 | sed 's/^reason=//' | tr -d '\r')"
         failed_stage="$(grep -m 1 '^failed_step=' "$WRITE_CHECK" 2>/dev/null | sed 's/^failed_step=//' | tr -d '\r')"
         [ -n "$failed_stage" ] || failed_stage="$last_reason"
-        core_test_result="unknown"
-        for f in "$CONFIG_TEST" "$RUNTIME_TEST" "$SUB_TEST"; do
-          [ -f "$f" ] || continue
-          if grep -q 'CONFIG_TEST_FAILED' "$f" 2>/dev/null; then core_test_result="failed:$(basename "$f")"; break; fi
-          if grep -q 'CONFIG_TEST_OK' "$f" 2>/dev/null; then core_test_result="ok:$(basename "$f")"; break; fi
-          if grep -q 'CORE_TEST_SKIPPED' "$f" 2>/dev/null; then core_test_result="skipped:$(basename "$f")"; break; fi
-        done
         echo "mode=$mode"
         echo "config_source=$config_source"
         echo "config_read_status=$config_read_status"
@@ -4903,7 +4953,6 @@ KANO_WRITE_CHECK_EOF
         echo "proxy_groups_count=$proxy_groups_count"
         echo "proxy_providers_count=$proxy_providers_count"
         echo "last_write_time=$last_write_time"
-        echo "core_test_result=$core_test_result"
         echo "last_result=$last_result"
         echo "last_reason=$last_reason"
         echo "failed_stage=$failed_stage"
@@ -4922,7 +4971,6 @@ KANO_WRITE_CHECK_EOF
       proxyGroupsCount: pickCount('proxy_groups_count'),
       proxyProvidersCount: pickCount('proxy_providers_count'),
       lastWriteTime: pick('last_write_time', 'unknown'),
-      coreTestResult: pick('core_test_result', 'unknown'),
       lastResult: pick('last_result', 'unknown'),
       lastReason: pick('last_reason', ''),
       failedStage: pick('failed_stage', ''),
@@ -5041,7 +5089,7 @@ KANO_WRITE_CHECK_EOF
     let state = await checkInstallState({ fresh: true });
     if (!['not_installed', 'damaged'].includes(state.state)) return true;
     if (state.state == 'damaged' && state.repairable) {
-      createToast(`检测到安装损坏，正在安全修复<br>${textToHtml(state.message || state.content)}`, 'yellow', 8000);
+      createToast(`检测到安装损坏，正在安全修复<br>${safeTextToHtml(state.message || state.content)}`, 'yellow', 8000);
       if (await selfHealDamagedInstall(state)) {
         state = await checkInstallState({ fresh: true });
         if (!['not_installed', 'damaged'].includes(state.state)) return true;
@@ -5052,7 +5100,7 @@ KANO_WRITE_CHECK_EOF
     createToast(
       state.state == 'not_installed'
         ? '\u672a\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5'
-        : `猫猫安装不可用<br>${textToHtml(state.message || state.content)}`,
+        : `猫猫安装不可用<br>${safeTextToHtml(state.message || state.content)}`,
       'red',
       9000,
     );
@@ -5101,7 +5149,7 @@ KANO_WRITE_CHECK_EOF
       '--yq-runtime', KANO_YQ_RUNTIME_DIR,
       '--clash-dir', CLASH_DIR,
     ], 15 * 1000);
-    if (helperResult) return String(helperResult.text || '');
+    if (helperResult) return sanitizeSubscriptionSecrets(helperResult.text || '');
     const res = await runShellWithRoot(`
         get_diag_ipt() {
           NAME="$1"
@@ -5188,7 +5236,7 @@ KANO_WRITE_CHECK_EOF
         echo "[last logs]"
         [ -f ${shellQuote(LOG_FILE)} ] && tail -n 80 ${shellQuote(LOG_FILE)} 2>/dev/null || true
         `, 15 * 1000);
-    return res.content || '';
+    return sanitizeSubscriptionSecrets(res.content || '');
   };
 
   const networkRescue = async ({ stopService = true, showOutput = true, reason = '\u624b\u52a8\u6062\u590d' } = {}) => {
@@ -5305,7 +5353,7 @@ KANO_WRITE_CHECK_EOF
     return !!(res && res.success && String(res.content || '').trim() == '1');
   };
 
-  const acceptRunningCoreWithSlowApi = async (context = '\u542f\u52a8') => {
+  const waitForRunningCoreApi = async (context = '\u542f\u52a8') => {
     const pid = await getCorePid();
     if (!pid) return false;
     if (!(await isCorePidAlive(pid))) return false;
@@ -5313,11 +5361,11 @@ KANO_WRITE_CHECK_EOF
     if (!(await isCorePidAlive(pid))) return false;
     await appendTemplateFlowDebug(`core process ready before api context=${context} pid=${pid}`);
     createToast(
-      `${escapeHtml(context)}\u540e\u6838\u5fc3\u8fdb\u7a0b\u5df2\u542f\u52a8\uff0c\u63a7\u5236 API \u54cd\u5e94\u8f83\u6162\uff1b\u5df2\u4fdd\u7559\u65b0\u8bbe\u7f6e\uff0c\u4e0d\u518d\u81ea\u52a8\u6062\u590d\u65e7\u503c\u3002`,
+      `${escapeHtml(context)}\u540e\u6838\u5fc3\u8fdb\u7a0b\u5df2\u542f\u52a8\uff0c\u6b63\u5728\u7ee7\u7eed\u7b49\u5f85\u63a7\u5236 API...`,
       'yellow',
       10000,
     );
-    return true;
+    return await waitForCoreApi(12, 1000);
   };
 
   const inspectGeodataBootstrap = async () => {
@@ -5363,7 +5411,7 @@ KANO_WRITE_CHECK_EOF
   const verifyStartOrRollback = async (context = '\u542f\u52a8') => {
     const apiOk = await waitForCoreApi();
     if (apiOk) return true;
-    if (await acceptRunningCoreWithSlowApi(context)) return true;
+    if (await waitForRunningCoreApi(context)) return true;
     const geodataState = await inspectGeodataBootstrap();
     if (geodataState.inProgress) {
       createToast('检测到 Mihomo 正在初始化 MMDB/Geo 数据，已延长等待，避免误判启动失败。', 'yellow', 12000);
@@ -5372,7 +5420,7 @@ KANO_WRITE_CHECK_EOF
         createToast('Geo 数据初始化完成，Mihomo API 已恢复。', 'green', 8000);
         return true;
       }
-      if (await acceptRunningCoreWithSlowApi(context)) return true;
+      if (await waitForRunningCoreApi(context)) return true;
     }
     const firstStatusText = await collectNetworkStatus();
     const retryRes = await startClashServiceClean({
@@ -5384,7 +5432,7 @@ KANO_WRITE_CHECK_EOF
         createToast(`${escapeHtml(context)}\u540e\u6838\u5fc3\u542f\u52a8\u8f83\u6162\uff0c\u5df2\u81ea\u52a8\u91cd\u8bd5\u6062\u590d\u3002`, 'yellow', 9000);
         return true;
       }
-      if (await acceptRunningCoreWithSlowApi(context)) return true;
+      if (await waitForRunningCoreApi(context)) return true;
     }
     const secondStatusText = await collectNetworkStatus();
     const statusText = [
@@ -5429,7 +5477,7 @@ KANO_WRITE_CHECK_EOF
     return line.replace(/^CONFIG_ROLLBACK=/, '').trim();
   };
 
-  const restoreConfigRollbackPoint = async (rollbackPath = '', context = '\u56de\u6eda') => {
+  const restoreConfigRollbackPoint = async (rollbackPath = '', context = '\u56de\u6eda', { showToast = true } = {}) => {
     if (!rollbackPath) return false;
     const res = await runShellWithRoot(`
         CONFIG=${shellQuote(CLASH_CONFIG)}
@@ -5452,23 +5500,25 @@ KANO_WRITE_CHECK_EOF
         sync 2>/dev/null || true
         echo "CONFIG_ROLLBACK_RESTORED: $BACKUP"
         `);
-    createToast(
-      res.success
-        ? `${escapeHtml(context)}\u5931\u8d25\uff0c\u5df2\u6062\u590d\u4e0a\u4e00\u4efd config.yaml`
-        : `${escapeHtml(context)}\u5931\u8d25\uff0c\u4e14 config.yaml \u56de\u6eda\u5931\u8d25<br>${textToHtml(res.content || '')}`,
-      res.success ? 'yellow' : 'red',
-      9000,
-    );
+    if (showToast) {
+      createToast(
+        res.success
+          ? `${escapeHtml(context)}\u5931\u8d25\uff0c\u5df2\u6062\u590d\u4e0a\u4e00\u4efd config.yaml`
+          : `${escapeHtml(context)}\u5931\u8d25\uff0c\u4e14 config.yaml \u56de\u6eda\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`,
+        res.success ? 'yellow' : 'red',
+        9000,
+      );
+    }
     return res.success;
   };
 
-  const restartClashWithConfigRollback = async (rollbackPath = '', context = '\u91cd\u542f') => {
+  const restartClashWithConfigRollback = async (rollbackPath = null, context = '\u91cd\u542f') => {
     await appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
     const ok = await restartClash({ skipCheck: true });
     await appendTemplateFlowDebug(`leave restartClashWithConfigRollback ok=${ok ? '1' : '0'} context=${context}`);
     if (ok) return true;
 
-    if (!rollbackPath) {
+    if (rollbackPath === null) {
       createToast(
         `${escapeHtml(context)}失败，且没有可用的 config.yaml 回滚点。已清理运行规则以避免断网。`,
         'red',
@@ -5478,9 +5528,28 @@ KANO_WRITE_CHECK_EOF
       return false;
     }
 
+    if (rollbackPath === '') {
+      const removed = await runShellWithRoot(`
+        rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
+        [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
+        echo CONFIG_ROLLBACK_RESTORED_ABSENT
+      `, 15 * 1000);
+      await networkRescue({ stopService: true, showOutput: false, reason: `${context}回滚到无配置状态` });
+      createToast(
+        removed.success
+          ? `${escapeHtml(context)}失败；写入前没有 config.yaml，已移除新配置并清理网络规则。`
+          : `${escapeHtml(context)}失败；写入前没有 config.yaml，但新配置移除失败。`,
+        removed.success ? 'yellow' : 'red',
+        12000,
+      );
+      await isMMRunning();
+      return false;
+    }
+
     await appendTemplateFlowDebug(`restart failed, restoring config rollback=${rollbackPath}`);
-    const restored = await restoreConfigRollbackPoint(rollbackPath, context);
+    const restored = await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
     if (!restored) {
+      createToast(`${escapeHtml(context)}失败，且上一份 config.yaml 回滚失败。`, 'red', 12000);
       await isMMRunning();
       return false;
     }
@@ -6139,7 +6208,7 @@ KANO_WRITE_CHECK_EOF
 
   let lastSanitizedTrafficMode = 'tproxy';
 
-  const sanitizeConfigForTProxy = async ({ showToast = false } = {}) => {
+  const sanitizeConfigForTProxy = async ({ showToast = false, errorToast = true } = {}) => {
     const runtimeRes = await runShellWithRoot(`
         OPTIONS=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
         SERVICE=${shellQuote(CLASH_SERVICE)}
@@ -6163,7 +6232,7 @@ KANO_WRITE_CHECK_EOF
         echo "tun_device=$tun_device"
         `, 15 * 1000);
     if (!runtimeRes.success) {
-      createToast(`配置自检环境读取失败<br>${textToHtml(runtimeRes.content || '')}`, 'red', 9000);
+      if (errorToast) createToast(`配置自检环境读取失败<br>${safeTextToHtml(runtimeRes.content || '')}`, 'red', 9000);
       return false;
     }
     const values = {};
@@ -6176,19 +6245,19 @@ KANO_WRITE_CHECK_EOF
     const ipv6Enabled = values.ipv6_mode == 'on';
     const tproxyPort = getPositivePort(values.tproxy_port, 7895);
     if (trafficMode == 'tun' && values.tun_device != '1') {
-      createToast('配置自检失败：TUN 模式需要 /dev/net/tun 或 /dev/tun，原配置未改写', 'red', 9000);
+      if (errorToast) createToast('配置自检失败：TUN 模式需要 /dev/net/tun 或 /dev/tun，原配置未改写', 'red', 9000);
       return false;
     }
 
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
-      createToast(`配置自检失败<br>${textToHtml(storage.content || '')}`, 'red', 9000);
+      if (errorToast) createToast(`配置自检失败<br>${safeTextToHtml(storage.content || '')}`, 'red', 9000);
       return false;
     }
 
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) {
-      createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${textToHtml(read.message || '')}`, 'red', 10000);
+      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(read.message || '')}`, 'red', 10000);
       return false;
     }
 
@@ -6244,7 +6313,7 @@ KANO_WRITE_CHECK_EOF
         names.add(name);
       });
     } catch (e) {
-      createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${textToHtml(e.message || e)}`, 'red', 10000);
+      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
       return false;
     }
 
@@ -6252,11 +6321,9 @@ KANO_WRITE_CHECK_EOF
       label: 'config.yaml',
       backup: true,
       backupTag: 'f50_sanitize',
-      coreTest: false,
-      coreTimeout: 120,
     });
     if (!write.ok) {
-      createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${textToHtml(write.content || '')}`, 'red', 12000);
+      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
       return false;
     }
     if (showToast) {
@@ -6372,7 +6439,7 @@ KANO_BOOTSTRAP_CONFIG
         fi
         `);
     if (!res.success) {
-      createToast(`\u5199\u5165\u515c\u5e95\u914d\u7f6e\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`\u5199\u5165\u515c\u5e95\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     if (String(res.content || '').includes('BOOTSTRAP_CREATED')) {
@@ -6409,7 +6476,7 @@ KANO_BOOTSTRAP_CONFIG
       const archive = await downloadCoreArchive({ allowCached: false });
       if (!archive.ok) {
         return createToast(
-          `\u4e0b\u8f7d\u6216\u6821\u9a8c\u5b89\u88c5\u5305\u5931\u8d25<br>${textToHtml(archive.content || archive.message)}`,
+          `\u4e0b\u8f7d\u6216\u6821\u9a8c\u5b89\u88c5\u5305\u5931\u8d25<br>${safeTextToHtml(archive.content || archive.message)}`,
           'red',
           12000,
         );
@@ -6610,7 +6677,7 @@ EOF_KANO_SERVICE
         echo "INSTALL_PACKAGE_COMMITTED: yq=$yq_version zip_size=$zip_size unpacked=\${total_unpacked:-unknown}"
         `, 92 * 1000);
       if (!res2.success || !String(res2.content || '').includes('INSTALL_PACKAGE_COMMITTED')) {
-        return createToast(`安装包校验或提交失败<br>${textToHtml(res2.content || '')}`, 'red', 10000);
+        return createToast(`安装包校验或提交失败<br>${safeTextToHtml(res2.content || '')}`, 'red', 10000);
       }
       const installBackupPath = ((String(res2.content || '').split('\n').find((line) => line.startsWith('INSTALL_BACKUP=')) || '')
         .replace(/^INSTALL_BACKUP=/, '')
@@ -6637,14 +6704,14 @@ EOF_KANO_SERVICE
           printf 'INSTALL_ROLLBACK_REASON=%s\n' ${shellQuote(reason)}
         `, 60 * 1000, 'install_rollback');
         if (!rollbackRes.success) {
-          createToast(`安装失败，且安装目录回滚失败<br>${textToHtml(rollbackRes.content || '')}`, 'red', 12000);
+          createToast(`安装失败，且安装目录回滚失败<br>${safeTextToHtml(rollbackRes.content || '')}`, 'red', 12000);
         }
         return rollbackRes.success;
       };
       const failInstalledPackage = async (message, detail = '') => {
         const rolledBack = await rollbackInstalledPackage(message);
         createToast(
-          `${escapeHtml(message)}${detail ? `<br>${textToHtml(detail)}` : ''}<br>${rolledBack ? '已恢复安装前状态。' : '安装目录回滚失败。'}`,
+          `${escapeHtml(message)}${detail ? `<br>${safeTextToHtml(detail)}` : ''}<br>${rolledBack ? '已恢复安装前状态。' : '安装目录回滚失败。'}`,
           'red',
           12000,
         );
@@ -6733,8 +6800,16 @@ EOF_KANO_SERVICE
       if (!(await verifyStartOrRollback('\u9996\u6b21\u542f\u52a8'))) {
         return await failInstalledPackage('首次启动健康检查失败');
       }
-      if (policyReadyAfterInstall && !(await reapplyPolicyRulesSilent({ ensureScript: false }))) {
-        createToast('核心已启动，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
+      const trafficModeReadyAfterInstall = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+      const policyAppliedAfterInstall = !policyReadyAfterInstall
+        || await reapplyPolicyRulesSilent({ ensureScript: false });
+      const installRuntimeReady = trafficModeReadyAfterInstall && policyAppliedAfterInstall;
+      if (!installRuntimeReady) {
+        const failedParts = [
+          trafficModeReadyAfterInstall ? '' : '流量模式同步',
+          policyAppliedAfterInstall ? '' : '网络策略应用',
+        ].filter(Boolean).join('、');
+        createToast(`核心 API 已启动，但${failedParts}失败`, 'red', 10000);
       }
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
       scheduleBinaryHelperButtonRefresh();
@@ -6759,9 +6834,9 @@ EOF_KANO_SERVICE
 
       showInfoDialog(
         'mm_installed_confirm_1',
-        '\u6838\u5fc3\u5df2\u542f\u52a8',
+        installRuntimeReady ? '\u6838\u5fc3\u5df2\u542f\u52a8' : '核心已启动，网络接管未完整生效',
         `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥在“Web 面板连接”中管理；节点在“订阅管理”中添加。`,
+        访问密钥在“Web 面板连接”中管理；节点在“订阅管理”中添加。${installRuntimeReady ? '' : '<br />请在“网络规则”中重新应用后再使用代理。'}`,
       );
     } finally {
       disabled_btn_enabled = false;
@@ -7250,7 +7325,7 @@ KANO_POLICY_TOOLS_EOF
         echo "POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}"
         `);
     if (!res.success) {
-      createToast(`\u5199\u5165\u7b56\u7565\u5de5\u5177\u811a\u672c\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`\u5199\u5165\u7b56\u7565\u5de5\u5177\u811a\u672c\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     if (syncStorage && !(await syncUnifiedDeviceBypassStorage())) {
@@ -7520,7 +7595,7 @@ KANO_POLICY_TOOLS_EOF
         write_policy_file ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} 600 ${shellQuote(optionsText)}
         `);
     if (!res.success) {
-      createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     invalidateBinarySnapshot();
@@ -7542,10 +7617,10 @@ KANO_POLICY_TOOLS_EOF
         ${shellQuote(CLASH_POLICY_SCRIPT)} status
         `);
     if (!res.success) {
-      createToast(`\u7b56\u7565\u89c4\u5219\u5e94\u7528\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 9000);
+      createToast(`\u7b56\u7565\u89c4\u5219\u5e94\u7528\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
     }
-    createToast(`\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528<br>${textToHtml(res.content || '')}`, 'green', 7000);
+    createToast('\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528', 'green', 7000);
     return true;
   };
 
@@ -7840,7 +7915,7 @@ KANO_POLICY_TOOLS_EOF
           if (await restartClash({ skipCheck: true })) {
             state.options = { ...nextState.options };
           } else {
-            await savePolicyState({
+            const modeRestored = await savePolicyState({
               ...nextState,
               options: {
                 ...nextState.options,
@@ -7848,15 +7923,22 @@ KANO_POLICY_TOOLS_EOF
                 ipv6: state.options.ipv6,
               },
             }, { apply: false });
-            await restoreConfigRollbackPoint(modeRollbackPath, '切换流量模式');
+            const configRestored = await restoreConfigRollbackPoint(
+              modeRollbackPath,
+              '切换流量模式',
+              { showToast: false },
+            );
             get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
             get('#mm_policy_ipv6').checked = state.options.ipv6 == 'on';
-            const recoveryOk = await restartClash({ skipCheck: true });
+            const recoveryOk = configRestored && await restartClash({ skipCheck: true });
+            const rollbackComplete = modeRestored && configRestored;
             createToast(
-              recoveryOk
+              rollbackComplete && recoveryOk
                 ? '切换失败，旧模式、旧配置和核心已恢复。'
-                : '切换失败，旧模式和旧配置已恢复；核心仍未启动，已清理网络规则。',
-              recoveryOk ? 'yellow' : 'red',
+                : rollbackComplete
+                  ? '切换失败，旧模式和旧配置已恢复；核心仍未启动，已清理网络规则。'
+                  : '切换失败，且旧模式或旧配置未能完整恢复。',
+              rollbackComplete && recoveryOk ? 'yellow' : 'red',
               10000,
             );
           }
@@ -7914,7 +7996,7 @@ KANO_POLICY_TOOLS_EOF
 
   const stopClash = async ({ skipCheck = false, showOutput = true } = {}) => {
     if (!skipCheck && !(await ensureReady())) return false;
-    createToast('\u6b63\u5728\u505c\u6b62\u6838\u5fc3...', 'green');
+    createToast('\u6b63\u5728\u505c\u6b62\u6838\u5fc3...', 'yellow');
     const res = await runShellWithRoot(`
         set +e
         stop_rc=0
@@ -7931,7 +8013,7 @@ KANO_POLICY_TOOLS_EOF
         exit "$stop_rc"
         `);
     if (!res.success) {
-      createToast(`停止服务失败，但已清理插件规则。<br>${textToHtml(res.content || '')}`, 'red', 9000);
+      createToast(`停止服务失败，但已清理插件规则。<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       await isMMRunning();
       return false;
     }
@@ -7946,7 +8028,7 @@ KANO_POLICY_TOOLS_EOF
     if (!skipCheck && !(await ensureReady())) return false;
     createToast(
       '\u6b63\u5728\u91cd\u542f\u6838\u5fc3...',
-      'green',
+      'yellow',
     );
     const sanitized = await sanitizeConfigForTProxy({ showToast: false });
     if (!sanitized) createToast('配置增强整理未完成，已按现有 config.yaml 继续启动核心。', 'yellow', 8000);
@@ -7957,13 +8039,18 @@ KANO_POLICY_TOOLS_EOF
       return false;
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
-    await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+    const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
     const rulesOk = await reapplyPolicyRulesSilent();
-    if (!rulesOk) {
-      createToast('核心已重启，但网络策略规则应用失败（设备直连/DNS/QUIC 未生效），请到「网络规则」重新应用。', 'red', 10000);
-    } else {
-      createToast('核心已重启', 'green');
+    if (!trafficModeOk || !rulesOk) {
+      const failedParts = [
+        trafficModeOk ? '' : '流量模式同步',
+        rulesOk ? '' : '网络策略应用',
+      ].filter(Boolean).join('、');
+      createToast(`核心 API 已启动，但${failedParts}失败`, 'red', 10000);
+      await isMMRunning();
+      return false;
     }
+    createToast('核心已重启，运行配置和网络策略已生效', 'green');
     await isMMRunning();
     return true;
   };
@@ -8028,12 +8115,16 @@ KANO_POLICY_TOOLS_EOF
       return false;
     }
     if (file.size > 8 * 1024 * 1024) {
-      createToast('\u914d\u7f6e\u5305\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc78MB\uff01', 'red');
+      createToast('\u914d\u7f6e\u5305\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc7 8 MB', 'red');
       return false;
     }
 
     const oldControllerInfo = await buildControllerInfo();
     const rollbackPath = await createConfigRollbackPoint('config_package_restore');
+    if (rollbackPath === null) {
+      createToast('无法创建 config.yaml 回滚点，已取消配置包导入。', 'red', 9000);
+      return false;
+    }
     const formData = new FormData();
     formData.append('file', file);
     let res = null;
@@ -8046,11 +8137,11 @@ KANO_POLICY_TOOLS_EOF
         })
       ).json();
     } catch (e) {
-      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
+      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
       return false;
     }
     if (!res || !res.url) {
-      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${textToHtml(res && res.error ? res.error : '')}`, 'red', 9000);
+      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${safeTextToHtml(res && res.error ? res.error : '')}`, 'red', 9000);
       return false;
     }
 
@@ -8086,7 +8177,6 @@ KANO_POLICY_TOOLS_EOF
         SRC=${shellQuote(uploadedPath)}
         STAGE=${shellQuote(`/data/kano_config_package_restore_${txId}`)}
         ROLLBACK_DIR=${shellQuote(`/data/kano_config_package_restore_${txId}_rollback`)}
-        CORE=${shellQuote(CLASH_CORE)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
         COMMIT_STARTED=0
@@ -8148,6 +8238,10 @@ KANO_POLICY_TOOLS_EOF
           echo "RESTORE_FAILED: package contains symbolic links"
           exit 1
         fi
+        if find "$STAGE" ! -type f ! -type d 2>/dev/null | grep -q .; then
+          echo "RESTORE_FAILED: package contains unsupported file types"
+          exit 1
+        fi
         stage_kb="$(du -sk "$STAGE" 2>/dev/null | awk '{print $1}')"
         echo "$stage_kb" | grep -Eq '^[0-9]+$' || stage_kb=0
         [ "$stage_kb" -le 32768 ] || { echo "RESTORE_FAILED: extracted package exceeds 32 MiB"; exit 1; }
@@ -8166,10 +8260,6 @@ KANO_POLICY_TOOLS_EOF
         done
         [ -s "$STAGE/config.yaml" ] || { echo "RESTORE_FAILED: config.yaml empty"; exit 1; }
         ${requireMikeFarahYqV4Cmd()}
-        [ -x "$CORE" ] || {
-          echo "CONFIG_TEST_FAILED: Clash.Core missing or not executable; refusing unvalidated restore"
-          exit 1
-        }
         for yaml_file in "$STAGE/config.yaml" "$STAGE/template.yaml" "$STAGE/template.base.yaml"; do
           "$YQ" e '.' "$yaml_file" >/dev/null 2>/data/kano_config_package_yaml_test.out || {
             echo "RESTORE_FAILED: invalid YAML in $(basename "$yaml_file")"
@@ -8184,12 +8274,14 @@ KANO_POLICY_TOOLS_EOF
         done
         for json_file in "$STAGE/rule_override.json" "$STAGE/rule_override_applied.json"; do
           if command -v jq >/dev/null 2>&1; then
-            jq empty "$json_file" >/dev/null 2>&1 || { echo "RESTORE_FAILED: invalid JSON in $(basename "$json_file")"; exit 1; }
+            jq -e 'type == "object"' "$json_file" >/dev/null 2>&1 || { echo "RESTORE_FAILED: invalid JSON object in $(basename "$json_file")"; exit 1; }
           else
-            "$YQ" e -o=json '.' "$json_file" >/dev/null 2>&1 || { echo "RESTORE_FAILED: invalid JSON/YAML in $(basename "$json_file")"; exit 1; }
+            "$YQ" e -e 'type == "!!map"' "$json_file" >/dev/null 2>&1 || { echo "RESTORE_FAILED: invalid JSON object in $(basename "$json_file")"; exit 1; }
           fi
         done
-        echo "CONFIG_TEST_SKIPPED=relaxed_mode"
+        override_size="$(wc -c < "$STAGE/override.js" 2>/dev/null || echo 0)"
+        echo "$override_size" | grep -Eq '^[0-9]+$' || override_size=0
+        [ "$override_size" -le 20000 ] || { echo "RESTORE_FAILED: override.js exceeds 20 KiB"; exit 1; }
         stage_restore_file() {
           name="$1"
           dst="$2"
@@ -8236,7 +8328,7 @@ KANO_POLICY_TOOLS_EOF
       if (missingFiles.length > 0) {
         createToast(`\u914d\u7f6e\u5305\u7f3a\u5c11\u6587\u4ef6\uff0c\u5df2\u505c\u6b62\u5bfc\u5165<br>${textToHtml(missingFiles.join('\n'))}`, 'red', 10000);
       } else {
-        createToast(`\u914d\u7f6e\u5305\u5bfc\u5165\u5931\u8d25<br>${textToHtml(restoreOutput)}`, 'red', 10000);
+        createToast(`\u914d\u7f6e\u5305\u5bfc\u5165\u5931\u8d25<br>${safeTextToHtml(restoreOutput)}`, 'red', 10000);
       }
       return false;
     }
@@ -8244,9 +8336,23 @@ KANO_POLICY_TOOLS_EOF
     const packageRollbackDir = ((restoreOutput.split('\n').find((line) => line.startsWith('RESTORE_ROLLBACK_DIR=')) || '')
       .replace(/^RESTORE_ROLLBACK_DIR=/, '')
       .trim());
+    const restoreOriginalConfigOnly = async (context) => {
+      if (rollbackPath) return await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
+      const removed = await runShellWithRoot(`
+        rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
+        [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
+        echo CONFIG_ROLLBACK_RESTORED_ABSENT
+      `, 15 * 1000);
+      return removed.success && String(removed.content || '').includes('CONFIG_ROLLBACK_RESTORED_ABSENT');
+    };
     const rollbackRestoredPackage = async (context = '配置包导入', detail = '') => {
       if (!packageRollbackDir) {
-        if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, context);
+        const configRestored = await restoreOriginalConfigOnly(context);
+        createToast(
+          `${escapeHtml(context)}失败；完整配置包回滚点缺失，config.yaml ${configRestored ? '已恢复' : '未能恢复'}`,
+          'red',
+          10000,
+        );
         return false;
       }
       const rollbackRes = await runShellWithRoot(`
@@ -8259,38 +8365,48 @@ KANO_POLICY_TOOLS_EOF
         echo "PACKAGE_RESTORE_ROLLED_BACK"
       `, 45 * 1000);
       if (!rollbackRes.success || !String(rollbackRes.content || '').includes('PACKAGE_RESTORE_ROLLED_BACK')) {
-        if (rollbackPath) await restoreConfigRollbackPoint(rollbackPath, context);
-        createToast(`${escapeHtml(context)}失败，且完整配置包回滚失败<br>${textToHtml(rollbackRes.content || detail || '')}`, 'red', 10000);
+        const configRestored = await restoreOriginalConfigOnly(context);
+        createToast(
+          `${escapeHtml(context)}失败，且完整配置包回滚失败；config.yaml ${configRestored ? '已单独恢复' : '也未能恢复'}<br>${safeTextToHtml(rollbackRes.content || detail || '')}`,
+          'red',
+          10000,
+        );
         return false;
       }
+      const sanitized = await sanitizeConfigForTProxy({ showToast: false, errorToast: false });
+      const reload = sanitized ? await reloadConfigHot(oldControllerInfo) : { success: false };
+      const runtimeRecovered = reload.success
+        ? await ensureRuntimeTrafficMode(lastSanitizedTrafficMode) && await reapplyPolicyRulesSilent()
+        : await restartClash({ skipCheck: true });
       createToast(
-        `${escapeHtml(context)}失败，已恢复导入前的配置${detail ? `<br>${textToHtml(detail)}` : ''}`,
-        'yellow',
+        `${escapeHtml(context)}失败，已恢复导入前的配置${runtimeRecovered ? '和运行状态' : '；核心或网络策略未能恢复'}${detail ? `<br>${safeTextToHtml(detail)}` : ''}`,
+        runtimeRecovered ? 'yellow' : 'red',
         9000,
       );
-      return true;
+      return runtimeRecovered;
     };
 
-    if (!(await sanitizeConfigForTProxy({ showToast: false }))) {
+    if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
       await rollbackRestoredPackage('导入配置包清理');
-      await reloadConfigHot(oldControllerInfo);
       return false;
     }
     const packageCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
     if (!packageCheck.ok) {
       await rollbackRestoredPackage('导入配置包结构检查', packageCheck.message);
-      await reloadConfigHot(oldControllerInfo);
       return false;
     }
     const reloadRes = await reloadConfigHot(oldControllerInfo);
     let runningOk = reloadRes.success;
     if (!runningOk) {
-      createToast(`\u70ed\u91cd\u8f7d\u5931\u8d25\uff0c\u5df2\u6539\u7528\u670d\u52a1\u91cd\u542f<br>${textToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
-      runningOk = await restartClashWithConfigRollback(rollbackPath, '\u5bfc\u5165\u914d\u7f6e\u5305\u540e\u91cd\u542f');
+      createToast(`\u70ed\u91cd\u8f7d\u5931\u8d25\uff0c\u5df2\u6539\u7528\u670d\u52a1\u91cd\u542f<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
+      runningOk = await restartClash({ skipCheck: true });
+    } else {
+      const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+      const rulesOk = await reapplyPolicyRulesSilent();
+      runningOk = trafficModeOk && rulesOk;
     }
     if (!runningOk) {
       await rollbackRestoredPackage('导入配置包后启动');
-      await reloadConfigHot(oldControllerInfo);
       return false;
     }
 
@@ -8422,7 +8538,7 @@ KANO_POLICY_TOOLS_EOF
         [ -s "$PKG" ] || { echo "PACK_FAILED: empty package"; exit 1; }
         echo "PACKAGE_NAME=$(basename "$PKG")"
         `, 30 * 1000);
-    if (!res.success) return createToast(`\u5907\u4efd\u5931\u8d25\uff01<br>${textToHtml(res.content || '')}`, 'red');
+    if (!res.success) return createToast(`\u5907\u4efd\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red');
     const outputLines = String(res.content || '').split('\n');
     const packageName = ((outputLines.find((line) => line.startsWith('PACKAGE_NAME=')) || '')
       .replace(/^PACKAGE_NAME=/, '')
@@ -8617,7 +8733,7 @@ KANO_POLICY_TOOLS_EOF
         const before = await inspectBootIntegration();
         const result = await runShellWithRoot(before.enabled ? removeBootLinesCmd() : addBootLinesCmd());
         if (!result.success) {
-          createToast(`修改开机自启失败<br>${textToHtml(result.content || '')}`, 'red', 8000);
+          createToast(`修改开机自启失败<br>${safeTextToHtml(result.content || '')}`, 'red', 8000);
           return;
         }
         const after = await inspectBootIntegration();
@@ -8781,7 +8897,7 @@ KANO_POLICY_TOOLS_EOF
         try {
           const result = await persistProviderUserAgent(input.value);
           if (!result.ok) {
-            createToast(`订阅 User-Agent 保存失败<br>${textToHtml(result.message || '')}`, 'red', 8000);
+            createToast(`订阅 User-Agent 保存失败<br>${safeTextToHtml(result.message || '')}`, 'red', 8000);
             return;
           }
           createToast(
@@ -9040,6 +9156,10 @@ KANO_POLICY_TOOLS_EOF
       const storedSources = await readCurrentSubSources({ includeDisabled: true });
       const stored = storedSources.length > 0 ? storedSources : sources;
       const rollbackPath = await createConfigRollbackPoint('provider_auto_local_fallback');
+      if (rollbackPath === null) {
+        createToast('无法创建 config.yaml 回滚点，未切换本地转换模式。', 'red', 9000);
+        return { ok: false, conversion };
+      }
       if (!(await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_LOCAL))) {
         createToast('本地转换已完成，但保存本地转换模式失败；运行配置未切换。', 'red', 9000);
         return { ok: false, conversion };
@@ -9048,15 +9168,23 @@ KANO_POLICY_TOOLS_EOF
         backup: true,
         convertMode: SUB_CONVERT_MODE_LOCAL,
       }))) {
-        await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
-        await restoreConfigRollbackPoint(rollbackPath, 'HTTP Provider 自动本地降级写入失败');
-        createToast('本地转换配置生成失败，已恢复 HTTP Provider 模式。', 'red', 10000);
+        const modeRestored = await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
+        const configRestored = rollbackPath
+          ? await restoreConfigRollbackPoint(rollbackPath, 'HTTP Provider 自动本地降级写入失败', { showToast: false })
+          : false;
+        createToast(
+          modeRestored && configRestored
+            ? '本地转换配置生成失败，已恢复 HTTP Provider 模式和原配置。'
+            : '本地转换配置生成失败，且 HTTP Provider 模式或原配置未能完整恢复。',
+          modeRestored && configRestored ? 'yellow' : 'red',
+          10000,
+        );
         return { ok: false, conversion };
       }
       const restarted = await restartClashWithConfigRollback(rollbackPath, 'HTTP Provider 390 自动切换本地转换');
       if (!restarted) {
-        await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
-        createToast('本地转换配置启动失败，已恢复原 HTTP Provider 模式标记。', 'red', 10000);
+        const modeRestored = await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
+        if (!modeRestored) createToast('原配置已回滚，但 HTTP Provider 模式标记恢复失败。', 'red', 10000);
         return { ok: false, conversion };
       }
       await appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
@@ -9204,7 +9332,7 @@ KANO_POLICY_TOOLS_EOF
       const detail = nodeCheck.status == 'missing'
         ? 'template.yaml \u4e0d\u5b58\u5728\u3002'
         : nodeCheck.status == 'invalid'
-          ? `template.yaml \u89e3\u6790\u5931\u8d25\u3002<br>${textToHtml(nodeCheck.content || '')}`
+          ? `template.yaml \u89e3\u6790\u5931\u8d25\u3002<br>${safeTextToHtml(nodeCheck.content || '')}`
           : 'template.yaml \u6ca1\u6709 proxies \u8282\u70b9\uff0c\u4e5f\u6ca1\u6709\u5e26 URL \u7684 proxy-providers\u3002';
       return {
         ok: false,
@@ -9404,7 +9532,9 @@ ${expectedProviderChecks}
           const cacheText = item.ok
             ? (Number.isInteger(item.proxyCount) ? `当前节点：${item.proxyCount} 个` : '节点缓存：已更新')
             : item.cacheAvailable
-              ? `本次更新失败，当前继续使用缓存的 ${item.proxyCount} 个节点。`
+              ? (Number.isInteger(item.proxyCount)
+                ? `本次更新失败，当前继续使用缓存的 ${item.proxyCount} 个节点。`
+                : '本次更新失败，继续使用原节点缓存。')
               : item.proxyCount === 0
                 ? '本次更新失败，当前没有可确认的缓存节点。'
                 : '配置已应用，但无法确认节点缓存是否更新。';
@@ -9624,6 +9754,10 @@ ${expectedProviderChecks}
       }
       createToast('正在更新订阅并重启核心', 'yellow');
       const rollbackPath = await createConfigRollbackPoint('subscription_update');
+      if (rollbackPath === null) {
+        createToast('无法创建 config.yaml 回滚点，未更新运行配置。', 'red', 9000);
+        return false;
+      }
       if (!(await writeSubConfigByMode(cleanSources, cleanMode, {
         backup: true,
         convertMode: cleanConvertMode,
@@ -9751,7 +9885,7 @@ ${expectedProviderChecks}
         echo "SUBSCRIPTION_TRANSACTION_READY"
       `, 20 * 1000);
       if (!snapshotRes.success || !String(snapshotRes.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
-        createToast(`无法创建订阅事务回滚点<br>${textToHtml(snapshotRes.content || '')}`, 'red', 9000);
+        createToast(`无法创建订阅事务回滚点<br>${safeTextToHtml(snapshotRes.content || '')}`, 'red', 9000);
         return false;
       }
       const restoreSubscriptionTransaction = async () => {
@@ -9777,7 +9911,7 @@ ${expectedProviderChecks}
           echo "SUBSCRIPTION_TRANSACTION_RESTORED"
         `, 30 * 1000);
         if (!restoreRes.success) {
-          createToast(`订阅相关文件回滚失败<br>${textToHtml(restoreRes.content || '')}`, 'red', 10000);
+          createToast(`订阅相关文件回滚失败<br>${safeTextToHtml(restoreRes.content || '')}`, 'red', 10000);
         }
         return restoreRes.success;
       };
@@ -9805,6 +9939,11 @@ ${expectedProviderChecks}
         }
       }
       const rollbackPath = await createConfigRollbackPoint('subscription_save');
+      if (rollbackPath === null) {
+        await restoreSubscriptionTransaction();
+        createToast('无法创建 config.yaml 回滚点，订阅设置未修改。', 'red', 9000);
+        return false;
+      }
       const writtenOk = await writeSubConfigByMode(cleanSources, cleanMode, {
         convertMode: cleanConvertMode,
       });
@@ -9866,6 +10005,10 @@ ${expectedProviderChecks}
           ? '\u6b63\u5728\u6309\u914d\u7f6e\u6a21\u677f\u751f\u6210 config.yaml...'
           : '\u6b63\u5728\u6309\u9ed8\u8ba4 F50 \u6a21\u677f\u751f\u6210 config.yaml...', 'yellow');
         const rollbackPath = await createConfigRollbackPoint('template_rebuild_sources');
+        if (rollbackPath === null) {
+          createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
+          return false;
+        }
         if (!(await ensureTemplateProviders(sources, { forceTemplate: true, showToast: true }))) return false;
         let localConversion = null;
         if (currentConvertMode == SUB_CONVERT_MODE_LOCAL) {
@@ -9904,11 +10047,14 @@ ${expectedProviderChecks}
         prepareTemplate: true,
       }))) return false;
       const rollbackPath = await createConfigRollbackPoint('template_rebuild_embedded');
+      if (rollbackPath === null) {
+        createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
+        return false;
+      }
       const res = await runShellWithRoot(`
         set +e
         CONFIG=${shellQuote(CLASH_CONFIG)}
         TEMPLATE=${shellQuote(CLASH_TEMPLATE)}
-        CORE=${shellQuote(CLASH_CORE)}
         WRITE_CHECK=${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
         FLOW=${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
         CONFIG_NEW="$CONFIG.kano_template_new.$$"
@@ -9920,15 +10066,13 @@ ${expectedProviderChecks}
         }
         trap cleanup_template_commit EXIT
         : > "$WRITE_CHECK"
-        : > ${shellQuote(CLASH_TEMPLATE_OVERWRITE_TEST_OUT)}
         echo "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null) shell enter template_embedded overwrite" >> "$FLOW" 2>/dev/null || true
         mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
-        [ -s "$TEMPLATE" ] || { echo "CONFIG_TEST_FAILED: template.yaml missing or empty"; exit 1; }
+        [ -s "$TEMPLATE" ] || { echo "TEMPLATE_MISSING: template.yaml missing or empty"; exit 1; }
         stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
         [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
         cat "$TEMPLATE" > "$CONFIG_NEW" || { echo "CONFIG_COMMIT_FAILED: cannot stage template"; exit 1; }
         chmod 644 "$CONFIG_NEW" 2>/dev/null || true
-        echo "CONFIG_TEST_SKIPPED=relaxed_mode" >> /data/kano_template_overwrite_test.out
         hash_file() {
           file="$1"
           if command -v sha256sum >/dev/null 2>&1; then sha256sum "$file" 2>/dev/null | awk '{print $1}'
@@ -9965,12 +10109,17 @@ ${expectedProviderChecks}
         echo "WRITE_CHECK=/data/kano_template_write_check.out"
         `, 30 * 1000);
       if (!res.success) {
-        createToast(`\u6a21\u677f\u8986\u5199\u5931\u8d25<br>${textToHtml(res.content || '')}`, 'red', 8000);
+        createToast(`\u6a21\u677f\u8986\u5199\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
         return false;
       }
-      createToast(`\u6a21\u677f\u5df2\u8986\u5199\u5230 config.yaml<br>${textToHtml(res.content || '')}`, 'green', 6500);
-      if (!(await sanitizeConfigForTProxy({ showToast: false }))) {
-        await restoreConfigRollbackPoint(rollbackPath, '\u6a21\u677f\u8986\u5199');
+      createToast('模板已写入，正在检查并重启核心...', 'yellow', 6500);
+      if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
+        const restored = await restoreConfigRollbackPoint(rollbackPath, '\u6a21\u677f\u8986\u5199', { showToast: false });
+        createToast(
+          restored ? '模板配置整理失败，已恢复上一份 config.yaml' : '模板配置整理失败，且 config.yaml 回滚失败',
+          restored ? 'yellow' : 'red',
+          10000,
+        );
         return false;
       }
       const restarted = await restartClashWithConfigRollback(rollbackPath, '\u6a21\u677f\u8986\u5199\u540e\u91cd\u542f');
@@ -10000,7 +10149,7 @@ ${expectedProviderChecks}
         ok: res.success,
         exists: res.success && !missing,
         content: missing ? '' : content,
-        message: res.success ? '' : content,
+        message: res.success ? '' : sanitizeSubscriptionSecrets(content),
       };
     };
 
@@ -10027,6 +10176,17 @@ ${expectedProviderChecks}
         createToast('无法创建 config.yaml 回滚点，已取消写入（原 config.yaml 未改动）。', 'red', 9000);
         return false;
       }
+      const rollbackUploadedConfig = async (context) => {
+        if (rollbackPath) {
+          return await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
+        }
+        const removed = await runShellWithRoot(`
+          rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
+          [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
+          echo CONFIG_ROLLBACK_RESTORED_ABSENT
+        `, 15 * 1000);
+        return removed.success && String(removed.content || '').includes('CONFIG_ROLLBACK_RESTORED_ABSENT');
+      };
       const stagePath = `${CLASH_CONFIG}.kano_upload_stage`;
       const stageRes = await runShellWithRoot(`
         set -e
@@ -10038,13 +10198,13 @@ ${expectedProviderChecks}
       `);
       if (!stageRes.success) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} ${shellQuote(uploadedPath)} 2>/dev/null || true`);
-        createToast(`配置暂存失败，原 config.yaml 未改动<br>${textToHtml(stageRes.content || '')}`, 'red', 9000);
+        createToast(`配置暂存失败，原 config.yaml 未改动<br>${safeTextToHtml(stageRes.content || '')}`, 'red', 9000);
         return false;
       }
       const stageCheck = await validateConfigFileStructure(stagePath, 'config.yaml');
       if (!stageCheck.ok) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
-        createToast(`配置结构检查失败，原 config.yaml 未改动<br>${textToHtml(stageCheck.message || '')}`, 'red', 10000);
+        createToast(`配置结构检查失败，原 config.yaml 未改动<br>${safeTextToHtml(stageCheck.message || '')}`, 'red', 10000);
         return false;
       }
       const commitRes = await runShellWithRoot(`
@@ -10056,25 +10216,56 @@ ${expectedProviderChecks}
       `);
       if (!commitRes.success) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
-        await restoreConfigRollbackPoint(rollbackPath, '上传配置');
-        createToast(`配置写入失败<br>${textToHtml(commitRes.content || '')}`, 'red', 9000);
+        const restored = await rollbackUploadedConfig('上传配置');
+        createToast(
+          `配置写入失败，${restored ? '已恢复写入前状态' : '且写入前状态恢复失败'}<br>${safeTextToHtml(commitRes.content || '')}`,
+          restored ? 'yellow' : 'red',
+          10000,
+        );
         return false;
       }
-      if (!(await sanitizeConfigForTProxy({ showToast: false }))) {
-        await restoreConfigRollbackPoint(rollbackPath, '上传配置自检');
+      if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
+        const restored = await rollbackUploadedConfig('上传配置自检');
+        createToast(
+          restored ? '配置整理失败，已恢复写入前状态' : '配置整理失败，且写入前状态恢复失败',
+          restored ? 'yellow' : 'red',
+          10000,
+        );
         return false;
       }
       const committedCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
       if (!committedCheck.ok) {
-        await restoreConfigRollbackPoint(rollbackPath, '上传配置校验');
-        createToast(`配置结构检查失败，已恢复上一份 config.yaml<br>${textToHtml(committedCheck.message || '')}`, 'red', 10000);
+        const restored = await rollbackUploadedConfig('上传配置校验');
+        createToast(
+          `配置结构检查失败，${restored ? '已恢复写入前状态' : '且写入前状态恢复失败'}<br>${safeTextToHtml(committedCheck.message || '')}`,
+          restored ? 'yellow' : 'red',
+          10000,
+        );
         return false;
       }
       const reloadRes = await reloadConfigHot(controllerInfo);
       if (reloadRes.success) {
-        createToast('config.yaml 已通过结构检查并热加载', 'green', 7000);
+        const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+        const rulesOk = await reapplyPolicyRulesSilent();
+        if (trafficModeOk && rulesOk) {
+          createToast('config.yaml 已通过结构检查，运行配置和网络策略已生效', 'green', 7000);
+          await isMMRunning();
+          return true;
+        }
+        const restored = await rollbackUploadedConfig('上传配置运行态检查');
+        const recoveryReload = restored ? await reloadConfigHot(controllerInfo) : { success: false };
+        const recoveryOk = recoveryReload.success
+          && await ensureRuntimeTrafficMode(lastSanitizedTrafficMode)
+          && await reapplyPolicyRulesSilent();
+        createToast(
+          restored && recoveryOk
+            ? '新配置运行态检查失败，已恢复写入前配置和网络策略'
+            : '新配置运行态检查失败，且写入前运行状态未能完整恢复',
+          restored && recoveryOk ? 'yellow' : 'red',
+          10000,
+        );
         await isMMRunning();
-        return true;
+        return false;
       }
       createToast('热加载失败，正在通过重启应用配置…', 'yellow', 7000);
       return await restartClashWithConfigRollback(rollbackPath, '上传配置后重启');
@@ -10086,7 +10277,7 @@ ${expectedProviderChecks}
         const uploadedPath = await uploadEditorContent(content, 'config.yaml');
         return await commitUploadedConfigWithValidation(uploadedPath, controllerInfo);
       } catch (e) {
-        createToast(`配置上传失败<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e))}`, 'red', 9000);
+        createToast(`配置上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
         return false;
       }
     };
@@ -10106,7 +10297,20 @@ ${expectedProviderChecks}
       if (allowedFile.path == CLASH_TEMPLATE || allowedFile.path == CLASH_TEMPLATE_BASE) {
         return await saveTemplate(new File([content], allowedFile.label, { type: 'text/yaml;charset=utf-8' }));
       }
+      if (allowedFile.path == CLASH_OVERRIDE_JS) return await saveJsOverrideText(content);
       if (allowedFile.path == CLASH_SUB_URLS) {
+        const invalidLineIndex = content.split(/\r?\n/).findIndex((line) => {
+          const value = line.trim();
+          if (!value || (value.startsWith('#') && !value.startsWith(SUB_DISABLED_MARKER))) return false;
+          const storedLine = value.startsWith(SUB_DISABLED_MARKER)
+            ? value.slice(SUB_DISABLED_MARKER.length).trim()
+            : value;
+          return !isHttpUrl((storedLine.split(/\s+/)[0] || '').trim());
+        });
+        if (invalidLineIndex >= 0) {
+          createToast(`subscription_urls.txt 第 ${invalidLineIndex + 1} 行不是有效的 HTTP(S) 订阅地址`, 'red', 9000);
+          return false;
+        }
         const sources = parseStoredSubSourcesFromText(content);
         if (sources.length == 0 && !content.trim()) return await clearSubSourceFile();
         return await saveSubSources(
@@ -10114,6 +10318,15 @@ ${expectedProviderChecks}
           SUB_RULE_MODE_TEMPLATE,
           parseSubConvertModeFromText(content),
         );
+      }
+      if ([CLASH_RULE_OVERRIDE_JSON, CLASH_RULE_OVERRIDE_APPLIED_JSON].includes(allowedFile.path) && content.trim()) {
+        try {
+          const parsed = JSON.parse(content);
+          if (!isPlainYamlObject(parsed)) throw new Error('根节点必须是对象');
+        } catch (e) {
+          createToast(`${escapeHtml(allowedFile.label)} JSON 无效：${escapeHtml(e && e.message ? e.message : e)}`, 'red', 9000);
+          return false;
+        }
       }
 
       try {
@@ -10132,13 +10345,13 @@ ${expectedProviderChecks}
           echo FILE_SAVED
         `);
         createToast(
-          res.success ? `${escapeHtml(allowedFile.label)} 已保存` : `${escapeHtml(allowedFile.label)} 保存失败<br>${textToHtml(res.content || '')}`,
+          res.success ? `${escapeHtml(allowedFile.label)} 已保存` : `${escapeHtml(allowedFile.label)} 保存失败<br>${safeTextToHtml(res.content || '')}`,
           res.success ? 'green' : 'red',
           7000,
         );
         return res.success;
       } catch (e) {
-        createToast(`${escapeHtml(allowedFile.label)} 保存失败<br>${textToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
+        createToast(`${escapeHtml(allowedFile.label)} 保存失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
         return false;
       }
     };
@@ -10360,7 +10573,7 @@ ${expectedProviderChecks}
             close();
           }
         } catch (e) {
-          createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${textToHtml(e && e.message ? e.message : e)}`, 'red');
+          createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
         } finally {
           setButtonBusy(submitBtn, false);
           releaseCriticalOperation(operationToken);

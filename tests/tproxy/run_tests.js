@@ -170,10 +170,10 @@ function runFor(label, file) {
     source.indexOf('collapseGen(', panelUiStart),
   );
   const actionGroupButtonLists = [
-    'quickRunBtn, webPanelToggleBtn, open, refresh, btn_restart, controllerSettingsBtn',
+    'quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn',
     'subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn',
-    'policyToolsBtn, macBypassBtn, binaryHelperBtn, binaryHelperUploadBtn',
-    'showLogBtn, rescueBtn, boot_on, clearCacheBtn, stopBtn, btn_disabled',
+    'policyToolsBtn, macBypassBtn, rescueBtn, showLogBtn',
+    'binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled',
   ];
   const actionGroupButtonCounts = actionGroupButtonLists
     .filter((buttons) => panelUiSource.includes(`[${buttons}]`))
@@ -188,14 +188,14 @@ function runFor(label, file) {
   );
   chk(
     actionGroupButtonCounts,
-    [6, 6, 4, 6],
+    [8, 6, 4, 4],
     '四组操作按钮均保持成对数量',
   );
   chk(
-    panelUiSource.includes('.kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:36px;')
-      && panelUiSource.includes('.kano-dialog-actions>button{width:100%;min-width:0;min-height:34px;}'),
+    panelUiSource.includes('.kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;')
+      && panelUiSource.includes('.kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:30px;padding:5px 10px;}'),
     true,
-    '主面板和二级菜单按钮使用等宽、居中和统一高度',
+    '主面板按钮收紧高度，二级操作按钮按文案自适应宽度',
   );
   chk(
     source.includes("const statusEl = document.querySelector('#mm_task_status');")
@@ -206,22 +206,40 @@ function runFor(label, file) {
     '任务状态只显示当前关键操作或空闲状态',
   );
   chk(
-    panelUiSource.includes('.kano-dialog-actions.kano-actions-3,.kano-dialog-actions.kano-actions-5{grid-template-columns:1fr;}')
+    panelUiSource.includes('.kano-dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;')
+      && panelUiSource.includes('.kano-dialog-actions.kano-actions-4{display:grid;grid-template-columns:repeat(2,max-content);}')
+      && panelUiSource.includes('.kano-log-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));')
       && source.includes('#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}')
       && source.includes("row.style.gridTemplateColumns = 'minmax(0,1fr) repeat(2,56px)';"),
     true,
-    '二级菜单的奇数操作区、三标签和订阅行保持对称',
+    '二级菜单紧凑排列，四操作区、三标签和订阅行保持对称',
   );
   chk(
-    panelUiSource.includes("open.textContent = '新窗口打开面板';")
+    panelUiSource.includes("open.textContent = '打开新窗口';")
       && panelUiSource.includes("refresh.textContent = '刷新面板';")
       && panelUiSource.includes("controllerSettingsBtn.textContent = '面板连接';")
-      && panelUiSource.includes("showLogBtn.textContent = '日志与诊断';")
-      && panelUiSource.includes("quickRunBtn.textContent = '安装或启动核心';")
+      && panelUiSource.includes("showLogBtn.textContent = '状态与日志';")
+      && panelUiSource.includes("quickRunBtn.textContent = '安装 / 启动';")
+      && panelUiSource.includes("templateOverrideBtn.textContent = '配置与规则';")
+      && panelUiSource.includes("policyToolsBtn.textContent = '流量接管';")
+      && panelUiSource.includes("userAgentBtn.textContent = '订阅请求头';")
       && !panelUiSource.includes('新窗口打开 Web 面板')
       && !/setButtonBusy\([^\n]*\.\.\./.test(source),
     true,
     '按钮文案去除重复词，并统一进行中状态标点',
+  );
+  chk(
+    panelUiSource.includes("appendActionGroup('\\u6838\\u5fc3\\u4e0e\\u9762\\u677f'")
+      && panelUiSource.includes("appendActionGroup('\\u8ba2\\u9605\\u4e0e\\u914d\\u7f6e'")
+      && panelUiSource.includes("appendActionGroup('\\u7f51\\u7edc\\u4e0e\\u8bca\\u65ad'")
+      && panelUiSource.includes("appendActionGroup('\\u7ec4\\u4ef6\\u4e0e\\u7ef4\\u62a4'")
+      && source.includes('<div class="kano-dialog-menu-title">规则覆写</div>')
+      && source.includes('<div class="kano-dialog-menu-title">配置文件</div>')
+      && source.includes('>保存并应用</button>')
+      && source.includes('>上传模板</button>')
+      && source.includes('>导入配置</button>'),
+    true,
+    '主菜单按任务重新分类，配置二级菜单按规则与文件分区',
   );
 
   const modeStatusSource = source.slice(
@@ -574,11 +592,11 @@ function runFor(label, file) {
           source.indexOf('const refreshBinaryHelperButton ='),
         );
         chk(
-          helperStateSource.includes("binaryHelperBtn.textContent = 'Shell兼容'")
-            && helperStateSource.includes("binaryHelperBtn.textContent = 'Shell兼容 ⚠'")
+          helperStateSource.includes("binaryHelperBtn.textContent = '安装转换组件'")
+            && helperStateSource.includes("binaryHelperBtn.textContent = '修复转换组件'")
             && helperStateSource.includes('使用 Shell 兼容模式'),
           true,
-          'missing or invalid helper is exposed as automatic Shell compatibility mode',
+          '缺失或异常的转换组件仍明确提示 Shell 兼容模式',
         );
         const helperPreferredSource = source.slice(
           source.indexOf('const installBinaryHelperPreferred = async'),

@@ -657,7 +657,7 @@ const gateOf = (text) => {
     const app = loadPlugin(sbx);
     await app.click('status');
     const detail = app.elements.get('#f50_boot_fix_standalone_detail').innerHTML;
-    assert(/尾钩.*不见了|⚠/.test(detail), '面板给出了告警');
+    assert(/尾钩.*(?:缺失|不见了)|需要处理/.test(detail), '面板给出了告警');
   });
 
   await test('T26 页面操作使用同一把忙锁，不允许安装与卸载并发执行', async () => {
@@ -681,7 +681,11 @@ const gateOf = (text) => {
     const app = loadPlugin(sbx);
     const html = String(app.container.insertedElement?.innerHTML || '');
     assert(/<details id="f50_boot_fix_standalone_panel">/.test(html), '操作区使用可展开的 details 容器');
-    assert(/<summary[^>]*>[\s\S]*全插件开机自启修复[\s\S]*<\/summary>/.test(html), '标题作为展开和隐藏入口');
+    assert(/<summary[^>]*>[\s\S]*开机自启管理[\s\S]*<\/summary>/.test(html), '标题作为展开和隐藏入口');
+    assert(/class="f50bf-overview"/.test(html) && /class="f50bf-actions"/.test(html), '状态概览和操作区层级明确');
+    assert(/min-height:32px/.test(html) && /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(html), '按钮尺寸紧凑且移动端保持两列');
+    assert(/刷新状态/.test(html) && /执行一次/.test(html) && /卸载增强/.test(html), '按钮文案直接说明操作');
+    assert(!/状态：未检查 ·/.test(html), '移除堆叠在状态行中的实现说明');
     assert(!/<details[^>]*\sopen(?:\s|>)/.test(html), '面板默认保持收起以节省空间');
   });
 

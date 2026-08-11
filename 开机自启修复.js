@@ -1244,7 +1244,7 @@ F50_SERVICE_D_EOF
     const warn = result.content.includes('F50_WARN:')
       ? `<br>${escapeHtml((result.content.match(/F50_WARN:[^\n]*/) || [''])[0])}`
       : '';
-    toast(`全插件开机自启增强已安装：UFI 原生启动保持不变，可隔离重放 ${escapeHtml(entries)} 条指令${extra}${warn}`, 'green', 7000);
+    toast(`开机自启增强已安装：UFI 原生顺序不变，${escapeHtml(entries)} 条启动指令可隔离重试${extra}${warn}`, 'green', 7000);
     return true;
   };
 
@@ -1349,7 +1349,7 @@ ${rejectIfManagerActiveCmd()}
       toast(`卸载失败：${escapeHtml(result.content || '未知错误')}`, 'red', 9000);
       return false;
     }
-    toast('已卸载增强层：各插件启动指令保持原样，继续由 UFI 原生机制执行。', 'green', 6000);
+    toast('开机自启增强已卸载；插件启动指令保持不变。', 'green', 6000);
     return true;
   };
 
@@ -1401,14 +1401,14 @@ ${rejectIfManagerActiveCmd()}
   const STATUS_LABEL = {
     ok: ['成功', '#39b54a'],
     'retry-ok': ['重试后成功', '#39b54a'],
-    running: ['仍在运行(常驻)', '#c8a020'],
+    running: ['仍在运行（常驻）', '#c8a020'],
     fail: ['失败', '#d0454c'],
     'retry-fail': ['重试后仍失败', '#d0454c'],
     'retry-running': ['重试中仍在运行', '#c8a020'],
   };
 
   const renderState = (stateText) => {
-    if (!stateText || !stateText.trim()) return '<div style="opacity:.7">暂无执行记录（还没重启过，或可点「立即执行一次」测试）。</div>';
+    if (!stateText || !stateText.trim()) return '<div class="f50bf-empty">暂无执行记录。可点击「执行一次」进行验证。</div>';
     const lines = stateText.split('\n');
     const meta = {};
     const entries = [];
@@ -1426,23 +1426,23 @@ ${rejectIfManagerActiveCmd()}
       meta.RUN_MODE ? `执行方式：${meta.RUN_MODE === 'whole' ? '整体重放（兜底）' : '逐条隔离'}` : '',
       meta.TRIGGER ? `触发来源：${meta.TRIGGER}` : '',
       meta.NOTE ? `说明：${meta.NOTE}` : '',
-      meta.DONE === '1' ? '' : '（执行中…）',
+      meta.DONE === '1' ? '' : '执行中…',
     ].filter(Boolean).map((t) => escapeHtml(t)).join(' · ');
     if (!entries.length) {
       const empty = meta.ENTRIES === '0' && meta.DONE === '1'
-        ? '<div style="opacity:.7">本次未发现可执行的插件启动指令（0 条）。</div>'
+        ? '<div class="f50bf-empty">本次没有可执行的插件启动指令。</div>'
         : '';
-      return `<div>${head}</div>${empty}`;
+      return `<div class="f50bf-run-meta">${head}</div>${empty}`;
     }
     const rows = entries.map((e) => {
       const [text, color] = STATUS_LABEL[e.status] || [e.status, '#888'];
-      return `<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;border-top:1px solid rgba(128,128,128,.18)">
-        <span style="opacity:.6;min-width:2.2em">${escapeHtml(e.idx)}</span>
-        <span style="color:${color};min-width:7.5em">${escapeHtml(text)}${e.rc && e.rc !== '-' && e.rc !== '0' ? `(${escapeHtml(e.rc)})` : ''}</span>
-        <span style="word-break:break-all;font-family:monospace">${escapeHtml(e.label)}</span>
+      return `<div class="f50bf-run-row">
+        <span class="f50bf-run-index">${escapeHtml(e.idx)}</span>
+        <span class="f50bf-run-result" style="color:${color}">${escapeHtml(text)}${e.rc && e.rc !== '-' && e.rc !== '0' ? `（${escapeHtml(e.rc)}）` : ''}</span>
+        <span class="f50bf-code">${escapeHtml(e.label)}</span>
       </div>`;
     }).join('');
-    return `<div style="margin-bottom:4px">${head}</div>${rows}`;
+    return `<div class="f50bf-run-meta">${head}</div>${rows}`;
   };
 
   const renderDetail = (content) => {
@@ -1464,39 +1464,52 @@ ${rejectIfManagerActiveCmd()}
     const stateText = section(content, 'STATE');
     const logText = section(content, 'LOG').trim();
     const logHtml = logText
-      ? `<div style="white-space:pre-wrap;word-break:break-all;font-family:monospace;line-height:1.45">${escapeHtml(logText)}</div>`
-      : '<div style="opacity:.7">暂无管理器运行日志。</div>';
+      ? `<div class="f50bf-log">${escapeHtml(logText)}</div>`
+      : '<div class="f50bf-empty">暂无管理器运行日志。</div>';
 
     const warnings = [];
     const [begin, end] = String(gate).split('/');
-    if (!managerOk) warnings.push('增强管理器缺失或不可执行；UFI 原生启动仍会照常运行，请点击「安装 / 修复」恢复重试/日志能力。');
-    if (managerOk && begin === '0') warnings.push('启动文件末尾的增强尾钩不见了（可能被其它插件整体重写过），请点击「安装 / 修复」重新写入。');
-    if (begin !== end) warnings.push(`增强尾钩标记不成对(${escapeHtml(String(gate))})，请点击「安装 / 修复」修正。`);
-    if (installed && !tailLast) warnings.push('增强尾钩不在启动文件末尾，请点击「安装 / 修复」重排。');
+    if (!managerOk) warnings.push('增强管理器不可用。UFI 原生启动不受影响；点击「安装 / 修复」恢复重试和日志。');
+    if (managerOk && begin === '0') warnings.push('启动尾钩缺失，可能被其他插件重写。点击「安装 / 修复」恢复。');
+    if (begin !== end) warnings.push(`启动尾钩标记异常（${escapeHtml(String(gate))}）。点击「安装 / 修复」修正。`);
+    if (installed && !tailLast) warnings.push('尾钩不在启动文件末尾。点击「安装 / 修复」重排。');
     if (managerOk && version !== MANAGER_VERSION) {
       warnings.push(version
-        ? `设备上的管理器是 v${escapeHtml(version)}，当前插件为 v${MANAGER_VERSION}，请点击「安装 / 修复」升级。`
-        : `设备上装的是旧版管理器（没有版本号），请点击「安装 / 修复」升级到 v${MANAGER_VERSION}。`);
+        ? `管理器版本为 v${escapeHtml(version)}，当前版本为 v${MANAGER_VERSION}。点击「安装 / 修复」升级。`
+        : `管理器版本过旧。点击「安装 / 修复」升级到 v${MANAGER_VERSION}。`);
     }
-    if (listError) warnings.push(`启动指令解析：${escapeHtml(listError)}（将退回整体重放模式，仍会执行，但一条卡住会影响后面的）。`);
+    if (listError) warnings.push(`启动指令解析失败：${escapeHtml(listError)}。将改用整体执行；单条指令卡住时会影响后续指令。`);
 
     const listHtml = listItems.length
-      ? listItems.map((item) => `<div style="display:flex;gap:8px"><span style="opacity:.6;min-width:2.2em">${escapeHtml(item.idx)}</span><span style="word-break:break-all;font-family:monospace">${escapeHtml(item.label)}</span></div>`).join('')
-      : '<div style="opacity:.7">启动文件里还没有任何插件的启动指令。</div>';
+      ? listItems.map((item) => `<div class="f50bf-command"><span>${escapeHtml(item.idx)}</span><span class="f50bf-code">${escapeHtml(item.label)}</span></div>`).join('')
+      : '<div class="f50bf-empty">没有插件启动指令。</div>';
+    const warningHtml = warnings.length
+      ? `<div class="f50bf-warning"><strong>需要处理</strong>${warnings.map((w) => `<div>${w}</div>`).join('')}</div>`
+      : '';
+    const countText = `${escapeHtml(listCount || String(listItems.length))} 条${listMode === 'whole' ? ' · 整体执行' : ''}`;
+    const hasState = !!stateText.trim();
 
     return `
-      <div style="margin-top:8px;font-size:.6rem;line-height:1.7">
-        <div><strong>安装状态：</strong>${installed ? '已安装' : '未安装'}
-          <strong>管理器：</strong>${managerOk ? `v${escapeHtml(version || '?')}` : '缺失'}
-          <strong>尾钩标记：</strong>${escapeHtml(gate || '-')}
-          <strong>备用触发：</strong>${serviceD ? 'service.d 已装' : '无'}</div>
-        ${warnings.map((w) => `<div style="color:#d0454c">⚠ ${w}</div>`).join('')}
-        <div style="margin-top:6px"><strong>增强管理器可隔离重放的启动指令（${escapeHtml(listCount || String(listItems.length))} 条${listMode === 'whole' ? '，当前为整体重放模式' : ''}）：</strong></div>
-        <div style="margin-left:2px">${listHtml}</div>
-        <div style="margin-top:6px"><strong>最近一次执行结果：</strong></div>
-        <div style="margin-left:2px">${renderState(stateText)}</div>
-        <div style="margin-top:6px"><strong>管理器运行日志（最近 14 行）：</strong></div>
-        <div style="margin-left:2px">${logHtml}</div>
+      <div class="f50bf-detail">
+        <div class="f50bf-metrics">
+          <div><span>增强层</span><strong>${installed ? '已安装' : '未安装'}</strong></div>
+          <div><span>管理器</span><strong>${managerOk ? `v${escapeHtml(version || '?')}` : '不可用'}</strong></div>
+          <div><span>启动尾钩</span><strong>${escapeHtml(gate || '-')}</strong></div>
+          <div><span>备用触发</span><strong>${serviceD ? 'service.d' : '未启用'}</strong></div>
+        </div>
+        ${warningHtml}
+        <details class="f50bf-subpanel">
+          <summary><span>启动指令</span><span>${countText}</span></summary>
+          <div class="f50bf-subpanel-body">${listHtml}</div>
+        </details>
+        <details class="f50bf-subpanel"${hasState ? ' open' : ''}>
+          <summary><span>最近一次执行结果</span><span>${hasState ? '已记录' : '无记录'}</span></summary>
+          <div class="f50bf-subpanel-body">${renderState(stateText)}</div>
+        </details>
+        <details class="f50bf-subpanel">
+          <summary><span>管理器运行日志</span><span>最近 14 行</span></summary>
+          <div class="f50bf-subpanel-body">${logHtml}</div>
+        </details>
       </div>`;
   };
 
@@ -1507,18 +1520,66 @@ ${rejectIfManagerActiveCmd()}
 
     const section = document.createElement('div');
     section.id = ROOT_ID;
-    section.style.marginTop = '10px';
     section.innerHTML = `
+      <style>
+        #${ROOT_ID}{margin-top:10px;color:inherit;}
+        #${ROOT_ID} *{box-sizing:border-box;}
+        #${ROOT_ID}_panel{overflow:hidden;border:1px solid rgba(148,163,184,.20);border-radius:15px;background:rgba(15,23,42,.36);}
+        #${ROOT_ID}_panel>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;margin:0;padding:9px 12px;background:linear-gradient(135deg,rgba(30,41,59,.72),rgba(15,23,42,.42));}
+        #${ROOT_ID}_panel>summary::-webkit-details-marker{display:none;}
+        #${ROOT_ID}_panel>summary::after{content:'+';flex:0 0 auto;font-size:.78rem;opacity:.7;}
+        #${ROOT_ID}_panel[open]>summary::after{content:'−';}
+        #${ROOT_ID} .f50bf-heading{display:grid;gap:3px;min-width:0;}
+        #${ROOT_ID} .f50bf-heading strong{font-size:.70rem;line-height:1.2;}
+        #${ROOT_ID} .f50bf-heading span{font-size:.56rem;line-height:1.35;opacity:.68;font-weight:400;}
+        #${ROOT_ID} .f50bf-body{padding:10px;}
+        #${ROOT_ID} .f50bf-overview{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:stretch;margin-bottom:9px;}
+        #${ROOT_ID} .f50bf-summary{padding:8px 10px;border:1px solid rgba(96,165,250,.20);border-radius:10px;background:rgba(15,23,42,.45);font-size:.59rem;line-height:1.55;color:#cbd5e1;}
+        #${ROOT_ID} .f50bf-state{display:flex;align-items:center;justify-content:center;min-width:82px;padding:7px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.48);font-size:.60rem;font-weight:800;white-space:nowrap;color:#cbd5e1;}
+        #${ROOT_ID} .f50bf-state[data-tone="ok"]{border-color:rgba(74,222,128,.32);background:rgba(20,83,45,.32);color:#bbf7d0;}
+        #${ROOT_ID} .f50bf-state[data-tone="warn"]{border-color:rgba(251,191,36,.34);background:rgba(120,53,15,.28);color:#fde68a;}
+        #${ROOT_ID} .f50bf-state[data-tone="error"]{border-color:rgba(248,113,113,.36);background:rgba(127,29,29,.28);color:#fecaca;}
+        #${ROOT_ID} .f50bf-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+        #${ROOT_ID} .f50bf-actions button{flex:0 0 auto;min-width:82px;min-height:32px;padding:5px 10px;border-radius:9px;font-size:.61rem;}
+        #${ROOT_ID} .f50bf-primary{background:linear-gradient(180deg,rgba(37,99,235,.96),rgba(30,64,175,.96));border-color:rgba(147,197,253,.35);}
+        #${ROOT_ID} .f50bf-danger{margin-left:auto;background:linear-gradient(180deg,rgba(127,29,29,.94),rgba(69,10,10,.94));border-color:rgba(252,165,165,.34);}
+        #${ROOT_ID} button:focus-visible,#${ROOT_ID} summary:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
+        #${ROOT_ID} .f50bf-detail{display:grid;gap:8px;margin-top:10px;font-size:.60rem;line-height:1.6;}
+        #${ROOT_ID} .f50bf-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;}
+        #${ROOT_ID} .f50bf-metrics>div{display:grid;gap:2px;padding:7px 8px;border:1px solid rgba(148,163,184,.16);border-radius:9px;background:rgba(15,23,42,.35);min-width:0;}
+        #${ROOT_ID} .f50bf-metrics span{font-size:.54rem;opacity:.64;}
+        #${ROOT_ID} .f50bf-metrics strong{font-size:.61rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        #${ROOT_ID} .f50bf-warning{display:grid;gap:4px;padding:8px 10px;border:1px solid rgba(248,113,113,.28);border-radius:9px;background:rgba(127,29,29,.18);color:#fecaca;}
+        #${ROOT_ID} .f50bf-warning strong{font-size:.61rem;}
+        #${ROOT_ID} .f50bf-subpanel{overflow:hidden;border:1px solid rgba(148,163,184,.16);border-radius:9px;background:rgba(15,23,42,.28);}
+        #${ROOT_ID} .f50bf-subpanel>summary{display:flex;justify-content:space-between;gap:10px;padding:7px 9px;cursor:pointer;list-style:none;font-size:.60rem;font-weight:800;background:rgba(30,41,59,.38);}
+        #${ROOT_ID} .f50bf-subpanel>summary::-webkit-details-marker{display:none;}
+        #${ROOT_ID} .f50bf-subpanel>summary span:last-child{font-size:.54rem;font-weight:400;opacity:.65;}
+        #${ROOT_ID} .f50bf-subpanel-body{padding:8px 9px;max-height:260px;overflow:auto;}
+        #${ROOT_ID} .f50bf-command,#${ROOT_ID} .f50bf-run-row{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:7px;padding:3px 0;border-top:1px solid rgba(148,163,184,.10);}
+        #${ROOT_ID} .f50bf-command:first-child,#${ROOT_ID} .f50bf-run-row:first-of-type{border-top:0;}
+        #${ROOT_ID} .f50bf-command>span:first-child,#${ROOT_ID} .f50bf-run-index{opacity:.55;}
+        #${ROOT_ID} .f50bf-run-row{grid-template-columns:2.2em minmax(7.5em,auto) minmax(0,1fr);align-items:baseline;}
+        #${ROOT_ID} .f50bf-code{word-break:break-all;font-family:Consolas,Monaco,monospace;}
+        #${ROOT_ID} .f50bf-run-meta{margin-bottom:5px;color:#cbd5e1;opacity:.78;}
+        #${ROOT_ID} .f50bf-log{white-space:pre-wrap;word-break:break-all;font-family:Consolas,Monaco,monospace;line-height:1.45;}
+        #${ROOT_ID} .f50bf-empty{opacity:.68;}
+        @media (max-width:720px){#${ROOT_ID} .f50bf-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}}
+        @media (max-width:520px){#${ROOT_ID} .f50bf-overview{grid-template-columns:1fr;}#${ROOT_ID} .f50bf-state{justify-content:flex-start;}#${ROOT_ID} .f50bf-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}#${ROOT_ID} .f50bf-actions button{width:100%;min-width:0;}#${ROOT_ID} .f50bf-danger{margin-left:0;}#${ROOT_ID} .f50bf-run-row{grid-template-columns:2.2em minmax(0,1fr);}#${ROOT_ID} .f50bf-run-result{grid-column:2;}#${ROOT_ID} .f50bf-run-row .f50bf-code{grid-column:2;}}
+      </style>
       <details id="${ROOT_ID}_panel">
-        <summary class="title" style="margin:6px 0;cursor:pointer"><strong>全插件开机自启修复</strong></summary>
-        <div style="padding-top:4px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn" id="${ROOT_ID}_install">安装 / 修复</button>
-            <button class="btn" id="${ROOT_ID}_status">检查状态</button>
-            <button class="btn" id="${ROOT_ID}_run">立即执行一次</button>
-            <button class="btn" id="${ROOT_ID}_uninstall">卸载</button>
+        <summary class="title"><span class="f50bf-heading"><strong>开机自启管理</strong><span>保留 UFI 原生启动顺序，为失败或卡住的插件增加隔离重试。</span></span></summary>
+        <div class="f50bf-body">
+          <div class="f50bf-overview">
+            <div class="f50bf-summary">安装或修复增强层不会删除插件启动指令；卸载后仍由 UFI 原生机制执行。</div>
+            <div id="${ROOT_ID}_state" class="f50bf-state" data-tone="idle">未检查</div>
           </div>
-          <div id="${ROOT_ID}_state" style="margin-top:8px;font-size:.62rem;opacity:.78">状态：未检查 · UFI 原生启动 + 延迟隔离重试增强</div>
+          <div class="f50bf-actions">
+            <button class="btn f50bf-primary" id="${ROOT_ID}_install">安装 / 修复</button>
+            <button class="btn" id="${ROOT_ID}_status">刷新状态</button>
+            <button class="btn" id="${ROOT_ID}_run">执行一次</button>
+            <button class="btn f50bf-danger" id="${ROOT_ID}_uninstall">卸载增强</button>
+          </div>
           <div id="${ROOT_ID}_detail"></div>
         </div>
       </details>
@@ -1533,21 +1594,25 @@ ${rejectIfManagerActiveCmd()}
     const detailEl = section.querySelector(`#${ROOT_ID}_detail`);
     const actionButtons = [installBtn, statusBtn, runBtn, uninstallBtn].filter(Boolean);
     let actionBusy = false;
+    const setPanelStatus = (text, tone = 'idle') => {
+      statusEl.textContent = text;
+      statusEl.dataset.tone = tone;
+    };
 
     const showStatus = async () => {
       if (!(await checkRoot())) {
-        statusEl.textContent = '状态：需要后台登录及高级功能/root';
+        setPanelStatus('需要 root 权限', 'error');
         toast('请先登录后台并开启高级功能/root。', 'red', 6000);
         return;
       }
       const state = await inspectFix();
       if (!state.success) {
-        statusEl.textContent = '状态：检查失败';
+        setPanelStatus('检查失败', 'error');
         detailEl.innerHTML = '';
-        toast(`状态检查失败（root 或超时），未修改任何文件。<br>${escapeHtml(state.content || '')}`, 'red', 7000);
+        toast(`状态检查失败，未修改文件。<br>${escapeHtml(state.content || '')}`, 'red', 7000);
         return;
       }
-      statusEl.textContent = `状态：${state.installed ? '已安装' : '未安装'}`;
+      setPanelStatus(state.installed ? '已安装' : '未安装', state.installed ? 'ok' : 'warn');
       detailEl.innerHTML = renderDetail(state.content);
     };
 
@@ -1574,26 +1639,26 @@ ${rejectIfManagerActiveCmd()}
       }
     };
 
-    installBtn.onclick = withBusy(installBtn, '安装中...', async () => {
+    installBtn.onclick = withBusy(installBtn, '安装中…', async () => {
       // 失败路径也刷新一次：超时之类的情况下安装其实可能已经生效，
       // 只是那条成功标记没来得及回传，不刷新会让人以为没装上。
       await installFix();
       await showStatus();
     });
 
-    statusBtn.onclick = withBusy(statusBtn, '检查中...', showStatus);
+    statusBtn.onclick = withBusy(statusBtn, '检查中…', showStatus);
 
-    runBtn.onclick = withBusy(runBtn, '执行中...', async () => {
-      detailEl.innerHTML = '<div style="margin-top:8px;font-size:.6rem;opacity:.8">正在按开机流程逐条执行各插件的启动指令…</div>';
+    runBtn.onclick = withBusy(runBtn, '执行中…', async () => {
+      detailEl.innerHTML = '<div class="f50bf-detail"><div class="f50bf-summary">正在按开机流程执行插件启动指令…</div></div>';
       const finalState = await runNow((partial) => {
-        detailEl.innerHTML = `<div style="margin-top:8px;font-size:.6rem">${renderState(partial)}</div>`;
+        detailEl.innerHTML = `<div class="f50bf-detail"><div class="f50bf-subpanel-body">${renderState(partial)}</div></div>`;
       });
-      if (finalState) toast('已按开机流程执行完一轮，结果见下方列表。', 'green', 6000);
+      if (finalState) toast('本轮启动指令已执行，结果见下方。', 'green', 6000);
       await showStatus();
     });
 
-    uninstallBtn.onclick = withBusy(uninstallBtn, '卸载中...', async () => {
-      if (!window.confirm('确定卸载吗？将移除启动文件末尾的增强尾钩和管理器；各插件原始启动指令会原样保留，UFI 原生启动机制不受影响。')) return;
+    uninstallBtn.onclick = withBusy(uninstallBtn, '卸载中…', async () => {
+      if (!window.confirm('卸载开机自启增强？这会移除管理器和启动尾钩；插件启动指令保留，UFI 原生启动不受影响。')) return;
       if (await uninstallFix()) await showStatus();
     });
 

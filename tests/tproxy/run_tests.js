@@ -133,7 +133,7 @@ function runFor(label, file) {
     ...EXPORTS,
     ...RUNTIME_EXPORTS,
     'probeBinaryHelperState', 'installBinaryHelperFromDevicePath',
-    'convertSubscriptionsLocally',
+    'convertSubscriptionsLocally', 'validateLocalSubscriptionUrl',
   ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
@@ -615,6 +615,31 @@ function runFor(label, file) {
           source.indexOf('const ensureLocalSubscriptionConverter = async'),
           source.indexOf('const readCurrentModeStatus = async'),
         );
+        chk(api.validateLocalSubscriptionUrl('https://example.com/sub').ok, true,
+          'local conversion accepts a public HTTPS subscription URL');
+        for (const blockedUrl of [
+          'http://example.com/sub',
+          'https://user:pass@example.com/sub',
+          'https://localhost/sub',
+          'https://2130706433/sub',
+          'https://0x7f000001/sub',
+          'https://127.0.0.1/sub',
+          'https://192.168.1.1/sub',
+          'https://[::1]/sub',
+        ]) {
+          chk(api.validateLocalSubscriptionUrl(blockedUrl).ok, false,
+            `local conversion rejects unsafe URL: ${blockedUrl}`);
+        }
+        chk(api.validateLocalSubscriptionUrl('https://203.0.1.1/sub').ok, true,
+          'local conversion does not over-block an ordinary public IPv4 literal');
+        const shellCallsBeforeBlockedUrl = shellCallCount;
+        const blockedLocalConversion = await api.convertSubscriptionsLocally([
+          { url: 'http://example.com/subscription' },
+        ]);
+        chk(blockedLocalConversion.providers[0].errorType, 'url_policy',
+          'local conversion reports an HTTPS policy failure before download');
+        chk(shellCallCount, shellCallsBeforeBlockedUrl,
+          'blocked local subscription URLs never reach the root shell');
         chk(
           localConverterSource.includes('chmod 700 "$CONVERTER" || exit 1')
             && localConverterSource.includes('if http_code="$("$CURL_BIN"')
@@ -636,6 +661,17 @@ function runFor(label, file) {
             && localConverterSource.includes('${restoreCommands}'),
           true,
           'local conversion classifies failures and commits all provider caches transactionally',
+        );
+        chk(
+          localConverterSource.includes("--proto '=https'")
+            && localConverterSource.includes('--max-redirs 0')
+            && localConverterSource.includes('--max-filesize ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES}')
+            && localConverterSource.includes('--resolve "$source_host:$source_port:$resolved_ip"')
+            && localConverterSource.includes('resolve_public_ipv4()')
+            && localConverterSource.includes('LOCAL_TOTAL_BYTES=0')
+            && localConverterSource.includes('LOCAL_SUBSCRIPTION_TOTAL_BYTES'),
+          true,
+          'local conversion pins a public IPv4 target, rejects redirects, and enforces file and total quotas',
         );
         chk(
           localConverterSource.includes("downloadCoreArchive({ allowCached: true })")

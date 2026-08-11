@@ -1372,7 +1372,7 @@ EOF_KANO_SERVICE
       return false;
     };
     const policyReady = await ensurePolicyToolsScript();
-    if (!policyReady) createToast('基础修复已完成；网络策略增强脚本暂不可用，可稍后在“网络规则”中重试。', 'yellow', 8000);
+    if (!policyReady) createToast('基础修复已完成；网络策略增强脚本暂不可用，可稍后在“流量接管”中重试。', 'yellow', 8000);
     const checked = await runtimePreflight();
     if (['not_installed', 'damaged'].includes(checked.state)) {
       return failAndRollback('post_preflight', checked.content || checked.message);
@@ -1728,7 +1728,7 @@ EOF_KANO_SERVICE
 
   const installBinaryHelperFromDevicePath = async ({
     sourcePath, prepareCommand = '', timeout = 30 * 1000,
-    label = 'install_binary_helper', successMessage = '辅助内核已安装', quiet = false,
+    label = 'install_binary_helper', successMessage = '转换组件已安装', quiet = false,
   } = {}) => {
     if (!sourcePath) return false;
     const stagePath = `${KANO_HELPER_PATH}.kano_new_${Date.now()}_${createRandomString(4)}`;
@@ -1812,7 +1812,7 @@ EOF_KANO_SERVICE
     `, timeout, label);
     if (!installResult.success) {
       if (quiet) console.error('binary helper install failed', installResult.content || '');
-      else createToast(`辅助内核安装失败<br>${safeTextToHtml(installResult.content || '')}`, 'red', 9000);
+      else createToast(`转换组件安装失败<br>${safeTextToHtml(installResult.content || '')}`, 'red', 9000);
       return false;
     }
     invalidateBinarySnapshot();
@@ -1839,7 +1839,7 @@ EOF_KANO_SERVICE
         cp "$BUNDLED" "$SOURCE"
       `,
       timeout: 35 * 1000, label: 'install_binary_helper_bundled',
-      successMessage: '辅助内核已从本地安装包安装',
+      successMessage: '转换组件已从本地安装包安装',
     });
   };
 
@@ -1855,7 +1855,7 @@ EOF_KANO_SERVICE
       `,
       timeout: 110 * 1000,
       label: 'install_binary_helper_gitee',
-      successMessage: '辅助内核已从 Gitee 安装',
+      successMessage: '转换组件已从 Gitee 安装',
     });
   };
 
@@ -1894,7 +1894,7 @@ EOF_KANO_SERVICE
   const installBinaryHelperFromFile = async (file) => {
     if (!file) return false;
     if (file.size === 0) {
-      createToast('辅助内核文件为空', 'red', 5000);
+      createToast('转换组件文件为空', 'red', 5000);
       return false;
     }
     const formData = new FormData();
@@ -1909,7 +1909,7 @@ EOF_KANO_SERVICE
       uploadResult = await response.json();
       if (!response.ok || !uploadResult.url) throw new Error(uploadResult.error || `HTTP ${response.status}`);
     } catch (e) {
-      createToast(`辅助内核上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
+      createToast(`转换组件上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
       return false;
     }
 
@@ -3253,7 +3253,7 @@ EOF_KANO_SERVICE
         trap - EXIT
         `);
     if (!res.success) {
-      createToast(`保存图形化规则失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`保存图形规则失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
     }
     return !!res.success;
   };
@@ -5803,11 +5803,13 @@ KANO_WRITE_CHECK_EOF
         <div style="pointer-events:all;width:80vw;max-width:800px">
             <div class="title" style="margin:0" data-i18n="system_notice">${escapeHtml(title)}</div>
             <div class="content_message" style="background: rgba(0, 0, 0, 0.8);color: rgb(0, 255, 0);box-sizing: border-box;font-family: sans-serif;line-height:1.4;margin:10px 0;max-height: 400px;overflow: auto;font-size: .64rem;">${message1}</div>
-            <div class="kano-dialog-actions kano-actions-5" style="--kano-action-count:5;">
+            <div class="kano-log-actions">
                 <button style="font-size:.64rem" id="${id_refresh}">\u5237\u65b0</button>
                 <button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${id_pause}">\u6682\u505c\u6eda\u52a8</button>
-                <button style="font-size:.64rem" id="${id_download}">\u4e0b\u8f7d\u65e5\u5fd7</button>
-                <button style="font-size:.64rem" id="${id_clear}">\u6e05\u7a7a\u65e5\u5fd7</button>
+                <button style="font-size:.64rem" id="${id_download}">\u4e0b\u8f7d</button>
+                <button style="font-size:.64rem" id="${id_clear}">\u6e05\u7a7a</button>
+            </div>
+            <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;">
                 <button style="font-size:.64rem" id="${id}" data-i18n="close_btn">${t('close_btn')}</button>
             </div>
         </div>
@@ -5966,15 +5968,15 @@ KANO_WRITE_CHECK_EOF
     const { el, close } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:92vw;max-width:620px;">
-        <div class="title" style="margin:0">Web \u9762\u677f\u8fde\u63a5</div>
+        <div class="title" style="margin:0">\u9762\u677f\u8fde\u63a5</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;">
           <div id="${statusId}" style="margin-bottom:10px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.45);">${sourceRows}</div>
           <label style="display:block;margin-bottom:8px;">
-            <span style="display:block;margin-bottom:4px;">\u63a7\u5236\u5730\u5740\uff08external-controller\uff09</span>
+            <span style="display:block;margin-bottom:4px;">\u63a7\u5236\u5730\u5740</span>
             <input id="${controllerId}" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
           </label>
           <div style="display:block;margin-bottom:8px;">
-            <span style="display:block;margin-bottom:4px;">\u8bbf\u95ee\u5bc6\u94a5\uff08secret\uff09</span>
+            <span style="display:block;margin-bottom:4px;">\u8bbf\u95ee\u5bc6\u94a5</span>
             <div style="display:flex;gap:8px;align-items:center;">
               <input id="${secretId}" type="password" autocomplete="off" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
               <button id="${secretToggleId}" type="button" aria-controls="${secretId}" aria-pressed="false" title="\u663e\u793a\u5bc6\u7801" style="flex:0 0 auto;font-size:.64rem;white-space:nowrap;">\u663e\u793a</button>
@@ -5982,7 +5984,7 @@ KANO_WRITE_CHECK_EOF
           </div>
         </div>
         <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:12px;">
-          <button style="font-size:.64rem" id="${checkId}">\u6d4b\u8bd5\u8fde\u63a5</button>
+          <button style="font-size:.64rem" id="${checkId}">\u6d4b\u8bd5</button>
           <button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${saveId}">\u4fdd\u5b58</button>
           <button style="font-size:.64rem" id="${closeId}">\u5173\u95ed</button>
         </div>
@@ -6036,7 +6038,7 @@ KANO_WRITE_CHECK_EOF
     };
 
     saveBtn.onclick = async () => {
-      const operationToken = acquireCriticalOperation('保存 Web 面板连接');
+      const operationToken = acquireCriticalOperation('保存面板连接');
       if (!operationToken) return;
       setButtonBusy(saveBtn, true, '\u4fdd\u5b58\u4e2d\u2026');
       try {
@@ -6825,7 +6827,7 @@ EOF_KANO_SERVICE
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
       scheduleBinaryHelperButtonRefresh();
       if (!helperReadyAfterInstall) {
-        createToast('基础代理已安装；辅助内核安装失败，当前使用 Shell 兼容模式。', 'yellow', 8000);
+        createToast('基础代理已安装；转换组件安装失败，当前使用 Shell 兼容模式。', 'yellow', 8000);
       }
 
       disabled_btn_enabled = false;
@@ -6847,7 +6849,7 @@ EOF_KANO_SERVICE
         'mm_installed_confirm_1',
         installRuntimeReady ? '\u6838\u5fc3\u5df2\u542f\u52a8' : '核心已启动，网络接管未完整生效',
         `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥在“Web 面板连接”中管理；节点在“订阅管理”中添加。${installRuntimeReady ? '' : '<br />请在“网络规则”中重新应用后再使用代理。'}`,
+        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。${installRuntimeReady ? '' : '<br />请在“流量接管”中重新应用后再使用代理。'}`,
       );
     } finally {
       disabled_btn_enabled = false;
@@ -6858,7 +6860,7 @@ EOF_KANO_SERVICE
   };
   const btn_disabled = document.createElement('button');
   btn_disabled.classList.add('btn', 'kano-danger');
-  btn_disabled.textContent = '完整卸载';
+  btn_disabled.textContent = '卸载插件';
   btn_disabled.onclick = async () => {
     if (!(await ensureAdvanced())) return;
     const installState = await runShellWithRoot(`[ -d ${shellQuote(CLASH_DIR)} ] && echo 1 || echo 0`, 10 * 1000);
@@ -7666,7 +7668,7 @@ KANO_POLICY_TOOLS_EOF
   const showPolicyStatus = async () => {
     const exists = await runShellWithRoot(`[ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] && echo 1 || echo 0`, 10 * 1000);
     if (String(exists.content || '').trim() != '1') {
-      createToast('网络规则脚本不存在，请先点“重新应用网络规则”。', 'yellow', 7000);
+      createToast('网络规则脚本不存在，请在“检查修复”中点击“重建网络规则”。', 'yellow', 7000);
       return;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} status`);
@@ -7709,8 +7711,8 @@ KANO_POLICY_TOOLS_EOF
           #kano_policy_shell .kp-maintain-item button{width:100%;}
           #kano_policy_shell .kp-maintain-item span{font-size:.59rem;line-height:1.55;opacity:.72;}
           #kano_policy_shell .kp-footer{margin-top:12px;display:flex;justify-content:flex-end;align-items:center;}
-          #kano_policy_shell .kp-footer-right{width:min(100%,260px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
-          #kano_policy_shell .kp-footer-right button{width:100%;min-height:34px;}
+          #kano_policy_shell .kp-footer-right{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+          #kano_policy_shell .kp-footer-right button{width:auto;min-width:72px;min-height:30px;padding:5px 10px;}
           #kano_policy_shell .kp-client{display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1fr) auto auto;gap:7px;align-items:center;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px;margin-top:6px;background:rgba(0,0,0,.18);font-size:.60rem;}
           #kano_policy_shell code{font-size:.58rem;opacity:.9;}
           #kano_policy_shell button:focus-visible,#kano_policy_shell input:focus-visible,#kano_policy_shell select:focus-visible,#kano_policy_shell textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
@@ -7719,33 +7721,33 @@ KANO_POLICY_TOOLS_EOF
         <div id="kano_policy_shell">
           <div class="kp-head">
             <div>
-              <div class="kp-title">\u7f51\u7edc\u4e0e\u89c4\u5219</div>
+              <div class="kp-title">\u7f51\u7edc\u8bbe\u7f6e</div>
             </div>
           </div>
 
           <div class="kp-body">
             <div class="kp-nav">
-              <button type="button" class="kp-tab" data-policy-tab="network">\u6d41\u91cf\u63a5\u7ba1</button>
-              <button type="button" class="kp-tab" data-policy-tab="device">设备直连</button>
-              <button type="button" class="kp-tab" data-policy-tab="maintain">修复与状态</button>
+              <button type="button" class="kp-tab" data-policy-tab="network">\u6d41\u91cf\u6a21\u5f0f</button>
+              <button type="button" class="kp-tab" data-policy-tab="device">\u76f4\u8fde\u8bbe\u5907</button>
+              <button type="button" class="kp-tab" data-policy-tab="maintain">\u68c0\u67e5\u4fee\u590d</button>
             </div>
 
             <div class="kp-main">
               <section class="kp-panel" data-policy-panel="network">
                 <div class="kp-card">
-                  <div class="kp-card-title">\u6d41\u91cf\u63a5\u7ba1</div>
+                  <div class="kp-card-title">\u6d41\u91cf\u6a21\u5f0f</div>
                   <div class="kp-desc">TProxy \u63a5\u7ba1\u4e0b\u6e38\u8bbe\u5907\u6d41\u91cf\uff1bTUN \u7531 Mihomo \u5efa\u7acb\u8def\u7531\u3002</div>
                   <div class="kp-row">
-                    <div class="kp-label">\u6d41\u91cf\u63a5\u7ba1\u6a21\u5f0f</div>
+                    <div class="kp-label">\u63a5\u7ba1\u6a21\u5f0f</div>
                     <select id="mm_policy_traffic_mode"><option value="tproxy">TProxy\uff1a\u63a5\u7ba1 F50 \u8f6c\u53d1\u6d41\u91cf</option><option value="tun">TUN\uff1aMihomo \u81ea\u52a8\u8def\u7531</option><option value="off">\u5173\u95ed\uff1a\u6838\u5fc3\u8fd0\u884c\uff0c\u6d41\u91cf\u4e0d\u63a5\u7ba1</option></select>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">IPv6</div>
-                    <label><input id="mm_policy_ipv6" type="checkbox"> \u542f\u7528 Mihomo IPv6 \u4e0e ip6tables \u7ed5\u8fc7/DNS/QUIC \u89c4\u5219</label>
+                    <label><input id="mm_policy_ipv6" type="checkbox"> \u542f\u7528 IPv6 \u63a5\u7ba1\u89c4\u5219</label>
                   </div>
                   <div class="kp-row">
-                    <div class="kp-label">\u963b\u6b62 QUIC</div>
-                    <label><input id="mm_policy_quic" type="checkbox"> \u963b\u65ad UDP/443\uff0c\u8ba9\u90e8\u5206 App \u56de\u843d TCP</label>
+                    <div class="kp-label">QUIC</div>
+                    <label><input id="mm_policy_quic" type="checkbox"> \u62e6\u622a UDP/443\uff0c\u4f7f\u5e94\u7528\u56de\u843d TCP</label>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS \u52ab\u6301</div>
@@ -7768,18 +7770,18 @@ KANO_POLICY_TOOLS_EOF
 
               <section class="kp-panel" data-policy-panel="maintain">
                 <div class="kp-card">
-                  <div class="kp-card-title">修复与状态</div>
+                  <div class="kp-card-title">检查修复</div>
                   <div class="kp-desc">仅在核心启动异常、切换模式后失效或网络规则未生效时使用。</div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_fix_runtime_config">修复代理配置并重启</button>
+                    <button type="button" id="mm_policy_fix_runtime_config">\u4fee\u590d\u8fd0\u884c\u914d\u7f6e</button>
                     <span>校正 TProxy、TUN、IPv6 和 DNS 所需配置，然后重启核心；不会删除订阅或模板配置。</span>
                   </div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_repair">重新应用网络规则</button>
+                    <button type="button" id="mm_policy_repair">\u91cd\u5efa\u7f51\u7edc\u89c4\u5219</button>
                     <span>重写策略脚本并重建 KANO_* iptables/ip6tables 链；不修改 config.yaml。</span>
                   </div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_status_btn">查看网络规则状态</button>
+                    <button type="button" id="mm_policy_status_btn">\u67e5\u770b\u89c4\u5219\u72b6\u6001</button>
                     <span>显示实际使用的 iptables 后端、设备直连项和当前规则链，不会改动配置。</span>
                   </div>
                 </div>
@@ -8096,7 +8098,7 @@ KANO_POLICY_TOOLS_EOF
         createToast(`\u6a21\u677f\u6587\u4ef6\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc7${2}MB\uff01`, 'red');
         return;
       }
-      await runCriticalOperation('上传配置模板', async () => saveTemplate(file));
+      await runCriticalOperation('上传模板', async () => saveTemplate(file));
     } finally {
       uploadEl.value = '';
     }
@@ -8467,7 +8469,7 @@ KANO_POLICY_TOOLS_EOF
 
   const backupBtn = document.createElement('button');
   backupBtn.classList.add('btn');
-  backupBtn.textContent = '\u5bfc\u51fa\u914d\u7f6e\u5305';
+  backupBtn.textContent = '\u5bfc\u51fa\u914d\u7f6e';
   backupBtn.onclick = async () => {
     if (!(await ensureReady())) return;
     const operationToken = acquireCriticalOperation('导出配置包');
@@ -8616,14 +8618,14 @@ KANO_POLICY_TOOLS_EOF
       #IFRAME_KANO .kano-mm-task-status[data-state="running"]{border-color:rgba(251,191,36,.34);background:rgba(120,53,15,.28);color:#fde68a;}
       #mm_action_box{margin-bottom:10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:start;}
       #IFRAME_KANO .kano-action-group{min-width:0;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(15,23,42,.44);overflow:hidden;}
-      #IFRAME_KANO .kano-action-group>summary{cursor:pointer;list-style:none;min-height:36px;padding:9px 11px;font-size:.66rem;font-weight:800;letter-spacing:.01em;color:#dbeafe;background:rgba(30,41,59,.55);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+      #IFRAME_KANO .kano-action-group>summary{cursor:pointer;list-style:none;min-height:32px;padding:7px 9px;font-size:.62rem;font-weight:800;letter-spacing:.01em;color:#dbeafe;background:rgba(30,41,59,.55);display:flex;align-items:center;justify-content:space-between;gap:8px;}
       #IFRAME_KANO .kano-action-group>summary::after{content:'+';font-size:.72rem;opacity:.72;}
       #IFRAME_KANO .kano-action-group[open]>summary::after{content:'-';}
       #IFRAME_KANO .kano-action-group[open]>summary{background:rgba(37,99,235,.20);border-bottom:1px solid rgba(96,165,250,.18);color:#eff6ff;}
       #IFRAME_KANO .kano-action-group>summary::-webkit-details-marker{display:none;}
-      #IFRAME_KANO .kano-action-inner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:9px;}
-      #IFRAME_KANO .kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:36px;line-height:1.25;text-align:center;}
-      #IFRAME_KANO button{border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:7px 10px;background:linear-gradient(180deg,rgba(51,65,85,.94),rgba(30,41,59,.94));color:#e5edf7;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;}
+      #IFRAME_KANO .kano-action-inner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:7px;}
+      #IFRAME_KANO .kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;line-height:1.2;text-align:center;font-size:.61rem;}
+      #IFRAME_KANO button{border:1px solid rgba(148,163,184,.25);border-radius:9px;padding:5px 9px;background:linear-gradient(180deg,rgba(51,65,85,.94),rgba(30,41,59,.94));color:#e5edf7;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;}
       #IFRAME_KANO button:hover{filter:brightness(1.08);}
       #IFRAME_KANO button:disabled{opacity:.55;filter:grayscale(.35);}
       #IFRAME_KANO button:focus-visible,#IFRAME_KANO summary:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
@@ -8632,12 +8634,18 @@ KANO_POLICY_TOOLS_EOF
       #IFRAME_KANO .kano-mm-web-panel{border:1px solid rgba(148,163,184,.18);border-radius:16px;background:rgba(15,23,42,.38);overflow:hidden;}
       #IFRAME_KANO .kano-mm-web-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;font-size:.58rem;opacity:.78;border-bottom:1px solid rgba(148,163,184,.14);}
       #IFRAME_KANO #mm_iframe{border:none;padding:0;margin:0;width:100%;height:70vh;min-height:420px;max-height:720px;display:block;background:#0f172a;}
-      .kano-dialog-actions{display:grid;grid-template-columns:repeat(var(--kano-action-count,2),minmax(0,1fr));gap:8px;width:100%;max-width:560px;margin-left:auto;}
-      .kano-dialog-actions>button{width:100%;min-width:0;min-height:34px;}
-      .kano-dialog-actions.kano-actions-1{width:min(100%,120px);}
+      .kano-dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto;}
+      .kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:30px;padding:5px 10px;}
+      .kano-log-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;max-width:440px;margin-left:auto;}
+      .kano-log-actions>button{width:100%;min-width:0;min-height:30px;padding:5px 8px;}
+      .kano-dialog-menu{display:grid;gap:9px;margin-top:12px;}
+      .kano-dialog-menu-section{padding:9px;border:1px solid rgba(148,163,184,.20);border-radius:10px;background:rgba(15,23,42,.28);}
+      .kano-dialog-menu-title{margin-bottom:7px;font-size:.59rem;font-weight:800;color:#bfdbfe;}
+      .kano-dialog-menu-grid{display:grid;grid-template-columns:repeat(var(--kano-menu-cols,2),minmax(0,1fr));gap:7px;}
+      .kano-dialog-menu-grid>button{width:100%;min-width:0;min-height:32px;padding:5px 8px;font-size:.62rem;}
       .kano-yaml-editor:focus{border-color:rgba(96,165,250,.75)!important;box-shadow:0 0 0 2px rgba(59,130,246,.22);}
       @media (max-width:1100px){#mm_action_box{grid-template-columns:repeat(2,minmax(0,1fr));}}
-      @media (max-width:600px){#mm_action_box{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-overview{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-task-status{justify-content:flex-start;}#IFRAME_KANO #mm_iframe{min-height:360px;height:65vh;}.kano-dialog-actions.kano-actions-3,.kano-dialog-actions.kano-actions-5{grid-template-columns:1fr;}.kano-dialog-actions.kano-actions-4{grid-template-columns:repeat(2,minmax(0,1fr));}}
+      @media (max-width:600px){#mm_action_box{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-overview{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-task-status{justify-content:flex-start;}#IFRAME_KANO #mm_iframe{min-height:360px;height:65vh;}.kano-dialog-actions.kano-actions-4{display:grid;grid-template-columns:repeat(2,max-content);}.kano-log-actions{grid-template-columns:repeat(2,minmax(0,1fr));max-width:260px;}}
       @media (max-width:420px){#IFRAME_KANO .kano-action-inner{grid-template-columns:1fr;}}
     `;
     document.head.appendChild(style);
@@ -8678,7 +8686,7 @@ KANO_POLICY_TOOLS_EOF
       localStorage.setItem(WEB_VISIBLE_KEY, visible ? 'visible' : 'hidden');
       wrap.style.display = visible ? '' : 'none';
       if (typeof webPanelToggleBtn != 'undefined' && webPanelToggleBtn) {
-        webPanelToggleBtn.textContent = visible ? '\u9690\u85cf Web \u9762\u677f' : '\u663e\u793a Web \u9762\u677f';
+        webPanelToggleBtn.textContent = visible ? '\u9690\u85cf\u9762\u677f' : '\u663e\u793a\u9762\u677f';
         webPanelToggleBtn.classList.toggle('kano-primary', visible);
       }
       if (visible && load && localStorage.getItem('#collapse_mm') == 'open') {
@@ -8691,7 +8699,7 @@ KANO_POLICY_TOOLS_EOF
     const refreshPanel = async ({ forceShow = false } = {}) => {
       if (forceShow) await setWebPanelVisible(true, { load: false });
       if (!isWebPanelVisible()) {
-        createToast('Web 面板已隐藏，请先点击“显示 Web 面板”。', 'yellow', 4500);
+        createToast('面板已隐藏，请先点击“显示面板”。', 'yellow', 4500);
         return;
       }
       const iframe = document.querySelector('#mm_iframe');
@@ -8705,14 +8713,14 @@ KANO_POLICY_TOOLS_EOF
 
     webPanelToggleBtn = document.createElement('button');
     webPanelToggleBtn.classList.add('btn');
-    webPanelToggleBtn.textContent = isWebPanelVisible() ? '\u9690\u85cf Web \u9762\u677f' : '\u663e\u793a Web \u9762\u677f';
+    webPanelToggleBtn.textContent = isWebPanelVisible() ? '\u9690\u85cf\u9762\u677f' : '\u663e\u793a\u9762\u677f';
     webPanelToggleBtn.onclick = async () => {
       await setWebPanelVisible(!isWebPanelVisible(), { load: true });
     };
 
     const open = document.createElement('button');
     open.classList.add('btn');
-    open.textContent = '新窗口打开面板';
+    open.textContent = '打开新窗口';
     open.onclick = async () => {
       const a = document.createElement('a');
       a.href = await buildPanelUrl();
@@ -8782,7 +8790,7 @@ KANO_POLICY_TOOLS_EOF
 
     const showLogBtn = document.createElement('button');
     showLogBtn.classList.add('btn');
-    showLogBtn.textContent = '日志与诊断';
+    showLogBtn.textContent = '状态与日志';
     showLogBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       setButtonBusy(showLogBtn, true, '读取中…');
@@ -8800,10 +8808,10 @@ KANO_POLICY_TOOLS_EOF
 
     const binaryHelperBtn = document.createElement('button');
     binaryHelperBtn.classList.add('btn');
-    binaryHelperBtn.textContent = '辅助内核';
+    binaryHelperBtn.textContent = '转换组件';
     const binaryHelperUploadBtn = document.createElement('button');
     binaryHelperUploadBtn.classList.add('btn');
-    binaryHelperUploadBtn.textContent = '导入辅助内核';
+    binaryHelperUploadBtn.textContent = '导入组件';
     const applyBinaryHelperButtonState = (probe = {}) => {
       const installed = probe.state == 'installed';
       const info = probe.info || null;
@@ -8811,17 +8819,17 @@ KANO_POLICY_TOOLS_EOF
       binaryHelperBtn.dataset.helperState = probe.state || 'unknown';
       binaryHelperBtn.style.background = installed ? 'var(--dark-btn-color-active)' : '';
       if (installed) {
-        binaryHelperBtn.textContent = version ? `辅助内核 ✓ ${version}` : '辅助内核 ✓';
-        binaryHelperBtn.title = '辅助内核正常；点击检查更新';
+        binaryHelperBtn.textContent = version ? `转换组件 ✓ ${version}` : '转换组件 ✓';
+        binaryHelperBtn.title = '转换组件正常；点击检查更新';
       } else if (probe.state == 'missing') {
-        binaryHelperBtn.textContent = 'Shell兼容';
-        binaryHelperBtn.title = '使用 Shell 兼容模式；点击安装辅助内核';
+        binaryHelperBtn.textContent = '安装转换组件';
+        binaryHelperBtn.title = '当前使用 Shell 兼容模式；点击安装转换组件';
       } else if (probe.state == 'invalid') {
-        binaryHelperBtn.textContent = 'Shell兼容 ⚠';
-        binaryHelperBtn.title = '辅助内核异常；点击修复';
+        binaryHelperBtn.textContent = '修复转换组件';
+        binaryHelperBtn.title = '转换组件异常；点击修复';
       } else {
-        binaryHelperBtn.textContent = 'Shell兼容 ⚠';
-        binaryHelperBtn.title = '辅助内核不可用；点击重装';
+        binaryHelperBtn.textContent = '修复转换组件';
+        binaryHelperBtn.title = '转换组件不可用；点击重装';
       }
     };
     const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {
@@ -8863,7 +8871,7 @@ KANO_POLICY_TOOLS_EOF
         const healthy = current.state == 'installed';
         const confirmed = await askConfirm(
           `mm_binary_helper_update_${createRandomString(4)}`,
-          healthy ? '检查辅助内核更新？' : '修复辅助内核？',
+          healthy ? '检查转换组件更新？' : '修复转换组件？',
           '优先从 Gitee 下载，失败后使用本地安装包；可用版本只升级不降级。',
           healthy ? '检查更新' : '更新修复',
           '取消',
@@ -8887,7 +8895,7 @@ KANO_POLICY_TOOLS_EOF
 
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
-    userAgentBtn.textContent = '订阅 User-Agent';
+    userAgentBtn.textContent = '订阅请求头';
     userAgentBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       const currentValue = await loadProviderUserAgent({ fresh: true });
@@ -8896,9 +8904,9 @@ KANO_POLICY_TOOLS_EOF
         'mm_provider_user_agent',
         `
           <div style="pointer-events:all;width:86vw;max-width:720px;">
-            <div class="title" style="margin:0">订阅 User-Agent</div>
+            <div class="title" style="margin:0">订阅请求头</div>
             <div style="margin:14px 0 8px;font-size:.62rem;line-height:1.55;opacity:.82;">
-              设置订阅请求的 User-Agent。留空使用 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}，下次更新时生效。
+              设置订阅请求使用的 User-Agent；留空使用默认值 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}，下次更新生效。
             </div>
             <input id="mm_provider_user_agent_input" type="text" maxlength="512" spellcheck="false"
               placeholder="${escapeHtml(KANO_PROVIDER_USER_AGENT)}"
@@ -8942,7 +8950,7 @@ KANO_POLICY_TOOLS_EOF
 
     const rescueBtn = document.createElement('button');
     rescueBtn.classList.add('btn', 'kano-danger');
-    rescueBtn.textContent = '\u65ad\u7f51\u6062\u590d';
+    rescueBtn.textContent = '\u6062\u590d\u7f51\u7edc';
     rescueBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const confirmed = await askConfirm(
@@ -8953,7 +8961,7 @@ KANO_POLICY_TOOLS_EOF
         '\u53d6\u6d88',
       );
       if (!confirmed) return;
-      const operationToken = acquireCriticalOperation('断网恢复');
+      const operationToken = acquireCriticalOperation('恢复网络');
       if (!operationToken) return;
       setButtonBusy(rescueBtn, true, '\u6062\u590d\u4e2d\u2026');
       try {
@@ -10390,10 +10398,10 @@ ${expectedProviderChecks}
         'mm_local_file_editor',
         `
           <div style="pointer-events:all;width:92vw;max-width:900px;">
-            <div class="title" style="margin:0">编辑本地文件</div>
+            <div class="title" style="margin:0">配置文件</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
               <select id="mm_local_file_select" style="min-width:220px;flex:1;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
-              <button id="mm_local_file_reload_btn" style="font-size:.64rem">重新读取</button>
+              <button id="mm_local_file_reload_btn" style="font-size:.64rem">读取</button>
             </div>
             <textarea id="mm_local_file_text" spellcheck="false" style="box-sizing:border-box;width:100%;height:55vh;min-height:260px;padding:10px;background:#050b16;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;font-family:monospace;font-size:.62rem;line-height:1.45;resize:vertical;"></textarea>
             <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:.6rem;opacity:.76;"></div>
@@ -10446,7 +10454,7 @@ ${expectedProviderChecks}
 
     const editBtn = document.createElement('button');
     editBtn.classList.add('btn');
-    editBtn.textContent = '编辑本地文件';
+    editBtn.textContent = '配置文件';
     editBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       await showEditableLocalFilesDialog();
@@ -10462,22 +10470,22 @@ ${expectedProviderChecks}
         'mm_sub_input_toast',
         `
             <div style="pointer-events:all;width:80vw;max-width:800px;">
-                <div class="title" style="margin:0">\u8ba2\u9605\u7ba1\u7406</div>
-                <div style="margin:20px 0;display:flex;flex-direction:column;gap:10px;">
+                <div class="title" style="margin:0">\u8ba2\u9605\u8bbe\u7f6e</div>
+                <div style="margin:14px 0;display:flex;flex-direction:column;gap:10px;">
                     <div id="mm_sub_rows" style="display:flex;flex-direction:column;gap:8px;"></div>
                     <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
-                      <button style="font-size:.64rem" id="mm_sub_add_btn">\u6dfb\u52a0\u94fe\u63a5</button>
-                      <button style="font-size:.64rem" id="mm_sub_clear_btn">\u6e05\u7a7a\u5217\u8868</button>
+                      <button style="font-size:.64rem" id="mm_sub_add_btn">\u6dfb\u52a0\u8ba2\u9605</button>
+                      <button style="font-size:.64rem" id="mm_sub_clear_btn">\u6e05\u7a7a\u8ba2\u9605</button>
                     </div>
                     <label style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
-                      <span>订阅处理</span>
+                      <span>处理方式</span>
                       <select id="mm_sub_convert_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
-                        <option value="${SUB_CONVERT_MODE_PROVIDER}">Mihomo HTTP Provider（默认，390 自动多 UA 本地降级）</option>
-                        <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（多 UA + YAML/JSON/Base64/分享链接）</option>
+                        <option value="${SUB_CONVERT_MODE_PROVIDER}">HTTP Provider（默认，失败时自动本地转换）</option>
+                        <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（支持分享链接）</option>
                       </select>
                     </label>
-                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">\u6bcf\u884c\u4e00\u4e2a\u8282\u70b9\u8ba2\u9605\u94fe\u63a5\u3002\u7981\u7528\u4f1a\u4fdd\u7559\u94fe\u63a5\u5e76\u6392\u9664\u540e\u7eed\u751f\u6210\u4e0e\u66f4\u65b0\uff1b\u5168\u90e8\u7981\u7528\u65f6\u4fdd\u7559\u5f53\u524d\u8fd0\u884c\u914d\u7f6e\u3002</div>
-                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，但转换在 F50 内完成，不经过第三方转换站；更新由本页面触发。</div>
+                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。</div>
+                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
                 </div>
                 <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
                     <button style="font-size:.64rem" id="mm_sub_submit_btn">\u4fdd\u5b58\u5e76\u66f4\u65b0</button>
@@ -10583,7 +10591,7 @@ ${expectedProviderChecks}
 
         if (showSuspiciousSubSourcesError(sources)) return;
 
-        const operationToken = acquireCriticalOperation('保存并更新订阅');
+        const operationToken = acquireCriticalOperation('保存更新订阅');
         if (!operationToken) return;
 
         setButtonBusy(submitBtn, true, '\u5904\u7406\u4e2d\u2026');
@@ -10611,7 +10619,7 @@ ${expectedProviderChecks}
     // \u521b\u5efa\u8ba2\u9605\u94fe\u63a5\u6309\u94ae
     const subBtn = document.createElement('button');
     subBtn.classList.add('btn');
-    subBtn.textContent = '\u8ba2\u9605\u7ba1\u7406';
+    subBtn.textContent = '\u8ba2\u9605\u8bbe\u7f6e';
     subBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       importSub();
@@ -10676,12 +10684,12 @@ ${expectedProviderChecks}
         'mm_rule_override_toast',
         `
           <div style="pointer-events:all;width:94vw;max-width:980px;">
-            <div class="title" style="margin:0">图形化规则</div>
+            <div class="title" style="margin:0">图形规则</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
-              适合添加少量自定义规则；保存并应用会统一重建模板、校验配置并在失败时回滚。
+              用于少量自定义规则。应用时会重建并校验配置，失败自动回滚。
             </div>
             <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:.66rem;">
-              <input id="mm_rule_override_enabled" type="checkbox" /> 启用图形化规则
+              <input id="mm_rule_override_enabled" type="checkbox" /> 启用图形规则
             </label>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;align-items:center;">
               <select id="mm_rule_override_type" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">${typeOptionsHtml}</select>
@@ -10699,7 +10707,7 @@ ${expectedProviderChecks}
             <div class="kano-dialog-actions kano-actions-4" style="--kano-action-count:4;margin-top:10px;">
               <button style="font-size:.64rem" id="mm_rule_override_save_btn">保存</button>
               <button style="font-size:.64rem" id="mm_rule_override_apply_btn">保存并应用</button>
-              <button style="font-size:.64rem" id="mm_rule_override_clear_btn">清空规则</button>
+              <button style="font-size:.64rem" id="mm_rule_override_clear_btn">清空</button>
               <button style="font-size:.64rem" id="mm_rule_override_close_btn">关闭</button>
             </div>
           </div>
@@ -10731,7 +10739,7 @@ ${expectedProviderChecks}
         if (config.rules.length == 0) {
           const empty = document.createElement('div');
           empty.style.cssText = 'opacity:.65;font-size:.64rem;line-height:1.7;padding:4px;';
-          empty.textContent = '暂无图形化规则';
+          empty.textContent = '暂无图形规则';
           listEl.appendChild(empty);
           return;
         }
@@ -10790,7 +10798,7 @@ ${expectedProviderChecks}
           return;
         }
         if (rule.content.includes(',')) {
-          createToast('复杂规则请使用 JS 覆写，图形化规则内容不能包含英文逗号', 'yellow', 6000);
+          createToast('复杂规则请使用 JS 覆写，图形规则内容不能包含英文逗号', 'yellow', 6000);
           return;
         }
         const key = `${rule.position}|${formatRuleOverrideRule(rule)}`;
@@ -10809,18 +10817,18 @@ ${expectedProviderChecks}
       };
       const saveCurrent = async () => saveRuleOverrideConfig(syncConfig());
       saveBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('保存图形化规则');
+        const operationToken = acquireCriticalOperation('保存图形规则');
         if (!operationToken) return;
         setButtonBusy(saveBtn, true, '保存中…');
         try {
-          if (await saveCurrent()) createToast('图形化规则已保存', 'green');
+          if (await saveCurrent()) createToast('图形规则已保存', 'green');
         } finally {
           setButtonBusy(saveBtn, false);
           releaseCriticalOperation(operationToken);
         }
       };
       applyBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('应用图形化规则');
+        const operationToken = acquireCriticalOperation('应用图形规则');
         if (!operationToken) return;
         setButtonBusy(applyBtn, true, '应用中…');
         try {
@@ -10842,7 +10850,7 @@ ${expectedProviderChecks}
           <div style="pointer-events:all;width:92vw;max-width:900px;">
             <div class="title" style="margin:0">JS 覆写</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
-              定义 <code>function main(config) { ...; return config; }</code> 处理复杂规则；清空后保存即可停用。
+              定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。
             </div>
             <textarea id="mm_js_override_text" spellcheck="false" autocapitalize="off" style="width:100%;height:430px;max-height:60vh;border:1px solid rgba(96,165,250,.35);border-radius:12px;background:#111827;color:#E5E7EB;caret-color:#60A5FA;box-sizing:border-box;font-family:Consolas,Monaco,monospace,'Microsoft YaHei';line-height:1.5;padding:12px;outline:none;"></textarea>
             <div class="kano-dialog-actions kano-actions-4" style="--kano-action-count:4;margin-top:10px;">
@@ -10889,7 +10897,7 @@ ${expectedProviderChecks}
 
     const templateOverrideBtn = document.createElement('button');
     templateOverrideBtn.classList.add('btn');
-    templateOverrideBtn.textContent = '配置模板';
+    templateOverrideBtn.textContent = '配置与规则';
     templateOverrideBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       const [ruleOverride, jsOverrideSaved] = await Promise.all([
@@ -10901,19 +10909,26 @@ ${expectedProviderChecks}
         'mm_template_override_center',
         `
           <div style="pointer-events:all;width:90vw;max-width:760px;">
-            <div class="title" style="margin:0">配置模板</div>
-            <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.82;">
-              管理配置模板、图形化规则和 JS 覆写。
-            </div>
+            <div class="title" style="margin:0">配置与规则</div>
             <div style="margin:10px 0;padding:9px 10px;border:1px solid rgba(148,163,184,.24);border-radius:8px;font-size:.61rem;line-height:1.6;">
-              图形化规则：${activeRuleCount} 条 · JS 覆写：${jsOverrideSaved ? '已启用' : '未启用'}
+              图形规则 ${activeRuleCount} 条 · JS 覆写 ${jsOverrideSaved ? '已启用' : '未启用'}
             </div>
-            <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px;">
-              <button style="font-size:.64rem;text-align:left;padding:10px;" id="mm_template_rules_btn">图形化规则</button>
-              <button style="font-size:.64rem;text-align:left;padding:10px;" id="mm_template_js_btn">JS 覆写</button>
-              <button style="font-size:.64rem;text-align:left;padding:10px;" id="mm_template_upload_btn">\u4e0a\u4f20\u914d\u7f6e\u6a21\u677f</button>
-              <button style="font-size:.64rem;text-align:left;padding:10px;" id="mm_template_restore_package_btn">\u5bfc\u5165\u914d\u7f6e\u5305</button>
-              <button style="font-size:.64rem;text-align:left;padding:10px;" id="mm_template_rebuild_btn">应用配置模板</button>
+            <div class="kano-dialog-menu">
+              <div class="kano-dialog-menu-section">
+                <div class="kano-dialog-menu-title">规则覆写</div>
+                <div class="kano-dialog-menu-grid" style="--kano-menu-cols:2;">
+                  <button id="mm_template_rules_btn">图形规则</button>
+                  <button id="mm_template_js_btn">JS 覆写</button>
+                </div>
+              </div>
+              <div class="kano-dialog-menu-section">
+                <div class="kano-dialog-menu-title">配置文件</div>
+                <div class="kano-dialog-menu-grid" style="--kano-menu-cols:3;">
+                  <button id="mm_template_upload_btn">上传模板</button>
+                  <button id="mm_template_restore_package_btn">导入配置</button>
+                  <button id="mm_template_rebuild_btn">应用模板</button>
+                </div>
+              </div>
             </div>
             <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
               <button style="font-size:.64rem" id="mm_template_close_btn">\u5173\u95ed</button>
@@ -10940,7 +10955,7 @@ ${expectedProviderChecks}
         await showJsOverrideDialog();
       };
       rebuildBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('应用配置模板');
+        const operationToken = acquireCriticalOperation('应用模板');
         if (!operationToken) return;
         setButtonBusy(rebuildBtn, true, '\u5e94\u7528\u4e2d\u2026');
         try {
@@ -10954,7 +10969,7 @@ ${expectedProviderChecks}
 
     const policyToolsBtn = document.createElement('button');
     policyToolsBtn.classList.add('btn');
-    policyToolsBtn.textContent = '网络规则';
+    policyToolsBtn.textContent = '流量接管';
     policyToolsBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       showPolicyToolsDialog({ initialTab: 'network' });
@@ -10970,7 +10985,7 @@ ${expectedProviderChecks}
 
     const quickRunBtn = document.createElement('button');
     quickRunBtn.classList.add('btn');
-    quickRunBtn.textContent = '安装或启动核心';
+    quickRunBtn.textContent = '安装 / 启动';
     quickRunBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       if (!(await checkIsInstalled())) {
@@ -11006,10 +11021,10 @@ ${expectedProviderChecks}
       return details;
     };
 
-    appendActionGroup('\u8fd0\u884c\u4e0e\u9762\u677f', [quickRunBtn, webPanelToggleBtn, open, refresh, btn_restart, controllerSettingsBtn], false);
+    appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
     appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
-    appendActionGroup('\u7f51\u7edc\u4e0e\u8bbe\u5907', [policyToolsBtn, macBypassBtn, binaryHelperBtn, binaryHelperUploadBtn], false);
-    appendActionGroup('\u8bca\u65ad\u4e0e\u7ef4\u62a4', [showLogBtn, rescueBtn, boot_on, clearCacheBtn, stopBtn, btn_disabled], false);
+    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, macBypassBtn, rescueBtn, showLogBtn], false);
+    appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
 
     let colTimer = null;
     let colTimer1 = null;

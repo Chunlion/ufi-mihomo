@@ -76,6 +76,8 @@
   const SUB_CONVERT_MODE_PROVIDER = 'provider';
   const SUB_CONVERT_MODE_LOCAL = 'local';
   const SUB_DISABLED_MARKER = '# KANO_SUB_DISABLED ';
+  const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
+  const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
   const POLICY_SCRIPT_VERSION = '6.3';
   const CONTROLLER_INFO_CACHE_TTL = 250;
@@ -176,6 +178,60 @@ ${script}`,
     } catch {
       return false;
     }
+  };
+
+  const isPrivateOrReservedIpv4 = (hostname = '') => {
+    const parts = String(hostname || '').split('.');
+    if (parts.length != 4 || parts.some((part) => !/^\d+$/.test(part) || Number(part) > 255)) return false;
+    const [a, b, c] = parts.map(Number);
+    return a == 0 || a == 10 || a == 127 || a >= 224
+      || (a == 100 && b >= 64 && b <= 127)
+      || (a == 169 && b == 254)
+      || (a == 172 && b >= 16 && b <= 31)
+      || (a == 192 && b == 0 && (c == 0 || c == 2))
+      || (a == 192 && b == 168)
+      || (a == 198 && (b == 18 || b == 19))
+      || (a == 198 && b == 51 && c == 100)
+      || (a == 203 && b == 0 && c == 113);
+  };
+
+  const validateLocalSubscriptionUrl = (value = '') => {
+    let url;
+    try {
+      url = new URL(String(value || '').trim());
+    } catch {
+      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u7684\u8ba2\u9605\u5730\u5740\u65e0\u6548' };
+    }
+    if (url.protocol != 'https:') {
+      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u53ea\u5141\u8bb8 HTTPS \u8ba2\u9605\u5730\u5740' };
+    }
+    if (url.username || url.password) {
+      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u4e0d\u5f97\u5728 URL \u4e2d\u643a\u5e26\u7528\u6237\u540d\u6216\u5bc6\u7801' };
+    }
+    const hostname = String(url.hostname || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+    if (!hostname) {
+      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u7f3a\u5c11\u4e3b\u673a\u540d' };
+    }
+    if (hostname.includes(':')) {
+      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u4e0d\u63a5\u53d7 IPv6 \u5b57\u9762\u91cf\u8ba2\u9605\u5730\u5740' };
+    }
+    if (
+      hostname == 'localhost'
+      || hostname.endsWith('.localhost')
+      || hostname.endsWith('.local')
+      || hostname.endsWith('.lan')
+      || hostname.endsWith('.home.arpa')
+      || isPrivateOrReservedIpv4(hostname)
+    ) {
+      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u62d2\u7edd\u56de\u73af\u3001\u79c1\u7f51\u6216\u4fdd\u7559\u5730\u5740' };
+    }
+    return {
+      ok: true,
+      url: url.toString(),
+      hostname,
+      port: url.port || '443',
+      message: '',
+    };
   };
 
   const getUploadedPath = (url) => {
@@ -4657,6 +4713,24 @@ KANO_WRITE_CHECK_EOF
   const convertSubscriptionsLocally = async (sources = []) => {
     const cleanSources = normalizeSubSourceList(sources);
     if (cleanSources.length == 0) return buildProviderUpdateResult([]);
+    const sourceChecks = cleanSources.map((source) => validateLocalSubscriptionUrl(source.url));
+    const blockedIndex = sourceChecks.findIndex((check) => !check.ok);
+    if (blockedIndex >= 0) {
+      return buildProviderUpdateResult(cleanSources.map((source, index) => ({
+        type: 'proxy-provider',
+        name: source.name,
+        ok: false,
+        attempts: 0,
+        errorType: index == blockedIndex ? 'url_policy' : 'local_preflight_blocked',
+        message: index == blockedIndex
+          ? sourceChecks[index].message
+          : '\u5176\u5b83\u8ba2\u9605\u5730\u5740\u672a\u901a\u8fc7\u5b89\u5168\u68c0\u67e5\uff0c\u672c\u6b21\u672c\u5730\u8f6c\u6362\u5df2\u53d6\u6d88',
+        rawMessage: '',
+        urlMasked: index == blockedIndex ? maskSubscriptionUrl(source.url) : '',
+        proxyCount: null,
+        cacheAvailable: false,
+      })), { via: 'local', committed: false });
+    }
     await loadProviderUserAgent();
     if (!(await ensureLocalSubscriptionConverter())) {
       const cacheProbe = await runShellWithRoot(cleanSources.map((source) => `
@@ -4709,6 +4783,7 @@ KANO_WRITE_CHECK_EOF
     const downloadCommands = cleanSources.map((source, index) => {
       const rawPath = `$TX/raw_${index + 1}`;
       const outputPath = `$TX/${source.name}.yaml`;
+      const sourceCheck = sourceChecks[index];
       return `
         candidate_ok=0
         last_http=000
@@ -4720,9 +4795,13 @@ KANO_WRITE_CHECK_EOF
         out_tmp="${outputPath}.tmp"
         err_tmp="${rawPath}.err"
         conv_err="${rawPath}.convert.err"
+        source_host=${shellQuote(sourceCheck.hostname)}
+        source_port=${shellQuote(sourceCheck.port)}
         rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-        CURL_COMPRESSED=''
-        "$CURL_BIN" --help all 2>/dev/null | grep -q -- '--compressed' && CURL_COMPRESSED='--compressed'
+        resolved_ip="$(resolve_public_ipv4 "$source_host")" || {
+          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|resolve|000|blocked_target|subscription host has no public IPv4 address`)}
+          exit 22
+        }
         classify_candidate() {
           FILE="$1"
           first="$(head -c 384 "$FILE" 2>/dev/null | tr '\\r\\n\\t' '   ')"
@@ -4739,7 +4818,10 @@ KANO_WRITE_CHECK_EOF
           rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
           last_stage=download
           last_convert=''
-          if http_code="$("$CURL_BIN" -sS -L $CURL_COMPRESSED --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
+          if http_code="$("$CURL_BIN" -sS --proto '=https' --max-redirs 0 \
+            --max-filesize ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} \
+            --resolve "$source_host:$source_port:$resolved_ip" \
+            --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
             -H 'Accept: application/yaml, text/yaml, application/x-yaml, text/plain, application/json, */*' \
             -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"; then
             curl_rc=0
@@ -4748,9 +4830,22 @@ KANO_WRITE_CHECK_EOF
           fi
           last_http="\${http_code:-000}"
           last_ua="$LOCAL_UA"
+          if [ "$curl_rc" -eq 63 ]; then
+            last_stage=download_limit
+            last_kind=too-large
+            last_convert="subscription exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
+            break
+          fi
           case "$http_code" in
             2??)
               if [ "$curl_rc" -eq 0 ] && [ -s "$raw_tmp" ]; then
+                raw_bytes="$(wc -c < "$raw_tmp" 2>/dev/null || echo 0)"
+                if ! echo "$raw_bytes" | grep -Eq '^[0-9]+$' || [ "$raw_bytes" -gt ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} ]; then
+                  last_stage=download_limit
+                  last_kind=too-large
+                  last_convert="subscription exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
+                  break
+                fi
                 last_kind="$(classify_candidate "$raw_tmp")"
                 last_stage=convert
                 if CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"; then
@@ -4759,6 +4854,21 @@ KANO_WRITE_CHECK_EOF
                   convert_rc=$?
                 fi
                 if [ "$convert_rc" -eq 0 ] && printf '%s' "$CONVERT_JSON" | grep -q '"ok":true' && [ -s "$out_tmp" ]; then
+                  out_bytes="$(wc -c < "$out_tmp" 2>/dev/null || echo 0)"
+                  if ! echo "$out_bytes" | grep -Eq '^[0-9]+$' || [ "$out_bytes" -gt ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} ]; then
+                    last_stage=download_limit
+                    last_kind=converted-output-too-large
+                    last_convert="converted provider exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
+                    break
+                  fi
+                  next_total=$((LOCAL_TOTAL_BYTES + raw_bytes + out_bytes))
+                  if [ "$next_total" -gt ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} ]; then
+                    last_stage=download_limit
+                    last_kind=total-quota
+                    last_convert="local conversion exceeds ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} bytes total"
+                    break
+                  fi
+                  LOCAL_TOTAL_BYTES="$next_total"
                   mv -f "$raw_tmp" "${rawPath}"
                   mv -f "$out_tmp" "${outputPath}"
                   candidate_ok=1
@@ -4819,7 +4929,52 @@ KANO_WRITE_CHECK_EOF
         TX=${shellQuote(txDir)}
         HELPER=${shellQuote(KANO_HELPER_PATH)}
         committing=0
+        LOCAL_TOTAL_BYTES=0
         umask 077
+        is_public_ipv4() {
+          printf '%s\n' "$1" | awk -F. '
+            NF != 4 { exit 1 }
+            {
+              for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1
+              if ($1 == 0 || $1 == 10 || $1 == 127 || $1 >= 224) exit 1
+              if ($1 == 100 && $2 >= 64 && $2 <= 127) exit 1
+              if ($1 == 169 && $2 == 254) exit 1
+              if ($1 == 172 && $2 >= 16 && $2 <= 31) exit 1
+              if ($1 == 192 && $2 == 0 && ($3 == 0 || $3 == 2)) exit 1
+              if ($1 == 192 && $2 == 168) exit 1
+              if ($1 == 198 && ($2 == 18 || $2 == 19)) exit 1
+              if ($1 == 198 && $2 == 51 && $3 == 100) exit 1
+              if ($1 == 203 && $2 == 0 && $3 == 113) exit 1
+              exit 0
+            }
+          '
+        }
+        resolve_public_ipv4() {
+          resolve_host="$1"
+          candidates=''
+          case "$resolve_host" in
+            *[!0-9.]*|'') ;;
+            *) candidates="$resolve_host" ;;
+          esac
+          if [ -z "$candidates" ] && command -v getent >/dev/null 2>&1; then
+            candidates="$(getent ahostsv4 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
+            [ -n "$candidates" ] || candidates="$(getent hosts "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
+          fi
+          if [ -z "$candidates" ] && command -v ping >/dev/null 2>&1; then
+            candidates="$(LC_ALL=C ping -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
+              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9][0-9.]*[)]$/) {
+                gsub(/[()]/, "", $i); print $i; exit
+              }
+            }')"
+          fi
+          for candidate_ip in $candidates; do
+            if is_public_ipv4 "$candidate_ip"; then
+              printf '%s\n' "$candidate_ip"
+              return 0
+            fi
+          done
+          return 1
+        }
         cleanup_local_conversion() {
           rc=$?
           if [ "$committing" = 1 ]; then
@@ -4864,9 +5019,13 @@ KANO_WRITE_CHECK_EOF
       const message = ok
         ? ''
         : source.name == failedName
-          ? (failedStage == 'download'
-            ? `订阅下载失败${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}`
-            : `订阅响应无法转换${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}${failedKind ? `，响应类型 ${failedKind}` : ''}`)
+          ? (failedStage == 'resolve'
+            ? '订阅主机未解析到公网 IPv4 地址，已拒绝本地访问'
+            : failedStage == 'download_limit'
+              ? '订阅响应超过本地转换的文件或总配额'
+              : (failedStage == 'download'
+                ? `订阅下载失败${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}`
+                : `订阅响应无法转换${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}${failedKind ? `，响应类型 ${failedKind}` : ''}`))
           : '本次本地转换未提交，继续保留原节点缓存';
       return {
         type: 'proxy-provider',

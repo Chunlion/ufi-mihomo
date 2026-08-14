@@ -47,6 +47,8 @@
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
   const CLASH_PACKAGE_URL = 'https://pan.kanokano.cn/d/UFI-TOOLS-UPDATE/plugins/mihomo-tproxy.zip';
   const CLASH_PACKAGE_FALLBACK_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
+  const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
+  const ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
   // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
   // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
@@ -2978,6 +2980,37 @@ EOF_KANO_SERVICE
     `MATCH,${proxyGroup}`,
   ];
 
+  const applyManagedDashboardFields = (config) => {
+    assertYamlRootMap(config, '配置');
+    const externalUi = String(config['external-ui'] || '').trim().replace(/\\/g, '/');
+    const externalUiName = String(config['external-ui-name'] || '').trim().toLowerCase();
+    const externalUiUrl = String(config['external-ui-url'] || '').trim();
+    const normalizedUi = externalUi.replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase();
+    const managedUiPaths = new Set([
+      '',
+      'ui',
+      'ui/zashboard',
+      'webui',
+      'webui/zashboard',
+      '/data/clash/proxy/webui/zashboard',
+    ]);
+    const usesManagedZashboard = managedUiPaths.has(normalizedUi) && (
+      (!externalUi && !externalUiName && !externalUiUrl)
+      || externalUiName == 'zashboard'
+      || /github\.com\/Zephyruso\/zashboard\//i.test(externalUiUrl)
+      || normalizedUi.endsWith('/zashboard')
+    );
+    if (!usesManagedZashboard) return false;
+
+    const changed = externalUi != ZASHBOARD_UI_DIR
+      || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
+      || !externalUiUrl;
+    config['external-ui'] = ZASHBOARD_UI_DIR;
+    if (!externalUiUrl) config['external-ui-url'] = ZASHBOARD_UI_URL;
+    delete config['external-ui-name'];
+    return changed;
+  };
+
   const applyRequiredF50Fields = (config, {
     tproxyPort = 7895,
     ipv6 = false,
@@ -2991,6 +3024,7 @@ EOF_KANO_SERVICE
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
       config['external-controller'] = '0.0.0.0:7788';
     }
+    applyManagedDashboardFields(config);
     if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = createRandomSecret(20);
     config.ipv6 = !!ipv6;
     if (!Array.isArray(config.proxies)) config.proxies = [];
@@ -3259,6 +3293,8 @@ EOF_KANO_SERVICE
     'log-level': 'info',
     ipv6: false,
     'external-controller': String(controllerSettings.controller || '0.0.0.0:7788'),
+    'external-ui': ZASHBOARD_UI_DIR,
+    'external-ui-url': ZASHBOARD_UI_URL,
     secret: String(controllerSettings.secret || createRandomSecret(20)),
     profile: {
       'store-selected': true,
@@ -6520,6 +6556,8 @@ KANO_WRITE_CHECK_EOF
     'log-level: info',
     'ipv6: false',
     'external-controller: 0.0.0.0:7788',
+    `external-ui: ${ZASHBOARD_UI_DIR}`,
+    `external-ui-url: ${ZASHBOARD_UI_URL}`,
     `secret: ${yamlSingleQuote(secret)}`,
     'profile:',
     '  store-selected: true',

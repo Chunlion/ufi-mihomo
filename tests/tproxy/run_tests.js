@@ -105,7 +105,7 @@ function loadPlugin(file, shellHandler, exportNames, { lexicalHostOnly = false }
 // ---- 用例 ---------------------------------------------------------------
 const EXPORTS = [
   'removeLegacyManagedRulePrefix', 'applyManagedRules', 'validateManagedConfigObject',
-  'validateConfigObjectStructure',
+  'validateConfigObjectStructure', 'applyManagedDashboardFields', 'applyRequiredF50Fields',
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
   'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
   'ensureInstallToolbox', 'sanitizeSubscriptionSecrets',
@@ -270,6 +270,37 @@ function runFor(label, file) {
     'API health check reuses the already detected core PID',
   );
   chk(hasBinaryHelper, true, 'unified plugin includes the optional Go helper capability');
+
+  console.log('--- Zashboard UI path normalization ---');
+  const duplicatedDashboard = {
+    'external-ui': 'WebUI/zashboard',
+    'external-ui-name': 'zashboard',
+    'external-ui-url': 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+  };
+  chk(api.applyManagedDashboardFields(duplicatedDashboard), true, 'duplicate Zashboard update path is detected');
+  chk(duplicatedDashboard['external-ui'], 'WebUI/zashboard', 'managed dashboard keeps the served UI directory');
+  chk(Object.prototype.hasOwnProperty.call(duplicatedDashboard, 'external-ui-name'), false,
+    'managed dashboard removes the name that caused a nested update directory');
+
+  const packagedDashboard = {
+    'external-ui': 'ui',
+    'external-ui-name': 'zashboard',
+    'external-ui-url': 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-no-fonts.zip',
+  };
+  api.applyRequiredF50Fields(packagedDashboard);
+  chk(packagedDashboard['external-ui'], 'WebUI/zashboard', 'packaged UI path is normalized before config commit');
+  chk(packagedDashboard['external-ui-url'].endsWith('/dist-no-fonts.zip'), true,
+    'an existing Zashboard release variant is preserved');
+  chk(Object.prototype.hasOwnProperty.call(packagedDashboard, 'external-ui-name'), false,
+    'packaged UI name is removed before core start');
+
+  const customDashboard = {
+    'external-ui': '/custom/dashboard',
+    'external-ui-name': 'custom-ui',
+    'external-ui-url': 'https://example.test/custom.zip',
+  };
+  chk(api.applyManagedDashboardFields(customDashboard), false, 'custom dashboard configuration is not rewritten');
+  chk(customDashboard['external-ui-name'], 'custom-ui', 'custom dashboard name is preserved');
   if (hasBinaryHelper) {
     const controllerReaderSource = source.slice(
       source.indexOf('const readControllerInfo = async () => {'),

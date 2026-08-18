@@ -12,7 +12,6 @@ from pathlib import Path
 
 
 REQUIRED = ("sing-box", "config.json", "source", "zashboard")
-MAX_BYTES = 180 * 1024 * 1024
 
 
 def require_runtime(source: Path) -> None:
@@ -26,10 +25,6 @@ def require_runtime(source: Path) -> None:
         raise ValueError("config.json must be a regular file")
     if any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("runtime package must not contain symbolic links")
-    total = sum(path.stat().st_size for path in source.rglob("*") if path.is_file())
-    if total > MAX_BYTES:
-        raise ValueError(f"runtime exceeds {MAX_BYTES} bytes")
-
 
 def package(source: Path, output: Path) -> int:
     require_runtime(source)

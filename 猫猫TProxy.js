@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy v7.4.0 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.1 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -57,7 +57,8 @@
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.3';
+  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.4';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.0';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
   const BOOT_GATE_END = '# F50_BOOT_FIX_END';
@@ -652,11 +653,33 @@ remove_missing_label() {
 }
 
 find_core_pid() {
-  pid="$(pidof Clash.Core 2>/dev/null | awk '{print $1}')"
-  if [ -z "$pid" ]; then
-    pid="$(ps -A 2>/dev/null | awk '/[C]lash\\.Core|[m]ihomo/ {print $2; exit}')"
+  for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
+    PID="\${p##*/}"
+    exe="$(readlink "$p/exe" 2>/dev/null)"
+    case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
+    cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
+    case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
+    printf '%s\\n' "$PID"
+    return 0
+  done
+  return 1
+}
+
+validate_core_config() {
+  CONFIG_TEST_LOG="$DIAG/config_test.out"
+  [ -x "$CORE" ] || { echo "CONFIG_TEST_STATE=core_unavailable"; return 6; }
+  [ -s "$CONFIG" ] || { echo "CONFIG_TEST_STATE=config_missing"; return 6; }
+  (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  config_test_rc=$?
+  if [ "$config_test_rc" -ne 0 ]; then
+    echo "CONFIG_TEST_STATE=invalid"
+    echo "CONFIG_TEST_RC=$config_test_rc"
+    tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
+    return 6
   fi
-  printf '%s\\n' "$pid"
+  echo "CONFIG_TEST_STATE=valid"
+  return 0
 }
 
 emit_preflight() {
@@ -834,11 +857,12 @@ start_runtime() {
   preflight
   preflight_rc=$?
   [ "$preflight_rc" -eq 0 ] || return "$preflight_rc"
+  validate_core_config || return $?
   if [ "$action" = "--restart" ]; then
     "$SERVICE" stop >/dev/null 2>&1 || true
   fi
   [ ! -x "$POLICY" ] || "$POLICY" flush >/dev/null 2>&1 || true
-  "$SERVICE" start >"$DIAG/service_start.out" 2>&1
+  KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start >"$DIAG/service_start.out" 2>&1
   service_start_rc=$?
   if [ "$service_start_rc" -ne 0 ]; then
     echo "START_STATE=service_failed"
@@ -923,6 +947,104 @@ esac
       values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
     });
     return values;
+  };
+
+  const buildServiceWrapperScript = () => `#!/system/bin/sh
+# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}
+set +e
+CORE=${CLASH_CORE}
+CONFIG=${CLASH_CONFIG}
+CONFIG_TEST_LOG=/data/kano_clash_config_test.log
+RUN_LOG=${LOG_FILE}
+
+case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
+  *arm64-v8a*|*aarch64*|*armv8*) binary=${CLASH_DIR}/Scripts/clashctl_arm64 ;;
+  *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) binary=${CLASH_DIR}/Scripts/clashctl_armv7 ;;
+  *) binary=${CLASH_DIR}/Scripts/clashctl ;;
+esac
+
+find_runtime_pid() {
+  for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
+    PID="\${p##*/}"
+    exe="$(readlink "$p/exe" 2>/dev/null)"
+    case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
+    cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
+    case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
+    printf '%s\\n' "$PID"
+    return 0
+  done
+  return 1
+}
+
+validate_config() {
+  [ "$KANO_CONFIG_PREVALIDATED" = "1" ] && return 0
+  [ -x "$CORE" ] || { echo "SERVICE_CONFIG_TEST_FAILED: Clash.Core 不可执行"; return 6; }
+  [ -s "$CONFIG" ] || { echo "SERVICE_CONFIG_TEST_FAILED: config.yaml 不存在或为空"; return 6; }
+  (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  test_rc=$?
+  if [ "$test_rc" -ne 0 ]; then
+    echo "SERVICE_CONFIG_TEST_FAILED: rc=$test_rc"
+    tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
+    return 6
+  fi
+  return 0
+}
+
+[ -x "$binary" ] || { echo "找不到适用于当前架构的 clashctl: $binary"; exit 1; }
+action="$1"
+case "$action" in start|restart) validate_config || exit $? ;; esac
+
+"$binary" "$@"
+controller_rc=$?
+[ "$controller_rc" -eq 0 ] || exit "$controller_rc"
+
+case "$action" in
+  start|restart)
+    stable=0
+    attempt=0
+    while [ "$attempt" -lt 30 ]; do
+      attempt=$((attempt + 1))
+      pid="$(find_runtime_pid)"
+      if [ -n "$pid" ]; then
+        stable=$((stable + 1))
+        if [ "$stable" -ge 2 ]; then
+          echo "SERVICE_START_VERIFIED_PID=$pid"
+          exit 0
+        fi
+      else
+        stable=0
+      fi
+      sleep 1
+    done
+    echo "SERVICE_START_VERIFY_FAILED: 控制器返回成功，但核心进程未稳定运行"
+    tail -n 120 "$RUN_LOG" 2>/dev/null || true
+    exit 7
+    ;;
+esac
+exit 0
+`;
+
+  const ensureServiceWrapper = async ({ force = false } = {}) => {
+    const script = buildServiceWrapperScript();
+    const marker = `# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}`;
+    return runShellWithRoot(`
+      set -e
+      TARGET=${shellQuote(CLASH_SERVICE)}
+      [ -d ${shellQuote(`${CLASH_DIR}/Scripts`)} ] || { echo "SERVICE_WRAPPER_SKIPPED=not_installed"; exit 3; }
+      NEW="$TARGET.new.$$"
+      if [ ${shellQuote(force ? '1' : '0')} != "1" ] && [ -x "$TARGET" ] && grep -qxF ${shellQuote(marker)} "$TARGET"; then
+        echo "SERVICE_WRAPPER_READY=${CLASH_SERVICE_WRAPPER_VERSION}"
+        exit 0
+      fi
+      cat > "$NEW" <<'KANO_SERVICE_WRAPPER_EOF'
+${script}
+KANO_SERVICE_WRAPPER_EOF
+      chmod 755 "$NEW"
+      sh -n "$NEW" || { rm -f "$NEW"; echo "SERVICE_WRAPPER_SYNTAX_FAILED"; exit 1; }
+      mv -f "$NEW" "$TARGET"
+      echo "SERVICE_WRAPPER_READY=${CLASH_SERVICE_WRAPPER_VERSION}"
+    `, 20 * 1000);
   };
 
   const parseRuntimePreflightResult = (result = {}) => {
@@ -5354,7 +5476,12 @@ KANO_WRITE_CHECK_EOF
   };
 
   const ensureInstalled = async () => {
-    if (await checkIsInstalled()) return true;
+    if (await checkIsInstalled()) {
+      const wrapperResult = await ensureServiceWrapper();
+      if (wrapperResult.success) return true;
+      createToast(`Clash.Service 启动保护修复失败<br>${safeTextToHtml(wrapperResult.content || '')}`, 'red', 9000);
+      return false;
+    }
     let state = await checkInstallState({ fresh: true });
     if (!['not_installed', 'damaged'].includes(state.state)) return true;
     if (state.state == 'damaged' && state.repairable) {
@@ -5534,14 +5661,26 @@ KANO_WRITE_CHECK_EOF
   };
 
   const startClashServiceClean = async ({ stopFirst = false, reason = '\u542f\u52a8' } = {}) => {
+    const wrapperResult = await ensureServiceWrapper();
+    if (!wrapperResult.success) {
+      return {
+        ...wrapperResult,
+        success: false,
+        content: `START_STATE=service_wrapper_failed\n${wrapperResult.content || ''}`,
+      };
+    }
     const result = await runShellWithRoot(`
       set +e
       SERVICE=${shellQuote(CLASH_SERVICE)}
       CORE=${shellQuote(CLASH_CORE)}
+      CONFIG=${shellQuote(CLASH_CONFIG)}
       START_LOG=${shellQuote('/data/kano_clash_start.log')}
+      CONFIG_TEST_LOG=${shellQuote('/data/kano_clash_config_test.log')}
       RUN_LOG=${shellQuote(LOG_FILE)}
       [ -s "$SERVICE" ] || { echo "START_STATE=not_installed"; exit 3; }
       [ -x "$SERVICE" ] || chmod 755 "$SERVICE" 2>/dev/null || { echo "START_STATE=service_not_executable"; exit 4; }
+      [ -x "$CORE" ] || chmod 755 "$CORE" 2>/dev/null || { echo "START_STATE=core_not_executable"; exit 4; }
+      [ -s "$CONFIG" ] || { echo "START_STATE=config_missing"; exit 6; }
 
       cleanup_stale_config_tests() {
         for p in /proc/[0-9]*; do
@@ -5566,17 +5705,31 @@ KANO_WRITE_CHECK_EOF
       }
 
       echo "START_REASON=${shellQuote(reason)}"
+      cleanup_stale_config_tests
+      (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+      config_test_rc=$?
+      {
+        echo "===== Clash.Core config test ====="
+        echo "CONFIG_TEST_RC=$config_test_rc"
+        tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
+      } >>"$RUN_LOG" 2>/dev/null || true
+      if [ "$config_test_rc" -ne 0 ]; then
+        echo "START_STATE=config_invalid"
+        echo "CONFIG_TEST_RC=$config_test_rc"
+        cat "$CONFIG_TEST_LOG" 2>/dev/null || true
+        exit 6
+      fi
+      echo "CONFIG_TEST_STATE=valid"
       if [ ${shellQuote(stopFirst ? '1' : '0')} = "1" ]; then
         "$SERVICE" stop >/dev/null 2>&1 || true
         sleep 1
       fi
-      cleanup_stale_config_tests
 
       (
         echo "===== Clash.Service start ====="
         echo "reason=${shellQuote(reason)}"
         date 2>/dev/null || true
-        "$SERVICE" start
+        KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start
         rc=$?
         echo "START_SERVICE_RC=$rc"
         exit "$rc"
@@ -5589,7 +5742,7 @@ KANO_WRITE_CHECK_EOF
         tail -n 120 "$START_LOG" 2>/dev/null || true
       } >>"$RUN_LOG" 2>/dev/null || true
       [ "$rc" -eq 0 ] || { echo "START_STATE=service_failed"; exit "$rc"; }
-      echo "START_STATE=started_native"
+      echo "START_STATE=started_verified_process"
       exit 0
     `, 90 * 1000);
     runtimePreflightCache = null;
@@ -7051,6 +7204,10 @@ EOF_KANO_SERVICE
         [ -f ${shellQuote(CLASH_SUB_URLS)} ] && chmod 600 ${shellQuote(CLASH_SUB_URLS)}
         `);
       if (!res5.success) return await failInstalledPackage('设置开机启动失败', res5.content || '');
+      const serviceWrapperReadyAfterInstall = await ensureServiceWrapper({ force: true });
+      if (!serviceWrapperReadyAfterInstall.success) {
+        return await failInstalledPackage('安装 Clash.Service 启动保护失败', serviceWrapperReadyAfterInstall.content || '');
+      }
       const policyReadyAfterInstall = await ensurePolicyToolsScript();
       if (!policyReadyAfterInstall) createToast('猫猫基础安装已完成；网络策略增强脚本暂未就绪，不影响核心启动。', 'yellow', 9000);
       if (!(await ensureBootstrapConfig())) return await failInstalledPackage('创建基础配置失败');
@@ -8308,8 +8465,14 @@ KANO_POLICY_TOOLS_EOF
     if (!sanitized) createToast('配置增强整理未完成，已按现有 config.yaml 继续启动核心。', 'yellow', 8000);
     const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
     if (!res.success) {
+      const startState = parseKeyValueOutput(res.content || '').START_STATE || '';
+      if (startState == 'config_invalid' || startState == 'config_missing') {
+        createToast(`配置校验失败，未停止当前正在运行的核心<br>${safeTextToHtml(res.content || '')}`, 'red', 12000);
+        await isMMRunning();
+        return false;
+      }
       await networkRescue({ stopService: true, showOutput: false, reason: '\u91cd\u542f\u5931\u8d25' });
-      createToast('\u91cd\u542f\u5931\u8d25\uff0c\u5df2\u81ea\u52a8\u6e05\u7406\u89c4\u5219', 'red');
+      createToast(`重启失败，已自动清理规则<br>${safeTextToHtml(res.content || '')}`, 'red', 10000);
       return false;
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;

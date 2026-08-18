@@ -113,6 +113,7 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
+  'buildServiceWrapperScript',
   'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
   'readCurrentModeStatus',
 ];
@@ -424,6 +425,28 @@ function runFor(label, file) {
     });
     const syntaxDetail = [runtimeSyntax.stderr, bashSyntax && bashSyntax.stderr].filter(Boolean).join(' ').trim();
     chk(runtimeSyntax.status, 0, `generated runtime manager passes sh -n${syntaxDetail ? `: ${syntaxDetail}` : ''}`);
+    const serviceWrapper = api.buildServiceWrapperScript();
+    const serviceWrapperSyntax = spawnSync('sh', ['-n'], {
+      input: serviceWrapper,
+      encoding: 'utf8',
+    });
+    chk(serviceWrapperSyntax.status, 0,
+      `generated Clash.Service wrapper passes sh -n${serviceWrapperSyntax.stderr ? `: ${serviceWrapperSyntax.stderr.trim()}` : ''}`);
+    chk(
+      serviceWrapper.includes('SERVICE_CONFIG_TEST_FAILED')
+        && serviceWrapper.includes('"$CORE" -t -f "$CONFIG"')
+        && serviceWrapper.includes('SERVICE_START_VERIFIED_PID=')
+        && serviceWrapper.includes('SERVICE_START_VERIFY_FAILED:'),
+      true,
+      'standalone and boot service starts reject invalid config and verify a stable runtime process',
+    );
+    chk(
+      runtimeManager.slice(runtimeManager.indexOf('start_runtime() {')).indexOf('validate_core_config || return $?')
+        < runtimeManager.slice(runtimeManager.indexOf('start_runtime() {')).indexOf('"$SERVICE" stop >/dev/null 2>&1 || true')
+        && runtimeManager.includes('KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start'),
+      true,
+      'runtime manager validates before stopping and avoids a duplicate config test',
+    );
     chk(
       runtimeManager.includes('TOOLBOX_BIN=/data/kano_tproxy_tools/bin')
         && runtimeManager.includes('[ ! -d "$TOOLBOX_BIN" ] || PATH="$TOOLBOX_BIN:$PATH"')
@@ -456,6 +479,10 @@ function runFor(label, file) {
       source.indexOf('const restartClash = async'),
       source.indexOf('const btn_restart ='),
     );
+    const serviceStartSource = source.slice(
+      source.indexOf('const startClashServiceClean = async'),
+      source.indexOf('const waitForCoreApi = async'),
+    );
     chk(
       startVerificationSource.includes('return await waitForCoreApi(12, 1000)')
         && !startVerificationSource.includes('acceptRunningCoreWithSlowApi')
@@ -464,6 +491,15 @@ function runFor(label, file) {
         && restartSource.includes('return false;'),
       true,
       'runtime success requires API readiness, traffic-mode convergence, and policy application',
+    );
+    chk(
+      serviceStartSource.indexOf('"$CORE" -t -f "$CONFIG"')
+        < serviceStartSource.indexOf('"$SERVICE" stop >/dev/null 2>&1 || true')
+        && serviceStartSource.includes('KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start')
+        && restartSource.includes("startState == 'config_invalid'")
+        && restartSource.includes('未停止当前正在运行的核心'),
+      true,
+      'manual restart validates before stop and preserves the running core on config failure',
     );
     const stopped = api.parseRuntimePreflightResult({
       success: true,

@@ -14,7 +14,6 @@
   const BOOT_END = '# KANO_SINGBOX_EBPF_END';
   const ROOT_ELEMENT_ID = 'kano_singbox_ebpf_root';
   const STYLE_ID = 'kano_singbox_ebpf_style';
-  const PACKAGE_MAX_BYTES = 160 * 1024 * 1024;
 
   const shellQuote = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -161,9 +160,6 @@
     [ -s "$package_root/config.json" ] || { echo '缺少 config.json'; exit 1; }
     [ -d "$package_root/source" ] || { echo '缺少 source'; exit 1; }
     [ -d "$package_root/zashboard" ] || { echo '缺少 zashboard'; exit 1; }
-    total=$(du -sk "$package_root" 2>/dev/null | awk '{print $1}')
-    case "$total" in ''|*[!0-9]*) total=0 ;; esac
-    [ "$total" -ge 30000 ] && [ "$total" -le 180000 ] || { echo "套件解压大小异常: $total KiB"; exit 1; }
     chmod 700 "$package_root/sing-box"
     "$package_root/sing-box" version 2>&1 | grep -q 'with_ebpf' || { echo '二进制不含 with_ebpf'; exit 1; }
     ${patchSharedInterface(interfaceName)}
@@ -225,7 +221,6 @@ SINGBOX_EBPF_BOOT
 
   const uploadPackage = async (file) => {
     if (!file || !/\.zip$/i.test(file.name || '')) throw new Error('只支持 singbox-ebpf.zip');
-    if (file.size < 30 * 1024 * 1024 || file.size > PACKAGE_MAX_BYTES) throw new Error('套件大小必须在 30 MiB 到 160 MiB 之间');
     if (typeof KANO_baseURL === 'undefined' || typeof common_headers === 'undefined') throw new Error('宿主上传接口不可用');
     const formData = new FormData();
     formData.append('file', file);

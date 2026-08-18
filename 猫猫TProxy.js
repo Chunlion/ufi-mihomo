@@ -1895,27 +1895,14 @@ EOF_KANO_SERVICE
       quiet, sourcePath,
       prepareCommand: `
         TOOLS=${shellQuote(KANO_HELPER_BUNDLED_DIR)}
-        ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-        case "$ABI $ABILIST $MACHINE" in
-          *arm64-v8a*|*aarch64*|*armv8*|*arm64*) HELPER_ABI=arm64 ;;
-          *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) HELPER_ABI=armv7 ;;
-          *) echo "HELPER_BUNDLED_UNSUPPORTED_ABI=${'$'}{ABI:-${'$'}MACHINE}"; exit 1 ;;
-        esac
         BUNDLED=""
         for candidate in \
-          "$TOOLS/kano-f50-helper-bundled-$HELPER_ABI" \
-          "$TOOLS/kano-f50-helper-android-$HELPER_ABI" \
           "$TOOLS/kano-f50-helper-bundled" \
           "$TOOLS/kano-f50-helper-android-arm64"; do
-          case "$candidate" in
-            *-bundled|*-android-arm64) [ "$HELPER_ABI" = arm64 ] || continue ;;
-          esac
           [ -s "$candidate" ] && { BUNDLED="$candidate"; break; }
         done
         if [ -z "$BUNDLED" ]; then
-          BUNDLED="$(find "$TOOLS" -maxdepth 1 -type f -name "kano-f50-helper-v*-${'$'}HELPER_ABI" 2>/dev/null | head -n 1)"
+          BUNDLED="$(find "$TOOLS" -maxdepth 1 -type f -name 'kano-f50-helper-v*-android-arm64' 2>/dev/null | head -n 1)"
         fi
         [ -n "$BUNDLED" ] && [ -s "$BUNDLED" ] || { echo "HELPER_BUNDLED_MISSING"; exit 1; }
         cp "$BUNDLED" "$SOURCE"
@@ -1931,13 +1918,6 @@ EOF_KANO_SERVICE
       quiet,
       sourcePath,
       prepareCommand: `
-        ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-        case "$ABI $ABILIST $MACHINE" in
-          *arm64-v8a*|*aarch64*|*armv8*|*arm64*) ;;
-          *) echo "HELPER_GITEE_UNAVAILABLE=package-only"; exit 1 ;;
-        esac
         ${getCurlBinCmd()}
         "$CURL_BIN" -fL --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 1 \
           ${shellQuote(KANO_HELPER_DOWNLOAD_URL)} -o "$SOURCE"
@@ -1951,8 +1931,8 @@ EOF_KANO_SERVICE
   const installBinaryHelperPreferred = async ({ quiet = false, preferGitee = false } = {}) => {
     if (preferGitee) {
       const giteeOk = await installBinaryHelperFromGitee({ quiet: true });
-      if (giteeOk) return true;
-      return installBinaryHelperFromBundled({ quiet });
+      const bundledOk = await installBinaryHelperFromBundled({ quiet: giteeOk || quiet });
+      return giteeOk || bundledOk;
     }
     const bundledOk = await installBinaryHelperFromBundled({ quiet: true });
     if (bundledOk) return true;
@@ -3910,13 +3890,13 @@ KANO_WRITE_CHECK_EOF
   let controllerInfoCacheExpiresAt = 0;
   let controllerInfoLoadPromise = null;
 
-  const readControllerInfo = async () => {
+  const readControllerInfo = async ({ fresh = false } = {}) => {
     const fallbackController = '127.0.0.1:7788';
     let externalController = '';
     let secret = '';
 
     try {
-      const snapshot = await readBinarySnapshot();
+      const snapshot = await readBinarySnapshot({ fresh });
       if (snapshot) {
         externalController = String(snapshot.externalController || '').trim();
         secret = String(snapshot.secret || '').trim();
@@ -3991,7 +3971,7 @@ KANO_WRITE_CHECK_EOF
     }
     if (!fresh && controllerInfoLoadPromise) return controllerInfoLoadPromise;
 
-    const loadPromise = readControllerInfo();
+    const loadPromise = readControllerInfo({ fresh });
     if (!fresh) controllerInfoLoadPromise = loadPromise;
     try {
       const info = await loadPromise;
@@ -4001,6 +3981,12 @@ KANO_WRITE_CHECK_EOF
     } finally {
       if (controllerInfoLoadPromise == loadPromise) controllerInfoLoadPromise = null;
     }
+  };
+
+  const invalidateControllerInfo = () => {
+    controllerInfoCache = null;
+    controllerInfoCacheExpiresAt = 0;
+    controllerInfoLoadPromise = null;
   };
 
   const yamlSingleQuote = (value = '') =>
@@ -4181,6 +4167,8 @@ KANO_WRITE_CHECK_EOF
         message: sanitizeSubscriptionSecrets(`新控制 API 设置无法生效；${rollbackSummary}\n${reloadRes.responseText || checkRes.responseText || ''}`.trim()),
       };
     }
+    invalidateBinarySnapshot();
+    invalidateControllerInfo();
     return {
       ...checked,
       saved: true,
@@ -5047,14 +5035,19 @@ KANO_WRITE_CHECK_EOF
           esac
           if [ -z "$candidates" ] && command -v getent >/dev/null 2>&1; then
             [ "$requested_family" = ipv6 ] || candidates="$(getent ahostsv4 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
-            if [ -z "$candidates" ] || [ "$requested_family" != auto ]; then
-              candidates="$candidates $(getent ahostsv6 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
-            fi
+            [ -n "$candidates" ] || candidates="$(getent ahostsv6 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
             [ -n "$candidates" ] || candidates="$(getent hosts "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
           fi
           if [ -z "$candidates" ] && [ "$requested_family" != ipv6 ] && command -v ping >/dev/null 2>&1; then
             candidates="$(LC_ALL=C ping -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
               for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9][0-9.]*[)]$/) {
+                gsub(/[()]/, "", $i); print $i; exit
+              }
+            }')"
+          fi
+          if [ -z "$candidates" ] && command -v ping6 >/dev/null 2>&1; then
+            candidates="$(LC_ALL=C ping6 -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
+              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9A-Fa-f:]+[)]$/) {
                 gsub(/[()]/, "", $i); print $i; exit
               }
             }')"

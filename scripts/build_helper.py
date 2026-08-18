@@ -18,7 +18,10 @@ DIST_DIR = ROOT / "dist"
 PACKAGE = ROOT / "tproxy-yq.zip"
 TARGETS = {
     "arm64": ("arm64", None, "kano-f50-helper-linux-arm64", "Tools/kano-f50-helper-bundled"),
-    "armv7": ("arm", "7", "kano-f50-helper-linux-armv7", "Tools/kano-f50-helper-bundled-armv7"),
+}
+PACKAGE_HELPER_ENTRIES = {
+    "Tools/kano-f50-helper-bundled",
+    "Tools/kano-f50-helper-bundled-armv7",
 }
 
 
@@ -53,7 +56,7 @@ def refresh_package(outputs: dict[str, Path]) -> None:
         with zipfile.ZipFile(PACKAGE, "r") as source, zipfile.ZipFile(temporary, "w") as target:
             target.comment = source.comment
             for info in source.infolist():
-                if info.filename not in replacements:
+                if info.filename not in PACKAGE_HELPER_ENTRIES:
                     target.writestr(info, source.read(info.filename))
             for archive_name, output in replacements.items():
                 info = zipfile.ZipInfo(archive_name)

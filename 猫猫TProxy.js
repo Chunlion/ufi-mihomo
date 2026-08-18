@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy v7.4.2 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.3 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -57,8 +57,8 @@
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.4';
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.0';
+  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.5';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.1';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
   const BOOT_GATE_END = '# F50_BOOT_FIX_END';
@@ -73,7 +73,9 @@
     `mkdir -p "${CLASH_INOTIFY_DIR}" && inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >> /dev/null &`;
   const BOOT_INOTIFY_LINE =
     `inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >> /dev/null &`;
-  const BOOT_POLICY_TOOLS_LINE = `sleep 8; ${CLASH_POLICY_SCRIPT} apply`;
+  const LEGACY_BOOT_POLICY_TOOLS_LINE = `sleep 8; ${CLASH_POLICY_SCRIPT} apply`;
+  const BOOT_POLICY_TOOLS_LINE =
+    `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} boot-apply >/data/kano_policy_boot.log 2>&1 || true`;
   const LEGACY_BOOT_MAC_BYPASS_LINE = `sleep 10; ${CLASH_MAC_BYPASS_SCRIPT}`;
   const SUB_RULE_MODE_TEMPLATE = 'template';
   const SUB_CONVERT_MODE_PROVIDER = 'provider';
@@ -82,7 +84,7 @@
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.3';
+  const POLICY_SCRIPT_VERSION = '6.4';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -432,9 +434,10 @@ ${script}`,
             -v legacy_wrapper=${shellQuote(LEGACY_BOOT_FIX_WRAPPER_LINE)} \
             -v legacy_inotify=${shellQuote(LEGACY_BOOT_INOTIFY_LINE)} \
             -v inotify=${shellQuote(BOOT_INOTIFY_LINE)} \
+            -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != policy && $0 != mac { print }' \
+            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != legacy_policy && $0 != policy && $0 != mac { print }' \
             ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
             mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
           BOOT_RC=$?
@@ -446,6 +449,12 @@ ${script}`,
   // 策略脚本仍保留为高级功能，但不再成为基础开机自启的必需项。
   const addPolicyToolsBootLineCmd = () => `
         touch ${shellQuote(BOOT_FILE)}
+        BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano_policy`)}.$$
+        awk -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} '$0 != legacy_policy { print }' ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
+          mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
+        BOOT_RC=$?
+        rm -f "$BOOT_TMP" 2>/dev/null || true
+        [ "$BOOT_RC" -eq 0 ] || exit "$BOOT_RC"
         grep -qxF ${shellQuote(BOOT_POLICY_TOOLS_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_POLICY_TOOLS_LINE)} >> ${shellQuote(BOOT_FILE)}
         `;
 
@@ -658,9 +667,13 @@ find_core_pid() {
     [ -r "$p/cmdline" ] || continue
     PID="\${p##*/}"
     exe="$(readlink "$p/exe" 2>/dev/null)"
-    case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
     cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
+    comm="$(cat "$p/comm" 2>/dev/null | tr -d '\\r\\n')"
     case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
+    case "$exe|$cmdline|$comm" in
+      *"$CORE"*|*"/Clash.Core"*|*"/mihomo"*|*"|Clash.Core"|*"|mihomo") ;;
+      *) continue ;;
+    esac
     printf '%s\\n' "$PID"
     return 0
   done
@@ -671,7 +684,11 @@ validate_core_config() {
   CONFIG_TEST_LOG="$DIAG/config_test.out"
   [ -x "$CORE" ] || { echo "CONFIG_TEST_STATE=core_unavailable"; return 6; }
   [ -s "$CONFIG" ] || { echo "CONFIG_TEST_STATE=config_missing"; return 6; }
-  (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  if command -v timeout >/dev/null 2>&1; then
+    (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  else
+    (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  fi
   config_test_rc=$?
   if [ "$config_test_rc" -ne 0 ]; then
     echo "CONFIG_TEST_STATE=invalid"
@@ -969,9 +986,13 @@ find_runtime_pid() {
     [ -r "$p/cmdline" ] || continue
     PID="\${p##*/}"
     exe="$(readlink "$p/exe" 2>/dev/null)"
-    case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
     cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
+    comm="$(cat "$p/comm" 2>/dev/null | tr -d '\\r\\n')"
     case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
+    case "$exe|$cmdline|$comm" in
+      *"$CORE"*|*"/Clash.Core"*|*"/mihomo"*|*"|Clash.Core"|*"|mihomo") ;;
+      *) continue ;;
+    esac
     printf '%s\\n' "$PID"
     return 0
   done
@@ -982,7 +1003,11 @@ validate_config() {
   [ "$KANO_CONFIG_PREVALIDATED" = "1" ] && return 0
   [ -x "$CORE" ] || { echo "SERVICE_CONFIG_TEST_FAILED: Clash.Core 不可执行"; return 6; }
   [ -s "$CONFIG" ] || { echo "SERVICE_CONFIG_TEST_FAILED: config.yaml 不存在或为空"; return 6; }
-  (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  if command -v timeout >/dev/null 2>&1; then
+    (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  else
+    (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+  fi
   test_rc=$?
   if [ "$test_rc" -ne 0 ]; then
     echo "SERVICE_CONFIG_TEST_FAILED: rc=$test_rc"
@@ -1231,6 +1256,14 @@ KANO_RUNTIME_MANAGER_EOF
     const state = await inspectBootIntegration();
     if (state.state != 'managed') return true;
     const migrated = await runShellWithRoot(addBootLinesCmd(), 10 * 1000);
+    return !!migrated.success;
+  };
+
+  const migrateBootPolicyIntegration = async () => {
+    const state = await inspectBootIntegration();
+    if (!state.enabled) return true;
+    if (!(await ensurePolicyToolsScript())) return false;
+    const migrated = await runShellWithRoot(addPolicyToolsBootLineCmd(), 10 * 1000);
     return !!migrated.success;
   };
 
@@ -5479,9 +5512,14 @@ KANO_WRITE_CHECK_EOF
   const ensureInstalled = async () => {
     if (await checkIsInstalled()) {
       const wrapperResult = await ensureServiceWrapper();
-      if (wrapperResult.success) return true;
-      createToast(`Clash.Service 启动保护修复失败<br>${safeTextToHtml(wrapperResult.content || '')}`, 'red', 9000);
-      return false;
+      if (!wrapperResult.success) {
+        createToast(`Clash.Service 启动保护修复失败<br>${safeTextToHtml(wrapperResult.content || '')}`, 'red', 9000);
+        return false;
+      }
+      if (!(await migrateBootPolicyIntegration())) {
+        createToast('开机绕过规则升级失败；当前操作继续，但重启后可能仍使用旧启动时序。', 'yellow', 9000);
+      }
+      return true;
     }
     let state = await checkInstallState({ fresh: true });
     if (!['not_installed', 'damaged'].includes(state.state)) return true;
@@ -5707,7 +5745,11 @@ KANO_WRITE_CHECK_EOF
 
       echo "START_REASON=${shellQuote(reason)}"
       cleanup_stale_config_tests
-      (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+      if command -v timeout >/dev/null 2>&1; then
+        (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+      else
+        (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
+      fi
       config_test_rc=$?
       {
         echo "===== Clash.Core config test ====="
@@ -7452,14 +7494,17 @@ EOF_KANO_SERVICE
     'get_ipt() {',
     '  NAME="$1"',
     '  FIRST=""',
+    '  KANO_BIN=""',
     '  for BIN in $(list_ipt_candidates "$NAME"); do',
     '    [ -n "$FIRST" ] || FIRST="$BIN"',
-    '    if "$BIN" -t mangle -S PREROUTING 2>/dev/null | grep -Eiq "TPROXY|clash|mihomo|KANO"; then',
+    '    RULES="$("$BIN" -t mangle -S PREROUTING 2>/dev/null)"',
+    '    if echo "$RULES" | grep -Eiq "TPROXY|clash|mihomo"; then',
     '      echo "$BIN"',
     '      return',
     '    fi',
+    '    if [ -z "$KANO_BIN" ] && echo "$RULES" | grep -q "KANO"; then KANO_BIN="$BIN"; fi',
     '  done',
-    '  [ -z "$FIRST" ] || echo "$FIRST"',
+    '  if [ -n "$KANO_BIN" ]; then echo "$KANO_BIN"; elif [ -n "$FIRST" ]; then echo "$FIRST"; fi',
     '}',
     'get_opt() {',
     '  KEY="$1"',
@@ -7472,10 +7517,15 @@ EOF_KANO_SERVICE
     '  echo "$1" | tr "[:lower:]" "[:upper:]" | sed "s/[^0-9A-F]//g" | grep -E "^[0-9A-F]{12}$" | sed "s/../&:/g;s/:$//"',
     '}',
     'is_ipv4() {',
-    '  echo "$1" | grep -Eq "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"',
+    '  echo "$1" | awk -F. \'NF != 4 {exit 1} {for (i=1; i<=4; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1}\'',
     '}',
     'is_cidr() {',
-    '  echo "$1" | grep -Eq "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"',
+    '  addr="\${1%/*}"',
+    '  prefix="\${1##*/}"',
+    '  [ "$addr" != "$1" ] || return 1',
+    '  is_ipv4 "$addr" || return 1',
+    '  echo "$prefix" | grep -Eq "^[0-9]{1,2}$" || return 1',
+    '  [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 32 ] 2>/dev/null',
     '}',
     'is_ipv6() {',
     '  echo "$1" | grep -q ":" && echo "$1" | grep -Eq "^[0-9A-Fa-f:]+$"',
@@ -7644,6 +7694,59 @@ EOF_KANO_SERVICE
     '  trap - EXIT',
     '  [ "$ipv6" = "on" ] && echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4/IPv6\uff09" || echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4\uff09"',
     '}',
+    'core_is_running() {',
+    '  pidof Clash.Core >/dev/null 2>&1 && return 0',
+    '  pidof mihomo >/dev/null 2>&1 && return 0',
+    '  pgrep -f "/data/clash/Proxy/[C]lash\\.Core" >/dev/null 2>&1 && return 0',
+    '  return 1',
+    '}',
+    'policy_is_first() {',
+    '  IPT="$1"',
+    '  FIRST_RULE="$("$IPT" -t mangle -S PREROUTING 2>/dev/null | awk \'$1 == "-A" && $2 == "PREROUTING" {print; exit}\')"',
+    '  [ "$FIRST_RULE" = "-A PREROUTING -j $POLICY_CHAIN" ]',
+    '}',
+    'runtime_firewall_ready() {',
+    '  IPT="$1"',
+    '  traffic_mode="$(get_opt traffic_mode legacy)"',
+    '  [ "$traffic_mode" = "tproxy" ] || return 0',
+    '  "$IPT" -t mangle -S PREROUTING 2>/dev/null | grep -Eiq "TPROXY|clash|mihomo"',
+    '}',
+    'policy_order_stable() {',
+    '  IPT="$1"',
+    '  policy_is_first "$IPT" || return 1',
+    '  [ "$(get_opt ipv6 off)" = "on" ] || return 0',
+    '  IP6T="$(get_ipt ip6tables)"',
+    '  [ -n "$IP6T" ] && policy_is_first "$IP6T"',
+    '}',
+    'boot_apply() {',
+    '  attempt=0',
+    '  stable=0',
+    '  while [ "$attempt" -lt 30 ]; do',
+    '    attempt=$((attempt + 1))',
+    '    if core_is_running; then',
+    '      IPT="$(get_ipt iptables)"',
+    '      if [ -n "$IPT" ] && runtime_firewall_ready "$IPT"; then',
+    '        if policy_order_stable "$IPT"; then',
+    '          stable=$((stable + 1))',
+    '          if [ "$stable" -ge 5 ]; then',
+    '            echo "BOOT_POLICY_STABLE=1 attempts=$attempt"',
+    '            return 0',
+    '          fi',
+    '        else',
+    '          stable=0',
+    '          (apply_all) || { echo "BOOT_POLICY_APPLY_RETRY=$attempt"; sleep 2; continue; }',
+    '        fi',
+    '      else',
+    '        stable=0',
+    '      fi',
+    '    else',
+    '      stable=0',
+    '    fi',
+    '    sleep 2',
+    '  done',
+    '  echo "BOOT_POLICY_STABLE=0 attempts=$attempt"',
+    '  return 1',
+    '}',
     'status_all() {',
     '  IPT="$(get_ipt iptables)"',
     '  IP6T="$(get_ipt ip6tables)"',
@@ -7709,6 +7812,7 @@ EOF_KANO_SERVICE
     '}',
     'case "$1" in',
     '  apply) apply_all ;;',
+    '  boot-apply) boot_apply ;;',
     '  flush) flush_all; echo "\u7b56\u7565\u89c4\u5219\u5df2\u6e05\u7a7a" ;;',
     '  status) status_all ;;',
     '  *) apply_all ;;',

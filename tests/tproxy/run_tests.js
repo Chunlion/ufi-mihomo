@@ -113,7 +113,7 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
-  'buildServiceWrapperScript',
+  'buildServiceWrapperScript', 'buildPolicyToolsScript',
   'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
   'readCurrentModeStatus',
 ];
@@ -387,11 +387,13 @@ function runFor(label, file) {
     'installer and boot entry create the inotify watch directory before starting the watcher',
   );
   chk(
-    bootLines.includes('sleep 8; /data/clash/Scripts/Clash.PolicyTools apply')
+    bootLines.includes('/data/clash/Scripts/Clash.PolicyTools boot-apply')
       && bootLines.indexOf('/data/clash/Scripts/Clash.Service start')
-        < bootLines.indexOf('sleep 8; /data/clash/Scripts/Clash.PolicyTools apply'),
+        < bootLines.indexOf('/data/clash/Scripts/Clash.PolicyTools boot-apply')
+      && removeBootLines.includes('-v legacy_policy=')
+      && removeBootLines.includes('$0 != legacy_policy'),
     true,
-    'every boot rewrite restores device-bypass policy after the core start entry',
+    'every boot rewrite migrates the fixed delay and starts convergence after the core entry',
   );
   chk(
     removeBootLines.includes('-v legacy_inotify=')
@@ -439,9 +441,59 @@ function runFor(label, file) {
     });
     chk(serviceWrapperSyntax.status, 0,
       `generated Clash.Service wrapper passes sh -n${serviceWrapperSyntax.stderr ? `: ${serviceWrapperSyntax.stderr.trim()}` : ''}`);
+    const policyTools = api.buildPolicyToolsScript();
+    const policySyntax = spawnSync('sh', ['-n'], {
+      input: policyTools,
+      encoding: 'utf8',
+    });
+    chk(policySyntax.status, 0,
+      `generated policy convergence script passes sh -n${policySyntax.stderr ? `: ${policySyntax.stderr.trim()}` : ''}`);
+    chk(
+      policyTools.includes('boot-apply) boot_apply')
+        && policyTools.includes('BOOT_POLICY_STABLE=1')
+        && policyTools.includes('[ "$stable" -ge 5 ]')
+        && policyTools.includes('policy_is_first')
+        && policyTools.includes('runtime_firewall_ready')
+        && policyTools.includes('policy_order_stable')
+        && policyTools.includes('get_ipt ip6tables'),
+      true,
+      'boot bypass waits for the active runtime firewall and verifies IPv4/IPv6 first-rule ordering',
+    );
+    chk(
+      policyTools.includes('$i < 0 || $i > 255')
+        && policyTools.includes('[ "$prefix" -le 32 ]'),
+      true,
+      'device bypass shell fallback rejects invalid IPv4 octets and CIDR prefixes',
+    );
+    const policyValidators = policyTools.slice(
+      policyTools.indexOf('is_ipv4() {'),
+      policyTools.indexOf('is_port_listening() {'),
+    );
+    const policyValidatorRun = spawnSync('sh', [], {
+      input: `${policyValidators}\n` + [
+        'is_ipv4 192.168.0.1 || exit 11',
+        '! is_ipv4 999.168.0.1 || exit 12',
+        'is_cidr 10.0.0.0/8 || exit 13',
+        '! is_cidr 10.0.0.0/99 || exit 14',
+      ].join('\n'),
+      encoding: 'utf8',
+    });
+    chk(policyValidatorRun.status, 0,
+      `device bypass IPv4/CIDR validators behave correctly${policyValidatorRun.stderr ? `: ${policyValidatorRun.stderr.trim()}` : ''}`);
+    chk(
+      policyTools.includes('grep -Eiq "TPROXY|clash|mihomo"')
+        && policyTools.includes('KANO_BIN="$BIN"')
+        && policyTools.indexOf('grep -Eiq "TPROXY|clash|mihomo"')
+          < policyTools.indexOf('KANO_BIN="$BIN"'),
+      true,
+      'iptables selection prefers the active proxy backend over stale KANO-only chains',
+    );
     chk(
       serviceWrapper.includes('SERVICE_CONFIG_TEST_FAILED')
         && serviceWrapper.includes('"$CORE" -t -f "$CONFIG"')
+        && serviceWrapper.includes('timeout 60 "$CORE" -t -f "$CONFIG"')
+        && serviceWrapper.includes('comm="$(cat "$p/comm"')
+        && runtimeManager.includes('comm="$(cat "$p/comm"')
         && serviceWrapper.includes('SERVICE_START_VERIFIED_PID=')
         && serviceWrapper.includes('SERVICE_START_VERIFY_FAILED:'),
       true,
@@ -564,8 +616,14 @@ function runFor(label, file) {
         'boot cleanup does not use fuzzy service-line deletion');
       chk(source.includes("LEGACY_BOOT_FIX_WRAPPER_LINE") && source.includes("$0 != legacy_wrapper"), true,
         'boot cleanup precisely removes the obsolete boot-fix wrapper');
-      chk(source.includes("migrateLegacyBootIntegration"), true,
-        'legacy boot integration is migrated automatically');
+      chk(
+        source.includes('const migrateBootPolicyIntegration = async')
+          && source.includes('await ensurePolicyToolsScript()')
+          && source.includes('runShellWithRoot(addPolicyToolsBootLineCmd()')
+          && source.includes('await migrateBootPolicyIntegration()'),
+        true,
+        'the next installed-device action migrates the legacy fixed-delay boot policy',
+      );
       chk(
         source.includes('REPAIR_USER_BACKUP=') && source.includes('REPAIR_ROLLBACK=restored_previous'),
         true,

@@ -82,7 +82,9 @@
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
   const POLICY_SCRIPT_VERSION = '6.3';
-  const CONTROLLER_INFO_CACHE_TTL = 250;
+  // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
+  // Explicit actions still request a fresh value after they change the configuration.
+  const CONTROLLER_INFO_CACHE_TTL = 1500;
   const ADVANCED_ACCESS_CACHE_TTL = 30 * 1000;
   const ADVANCED_ACCESS_FAILURE_CACHE_TTL = 2 * 1000;
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
@@ -94,7 +96,7 @@
   // Size and SHA remain updateable, but the executable protocol version is checked before activation.
   const KANO_HELPER_DOWNLOAD_URL =
     'https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64';
-  const KANO_HELPER_SNAPSHOT_TTL = 500;
+  const KANO_HELPER_SNAPSHOT_TTL = 1500;
 
   // ===== Basic helpers =====
   const runShellWithRoot = (script = '', timeout) =>
@@ -197,6 +199,16 @@ ${script}`,
       || (a == 203 && b == 0 && c == 113);
   };
 
+  const isPrivateOrReservedIpv6 = (hostname = '') => {
+    const value = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+    if (!value || !/^[0-9a-f:.]+$/.test(value)) return true;
+    if (value.includes('.')) return true;
+    return value == '::' || value == '::1'
+      || value.startsWith('fc') || value.startsWith('fd')
+      || /^fe[89ab]/.test(value) || value.startsWith('ff')
+      || value.startsWith('2001:db8:');
+  };
+
   const validateLocalSubscriptionUrl = (value = '') => {
     let url;
     try {
@@ -214,9 +226,6 @@ ${script}`,
     if (!hostname) {
       return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u7f3a\u5c11\u4e3b\u673a\u540d' };
     }
-    if (hostname.includes(':')) {
-      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u4e0d\u63a5\u53d7 IPv6 \u5b57\u9762\u91cf\u8ba2\u9605\u5730\u5740' };
-    }
     if (
       hostname == 'localhost'
       || hostname.endsWith('.localhost')
@@ -224,6 +233,7 @@ ${script}`,
       || hostname.endsWith('.lan')
       || hostname.endsWith('.home.arpa')
       || isPrivateOrReservedIpv4(hostname)
+      || (hostname.includes(':') && isPrivateOrReservedIpv6(hostname))
     ) {
       return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u62d2\u7edd\u56de\u73af\u3001\u79c1\u7f51\u6216\u4fdd\u7559\u5730\u5740' };
     }
@@ -232,6 +242,7 @@ ${script}`,
       url: url.toString(),
       hostname,
       port: url.port || '443',
+      addressFamily: hostname.includes(':') ? 'ipv6' : 'auto',
       message: '',
     };
   };
@@ -1884,14 +1895,27 @@ EOF_KANO_SERVICE
       quiet, sourcePath,
       prepareCommand: `
         TOOLS=${shellQuote(KANO_HELPER_BUNDLED_DIR)}
+        ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+        case "$ABI $ABILIST $MACHINE" in
+          *arm64-v8a*|*aarch64*|*armv8*|*arm64*) HELPER_ABI=arm64 ;;
+          *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) HELPER_ABI=armv7 ;;
+          *) echo "HELPER_BUNDLED_UNSUPPORTED_ABI=${'$'}{ABI:-${'$'}MACHINE}"; exit 1 ;;
+        esac
         BUNDLED=""
         for candidate in \
+          "$TOOLS/kano-f50-helper-bundled-$HELPER_ABI" \
+          "$TOOLS/kano-f50-helper-android-$HELPER_ABI" \
           "$TOOLS/kano-f50-helper-bundled" \
           "$TOOLS/kano-f50-helper-android-arm64"; do
+          case "$candidate" in
+            *-bundled|*-android-arm64) [ "$HELPER_ABI" = arm64 ] || continue ;;
+          esac
           [ -s "$candidate" ] && { BUNDLED="$candidate"; break; }
         done
         if [ -z "$BUNDLED" ]; then
-          BUNDLED="$(find "$TOOLS" -maxdepth 1 -type f -name 'kano-f50-helper-v*-android-arm64' 2>/dev/null | head -n 1)"
+          BUNDLED="$(find "$TOOLS" -maxdepth 1 -type f -name "kano-f50-helper-v*-${'$'}HELPER_ABI" 2>/dev/null | head -n 1)"
         fi
         [ -n "$BUNDLED" ] && [ -s "$BUNDLED" ] || { echo "HELPER_BUNDLED_MISSING"; exit 1; }
         cp "$BUNDLED" "$SOURCE"
@@ -1907,6 +1931,13 @@ EOF_KANO_SERVICE
       quiet,
       sourcePath,
       prepareCommand: `
+        ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
+        MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+        case "$ABI $ABILIST $MACHINE" in
+          *arm64-v8a*|*aarch64*|*armv8*|*arm64*) ;;
+          *) echo "HELPER_GITEE_UNAVAILABLE=package-only"; exit 1 ;;
+        esac
         ${getCurlBinCmd()}
         "$CURL_BIN" -fL --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 1 \
           ${shellQuote(KANO_HELPER_DOWNLOAD_URL)} -o "$SOURCE"
@@ -4833,11 +4864,18 @@ KANO_WRITE_CHECK_EOF
         conv_err="${rawPath}.convert.err"
         source_host=${shellQuote(sourceCheck.hostname)}
         source_port=${shellQuote(sourceCheck.port)}
+        source_family=${shellQuote(sourceCheck.addressFamily)}
         rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-        resolved_ip="$(resolve_public_ipv4 "$source_host")" || {
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|resolve|000|blocked_target|subscription host has no public IPv4 address`)}
+        resolved_target="$(resolve_public_address "$source_host" "$source_family")" || {
+          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|resolve|000|blocked_target|subscription host has no usable public IP address`)}
           exit 22
         }
+        resolved_family="${'$'}{resolved_target%%|*}"
+        resolved_ip="${'$'}{resolved_target#*|}"
+        resolve_host="$source_host"
+        [ "$resolved_family" = ipv6 ] && [ "$source_family" = ipv6 ] && resolve_host="[$source_host]"
+        resolve_spec="$resolve_host:$source_port:$resolved_ip"
+        [ "$resolved_family" = ipv6 ] && resolve_spec="$resolve_host:$source_port:[$resolved_ip]"
         classify_candidate() {
           FILE="$1"
           first="$(head -c 384 "$FILE" 2>/dev/null | tr '\\r\\n\\t' '   ')"
@@ -4856,7 +4894,7 @@ KANO_WRITE_CHECK_EOF
           last_convert=''
           if http_code="$("$CURL_BIN" -sS --proto '=https' --max-redirs 0 \
             --max-filesize ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} \
-            --resolve "$source_host:$source_port:$resolved_ip" \
+            --resolve "$resolve_spec" \
             --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
             -H 'Accept: application/yaml, text/yaml, application/x-yaml, text/plain, application/json, */*' \
             -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"; then
@@ -4985,27 +5023,56 @@ KANO_WRITE_CHECK_EOF
             }
           '
         }
-        resolve_public_ipv4() {
+        is_public_ipv6() {
+          candidate_ipv6="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+          case "$candidate_ipv6" in
+            ''|*.*|*[!0-9a-f:]*|::|::1|fc*|fd*|fe8*|fe9*|fea*|feb*|ff*|2001:db8:*) return 1 ;;
+          esac
+          printf '%s\n' "$candidate_ipv6" | awk -F: '
+            NF < 3 || NF > 8 { exit 1 }
+            {
+              for (i = 1; i <= NF; i++) if (length($i) > 4) exit 1
+              exit 0
+            }
+          '
+        }
+        resolve_public_address() {
           resolve_host="$1"
+          requested_family="$2"
           candidates=''
           case "$resolve_host" in
+            *:*) candidates="$resolve_host" ;;
             *[!0-9.]*|'') ;;
             *) candidates="$resolve_host" ;;
           esac
           if [ -z "$candidates" ] && command -v getent >/dev/null 2>&1; then
-            candidates="$(getent ahostsv4 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
+            [ "$requested_family" = ipv6 ] || candidates="$(getent ahostsv4 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
+            if [ -z "$candidates" ] || [ "$requested_family" != auto ]; then
+              candidates="$candidates $(getent ahostsv6 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
+            fi
             [ -n "$candidates" ] || candidates="$(getent hosts "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
           fi
-          if [ -z "$candidates" ] && command -v ping >/dev/null 2>&1; then
+          if [ -z "$candidates" ] && [ "$requested_family" != ipv6 ] && command -v ping >/dev/null 2>&1; then
             candidates="$(LC_ALL=C ping -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
               for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9][0-9.]*[)]$/) {
                 gsub(/[()]/, "", $i); print $i; exit
               }
             }')"
           fi
+          if [ -z "$candidates" ] && command -v ping >/dev/null 2>&1; then
+            candidates="$(LC_ALL=C ping -6 -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
+              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9A-Fa-f:]+[)]$/) {
+                gsub(/[()]/, "", $i); print $i; exit
+              }
+            }')"
+          fi
           for candidate_ip in $candidates; do
-            if is_public_ipv4 "$candidate_ip"; then
-              printf '%s\n' "$candidate_ip"
+            if [ "$requested_family" != ipv6 ] && is_public_ipv4 "$candidate_ip"; then
+              printf 'ipv4|%s\n' "$candidate_ip"
+              return 0
+            fi
+            if is_public_ipv6 "$candidate_ip"; then
+              printf 'ipv6|%s\n' "$candidate_ip"
               return 0
             fi
           done

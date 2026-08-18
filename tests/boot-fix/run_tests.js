@@ -1,9 +1,11 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { Sandbox, loadPlugin, waitForState, sleep, DASH } = require('./harness');
 
-const ROOT = path.join(__dirname, 'sbx');
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-boot-fix-'));
+process.on('exit', () => fs.rmSync(ROOT, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }));
 const sbx = new Sandbox(ROOT);
 const S = sbx.posix;
 

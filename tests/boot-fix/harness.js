@@ -9,9 +9,21 @@ const vm = require('vm');
 
 // 仓库根目录下的插件文件；测试台跑在 tests/boot-fix/ 里
 const PLUGIN = path.resolve(__dirname, '..', '..', '开机自启修复.js');
+const IS_WINDOWS = process.platform === 'win32';
+const WINDOWS_BASH_CANDIDATES = [
+  'D:\\Program Files\\Git\\bin\\bash.exe',
+  'C:\\Program Files\\Git\\bin\\bash.exe',
+];
+const POSIX_USER_PROFILE = String(process.env.USERPROFILE || '')
+  .replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`)
+  .replace(/\\/g, '/');
 const DASH = process.env.F50_DASH || '/usr/bin/dash';
-const BUSYBOX = process.env.F50_BUSYBOX || '/c/Users/Cuty/scoop/shims/busybox';
-const BASH_EXE = process.env.F50_BASH || 'D:\\Program Files\\Git\\bin\\bash.exe';
+const BUSYBOX = process.env.F50_BUSYBOX || (IS_WINDOWS && POSIX_USER_PROFILE
+  ? `${POSIX_USER_PROFILE}/scoop/shims/busybox`
+  : 'busybox');
+const BASH_EXE = process.env.F50_BASH || (IS_WINDOWS
+  ? WINDOWS_BASH_CANDIDATES.find((candidate) => fs.existsSync(candidate)) || 'bash'
+  : 'bash');
 
 const winToPosix = (p) => {
   const abs = path.resolve(p).replace(/\\/g, '/');

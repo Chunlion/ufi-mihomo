@@ -10,7 +10,6 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
   plugin: path.join(ROOT, '猫猫TProxy.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
-  helperArmv7: path.join(ROOT, 'dist', 'kano-f50-helper-linux-armv7'),
   package: path.join(ROOT, 'tproxy-yq.zip'),
 };
 
@@ -304,14 +303,15 @@ function runFor(label, file) {
   chk(customDashboard['external-ui-name'], 'custom-ui', 'custom dashboard name is preserved');
   if (hasBinaryHelper) {
     const controllerReaderSource = source.slice(
-      source.indexOf('const readControllerInfo = async () => {'),
+      source.indexOf('const readControllerInfo = async ({ fresh = false } = {}) => {'),
       source.indexOf('const buildControllerInfo = async ('),
     );
     chk(
-      controllerReaderSource.includes('const snapshot = await readBinarySnapshot()')
-        && controllerReaderSource.includes('const res = await runShellWithRoot('),
+      controllerReaderSource.includes('const snapshot = await readBinarySnapshot({ fresh })')
+        && controllerReaderSource.includes('const res = await runShellWithRoot(')
+        && source.includes('const loadPromise = readControllerInfo({ fresh })'),
       true,
-      'controller settings use Go first and retain their Shell fallback',
+      'controller settings propagate fresh reads and retain their Shell fallback',
     );
     const snapshotReaderSource = source.slice(
       source.indexOf('const readBinarySnapshot = async ('),
@@ -566,7 +566,7 @@ function runFor(label, file) {
           'helper probe accepts a healthy executable protocol');
         shellReply = {
           success: true,
-          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.3","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
+          content: 'KANO_HELPER_STATE=present\n{"ok":true,"version":"0.3.4","commands":["version","snapshot","clients","network-status","policy-read","convert-subscription"]}\nKANO_HELPER_RC=0\n',
         };
         chk((await api.probeBinaryHelperState()).state, 'installed',
           'helper probe accepts a healthy newer helper version');
@@ -639,9 +639,10 @@ function runFor(label, file) {
         const fallbackGitee = helperPreferredSource.lastIndexOf('installBinaryHelperFromGitee');
         chk(
           helperPreferredSource.includes('if (preferGitee)')
-            && firstGitee >= 0 && firstGitee < firstBundled && firstBundled < fallbackGitee,
+            && firstGitee >= 0 && firstGitee < firstBundled && firstBundled < fallbackGitee
+            && helperPreferredSource.includes('return giteeOk || bundledOk'),
           true,
-          'helper update is Gitee-first while initial installation remains bundled-first',
+          'helper update compares the Gitee result with the bundled release',
         );
         const localConverterSource = source.slice(
           source.indexOf('const ensureLocalSubscriptionConverter = async'),
@@ -703,6 +704,8 @@ function runFor(label, file) {
             && localConverterSource.includes('--resolve "$resolve_spec"')
             && localConverterSource.includes('resolve_public_address()')
             && localConverterSource.includes('is_public_ipv6()')
+            && localConverterSource.includes('command -v ping6')
+            && localConverterSource.includes('getent hosts "$resolve_host"')
             && localConverterSource.includes('LOCAL_TOTAL_BYTES=0')
             && localConverterSource.includes('LOCAL_SUBSCRIPTION_TOTAL_BYTES'),
           true,
@@ -771,25 +774,18 @@ function runFor(label, file) {
           true,
           'installation package embeds the same helper binary as dist',
         );
-        const helperArmv7 = fs.readFileSync(FILES.helperArmv7);
-        chk(
-          helperArmv7.length > 1024
-            && helperArmv7.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
-            && helperArmv7.readUInt16LE(18) === 0x28,
-          true,
-          'bundled Go helper includes an ARMv7 ELF variant',
-        );
-        const archivedHelperArmv7 = spawnSync(
+        const helperSource = fs.readFileSync(path.join(ROOT, 'binary-helper', 'main.go'), 'utf8');
+        const packageEntries = spawnSync(
           'unzip',
-          ['-p', FILES.package, 'Tools/kano-f50-helper-bundled-armv7'],
-          { encoding: null, maxBuffer: 16 * 1024 * 1024 },
+          ['-l', FILES.package],
+          { encoding: 'utf8' },
         );
         chk(
-          archivedHelperArmv7.status === 0 && Buffer.isBuffer(archivedHelperArmv7.stdout)
-            && archivedHelperArmv7.stdout.equals(helperArmv7)
-            && source.includes('kano-f50-helper-bundled-$HELPER_ABI'),
+          helperSource.includes('const version = "0.3.4"')
+            && packageEntries.status === 0
+            && !packageEntries.stdout.includes('kano-f50-helper-bundled-armv7'),
           true,
-          'ARMv7 helper is packaged and selected by device ABI',
+          'helper performance changes have a deployable version without unused ARMv7 payloads',
         );
         chk(
           source.includes('const CONTROLLER_INFO_CACHE_TTL = 1500')

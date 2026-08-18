@@ -24,7 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.3.3"
+const version = "0.3.4"
 
 var commands = []string{"version", "snapshot", "clients", "network-status", "policy-read", "convert-subscription"}
 

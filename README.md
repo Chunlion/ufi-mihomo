@@ -8,7 +8,7 @@
 |---|---|
 | `猫猫TProxy.js` | 统一主插件。Go 辅助内核可用时优先加速高频读取和本地订阅转换；不可用时自动使用 Shell 兼容路径 |
 | `开机自启修复.js` | 独立的全插件开机增强器；保留 UFI 原生启动顺序，并提供尾钩快照、故障转移和手动隔离重放 |
-| `dist/kano-f50-helper-linux-arm64`、`dist/kano-f50-helper-linux-armv7` | 可选轻量 Go 辅助程序；安装包按设备 ABI 选择，负责高频状态读取和 YAML、JSON、Base64 封装 YAML/JSON 的订阅格式检查；URI 等完整转换按需调用安装包内的冷 sidecar |
+| `dist/kano-f50-helper-linux-arm64` | 可选轻量 Go 辅助程序，负责高频状态读取和 YAML、JSON、Base64 封装 YAML/JSON 的订阅格式检查；URI 等完整转换按需调用安装包内的冷 sidecar |
 
 主插件的手动安装、启动、停止、重启和自愈不依赖“开机自启修复”。安装该增强插件后，猫猫和其它插件仍由 UFI 原生启动文件直接执行；末尾增强钩会记录完成状态并同步持久快照，设备提供 `service.d` 时还会安装独立故障转移入口。
 

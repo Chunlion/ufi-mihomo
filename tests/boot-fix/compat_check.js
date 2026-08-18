@@ -4,13 +4,16 @@
 // busybox（最接近 toybox 的可得实现）里确实存在。
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawnSync } = require('child_process');
-const { Sandbox, loadPlugin } = require('./harness');
+const { Sandbox, loadPlugin, BASH_EXE } = require('./harness');
 
-const BASH_EXE = process.env.F50_BASH || 'D:\\Program Files\\Git\\bin\\bash.exe';
-const OUT = path.join(__dirname, 'compat');
-fs.rmSync(OUT, { recursive: true, force: true });
-fs.mkdirSync(OUT, { recursive: true });
+const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-boot-compat-'));
+const SBX_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-boot-compat-sbx-'));
+process.on('exit', () => {
+  fs.rmSync(OUT, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
+  fs.rmSync(SBX_ROOT, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
+});
 
 const sh = (cmd) => spawnSync(BASH_EXE, ['-c', cmd], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
 
@@ -24,7 +27,7 @@ const check = (name, ok, detail = '') => {
   console.log('\n=== 可移植性检查（mksh / toybox 代理）===\n');
 
   // 1. 收集插件生成的所有 shell 脚本（不执行，只记录）
-  const sbx = new Sandbox(path.join(__dirname, 'sbxc'));
+  const sbx = new Sandbox(SBX_ROOT);
   sbx.reset();
   sbx.writeBoot('touch /tmp/x\n');
   const scripts = [];

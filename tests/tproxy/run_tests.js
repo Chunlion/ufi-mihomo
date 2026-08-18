@@ -10,6 +10,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FILES = {
   plugin: path.join(ROOT, '猫猫TProxy.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
+  helperArmv7: path.join(ROOT, 'dist', 'kano-f50-helper-linux-armv7'),
   package: path.join(ROOT, 'tproxy-yq.zip'),
 };
 
@@ -663,6 +664,8 @@ function runFor(label, file) {
         }
         chk(api.validateLocalSubscriptionUrl('https://203.0.1.1/sub').ok, true,
           'local conversion does not over-block an ordinary public IPv4 literal');
+        chk(api.validateLocalSubscriptionUrl('https://[2001:4860:4860::8888]/sub').ok, true,
+          'local conversion accepts a public IPv6 literal');
         const shellCallsBeforeBlockedUrl = shellCallCount;
         const blockedLocalConversion = await api.convertSubscriptionsLocally([
           { url: 'http://example.com/subscription' },
@@ -697,8 +700,9 @@ function runFor(label, file) {
           localConverterSource.includes("--proto '=https'")
             && localConverterSource.includes('--max-redirs 0')
             && localConverterSource.includes('--max-filesize ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES}')
-            && localConverterSource.includes('--resolve "$source_host:$source_port:$resolved_ip"')
-            && localConverterSource.includes('resolve_public_ipv4()')
+            && localConverterSource.includes('--resolve "$resolve_spec"')
+            && localConverterSource.includes('resolve_public_address()')
+            && localConverterSource.includes('is_public_ipv6()')
             && localConverterSource.includes('LOCAL_TOTAL_BYTES=0')
             && localConverterSource.includes('LOCAL_SUBSCRIPTION_TOTAL_BYTES'),
           true,
@@ -766,6 +770,32 @@ function runFor(label, file) {
             && archivedHelper.stdout.equals(helperBinary),
           true,
           'installation package embeds the same helper binary as dist',
+        );
+        const helperArmv7 = fs.readFileSync(FILES.helperArmv7);
+        chk(
+          helperArmv7.length > 1024
+            && helperArmv7.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
+            && helperArmv7.readUInt16LE(18) === 0x28,
+          true,
+          'bundled Go helper includes an ARMv7 ELF variant',
+        );
+        const archivedHelperArmv7 = spawnSync(
+          'unzip',
+          ['-p', FILES.package, 'Tools/kano-f50-helper-bundled-armv7'],
+          { encoding: null, maxBuffer: 16 * 1024 * 1024 },
+        );
+        chk(
+          archivedHelperArmv7.status === 0 && Buffer.isBuffer(archivedHelperArmv7.stdout)
+            && archivedHelperArmv7.stdout.equals(helperArmv7)
+            && source.includes('kano-f50-helper-bundled-$HELPER_ABI'),
+          true,
+          'ARMv7 helper is packaged and selected by device ABI',
+        );
+        chk(
+          source.includes('const CONTROLLER_INFO_CACHE_TTL = 1500')
+            && source.includes('const KANO_HELPER_SNAPSHOT_TTL = 1500'),
+          true,
+          'panel status reads use a shared 1.5-second cache',
         );
         chk(
           source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')

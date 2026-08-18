@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -360,20 +361,36 @@ func runNetworkStatus(args []string) {
 	fmt.Fprintf(&b, "clash_dir=%s\nyq_runtime=%s\n\n", *clashDir, *yqRuntime)
 	fmt.Fprintf(&b, "[process]\npid=%d\n\n", findCorePID())
 	fmt.Fprintf(&b, "[listen ports]\n%s\n", listenPortsText())
+	type probe struct {
+		name string
+		args []string
+	}
+	probes := []probe{{name: "ip", args: []string{"rule", "show"}}}
+	var firewallStart, firewallEnd int
 	if ipt := selectExecutable([]string{"iptables", "iptables-legacy", "iptables-nft", "/system/bin/iptables", "/system/xbin/iptables", "/vendor/bin/iptables"}); ipt != "" {
 		fmt.Fprintf(&b, "\n[IPv4 firewall: %s]\n", ipt)
+		firewallStart = len(probes)
 		for _, spec := range [][]string{{"-t", "mangle", "-S", "PREROUTING"}, {"-t", "mangle", "-S", "OUTPUT"}, {"-t", "nat", "-S"}} {
-			if out, _ := commandOutput(2*time.Second, ipt, spec...); out != "" {
-				b.WriteString(out)
-				if !strings.HasSuffix(out, "\n") {
-					b.WriteByte('\n')
-				}
-			}
+			probes = append(probes, probe{name: ipt, args: spec})
 		}
+		firewallEnd = len(probes)
 	} else {
 		b.WriteString("\n[IPv4 firewall]\nunavailable\n")
 	}
-	if out, _ := commandOutput(2*time.Second, "ip", "rule", "show"); out != "" {
+	requests := make([]commandRequest, len(probes))
+	for i, item := range probes {
+		requests[i] = commandRequest{name: item.name, args: item.args}
+	}
+	outputs := commandOutputBatch(2*time.Second, requests)
+	for _, out := range outputs[firewallStart:firewallEnd] {
+		if out != "" {
+			b.WriteString(out)
+			if !strings.HasSuffix(out, "\n") {
+				b.WriteByte('\n')
+			}
+		}
+	}
+	if out := outputs[0]; out != "" {
 		b.WriteString("\n[ip rule]\n")
 		b.WriteString(out)
 		if !strings.HasSuffix(out, "\n") {
@@ -736,12 +753,37 @@ func getProp(key string) string {
 func commandOutput(timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	return commandOutputContext(ctx, name, args...)
+}
+
+func commandOutputContext(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	b, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return string(b), ctx.Err()
 	}
 	return string(b), err
+}
+
+type commandRequest struct {
+	name string
+	args []string
+}
+
+func commandOutputBatch(timeout time.Duration, requests []commandRequest) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	outputs := make([]string, len(requests))
+	var wg sync.WaitGroup
+	for i, request := range requests {
+		wg.Add(1)
+		go func(index int, item commandRequest) {
+			defer wg.Done()
+			outputs[index], _ = commandOutputContext(ctx, item.name, item.args...)
+		}(i, request)
+	}
+	wg.Wait()
+	return outputs
 }
 
 func selectExecutable(cands []string) string {

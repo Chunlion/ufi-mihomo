@@ -818,8 +818,16 @@ function runFor(label, file) {
   }
 
   console.log('--- #9 托管规则清理 ---');
-  const fb = api.buildManagedFallbackRules('Proxy'); // 13 条，末条即 MATCH,<group>
-  chk(fb.length, 13, 'buildManagedFallbackRules 返回 13 条（末条为 MATCH）');
+  const fb = api.buildManagedFallbackRules('Proxy'); // 12 条，末条即 MATCH,<group>
+  chk(fb.length, 12, 'buildManagedFallbackRules 返回 12 条（末条为 MATCH）');
+  chk(fb.some((rule) => /^GEOIP\s*,\s*(private|netflix|telegram|google)\s*,/i.test(rule)), false,
+    'managed fallback omits GeoIP.dat 不保证支持的类别条目');
+  const unsupportedGeoipConfig = {
+    rules: ['GEOIP,netflix,Streaming,no-resolve', 'MATCH,Proxy'],
+  };
+  api.applyManagedRules(unsupportedGeoipConfig, { generated: false, proxyGroup: 'Proxy' });
+  chk(unsupportedGeoipConfig.rules, ['MATCH,Proxy'],
+    'existing unsupported category GeoIP rules are removed during config sanitization');
   chk(api.removeLegacyManagedRulePrefix(['MATCH,Proxy', 'DOMAIN,a.com,DIRECT'], 'Proxy'),
     ['MATCH,Proxy', 'DOMAIN,a.com,DIRECT'], '用户模板的 MATCH,Proxy 不再被误删');
   chk(api.removeLegacyManagedRulePrefix(['DOMAIN,x,DIRECT', 'RULE-SET,kano_direct_ip,DIRECT'], 'Proxy'),

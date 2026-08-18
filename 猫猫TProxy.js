@@ -2981,7 +2981,6 @@ EOF_KANO_SERVICE
     'RULE-SET,kano_direct_ip,DIRECT',
     `RULE-SET,kano_proxy_domain,${proxyGroup}`,
     'GEOSITE,private,DIRECT',
-    'GEOIP,private,DIRECT,no-resolve',
     'GEOSITE,cn,DIRECT',
     'GEOIP,cn,DIRECT,no-resolve',
     'GEOSITE,apple@cn,DIRECT',
@@ -3133,16 +3132,20 @@ EOF_KANO_SERVICE
   };
 
   const MANAGED_RULE_SET_PATTERN = /^RULE-SET\s*,\s*kano_(reject_domain|direct_domain|direct_ip|proxy_domain)\s*,/;
+  const UNSUPPORTED_CATEGORY_GEOIP_RULE = /^GEOIP\s*,\s*(private|netflix|telegram|google)\s*,/i;
+
+  const removeUnsupportedCategoryGeoipRules = (rules = []) =>
+    rules.filter((rule) => !UNSUPPORTED_CATEGORY_GEOIP_RULE.test(String(rule).trim()));
 
   const removeLegacyManagedRulePrefix = (rules = [], proxyGroup = 'Proxy') => {
-    let output = rules.slice();
+    let output = removeUnsupportedCategoryGeoipRules(rules);
     const expected = buildManagedFallbackRules(proxyGroup);
     const legacyProxy = buildManagedFallbackRules('Proxy');
-    const prefixMatches = output.length >= 12 && output.slice(0, 12).every((rule, index) => {
+    const prefixMatches = output.length >= expected.length && output.slice(0, expected.length).every((rule, index) => {
       return rule === expected[index] || rule === legacyProxy[index];
     });
     if (prefixMatches) {
-      output = output.slice(12);
+      output = output.slice(expected.length);
       if (output[0] === `MATCH,${proxyGroup}` || output[0] === 'MATCH,Proxy') output = output.slice(1);
     }
     return output.filter((rule) => !MANAGED_RULE_SET_PATTERN.test(String(rule).trim()));
@@ -6557,6 +6560,7 @@ KANO_WRITE_CHECK_EOF
       if (Object.prototype.hasOwnProperty.call(config, 'rules') && !Array.isArray(config.rules)) {
         throw new Error('rules 必须是数组');
       }
+      if (Array.isArray(config.rules)) config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
       if (Object.prototype.hasOwnProperty.call(config, 'proxy-providers') && !isPlainYamlObject(config['proxy-providers'])) {
         throw new Error('proxy-providers 必须是映射对象');
       }
@@ -6649,7 +6653,6 @@ KANO_WRITE_CHECK_EOF
     '  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
     '  - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve',
     '  - GEOSITE,private,DIRECT',
-    '  - GEOIP,private,DIRECT,no-resolve',
     '  - GEOSITE,cn,DIRECT',
     '  - GEOIP,cn,DIRECT,no-resolve',
     '  - MATCH,DIRECT',

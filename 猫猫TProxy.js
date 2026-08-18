@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy v7.4.1 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.2 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -544,6 +544,7 @@ KANO_YQ_SMOKE_EOF
         mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} 2>/dev/null || true
         grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_SERVICE_LINE)} >> ${shellQuote(BOOT_FILE)}
         grep -qxF ${shellQuote(BOOT_INOTIFY_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_INOTIFY_LINE)} >> ${shellQuote(BOOT_FILE)}
+        grep -qxF ${shellQuote(BOOT_POLICY_TOOLS_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_POLICY_TOOLS_LINE)} >> ${shellQuote(BOOT_FILE)}
         `;
 
   const buildRuntimeManagerScript = () => `#!/system/bin/sh

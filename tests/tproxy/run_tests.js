@@ -387,6 +387,13 @@ function runFor(label, file) {
     'installer and boot entry create the inotify watch directory before starting the watcher',
   );
   chk(
+    bootLines.includes('sleep 8; /data/clash/Scripts/Clash.PolicyTools apply')
+      && bootLines.indexOf('/data/clash/Scripts/Clash.Service start')
+        < bootLines.indexOf('sleep 8; /data/clash/Scripts/Clash.PolicyTools apply'),
+    true,
+    'every boot rewrite restores device-bypass policy after the core start entry',
+  );
+  chk(
     removeBootLines.includes('-v legacy_inotify=')
       && removeBootLines.includes('$0 != legacy_inotify'),
     true,

@@ -243,6 +243,19 @@ function runFor(label, file) {
     '主菜单按任务重新分类，配置二级菜单按规则与文件分区',
   );
 
+  const subscriptionDialogSource = source.slice(
+    source.indexOf('const importSub = async () => {'),
+    source.indexOf('// \\u521b\\u5efa\\u8ba2\\u9605\\u94fe\\u63a5\\u6309\\u94ae'),
+  );
+  chk(
+    subscriptionDialogSource.includes('\\u6e05\\u7a7a\\u5f53\\u524d\\u7f16\\u8f91\\u5185\\u5bb9\\uff1f')
+      && !subscriptionDialogSource.includes('if (!confirmed) return;\n        await clearSubSourceFile();')
+      && subscriptionDialogSource.includes('const hasSubscriptionUrl = sources.some')
+      && subscriptionDialogSource.includes('if (!hasSubscriptionUrl) {\n            const success = await clearSubSourceFile();'),
+    true,
+    '订阅清空仅修改当前编辑内容，保存时才写入设备',
+  );
+
   const modeStatusSource = source.slice(
     source.indexOf('const readCurrentModeStatus = async () => {'),
     source.indexOf('const refreshRuleModeStatus = async () => {'),

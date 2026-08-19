@@ -11099,13 +11099,12 @@ ${expectedProviderChecks}
       clearBtn.onclick = async () => {
         const confirmed = await askConfirm(
           'mm_sub_clear_confirm',
-          '\u6e05\u7a7a\u8ba2\u9605\u94fe\u63a5\uff1f',
-          '\u8fd9\u53ea\u4f1a\u6e05\u7a7a\u8ba2\u9605\u6e90\u5217\u8868\uff0c\u4e0d\u4f1a\u5220\u9664\u5f53\u524d config.yaml\u3002\u6e05\u7a7a\u540e\u8bf7\u91cd\u65b0\u6dfb\u52a0\u8ba2\u9605\u5e76\u4fdd\u5b58\u3002',
+          '\u6e05\u7a7a\u5f53\u524d\u7f16\u8f91\u5185\u5bb9\uff1f',
+          '\u4ec5\u6e05\u7a7a\u5f53\u524d\u7a97\u53e3\u7684\u8f93\u5165\u3002\u70b9\u300c\u4fdd\u5b58\u5e76\u66f4\u65b0\u300d\u540e\u624d\u4f1a\u6e05\u7a7a\u5df2\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\uff1b\u76f4\u63a5\u5173\u95ed\u4e0d\u4f1a\u4fee\u6539\u8bbe\u5907\u3002',
           '\u6e05\u7a7a',
           '\u53d6\u6d88',
         );
         if (!confirmed) return;
-        await clearSubSourceFile();
         resetChildren(rowsEl);
         addSubRow();
       };
@@ -11119,13 +11118,20 @@ ${expectedProviderChecks}
 
         if (showSuspiciousSubSourcesError(sources)) return;
 
+        const hasSubscriptionUrl = sources.some((source) => String(source.url || '').trim());
+
         const operationToken = acquireCriticalOperation('保存更新订阅');
         if (!operationToken) return;
 
         setButtonBusy(submitBtn, true, '\u5904\u7406\u4e2d\u2026');
-        createToast('\u6b63\u5728\u5904\u7406\u8ba2\u9605...', 'yellow');
 
         try {
+          if (!hasSubscriptionUrl) {
+            const success = await clearSubSourceFile();
+            if (success) close();
+            return;
+          }
+          createToast('\u6b63\u5728\u5904\u7406\u8ba2\u9605...', 'yellow');
           const success = await saveSubSources(
             sources,
             SUB_RULE_MODE_TEMPLATE,

@@ -113,7 +113,8 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
-  'buildServiceWrapperScript', 'buildPolicyToolsScript',
+  'buildServiceWrapperScript', 'buildPolicyToolsScript', 'flushGeneratedRulesCmd',
+  'verifyGeneratedRulesFlushedCmd', 'savePolicyState',
   'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
   'readCurrentModeStatus',
 ];
@@ -928,6 +929,77 @@ function runFor(label, file) {
         true, 'cache cleanup treats stopped-core API flushes as skipped');
       chk(source.includes('iptables -F') || source.includes('iptables -t nat -F'), false,
         'network rescue does not globally flush firewall tables');
+      const rescueCleanupShell = `${api.flushGeneratedRulesCmd()}\n${api.verifyGeneratedRulesFlushedCmd()}`;
+      const rescueCleanupSyntax = spawnSync('sh', ['-n'], {
+        input: rescueCleanupShell,
+        encoding: 'utf8',
+      });
+      chk(rescueCleanupSyntax.status, 0,
+        `network rescue cleanup verification passes sh -n${rescueCleanupSyntax.stderr ? `: ${rescueCleanupSyntax.stderr.trim()}` : ''}`);
+      const networkRescueSource = source.slice(
+        source.indexOf('const networkRescue = async'),
+        source.indexOf('const startClashServiceClean = async'),
+      );
+      chk(
+        networkRescueSource.includes('RESCUE_CORE_STILL_RUNNING')
+          && networkRescueSource.includes('verifyGeneratedRulesFlushedCmd()')
+          && networkRescueSource.includes('exit "$rescue_rc"'),
+        true,
+        'network rescue reports a failed stop or incomplete firewall cleanup',
+      );
+      const stopClashSource = source.slice(
+        source.indexOf('const stopClash = async'),
+        source.indexOf('const restartClash = async'),
+      );
+      chk(
+        stopClashSource.includes('verifyGeneratedRulesFlushedCmd()')
+          && stopClashSource.includes('STOP_RULE_CLEANUP_INCOMPLETE')
+          && stopClashSource.includes('[ "$stop_rc" -eq 0 ] && [ "$cleanup_rc" -eq 0 ]'),
+        true,
+        'manual stop verifies both the service stop and generated-rule cleanup',
+      );
+
+      const savePolicyStateSource = source.slice(
+        source.indexOf('const savePolicyState = async'),
+        source.indexOf('const applyPolicyToolsRules = async'),
+      );
+      chk(
+        savePolicyStateSource.includes('TX=/data/kano_policy_save.$$')
+          && savePolicyStateSource.includes('snapshot_policy_file')
+          && savePolicyStateSource.includes('restore_policy_file')
+          && savePolicyStateSource.includes('POLICY_STATE_COMMITTED')
+          && savePolicyStateSource.includes("bootEnabled ? addPolicyToolsBootLineCmd() : ''")
+          && !savePolicyStateSource.includes('await runShellWithRoot(addPolicyToolsBootLineCmd())'),
+        true,
+        'policy files and boot integration commit in one rollback-protected transaction',
+      );
+
+      const persistSubSourcesSource = source.slice(
+        source.indexOf('const persistSubSources = async'),
+        source.indexOf('const providerUpdateNeedsLocalFallback'),
+      );
+      const readCurrentSubSourcesSource = source.slice(
+        source.indexOf('const readCurrentSubSources = async'),
+        source.indexOf('const readCurrentSubRuleMode'),
+      );
+      chk(
+        persistSubSourcesSource.includes('TX=/data/kano_sub_persist.$$')
+          && persistSubSourcesSource.includes('SUB_NEW="$SUB.kano_new.$$"')
+          && persistSubSourcesSource.includes('restore_sub_file subscription "$SUB"')
+          && persistSubSourcesSource.includes('SUB_SOURCES_COMMITTED')
+          && readCurrentSubSourcesSource.includes('legacy entrypoint persist failed')
+          && readCurrentSubSourcesSource.includes('return [];'),
+        true,
+        'subscription source writes are atomic and failed legacy migration is not reused',
+      );
+      chk(
+        readCurrentSubSourcesSource.indexOf('if (!source.success)') >= 0
+          && readCurrentSubSourcesSource.indexOf('if (!source.success)')
+            < readCurrentSubSourcesSource.indexOf('parseStoredSubSourcesFromText')
+          && readCurrentSubSourcesSource.includes('readCurrentSubSources failed before legacy migration'),
+        true,
+        'subscription read failure does not trigger a write-side legacy migration',
+      );
     });
   }
 
@@ -1056,6 +1128,27 @@ function runFor(label, file) {
     await api.readCurrentModeStatus();
     const modeStatusSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
     chk(modeStatusSyntax.status, 0, `generated configuration-summary shell passes sh -n: ${modeStatusSyntax.stderr.trim()}`);
+
+    shellReply = { success: true, content: 'POLICY_STATE_COMMITTED' };
+    const policySaved = await api.savePolicyState({
+      deviceBypass: '',
+      directDomain: '',
+      directIp: '',
+      proxyDomain: '',
+      rejectDomain: '',
+      options: {
+        traffic_mode: 'tproxy',
+        ipv6: 'off',
+        quic_block: 'off',
+        dns_hijack: 'on',
+        dns_port: '1053',
+        proxy_group: 'Proxy',
+      },
+    }, { apply: false });
+    chk(policySaved, true, 'policy transaction requires its commit marker');
+    const policySaveSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
+    chk(policySaveSyntax.status, 0,
+      `generated policy transaction passes sh -n: ${policySaveSyntax.stderr.trim()}`);
 
     shellReply = { success: true, content: '0' };
     const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });

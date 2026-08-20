@@ -2257,6 +2257,71 @@ EOF_KANO_SERVICE
     return normalizeSubConvertModeValue(res.success ? res.content : '');
   };
 
+  const fileTransactionHelpersCmd = () => `
+        snapshot_transaction_file() {
+          name="$1"
+          path="$2"
+          if [ -e "$path" ]; then
+            cp -p "$path" "$TX/$name" 2>/dev/null || cp "$path" "$TX/$name" || return 1
+            touch "$TX/$name.had" || return 1
+          else
+            touch "$TX/$name.absent" || return 1
+          fi
+        }
+        restore_transaction_file() {
+          name="$1"
+          path="$2"
+          if [ -f "$TX/$name.had" ] && [ -f "$TX/$name" ]; then
+            mkdir -p "$(dirname "$path")" || return 1
+            restored="$path.kano_restore.$$"
+            cp -p "$TX/$name" "$restored" 2>/dev/null || cp "$TX/$name" "$restored" || return 1
+            mv -f "$restored" "$path" || return 1
+          elif [ -f "$TX/$name.absent" ]; then
+            rm -f "$path" || return 1
+          else
+            return 1
+          fi
+          return 0
+        }
+        recover_stale_transactions() {
+          tx_prefix="$1"
+          restore_callback="$2"
+          current_tx="$TX"
+          now="$(date +%s 2>/dev/null || echo 0)"
+          for stale_tx in /data/"$tx_prefix".*; do
+            [ -d "$stale_tx" ] || continue
+            [ "$stale_tx" = "$current_tx" ] && continue
+            stale_pid="\${stale_tx##*.}"
+            case "$stale_pid" in
+              ''|*[!0-9]*) ;;
+              *) [ -d "/proc/$stale_pid" ] && continue ;;
+            esac
+            if [ -f "$stale_tx/committed" ]; then
+              rm -rf "$stale_tx" 2>/dev/null || true
+              continue
+            fi
+            if [ -f "$stale_tx/pending" ]; then
+              pending_time="$(stat -c %Y "$stale_tx/pending" 2>/dev/null || echo 0)"
+              if [ "$now" -gt 0 ] && [ "$pending_time" -gt 0 ] && [ $((now - pending_time)) -lt 300 ]; then
+                continue
+              fi
+            fi
+            TX="$stale_tx"
+            if "$restore_callback"; then
+              echo "TRANSACTION_RECOVERY=restored:$stale_tx"
+              rm -rf "$stale_tx" 2>/dev/null || true
+            else
+              echo "KANO_ERROR_STAGE=transaction_recovery"
+              echo "KANO_ERROR_CODE=restore_failed"
+              TX="$current_tx"
+              return 1
+            fi
+          done
+          TX="$current_tx"
+          return 0
+        }
+        `;
+
 
   const subRuleModePersistSidecarsCmd = (mode = SUB_RULE_MODE_TEMPLATE) => `
         KANO_MODE=${shellQuote(normalizeSubRuleModeValue(mode))}
@@ -2270,6 +2335,69 @@ EOF_KANO_SERVICE
         fi
         chmod 600 ${shellQuote(CLASH_SUB_RULE_MODE_FILE)} ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} 2>/dev/null || true
         `;
+
+  const persistSubSourceState = async (
+    sources,
+    mode = SUB_RULE_MODE_TEMPLATE,
+    convertMode = SUB_CONVERT_MODE_PROVIDER,
+    { allowEmpty = false } = {},
+  ) => {
+    const cleanMode = normalizeSubRuleModeValue(mode);
+    const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+    const storedSources = normalizeStoredSubSourceList(sources);
+    if (!allowEmpty && storedSources.length == 0) return false;
+    const subUrlsText = buildSubUrlsFileText(storedSources, cleanMode, cleanConvertMode);
+    const sourceRes = await runShellWithRoot(`
+        set -e
+        TX=/data/kano_sub_persist.$$
+        SUB=${shellQuote(CLASH_SUB_URLS)}
+        MODE=${shellQuote(CLASH_SUB_RULE_MODE_FILE)}
+        OPTIONS=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
+        ${fileTransactionHelpersCmd()}
+        restore_sub_transaction() {
+          restore_rc=0
+          restore_transaction_file options "$OPTIONS" || restore_rc=1
+          restore_transaction_file mode "$MODE" || restore_rc=1
+          restore_transaction_file subscription "$SUB" || restore_rc=1
+          [ "$restore_rc" -eq 0 ]
+        }
+        finish_sub_persist() {
+          rc=$?
+          trap - EXIT
+          if [ "$rc" -ne 0 ]; then
+            set +e
+            restore_sub_transaction || rc=1
+          fi
+          rm -f "$SUB.kano_new.$$" 2>/dev/null || true
+          rm -rf "$TX" 2>/dev/null || true
+          exit "$rc"
+        }
+        recover_stale_transactions kano_sub_persist restore_sub_transaction
+        rm -rf "$TX" 2>/dev/null || true
+        mkdir -p "$TX"
+        trap finish_sub_persist EXIT
+        snapshot_transaction_file subscription "$SUB"
+        snapshot_transaction_file mode "$MODE"
+        snapshot_transaction_file options "$OPTIONS"
+        mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
+        ${subRuleModePersistSidecarsCmd(cleanMode)}
+        SUB_NEW="$SUB.kano_new.$$"
+        printf '%s' ${shellQuote(subUrlsText)} > "$SUB_NEW"
+        chmod 600 "$SUB_NEW"
+        mv -f "$SUB_NEW" "$SUB"
+        first_line="$(sed -n '1p' "$SUB" 2>/dev/null | tr -d '\r')"
+        [ "$first_line" = ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)} ] || {
+          echo "KANO_ERROR_STAGE=subscription_commit"
+          echo "KANO_ERROR_CODE=mode_header_mismatch"
+          exit 1
+        }
+        touch "$TX/committed"
+        echo SUB_SOURCES_COMMITTED
+        trap - EXIT
+        rm -rf "$TX" 2>/dev/null || true
+        `, 20 * 1000);
+    return !!(sourceRes.success && String(sourceRes.content || '').includes('SUB_SOURCES_COMMITTED'));
+  };
 
   const setConfigSourceCmd = (source = 'unknown') => `
         if mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)} 2>/dev/null; then
@@ -2285,32 +2413,20 @@ EOF_KANO_SERVICE
 
   const setSubRuleMode = async (mode = SUB_RULE_MODE_TEMPLATE) => {
     const cleanMode = normalizeSubRuleModeValue(mode);
-    const res = await runShellWithRoot(`
-        set -e
-        mkdir -p ${shellQuote(CLASH_PROXY_DIR)} ${shellQuote(`${CLASH_DIR}/Tools`)} ${shellQuote(CLASH_POLICY_DIR)}
-        ${subRuleModePersistSidecarsCmd(cleanMode)}
-        tmp=${shellQuote(CLASH_SUB_URLS)}.mode.$$
-        trap 'rm -f "$tmp" 2>/dev/null || true' EXIT
-        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
-          {
-            printf '%s\n' ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)}
-            grep -Ev '^[[:space:]]*# KANO_SUB_RULE_MODE=' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null | grep -Ev '^[[:space:]]*$' || true
-          } > "$tmp"
-        else
-          printf '%s\n' ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)} > "$tmp"
-        fi
-        chmod 600 "$tmp" 2>/dev/null || true
-        mv -f "$tmp" ${shellQuote(CLASH_SUB_URLS)}
-        trap - EXIT
-        first_line="$(sed -n '1p' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null | tr -d '\r')"
-        [ "$first_line" = ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)} ] || { echo "SUB_RULE_MODE_SET_FAILED:$first_line"; exit 1; }
-        echo "SUB_RULE_MODE_SET:${cleanMode}"
-        `, 15 * 1000);
-    if (!res.success) {
-      createToast(`\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
+    const current = await runShellWithRoot(`
+        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
+        `, 10 * 1000);
+    if (!current.success) {
+      createToast(`\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u8bfb\u53d6\u5931\u8d25<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
       return false;
     }
-    return true;
+    const storedSources = parseStoredSubSourcesFromText(current.content || '');
+    const convertMode = parseSubConvertModeFromText(current.content || '');
+    const saved = await persistSubSourceState(storedSources, cleanMode, convertMode, { allowEmpty: true });
+    if (!saved) {
+      createToast('\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25', 'red', 9000);
+    }
+    return saved;
   };
 
 
@@ -2352,22 +2468,7 @@ EOF_KANO_SERVICE
   ) => {
     const storedSources = normalizeStoredSubSourceList(sources);
     if (storedSources.length == 0 || normalizeSubSourceList(storedSources).length == 0) return false;
-    const subUrlsText = buildSubUrlsFileText(storedSources, mode, convertMode);
-    const res = await runShellWithRoot(`
-        set -e
-        mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
-        ${subRuleModePersistSidecarsCmd(mode)}
-        SUB=${shellQuote(CLASH_SUB_URLS)}
-        SUB_NEW="$SUB.kano_new.$$"
-        trap 'rm -f "$SUB_NEW" 2>/dev/null || true' EXIT
-        printf '%s' ${shellQuote(subUrlsText)} > "$SUB_NEW"
-        chmod 600 "$SUB_NEW"
-        mv -f "$SUB_NEW" "$SUB"
-        trap - EXIT
-        first_line="$(sed -n '1p' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null | tr -d '\r')"
-        [ "$first_line" = ${shellQuote(`# KANO_SUB_RULE_MODE=${normalizeSubRuleModeValue(mode)}`)} ] || { echo "SUB_URLS_MODE_HEADER_WRITE_FAILED:$first_line"; exit 1; }
-        `);
-    return res.success;
+    return await persistSubSourceState(storedSources, mode, convertMode);
   };
 
   const hasUserTemplateYaml = async () => {
@@ -5402,10 +5503,14 @@ KANO_WRITE_CHECK_EOF
     };
   };
 
+  let ruleModeStatusRequestId = 0;
   const refreshRuleModeStatus = async () => {
-    const el = document.querySelector('#mm_rule_mode_status');
-    if (!el) return null;
+    if (!document.querySelector('#mm_rule_mode_status')) return null;
+    const requestId = ++ruleModeStatusRequestId;
     const status = await readCurrentModeStatus();
+    if (requestId != ruleModeStatusRequestId) return status;
+    const el = document.querySelector('#mm_rule_mode_status');
+    if (!el) return status;
     const configLabel = status.configReadStatus == 'missing'
       ? '\u8fd0\u884c\u914d\u7f6e\u672a\u627e\u5230'
       : status.configReadStatus == 'invalid'
@@ -5443,14 +5548,17 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
+  let runningStatusRequestId = 0;
   const isMMRunning = async () => {
+    const requestId = ++runningStatusRequestId;
     const pid = await getCorePid();
-    const running_mm = document.querySelector('#running_mm');
     let apiOk = false;
     if (pid) {
       const version = await callMihomoApi('/version', 'GET', null, null, 8, { corePid: pid });
       apiOk = !!version.success;
     }
+    if (requestId != runningStatusRequestId) return !!pid;
+    const running_mm = document.querySelector('#running_mm');
     if (running_mm) {
       running_mm.textContent = apiOk
         ? '\u732b\u732b - \u{1f7e2}API\u6b63\u5e38'
@@ -5607,6 +5715,88 @@ KANO_WRITE_CHECK_EOF
         [ "$cleanup_failed" -eq 0 ]
         `;
 
+  const verifyCoreStoppedCmd = (marker = 'KANO') => `
+        core_pid="$(pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || pgrep -f '/data/[c]lash|[C]lash.Core|[m]ihomo' 2>/dev/null || true)"
+        if [ -n "$core_pid" ]; then
+          echo "${marker}_CORE_STILL_RUNNING:$core_pid"
+          echo "KANO_ERROR_STAGE=service_stop"
+          echo "KANO_ERROR_CODE=core_still_running"
+          false
+        else
+          true
+        fi
+        `;
+
+  const removePluginOwnedArtifactsCmd = () => `
+        rm -f \
+          ${shellQuote(KANO_SUBSCRIPTION_RAW)} \
+          ${shellQuote(KANO_SUBSCRIPTION_YAML)} \
+          ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} \
+          ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} \
+          ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)} \
+          ${shellQuote(DOWNLOAD_ZIP)} \
+          ${shellQuote(DOWNLOAD_LOG)} \
+          ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
+          /data/kano_policy_boot.log \
+          /data/kano_clash_config_test.log \
+          /data/kano_clash_repair_zip_test.out \
+          /data/kano_clash_repair_unzip.out \
+          /data/kano_clash_repair_config.err \
+          /data/kano_yq_expression_smoke.err \
+          /data/kano_template_node_check.err \
+          /data/kano_clash_zip_test.out \
+          /data/kano_clash_unzip.out \
+          /data/kano_config_package_archive_test.out \
+          /data/kano_config_package_archive_list.out \
+          /data/kano_config_package_yaml_test.out \
+          /data/kano_runtime_landed_check.err \
+          /data/kano_yaml_after_override.yaml \
+          /data/kano_ui_rules_patch.yaml \
+          /data/mm_uninstall_backup.err \
+          ${shellQuote(LOG_FILE)} 2>/dev/null || true
+        for artifact in \
+          /data/kano_mihomo_api_*.out \
+          /data/kano_mihomo_api_*.err \
+          /data/kano_ui_rules_*.txt \
+          /data/kano_helper_bundled_* \
+          /data/kano_helper_gitee_*; do
+          [ -f "$artifact" ] && rm -f "$artifact" 2>/dev/null || true
+        done
+        for artifact_dir in \
+          /data/kano_clash_repair.* \
+          /data/kano_policy_save.* \
+          /data/kano_sub_persist.* \
+          /data/kano_template_upload_* \
+          /data/kano_subscription_save_* \
+          /data/kano_config_package_restore_*; do
+          [ -d "$artifact_dir" ] && rm -rf "$artifact_dir" 2>/dev/null || true
+        done
+        rm -rf ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} 2>/dev/null || true
+        artifact_cleanup_failed=0
+        for artifact in \
+          ${shellQuote(KANO_SUBSCRIPTION_RAW)} \
+          ${shellQuote(KANO_SUBSCRIPTION_YAML)} \
+          ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} \
+          ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} \
+          ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)} \
+          ${shellQuote(DOWNLOAD_ZIP)} \
+          ${shellQuote(DOWNLOAD_LOG)} \
+          ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
+          ${shellQuote(KANO_YQ_RUNTIME_DIR)} \
+          ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} \
+          ${shellQuote(LOG_FILE)}; do
+          if [ -e "$artifact" ]; then
+            echo "UNINSTALL_ARTIFACT_REMAINS:$artifact"
+            artifact_cleanup_failed=1
+          fi
+        done
+        if [ "$artifact_cleanup_failed" -ne 0 ]; then
+          echo "KANO_ERROR_STAGE=uninstall_artifact_cleanup"
+          echo "KANO_ERROR_CODE=artifact_remains"
+        fi
+        [ "$artifact_cleanup_failed" -eq 0 ]
+        `;
+
   const collectNetworkStatus = async () => {
     const helperResult = await runBinaryHelperJson('network-status', [
       '--log', LOG_FILE,
@@ -5716,11 +5906,7 @@ KANO_WRITE_CHECK_EOF
         fi
         if [ ${shellQuote(stopFlag)} = '1' ]; then
           sleep 1
-          core_pid="$(pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || pgrep -f '/data/[c]lash|[C]lash.Core|[m]ihomo' 2>/dev/null || true)"
-          if [ -n "$core_pid" ]; then
-            echo "RESCUE_CORE_STILL_RUNNING:$core_pid"
-            rescue_rc=1
-          fi
+          ${verifyCoreStoppedCmd('RESCUE')} || rescue_rc=1
         fi
         echo "[rescue] flushing KANO chains"
         ${flushGeneratedRulesCmd()}
@@ -7198,11 +7384,20 @@ EOF_KANO_SERVICE
       const rollbackInstalledPackage = async (reason = '安装后检查失败') => {
         const rollbackRes = await runDangerousShellWithRoot(`
           set +e
+          rollback_rc=0
           TARGET=${shellQuote(CLASH_DIR)}
           BACKUP=${shellQuote(installBackupPath)}
           [ -f ${shellQuote(CLASH_SERVICE)} ] && ${shellQuote(CLASH_SERVICE)} stop >/dev/null 2>&1 || true
+          sleep 1
+          ${verifyCoreStoppedCmd('INSTALL_ROLLBACK')} || rollback_rc=1
           ${removeBootLinesCmd()}
           ${flushGeneratedRulesCmd()}
+          ${verifyGeneratedRulesFlushedCmd()} || rollback_rc=1
+          if [ "$rollback_rc" -ne 0 ]; then
+            echo "KANO_ERROR_STAGE=install_rollback_cleanup"
+            echo "KANO_ERROR_CODE=cleanup_incomplete"
+            exit "$rollback_rc"
+          fi
           if [ -n "$BACKUP" ] && [ ! -d "$BACKUP" ]; then
             echo "INSTALL_ROLLBACK_BACKUP_MISSING: $BACKUP"
             exit 1
@@ -7216,10 +7411,12 @@ EOF_KANO_SERVICE
           fi
           printf 'INSTALL_ROLLBACK_REASON=%s\n' ${shellQuote(reason)}
         `, 60 * 1000, 'install_rollback');
-        if (!rollbackRes.success) {
+        const rollbackOk = rollbackRes.success
+          && /INSTALL_ROLLBACK=(?:restored_previous|removed_failed_install)/.test(String(rollbackRes.content || ''));
+        if (!rollbackOk) {
           createToast(`安装失败，且安装目录回滚失败<br>${safeTextToHtml(rollbackRes.content || '')}`, 'red', 12000);
         }
-        return rollbackRes.success;
+        return rollbackOk;
       };
       const failInstalledPackage = async (message, detail = '') => {
         const rolledBack = await rollbackInstalledPackage(message);
@@ -7377,7 +7574,7 @@ EOF_KANO_SERVICE
     const confirmed = await askConfirm(
       'mm_uninstall_confirm',
       '\u786e\u8ba4\u5378\u8f7d\u732b\u732b\uff1f',
-      `\u5c06\u505c\u6b62\u670d\u52a1\u3001\u79fb\u9664\u5f00\u673a\u81ea\u542f\uff0c\u6e05\u7406 TProxy/DNS/Policy \u94fe\uff0c\u5e76\u5220\u9664 <code>/data/clash</code> \u548c <code>/data/kano_*</code> \u8c03\u8bd5\u6587\u4ef6\u3002<br />
+      `\u5c06\u505c\u6b62\u670d\u52a1\u3001\u79fb\u9664\u5f00\u673a\u81ea\u542f\uff0c\u6e05\u7406 TProxy/DNS/Policy \u94fe\uff0c\u5e76\u5220\u9664 <code>/data/clash</code> \u548c\u672c\u63d2\u4ef6\u521b\u5efa\u7684\u4e34\u65f6\u6587\u4ef6\u3002<br />
       <b>\u672c\u6b21\u5378\u8f7d\u4e0d\u4f1a\u505a\u4efb\u4f55\u5907\u4efd</b>\uff1bconfig.yaml\u3001template.yaml\u3001\u8ba2\u9605\u8bb0\u5f55\u3001\u8986\u5199\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7\u90fd\u4f1a\u76f4\u63a5\u5220\u9664\u3002<br />
       \u7ee7\u7eed\u524d\u8bf7\u786e\u8ba4\u4f60\u5df2\u7ecf\u4e0d\u9700\u8981\u8fd9\u4e9b\u6570\u636e\u3002`,
       '\u786e\u8ba4\u5378\u8f7d',
@@ -7392,14 +7589,21 @@ EOF_KANO_SERVICE
     try {
       const res = await runShellWithRoot(`
           set +e
+          uninstall_rc=0
           echo "\u5378\u8f7d\u7b56\u7565: \u4e0d\u5907\u4efd\uff0c\u76f4\u63a5\u5220\u9664\u6240\u6709\u732b\u732b\u6570\u636e"
           if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-            ${shellQuote(CLASH_SERVICE)} stop 2>&1 || true
+            ${shellQuote(CLASH_SERVICE)} stop 2>&1 || uninstall_rc=1
           fi
           sleep 1
+          ${verifyCoreStoppedCmd('UNINSTALL')} || uninstall_rc=1
           ${removeBootLinesCmd()}
           ${flushGeneratedRulesCmd()}
-          rm -f /data/mm_uninstall_backup.err 2>/dev/null || true
+          ${verifyGeneratedRulesFlushedCmd()} || uninstall_rc=1
+          if [ "$uninstall_rc" -ne 0 ]; then
+            echo "KANO_ERROR_STAGE=uninstall_cleanup"
+            echo "KANO_ERROR_CODE=cleanup_incomplete"
+            exit "$uninstall_rc"
+          fi
           if [ -d ${shellQuote(CLASH_DIR)} ]; then
             if rm -rf ${shellQuote(CLASH_DIR)}; then
               echo "\u5df2\u5220\u9664 /data/clash"
@@ -7410,14 +7614,19 @@ EOF_KANO_SERVICE
           else
             echo "/data/clash \u4e0d\u5b58\u5728"
           fi
-          rm -rf ${shellQuote(KANO_YQ_RUNTIME_DIR)} 2>/dev/null || true
-          rm -f /data/kano_* 2>/dev/null || true
-          rm -f ${shellQuote(DOWNLOAD_ZIP)} ${shellQuote(DOWNLOAD_LOG)} ${shellQuote(LOG_FILE)} 2>/dev/null || true
-          rm -rf ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} 2>/dev/null || true
-          echo "\u5df2\u5220\u9664 /data/kano_* \u8c03\u8bd5\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7"
+          ${removePluginOwnedArtifactsCmd()} || uninstall_rc=1
+          [ ! -e ${shellQuote(CLASH_DIR)} ] || {
+            echo "KANO_ERROR_STAGE=uninstall_delete"
+            echo "KANO_ERROR_CODE=clash_directory_remains"
+            exit 1
+          }
+          if [ "$uninstall_rc" -ne 0 ]; then exit "$uninstall_rc"; fi
+          echo "\u5df2\u5220\u9664\u63d2\u4ef6\u4e34\u65f6\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7"
           echo "UNINSTALL_NO_BACKUP_DONE"
           `, 60 * 1000);
-      if (!res.success) return createToast('\u5378\u8f7d\u5931\u8d25', 'red');
+      if (!res.success || !String(res.content || '').includes('UNINSTALL_NO_BACKUP_DONE')) {
+        return createToast(`\u5378\u8f7d\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 10000);
+      }
       createToast('\u5378\u8f7d\u5b8c\u6210', 'green');
       await isMMRunning();
     } finally {
@@ -8161,50 +8370,32 @@ KANO_POLICY_TOOLS_EOF
       CLASH_POLICY_OPTIONS_FILE,
     ];
     const snapshotPolicyFilesCmd = policyTransactionFiles
-      .map((path, index) => `snapshot_policy_file ${index} ${shellQuote(path)}`)
+      .map((path, index) => `snapshot_transaction_file ${index} ${shellQuote(path)}`)
       .join('\n');
     const restorePolicyFilesCmd = policyTransactionFiles
-      .map((path, index) => `restore_policy_file ${index} ${shellQuote(path)} || restore_rc=1`)
+      .map((path, index) => `restore_transaction_file ${index} ${shellQuote(path)} || restore_rc=1`)
       .reverse()
       .join('\n');
     const res = await runShellWithRoot(`
         set -e
         TX=/data/kano_policy_save.$$
-        snapshot_policy_file() {
-          name="$1"
-          path="$2"
-          if [ -e "$path" ]; then
-            cp -p "$path" "$TX/$name" 2>/dev/null || cp "$path" "$TX/$name"
-            touch "$TX/$name.had"
-          else
-            touch "$TX/$name.absent"
-          fi
-        }
-        restore_policy_file() {
-          name="$1"
-          path="$2"
-          if [ -f "$TX/$name.had" ] && [ -f "$TX/$name" ]; then
-            mkdir -p "$(dirname "$path")"
-            restored="$path.kano_restore.$$"
-            cp -p "$TX/$name" "$restored" 2>/dev/null || cp "$TX/$name" "$restored" || return 1
-            mv -f "$restored" "$path" || return 1
-          elif [ -f "$TX/$name.absent" ]; then
-            rm -f "$path" || return 1
-          fi
-          return 0
+        ${fileTransactionHelpersCmd()}
+        restore_policy_transaction() {
+          restore_rc=0
+          ${restorePolicyFilesCmd}
+          [ "$restore_rc" -eq 0 ]
         }
         finish_policy_save() {
           rc=$?
           trap - EXIT
           if [ "$rc" -ne 0 ]; then
             set +e
-            restore_rc=0
-            ${restorePolicyFilesCmd}
-            [ "$restore_rc" -eq 0 ] || rc=1
+            restore_policy_transaction || rc=1
           fi
           rm -rf "$TX" 2>/dev/null || true
           exit "$rc"
         }
+        recover_stale_transactions kano_policy_save restore_policy_transaction
         rm -rf "$TX" 2>/dev/null || true
         mkdir -p "$TX"
         trap finish_policy_save EXIT
@@ -8237,15 +8428,74 @@ KANO_POLICY_TOOLS_EOF
         write_policy_file ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} 600 ${shellQuote(optionsText)}
         ${bootEnabled ? addPolicyToolsBootLineCmd() : ''}
         echo POLICY_STATE_COMMITTED
+        ${apply ? `
+        set +e
+        ${shellQuote(CLASH_POLICY_SCRIPT)} apply
+        policy_apply_rc=$?
+        ${shellQuote(CLASH_POLICY_SCRIPT)} status
+        policy_status_rc=$?
+        if [ "$policy_apply_rc" -eq 0 ] && [ "$policy_status_rc" -eq 0 ]; then
+          touch "$TX/committed"
+          echo POLICY_RULES_APPLIED
+          trap - EXIT
+          rm -rf "$TX" 2>/dev/null || true
+          exit 0
+        fi
+        echo "KANO_ERROR_STAGE=policy_apply"
+        echo "KANO_ERROR_CODE=apply_or_status_failed"
+        trap - EXIT
+        restore_policy_transaction
+        policy_restore_rc=$?
+        policy_recovery_rc=1
+        if [ "$policy_restore_rc" -eq 0 ]; then
+          ${shellQuote(CLASH_POLICY_SCRIPT)} apply
+          policy_recovery_rc=$?
+        fi
+        if [ "$policy_restore_rc" -eq 0 ]; then
+          echo "POLICY_APPLY_ROLLBACK=restored"
+        else
+          echo "POLICY_APPLY_ROLLBACK=restore_failed"
+        fi
+        if [ "$policy_recovery_rc" -eq 0 ]; then
+          echo "POLICY_APPLY_RECOVERY=reapplied"
+        else
+          echo "POLICY_APPLY_RECOVERY=failed"
+        fi
+        if [ "$policy_restore_rc" -eq 0 ]; then rm -rf "$TX" 2>/dev/null || true; fi
+        exit 1
+        ` : `
+        touch "$TX/committed"
         trap - EXIT
         rm -rf "$TX" 2>/dev/null || true
-        `);
-    if (!res.success || !String(res.content || '').includes('POLICY_STATE_COMMITTED')) {
+        echo POLICY_STATE_SAVED
+        `}
+        `, 60 * 1000);
+    const policyOutput = String(res.content || '');
+    if (!policyOutput.includes('POLICY_STATE_COMMITTED')) {
       createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     invalidateBinarySnapshot();
-    if (apply) return await applyPolicyToolsRules({ ensureScript: false });
+    if (apply) {
+      if (res.success && policyOutput.includes('POLICY_RULES_APPLIED')) {
+        createToast('\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528', 'green', 7000);
+        return true;
+      }
+      const recoveryOk = policyOutput.includes('POLICY_APPLY_ROLLBACK=restored')
+        && policyOutput.includes('POLICY_APPLY_RECOVERY=reapplied');
+      createToast(
+        recoveryOk
+          ? '\u65b0\u7b56\u7565\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u6062\u590d\u5e76\u91cd\u65b0\u5e94\u7528\u4e0a\u4e00\u7248\u7b56\u7565'
+          : `\u65b0\u7b56\u7565\u5e94\u7528\u5931\u8d25\uff0c\u4e0a\u4e00\u7248\u7b56\u7565\u6062\u590d\u4e0d\u5b8c\u6574<br>${safeTextToHtml(policyOutput)}`,
+        recoveryOk ? 'yellow' : 'red',
+        10000,
+      );
+      return false;
+    }
+    if (!res.success || !policyOutput.includes('POLICY_STATE_SAVED')) {
+      createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
+      return false;
+    }
     createToast('\u7b56\u7565\u914d\u7f6e\u5df2\u4fdd\u5b58', 'green');
     return true;
   };
@@ -8650,6 +8900,7 @@ KANO_POLICY_TOOLS_EOF
           stop_rc=1
         fi
         sleep 1
+        ${verifyCoreStoppedCmd('STOP')} || stop_rc=1
         ${flushGeneratedRulesCmd()}
         cleanup_rc=0
         ${verifyGeneratedRulesFlushedCmd()} || cleanup_rc=1
@@ -9472,9 +9723,11 @@ KANO_POLICY_TOOLS_EOF
         binaryHelperBtn.title = '转换组件不可用；点击重装';
       }
     };
+    let binaryHelperRefreshRequestId = 0;
     const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {
+      const requestId = ++binaryHelperRefreshRequestId;
       const probe = await probeBinaryHelperState(timeout);
-      applyBinaryHelperButtonState(probe);
+      if (requestId == binaryHelperRefreshRequestId) applyBinaryHelperButtonState(probe);
       return probe;
     };
     const scheduleBinaryHelperButtonRefresh = ({ delay = 1000, retryDelay = 1500 } = {}) => {
@@ -9733,19 +9986,22 @@ KANO_POLICY_TOOLS_EOF
 
 
     const clearSubSourceFile = async () => {
-      const res = await runShellWithRoot(`
-        mkdir -p ${shellQuote(CLASH_PROXY_DIR)} ${shellQuote(`${CLASH_DIR}/Tools`)} ${shellQuote(CLASH_POLICY_DIR)}
-        : > ${shellQuote(CLASH_SUB_URLS)}
-        ${subRuleModePersistSidecarsCmd(SUB_RULE_MODE_TEMPLATE)}
-        rm -f /data/kano_subscription_* 2>/dev/null || true
-        `);
-      if (res.success) {
+      const saved = await persistSubSourceState(
+        [],
+        SUB_RULE_MODE_TEMPLATE,
+        SUB_CONVERT_MODE_PROVIDER,
+        { allowEmpty: true },
+      );
+      if (saved) {
+        await runShellWithRoot(`
+          rm -f ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} 2>/dev/null || true
+          `);
         createToast('\u5df2\u6e05\u7a7a\u8ba2\u9605\u6e90\u5217\u8868\uff0c\u5e76\u6062\u590d\u4e3a template \u89c4\u5219\u6a21\u5f0f', 'green');
         await refreshRuleModeStatus();
       } else {
         createToast('\u6e05\u7a7a\u8ba2\u9605\u6e90\u5931\u8d25', 'red');
       }
-      return res.success;
+      return saved;
     };
 
     const ensureTemplateProviders = async (sources, options = {}) => {
@@ -9777,79 +10033,6 @@ KANO_POLICY_TOOLS_EOF
       });
       await appendTemplateFlowDebug(`leave writeSubEntrypoint ok=${ok ? '1' : '0'}`);
       return ok;
-    };
-
-    const persistSubSources = async (
-      sources,
-      mode = SUB_RULE_MODE_TEMPLATE,
-      convertMode = SUB_CONVERT_MODE_PROVIDER,
-    ) => {
-      const cleanMode = normalizeSubRuleModeValue(mode);
-      const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
-      const storedSources = normalizeStoredSubSourceList(sources);
-      if (storedSources.length == 0) return false;
-      const subUrlsText = buildSubUrlsFileText(storedSources, cleanMode, cleanConvertMode);
-      const sourceRes = await runShellWithRoot(`
-        set -e
-        TX=/data/kano_sub_persist.$$
-        SUB=${shellQuote(CLASH_SUB_URLS)}
-        MODE=${shellQuote(CLASH_SUB_RULE_MODE_FILE)}
-        OPTIONS=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
-        snapshot_sub_file() {
-          name="$1"
-          path="$2"
-          if [ -e "$path" ]; then
-            cp -p "$path" "$TX/$name" 2>/dev/null || cp "$path" "$TX/$name"
-            touch "$TX/$name.had"
-          else
-            touch "$TX/$name.absent"
-          fi
-        }
-        restore_sub_file() {
-          name="$1"
-          path="$2"
-          if [ -f "$TX/$name.had" ] && [ -f "$TX/$name" ]; then
-            mkdir -p "$(dirname "$path")"
-            restored="$path.kano_restore.$$"
-            cp -p "$TX/$name" "$restored" 2>/dev/null || cp "$TX/$name" "$restored" || return 1
-            mv -f "$restored" "$path" || return 1
-          elif [ -f "$TX/$name.absent" ]; then
-            rm -f "$path" || return 1
-          fi
-          return 0
-        }
-        finish_sub_persist() {
-          rc=$?
-          trap - EXIT
-          if [ "$rc" -ne 0 ]; then
-            set +e
-            restore_sub_file options "$OPTIONS" || rc=1
-            restore_sub_file mode "$MODE" || rc=1
-            restore_sub_file subscription "$SUB" || rc=1
-          fi
-          rm -f "$SUB.kano_new.$$" 2>/dev/null || true
-          rm -rf "$TX" 2>/dev/null || true
-          exit "$rc"
-        }
-        rm -rf "$TX" 2>/dev/null || true
-        mkdir -p "$TX"
-        trap finish_sub_persist EXIT
-        snapshot_sub_file subscription "$SUB"
-        snapshot_sub_file mode "$MODE"
-        snapshot_sub_file options "$OPTIONS"
-        mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
-        ${subRuleModePersistSidecarsCmd(cleanMode)}
-        SUB_NEW="$SUB.kano_new.$$"
-        printf '%s' ${shellQuote(subUrlsText)} > "$SUB_NEW"
-        chmod 600 "$SUB_NEW"
-        mv -f "$SUB_NEW" "$SUB"
-        first_line="$(sed -n '1p' "$SUB" 2>/dev/null | tr -d '\r')"
-        [ "$first_line" = ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)} ] || { echo "SUB_URLS_MODE_HEADER_WRITE_FAILED:$first_line"; exit 1; }
-        echo SUB_SOURCES_COMMITTED
-        trap - EXIT
-        rm -rf "$TX" 2>/dev/null || true
-        `);
-      return !!(sourceRes.success && String(sourceRes.content || '').includes('SUB_SOURCES_COMMITTED'));
     };
 
     const providerUpdateNeedsLocalFallback = (providerResult = {}) =>
@@ -9884,7 +10067,7 @@ KANO_POLICY_TOOLS_EOF
         createToast('无法创建 config.yaml 回滚点，未切换本地转换模式。', 'red', 9000);
         return { ok: false, conversion };
       }
-      if (!(await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_LOCAL))) {
+      if (!(await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_LOCAL))) {
         createToast('本地转换已完成，但保存本地转换模式失败；运行配置未切换。', 'red', 9000);
         return { ok: false, conversion };
       }
@@ -9892,7 +10075,7 @@ KANO_POLICY_TOOLS_EOF
         backup: true,
         convertMode: SUB_CONVERT_MODE_LOCAL,
       }))) {
-        const modeRestored = await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
+        const modeRestored = await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
         const configRestored = rollbackPath
           ? await restoreConfigRollbackPoint(rollbackPath, 'HTTP Provider 自动本地降级写入失败', { showToast: false })
           : false;
@@ -9907,7 +10090,7 @@ KANO_POLICY_TOOLS_EOF
       }
       const restarted = await restartClashWithConfigRollback(rollbackPath, 'HTTP Provider 390 自动切换本地转换');
       if (!restarted) {
-        const modeRestored = await persistSubSources(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
+        const modeRestored = await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
         if (!modeRestored) createToast('原配置已回滚，但 HTTP Provider 模式标记恢复失败。', 'red', 10000);
         return { ok: false, conversion };
       }
@@ -10007,7 +10190,7 @@ KANO_POLICY_TOOLS_EOF
         }
         return [];
       }
-      if (!(await persistSubSources(cleanSources, SUB_RULE_MODE_TEMPLATE))) {
+      if (!(await persistSubSourceState(cleanSources, SUB_RULE_MODE_TEMPLATE))) {
         if (showToast) createToast('\u65e7\u76f4\u901a\u6a21\u5f0f\u8fc1\u79fb\u5931\u8d25\uff1a\u8ba2\u9605\u94fe\u63a5\u5199\u5165\u5931\u8d25', 'red', 9000);
         return [];
       }
@@ -10529,7 +10712,7 @@ ${expectedProviderChecks}
       const legacySources = parseLegacySubConfig(res.content);
       if (legacySources.length > 0) {
         if (showLegacySuspiciousSubSourcesError(legacySources, 'legacy entrypoint')) return [];
-        if (!(await persistSubSources(legacySources))) {
+        if (!(await persistSubSourceState(legacySources))) {
           createToast('\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u8fc1\u79fb\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u4f7f\u7528\u672a\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\u3002', 'red', 9000);
           await appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
           return [];
@@ -10648,7 +10831,7 @@ ${expectedProviderChecks}
         }
         return restoreRes.success;
       };
-      if (!(await persistSubSources(storedSources, cleanMode, cleanConvertMode))) {
+      if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) {
         await appendTemplateFlowDebug('saveSubSources persistSubSources failed');
         await restoreSubscriptionTransaction();
         createToast('\u4fdd\u5b58\u8ba2\u9605\u6e90\u5931\u8d25\uff01', 'red');

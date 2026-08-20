@@ -2,11 +2,14 @@
 // 把统一版 猫猫TProxy.js 当成真实插件加载起来（DOM + 宿主 API 全部打桩），
 // 然后针对本轮修复的每个函数做行为断言。宿主 shell 调用被拦截并按用例返回伪造结果。
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+const toShellPath = (value) => String(value).replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`);
+const shellQuoteForTest = (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`;
 const FILES = {
   plugin: path.join(ROOT, '猫猫TProxy.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
@@ -114,7 +117,8 @@ const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
   'buildServiceWrapperScript', 'buildPolicyToolsScript', 'flushGeneratedRulesCmd',
-  'verifyGeneratedRulesFlushedCmd', 'savePolicyState',
+  'verifyGeneratedRulesFlushedCmd', 'verifyCoreStoppedCmd', 'removePluginOwnedArtifactsCmd', 'fileTransactionHelpersCmd',
+  'persistSubSourceState', 'savePolicyState',
   'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
   'readCurrentModeStatus',
 ];
@@ -931,17 +935,58 @@ function runFor(label, file) {
         'network rescue does not globally flush firewall tables');
       const rescueCleanupShell = `${api.flushGeneratedRulesCmd()}\n${api.verifyGeneratedRulesFlushedCmd()}`;
       const rescueCleanupSyntax = spawnSync('sh', ['-n'], {
-        input: rescueCleanupShell,
+        input: `${rescueCleanupShell}\n${api.verifyCoreStoppedCmd('TEST')}\n${api.removePluginOwnedArtifactsCmd()}`,
         encoding: 'utf8',
       });
       chk(rescueCleanupSyntax.status, 0,
         `network rescue cleanup verification passes sh -n${rescueCleanupSyntax.stderr ? `: ${rescueCleanupSyntax.stderr.trim()}` : ''}`);
+      const transactionTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'kano-transaction-test-'));
+      try {
+        const transactionRoot = toShellPath(transactionTemp);
+        const transactionHelpers = api.fileTransactionHelpersCmd()
+          .replace('/data/"$tx_prefix".*', '"$ROOT"/"$tx_prefix".*');
+        const transactionBehavior = spawnSync('sh', ['-c', `
+          set -e
+          ROOT=${shellQuoteForTest(transactionRoot)}
+          TX="$ROOT/tx"
+          TARGET="$ROOT/value.txt"
+          ABSENT="$ROOT/absent.txt"
+          mkdir -p "$TX"
+          printf old > "$TARGET"
+          ${transactionHelpers}
+          snapshot_transaction_file existing "$TARGET"
+          snapshot_transaction_file absent "$ABSENT"
+          printf new > "$TARGET"
+          printf created > "$ABSENT"
+          restore_transaction_file absent "$ABSENT"
+          restore_transaction_file existing "$TARGET"
+          [ "$(cat "$TARGET")" = old ]
+          [ ! -e "$ABSENT" ]
+          STALE="$ROOT/stale_tx.crashed"
+          CURRENT="$ROOT/stale_tx.current"
+          mkdir -p "$STALE" "$CURRENT"
+          printf before-interruption > "$STALE/existing"
+          touch "$STALE/existing.had"
+          printf interrupted > "$TARGET"
+          TX="$CURRENT"
+          restore_stale_test() {
+            restore_transaction_file existing "$TARGET"
+          }
+          recover_stale_transactions stale_tx restore_stale_test
+          [ "$(cat "$TARGET")" = before-interruption ]
+          [ ! -e "$STALE" ]
+        `], { encoding: 'utf8' });
+        chk(transactionBehavior.status, 0,
+          `file transaction helpers restore files and recover an interrupted transaction${transactionBehavior.stderr ? `: ${transactionBehavior.stderr.trim()}` : ''}`);
+      } finally {
+        fs.rmSync(transactionTemp, { recursive: true, force: true });
+      }
       const networkRescueSource = source.slice(
         source.indexOf('const networkRescue = async'),
         source.indexOf('const startClashServiceClean = async'),
       );
       chk(
-        networkRescueSource.includes('RESCUE_CORE_STILL_RUNNING')
+        networkRescueSource.includes("verifyCoreStoppedCmd('RESCUE')")
           && networkRescueSource.includes('verifyGeneratedRulesFlushedCmd()')
           && networkRescueSource.includes('exit "$rescue_rc"'),
         true,
@@ -965,18 +1010,22 @@ function runFor(label, file) {
       );
       chk(
         savePolicyStateSource.includes('TX=/data/kano_policy_save.$$')
-          && savePolicyStateSource.includes('snapshot_policy_file')
-          && savePolicyStateSource.includes('restore_policy_file')
+          && savePolicyStateSource.includes('snapshot_transaction_file')
+          && savePolicyStateSource.includes('restore_transaction_file')
           && savePolicyStateSource.includes('POLICY_STATE_COMMITTED')
+          && savePolicyStateSource.includes('POLICY_APPLY_ROLLBACK=restored')
+          && savePolicyStateSource.includes('POLICY_APPLY_RECOVERY=reapplied')
+          && savePolicyStateSource.includes('POLICY_RULES_APPLIED')
+          && savePolicyStateSource.includes('POLICY_STATE_SAVED')
           && savePolicyStateSource.includes("bootEnabled ? addPolicyToolsBootLineCmd() : ''")
           && !savePolicyStateSource.includes('await runShellWithRoot(addPolicyToolsBootLineCmd())'),
         true,
-        'policy files and boot integration commit in one rollback-protected transaction',
+        'policy commit and runtime apply share a rollback point until old rules can be recovered',
       );
 
       const persistSubSourcesSource = source.slice(
-        source.indexOf('const persistSubSources = async'),
-        source.indexOf('const providerUpdateNeedsLocalFallback'),
+        source.indexOf('const persistSubSourceState = async'),
+        source.indexOf('const setConfigSourceCmd ='),
       );
       const readCurrentSubSourcesSource = source.slice(
         source.indexOf('const readCurrentSubSources = async'),
@@ -985,20 +1034,42 @@ function runFor(label, file) {
       chk(
         persistSubSourcesSource.includes('TX=/data/kano_sub_persist.$$')
           && persistSubSourcesSource.includes('SUB_NEW="$SUB.kano_new.$$"')
-          && persistSubSourcesSource.includes('restore_sub_file subscription "$SUB"')
+          && persistSubSourcesSource.includes('restore_transaction_file subscription "$SUB"')
           && persistSubSourcesSource.includes('SUB_SOURCES_COMMITTED')
+          && source.includes('return await persistSubSourceState(storedSources, mode, convertMode)')
+          && source.includes('const saved = await persistSubSourceState(')
           && readCurrentSubSourcesSource.includes('legacy entrypoint persist failed')
           && readCurrentSubSourcesSource.includes('return [];'),
         true,
-        'subscription source writes are atomic and failed legacy migration is not reused',
+        'all subscription state writers use the atomic transaction and failed legacy migration is not reused',
       );
       chk(
         readCurrentSubSourcesSource.indexOf('if (!source.success)') >= 0
           && readCurrentSubSourcesSource.indexOf('if (!source.success)')
             < readCurrentSubSourcesSource.indexOf('parseStoredSubSourcesFromText')
           && readCurrentSubSourcesSource.includes('readCurrentSubSources failed before legacy migration'),
+          true,
+          'subscription read failure does not trigger a write-side legacy migration',
+      );
+      const uninstallSource = source.slice(
+        source.indexOf('btn_disabled.onclick = async'),
+        source.indexOf('const normalizeMac ='),
+      );
+      chk(
+        uninstallSource.includes("verifyCoreStoppedCmd('UNINSTALL')")
+          && uninstallSource.includes('verifyGeneratedRulesFlushedCmd()')
+          && uninstallSource.includes('removePluginOwnedArtifactsCmd()')
+          && source.includes('UNINSTALL_ARTIFACT_REMAINS:')
+          && !uninstallSource.includes('rm -f /data/kano_*'),
         true,
-        'subscription read failure does not trigger a write-side legacy migration',
+        'uninstall verifies cleanup and only removes plugin-owned artifact paths',
+      );
+      chk(
+        source.includes('let ruleModeStatusRequestId = 0')
+          && source.includes('let runningStatusRequestId = 0')
+          && source.includes('let binaryHelperRefreshRequestId = 0'),
+        true,
+        'async status refreshes ignore stale responses',
       );
     });
   }
@@ -1129,7 +1200,7 @@ function runFor(label, file) {
     const modeStatusSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
     chk(modeStatusSyntax.status, 0, `generated configuration-summary shell passes sh -n: ${modeStatusSyntax.stderr.trim()}`);
 
-    shellReply = { success: true, content: 'POLICY_STATE_COMMITTED' };
+    shellReply = { success: true, content: 'POLICY_STATE_COMMITTED\nPOLICY_STATE_SAVED' };
     const policySaved = await api.savePolicyState({
       deviceBypass: '',
       directDomain: '',
@@ -1149,6 +1220,40 @@ function runFor(label, file) {
     const policySaveSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
     chk(policySaveSyntax.status, 0,
       `generated policy transaction passes sh -n: ${policySaveSyntax.stderr.trim()}`);
+
+    shellReply = {
+      success: true,
+      content: 'POLICY_STATE_COMMITTED\nPOLICY_APPLY_ROLLBACK=restored\nPOLICY_APPLY_RECOVERY=reapplied',
+    };
+    const policyApplyRecovered = await api.savePolicyState({
+      deviceBypass: '',
+      directDomain: '',
+      directIp: '',
+      proxyDomain: '',
+      rejectDomain: '',
+      options: {
+        traffic_mode: 'tproxy',
+        ipv6: 'off',
+        quic_block: 'off',
+        dns_hijack: 'on',
+        dns_port: '1053',
+        proxy_group: 'Proxy',
+      },
+    });
+    chk(policyApplyRecovered, false, 'failed policy apply returns failure after restoring and reapplying the previous policy');
+    const policyApplySyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
+    chk(policyApplySyntax.status, 0,
+      `generated policy apply rollback passes sh -n: ${policyApplySyntax.stderr.trim()}`);
+
+    shellReply = { success: true, content: 'SUB_SOURCES_COMMITTED' };
+    chk(
+      await api.persistSubSourceState(['https://example.com/sub']),
+      true,
+      'subscription persistence requires its transaction commit marker',
+    );
+    const subscriptionPersistSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
+    chk(subscriptionPersistSyntax.status, 0,
+      `generated subscription transaction passes sh -n: ${subscriptionPersistSyntax.stderr.trim()}`);
 
     shellReply = { success: true, content: '0' };
     const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });

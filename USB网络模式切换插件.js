@@ -1,6 +1,6 @@
 //<script>
 (async () => {
-  const VERSION = '2.1.1';
+  const VERSION = '2.1.2';
   const TITLE = 'USB 网络模式';
   const MODAL_NAME = 'kano_usb_native_mode_manager_modal';
   const STYLE_ID = 'kano_usb_native_mode_manager_style';
@@ -303,18 +303,24 @@ repair_network() {
         ip link set usb0 down 2>/dev/null
       fi
       if [ -d /sys/class/net/sipa_usb0 ]; then
-        attach_to_bridge sipa_usb0 || true
+        attach_to_bridge sipa_usb0 || {
+          log_msg "ERROR failed to attach sipa_usb0 to $BRIDGE"
+          return 1
+        }
         echo "sipa_usb0"
         return 0
       fi
       ifname=$(get_function_ifname rndis)
       if [ -n "$ifname" ]; then
-        attach_to_bridge "$ifname" || true
+        attach_to_bridge "$ifname" || {
+          log_msg "ERROR failed to attach $ifname to $BRIDGE"
+          return 1
+        }
         echo "$ifname"
         return 0
       fi
-      echo "unknown"
-      return 0
+      log_msg "ERROR rndis netdev not found"
+      return 1
       ;;
   esac
   return 1
@@ -400,6 +406,7 @@ raw_apply() {
 
 rollback_rndis() {
   log_msg "rollback begin -> RNDIS"
+  setprop persist.sys.usb.config rndis
   setprop sys.usb.config none
   wait_prop sys.usb.state none 12 || true
   sleep 1
@@ -408,9 +415,17 @@ rollback_rndis() {
     svc usb setFunctions rndis >/dev/null 2>&1
     sleep 3
   fi
-  repair_network rndis >/dev/null 2>&1 || true
-  save_state "rollback-rndis" "auto-rollback" "rndis" "sipa_usb0"
-  log_msg "rollback finished cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state)"
+  ifname=$(repair_network rndis) || ifname="unknown"
+  if verify_composition rndis rndis &&
+     [ "$(getprop persist.sys.usb.config)" = "rndis" ] &&
+     [ "$ifname" != "unknown" ]; then
+    save_state "rollback-rndis" "auto-rollback" "rndis" "$ifname"
+    log_msg "rollback finished cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state) ifname=$ifname"
+    return 0
+  fi
+  save_state "rollback-failed" "auto-rollback" "rndis" "$ifname"
+  log_msg "ERROR rollback failed cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state) persist=$(getprop persist.sys.usb.config) ifname=$ifname"
+  return 1
 }
 
 apply_mode() {
@@ -475,9 +490,13 @@ reconcile() {
   [ -f "$PAUSE_FILE" ] && return 2
   target=$(target_config "$MODE" "$WIRED_ADB")
   current=$(getprop sys.usb.config)
-  if [ "$current" != "$target" ]; then
+  if [ "$current" != "$target" ] || ! verify_composition "$MODE" "$target"; then
     apply_mode "$MODE" "$WIRED_ADB" "daemon-reconcile"
-    return $?
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      sync_persist >/dev/null 2>&1 || return 1
+    fi
+    return "$rc"
   fi
   repair_network "$MODE" >/dev/null 2>&1
   return $?
@@ -592,6 +611,12 @@ case "$1" in
     backup_original_persist
     setprop persist.sys.usb.config rndis
     apply_mode rndis 0 "safe-rndis"
+    rc=$?
+    if [ "$(getprop persist.sys.usb.config)" != "rndis" ]; then
+      log_msg "ERROR safe RNDIS persist verification failed"
+      exit 1
+    fi
+    exit "$rc"
     ;;
   status)
     status_output
@@ -727,8 +752,10 @@ start_loop() {
         fail_count=$((fail_count + 1))
         log_msg "reconcile failed rc=$rc count=$fail_count"
         if [ "$fail_count" -ge 3 ]; then
-          log_msg "three consecutive failures; pausing and leaving safe RNDIS rollback in place"
+          log_msg "three consecutive failures; pausing and switching to safe RNDIS"
           touch "$PAUSE_FILE"
+          sh "$MANAGER_FILE" safe-rndis >> "$LOG_FILE" 2>&1 || \
+            log_msg "ERROR safe RNDIS switch failed after consecutive reconcile failures"
           fail_count=0
         fi
       fi
@@ -920,7 +947,7 @@ sed -i '/kano_usb_network_manager/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || 
     const current = normalizeConfig(config || await readConfig());
     await migrateLegacy();
     const previousDaemon = await daemonStatus();
-    if (previousDaemon.running) await stopDaemon();
+    if (previousDaemon.running && !(await stopDaemon())) return false;
 
     const results = await Promise.all([
       writeRemoteFile(MANAGER_FILE, MANAGER_SCRIPT, '755'),
@@ -932,7 +959,7 @@ sed -i '/kano_usb_network_manager/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || 
     await run(`sh ${shellQuote(MANAGER_FILE)} save-original >/dev/null 2>&1 || true`, 8000);
 
     if (restartExisting && previousDaemon.running && current.permanent === '1') {
-      await restartDaemon();
+      return restartDaemon();
     }
     return true;
   };
@@ -994,7 +1021,7 @@ sed -i '/${BOOT_TAG}/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || true
   };
 
   const stopDaemon = async () => {
-    const res = await run(`sh ${shellQuote(DAEMON_FILE)} stop >/dev/null 2>&1 || true`, 8000);
+    const res = await run(`sh ${shellQuote(DAEMON_FILE)} stop >/dev/null 2>&1`, 8000);
     return res.ok;
   };
 
@@ -1060,8 +1087,8 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
   };
 
   const applyNow = async (mode, adb) => {
-    await run(`nohup sh ${shellQuote(MANAGER_FILE)} apply ${shellQuote(mode)} ${shellQuote(adb)} >/dev/null 2>&1 &`, 8000);
-    return true;
+    const res = await run(`nohup sh ${shellQuote(MANAGER_FILE)} apply ${shellQuote(mode)} ${shellQuote(adb)} >/dev/null 2>&1 &`, 8000);
+    return res.ok;
   };
 
   const repairNow = async () => {
@@ -1079,7 +1106,7 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
       await run(`rm -f ${shellQuote(PAUSE_FILE)}; sh ${shellQuote(MANAGER_FILE)} sync-persist >/dev/null 2>&1 || true`, 12000);
       return restartDaemon();
     } else {
-      await stopDaemon();
+      if (!(await stopDaemon())) return false;
       const bootOk = await setBootEnabled(false);
       if (!bootOk) return false;
       await run(`sh ${shellQuote(MANAGER_FILE)} restore-persist >/dev/null 2>&1 || true`, 10000);
@@ -1088,23 +1115,24 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
   };
 
   const safeRestoreRndis = async () => {
-    await stopDaemon();
-    await setBootEnabled(false);
+    if (!(await stopDaemon())) return false;
+    if (!(await setBootEnabled(false))) return false;
     const safeConfig = normalizeConfig({
       ...(await readConfig()),
       mode: 'rndis',
       adb: '0',
       permanent: '0',
     });
-    await saveConfig(safeConfig);
+    if (!(await saveConfig(safeConfig))) return false;
     const res = await run(`nohup sh ${shellQuote(MANAGER_FILE)} safe-rndis >/dev/null 2>&1 &`, 8000);
     return res.ok;
   };
 
   const uninstallAll = async () => {
-    await stopDaemon();
-    await setBootEnabled(false);
-    await run(`sh ${shellQuote(MANAGER_FILE)} safe-rndis >/dev/null 2>&1 || true`, 30000);
+    if (!(await stopDaemon())) return false;
+    if (!(await setBootEnabled(false))) return false;
+    const safeRes = await run(`sh ${shellQuote(MANAGER_FILE)} safe-rndis >/dev/null 2>&1`, 80000);
+    if (!safeRes.ok) return false;
     const res = await run(`rm -rf ${shellQuote(BASE_DIR)}`, 12000);
     if (res.ok) backendPreparePromise = null;
     return res.ok;
@@ -1312,7 +1340,9 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
       } else {
         createToast('正在切换，USB 将重新连接', 'pink', 5000);
       }
-      await applyNow(nextConfig.mode, nextConfig.adb);
+      if (!(await applyNow(nextConfig.mode, nextConfig.adb))) {
+        createToast('切换命令启动失败，请查看日志', 'red', 5000);
+      }
     };
 
     modalEl.querySelector('#kunm_repair_btn').onclick = async () => {
@@ -1334,16 +1364,16 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
         createToast('请先开启“开机保持模式”并保存', 'pink', 4000);
         return;
       }
-      await run(`sh ${shellQuote(MANAGER_FILE)} resume >/dev/null 2>&1 || true`, 8000);
-      await restartDaemon();
-      createToast('自动维护已恢复', 'green', 3500);
+      const resumed = await run(`sh ${shellQuote(MANAGER_FILE)} resume >/dev/null 2>&1`, 8000);
+      const restarted = resumed.ok && await restartDaemon();
+      createToast(restarted ? '自动维护已恢复' : '恢复失败，请查看日志', restarted ? 'green' : 'red', 4000);
       setTimeout(() => refreshFn(), 2500);
     };
 
     modalEl.querySelector('#kunm_safe_btn').onclick = async () => {
       createToast('正在恢复 RNDIS...', 'pink', 5000);
       const ok = await safeRestoreRndis();
-      createToast(ok ? '已恢复 RNDIS' : '恢复失败，请查看日志', ok ? 'green' : 'red', 5000);
+      createToast(ok ? '恢复命令已启动，请等待 USB 重连' : '恢复失败，请查看日志', ok ? 'green' : 'red', 5000);
       setTimeout(() => refreshFn(), 5000);
     };
 

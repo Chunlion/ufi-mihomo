@@ -4950,13 +4950,26 @@ KANO_WRITE_CHECK_EOF
       results.push(finalItem);
     }
 
-    const currentSnapshot = await callMihomoApi('/providers/proxies', 'GET', null, readiness.controllerInfo, 3);
-    const parsedSnapshot = currentSnapshot.success ? parseProviderApiSnapshot(currentSnapshot.responseText) : null;
+    let parsedSnapshot = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const currentSnapshot = await callMihomoApi('/providers/proxies', 'GET', null, readiness.controllerInfo, 3);
+      parsedSnapshot = currentSnapshot.success ? parseProviderApiSnapshot(currentSnapshot.responseText) : null;
+      const successfulNames = results.filter((item) => item.ok).map((item) => item.name);
+      const snapshotReady = parsedSnapshot && successfulNames.every((name) =>
+        parsedSnapshot[name] && Number.isInteger(parsedSnapshot[name].proxyCount) && parsedSnapshot[name].proxyCount > 0);
+      if (snapshotReady || attempt == 3) break;
+      await wait(attempt * 500);
+    }
     results.forEach((item) => {
       const providerState = parsedSnapshot && parsedSnapshot[item.name] || readiness.snapshot[item.name] || null;
       item.proxyCount = providerState ? providerState.proxyCount : null;
       item.updatedAt = providerState ? providerState.updatedAt : '';
       item.cacheAvailable = !!(providerState && providerState.proxyCount > 0);
+      if (item.ok && providerState && providerState.proxyCount === 0) {
+        item.ok = false;
+        item.errorType = 'empty_provider';
+        item.message = '节点来源已更新，但没有可用节点';
+      }
     });
 
     const providerUpdateResult = buildProviderUpdateResult(results, {
@@ -5176,6 +5189,13 @@ KANO_WRITE_CHECK_EOF
                   convert_rc=$?
                 fi
                 if [ "$convert_rc" -eq 0 ] && printf '%s' "$CONVERT_JSON" | grep -q '"ok":true' && [ -s "$out_tmp" ]; then
+                  proxy_count="$(printf '%s' "$CONVERT_JSON" | sed -n 's/.*"proxyCount":\\([0-9][0-9]*\\).*/\\1/p')"
+                  if ! echo "$proxy_count" | grep -Eq '^[0-9]+$' || [ "$proxy_count" -le 0 ]; then
+                    last_stage=convert
+                    last_kind=empty-provider
+                    last_convert='converter returned no usable proxies'
+                    continue
+                  fi
                   out_bytes="$(wc -c < "$out_tmp" 2>/dev/null || echo 0)"
                   if ! echo "$out_bytes" | grep -Eq '^[0-9]+$' || [ "$out_bytes" -gt ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} ]; then
                     last_stage=download_limit
@@ -5194,7 +5214,6 @@ KANO_WRITE_CHECK_EOF
                   mv -f "$raw_tmp" "${rawPath}"
                   mv -f "$out_tmp" "${outputPath}"
                   candidate_ok=1
-                  proxy_count="$(printf '%s' "$CONVERT_JSON" | sed -n 's/.*"proxyCount":\\([0-9][0-9]*\\).*/\\1/p')"
                   convert_format="$(printf '%s' "$CONVERT_JSON" | sed -n 's/.*"format":"\\([^"]*\\)".*/\\1/p')"
                   echo ${shellQuote(`LOCAL_FETCH_OK=${source.name}|`)}"$http_code|$LOCAL_UA|$last_kind"
                   echo ${shellQuote(`LOCAL_CONVERT_OK=${source.name}|`)}"$proxy_count|$convert_format"
@@ -5399,6 +5418,60 @@ KANO_WRITE_CHECK_EOF
       };
     });
     return buildProviderUpdateResult(providers, { via: 'local', committed });
+  };
+
+  const mergeLocalConversionReloadResult = (conversionResult = {}, reloadResult = {}) => {
+    const reloadByName = new Map(((reloadResult && reloadResult.providers) || [])
+      .map((item) => [item.name, item]));
+    const providers = ((conversionResult && conversionResult.providers) || []).map((converted) => {
+      if (!converted.ok) return converted;
+      const reloaded = reloadByName.get(converted.name);
+      if (!reloaded) {
+        return {
+          ...converted,
+          ok: false,
+          attempts: 0,
+          errorType: 'provider_reload_missing',
+          message: '本地转换已提交，但运行核心未返回节点来源刷新结果',
+          cacheAvailable: true,
+        };
+      }
+      const proxyCount = Number.isInteger(reloaded.proxyCount)
+        ? reloaded.proxyCount
+        : converted.proxyCount;
+      const emptyProvider = reloaded.ok && proxyCount === 0;
+      const ok = reloaded.ok && !emptyProvider;
+      return {
+        ...converted,
+        ...reloaded,
+        ok,
+        errorType: ok ? '' : (emptyProvider ? 'empty_provider' : reloaded.errorType),
+        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : reloaded.message),
+        proxyCount,
+        cacheAvailable: ok || (!reloaded.ok && converted.cacheAvailable),
+        format: converted.format,
+        via: 'local+mihomo',
+      };
+    });
+    return buildProviderUpdateResult(providers, {
+      controllerInfo: reloadResult && reloadResult.controllerInfo || null,
+      apiStatusCode: reloadResult && reloadResult.apiStatusCode || 0,
+      apiErrorType: reloadResult && reloadResult.apiErrorType || '',
+      notRunReason: reloadResult && reloadResult.notRunReason || '',
+      runtimeState: reloadResult && reloadResult.runtimeState || '',
+      via: 'local+mihomo',
+      committed: !!(conversionResult && conversionResult.committed),
+    });
+  };
+
+  const reloadLocalSubscriptionProviders = async (sources = [], conversionResult = null) => {
+    const conversion = conversionResult || buildProviderUpdateResult([]);
+    if (conversion.failed > 0 || conversion.total == 0) return conversion;
+    const runtimeReload = await forceUpdateProvidersFromConfig({
+      showToast: false,
+      providerNames: normalizeSubSourceList(sources).map((source) => source.name),
+    });
+    return mergeLocalConversionReloadResult(conversion, runtimeReload);
   };
 
   const readCurrentModeStatus = async () => {
@@ -10150,10 +10223,17 @@ KANO_POLICY_TOOLS_EOF
         if (!modeRestored) createToast('原配置已回滚，但 HTTP Provider 模式标记恢复失败。', 'red', 10000);
         return { ok: false, conversion };
       }
+      const appliedConversion = await reloadLocalSubscriptionProviders(sources, conversion);
       await appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
-      createToast('HTTP Provider 被上游拒绝；已自动切换为设备本地转换并恢复节点。', 'green', 10000);
-      await showSubscriptionUpdateSelfCheck(sources, cleanMode, conversion, null, SUB_CONVERT_MODE_LOCAL);
-      return { ok: true, conversion };
+      createToast(
+        appliedConversion.failed == 0
+          ? 'HTTP Provider 被上游拒绝；已自动切换为设备本地转换并恢复节点。'
+          : '已切换为设备本地转换，但运行节点刷新未确认。',
+        appliedConversion.failed == 0 ? 'green' : 'yellow',
+        10000,
+      );
+      await showSubscriptionUpdateSelfCheck(sources, cleanMode, appliedConversion, null, SUB_CONVERT_MODE_LOCAL);
+      return { ok: appliedConversion.failed == 0, conversion: appliedConversion };
     };
 
     const readLegacySubscriptionSources = async () => {
@@ -10659,9 +10739,13 @@ ${expectedProviderChecks}
       const sources = await readCurrentSubSources();
       const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
-      const providerUpdate = convertMode == SUB_CONVERT_MODE_LOCAL
-        ? await convertSubscriptionsLocally(sources)
-        : await forceUpdateProvidersFromConfig({ showToast: false });
+      let providerUpdate;
+      if (convertMode == SUB_CONVERT_MODE_LOCAL) {
+        const conversion = await convertSubscriptionsLocally(sources);
+        providerUpdate = await reloadLocalSubscriptionProviders(sources, conversion);
+      } else {
+        providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
+      }
       if (convertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
         await switchHttpProviderToLocal(sources, mode, { reason: 'HTTP 390' });
         return;
@@ -10704,8 +10788,10 @@ ${expectedProviderChecks}
       if (runtimeCheck.ok) {
         await appendTemplateFlowDebug('updateSubProviders fast path: runtime config unchanged');
         if (cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
-          await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, localConversion, runtimeCheck, cleanConvertMode);
-          return localConversion.total == 0 || localConversion.okCount == localConversion.total;
+          createToast('本地转换已完成，正在让 Mihomo 重新加载节点...', 'yellow');
+          const appliedConversion = await reloadLocalSubscriptionProviders(cleanSources, localConversion);
+          await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, appliedConversion, runtimeCheck, cleanConvertMode);
+          return appliedConversion.total == 0 || appliedConversion.okCount == appliedConversion.total;
         }
         createToast('运行配置未变，正在直接刷新节点订阅...', 'yellow');
         const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
@@ -10732,7 +10818,7 @@ ${expectedProviderChecks}
       const restarted = await restartClashWithConfigRollback(rollbackPath, '更新订阅后重启');
       if (restarted) {
         let providerUpdate = cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-          ? (localConversion || buildProviderUpdateResult([]))
+          ? await reloadLocalSubscriptionProviders(cleanSources, localConversion)
           : buildProviderUpdateResult([]);
         if (cleanConvertMode == SUB_CONVERT_MODE_PROVIDER && cleanMode == SUB_RULE_MODE_TEMPLATE) {
           providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
@@ -10935,7 +11021,7 @@ ${expectedProviderChecks}
       await runShellWithRoot(`rm -rf ${shellQuote(subscriptionTxDir)} 2>/dev/null || true`, 10 * 1000);
       if (restarted) {
         const providerUpdate = cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-          ? (localConversion || buildProviderUpdateResult([]))
+          ? await reloadLocalSubscriptionProviders(cleanSources, localConversion)
           : await forceUpdateProvidersFromConfig({ showToast: false });
         if (cleanConvertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
           const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
@@ -11001,7 +11087,7 @@ ${expectedProviderChecks}
         const restarted = await restartClashWithConfigRollback(rollbackPath, '\u5e94\u7528\u914d\u7f6e\u6a21\u677f');
         if (restarted) {
           const providerUpdate = currentConvertMode == SUB_CONVERT_MODE_LOCAL
-            ? (localConversion || buildProviderUpdateResult([]))
+            ? await reloadLocalSubscriptionProviders(sources, localConversion)
             : await forceUpdateProvidersFromConfig({ showToast: false });
           if (currentConvertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
             const fallback = await switchHttpProviderToLocal(sources, currentMode, { reason: 'HTTP 390' });
@@ -11594,7 +11680,7 @@ ${expectedProviderChecks}
             return;
           }
         }
-        createToast('\u6b63\u5728\u66f4\u65b0\u8ba2\u9605\u5e76\u5e94\u7528\u6a21\u677f...', 'yellow');
+        createToast('正在检查订阅并选择更新方式...', 'yellow');
         await updateSubProviders(sources, ruleMode, convertMode);
       } finally {
         setButtonBusy(updateSubBtn, false);

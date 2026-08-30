@@ -140,6 +140,7 @@ function runFor(label, file) {
     ...RUNTIME_EXPORTS,
     'probeBinaryHelperState', 'installBinaryHelperFromDevicePath',
     'convertSubscriptionsLocally', 'validateLocalSubscriptionUrl',
+    'mergeLocalConversionReloadResult',
   ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
@@ -709,6 +710,37 @@ function runFor(label, file) {
         'subscription result title separates config health from provider runtime state');
       chk(stoppedProviderOutcome.color, 'yellow',
         'stopped-core provider refresh is a warning instead of a config error');
+      const localConversionReloaded = api.mergeLocalConversionReloadResult({
+        committed: true,
+        providers: [{
+          name: 'Provider1', ok: true, attempts: 1, proxyCount: 3,
+          cacheAvailable: true, format: 'yaml', via: 'local',
+        }],
+      }, {
+        controllerInfo: { apiBase: 'http://127.0.0.1:7788' },
+        providers: [{
+          name: 'Provider1', ok: true, attempts: 1, proxyCount: 3,
+          cacheAvailable: true, via: 'mihomo',
+        }],
+      });
+      chk(localConversionReloaded.providers[0].ok, true,
+        'local conversion is successful only after the runtime provider reload succeeds');
+      const emptyLocalReload = api.mergeLocalConversionReloadResult({
+        committed: true,
+        providers: [{
+          name: 'Provider1', ok: true, attempts: 1, proxyCount: 3,
+          cacheAvailable: true, format: 'yaml', via: 'local',
+        }],
+      }, {
+        providers: [{
+          name: 'Provider1', ok: true, attempts: 1, proxyCount: 0,
+          cacheAvailable: false, via: 'mihomo',
+        }],
+      });
+      chk(
+        [emptyLocalReload.providers[0].errorType, emptyLocalReload.providers[0].cacheAvailable],
+        ['empty_provider', false],
+        'a runtime provider with zero usable nodes is not reported as updated');
       if (hasBinaryHelper) {
         shellReply = {
           success: true,
@@ -844,10 +876,26 @@ function runFor(label, file) {
           cacheProbe >= 0 && downloads > cacheProbe && snapshots > downloads && commits > snapshots
             && localConverterSource.includes('last_stage=download')
             && localConverterSource.includes('last_stage=convert')
+            && localConverterSource.includes("last_kind=empty-provider")
+            && localConverterSource.includes("[ \"$proxy_count\" -le 0 ]")
             && localConverterSource.includes('existingCache.get(source.name) === true')
             && localConverterSource.includes('${restoreCommands}'),
           true,
           'local conversion classifies failures and commits all provider caches transactionally',
+        );
+        const subscriptionUpdateSource = source.slice(
+          source.indexOf('const updateSubProviders = async'),
+          source.indexOf('const readCurrentSubSources = async'),
+        );
+        chk(
+          subscriptionUpdateSource.includes('reloadLocalSubscriptionProviders(cleanSources, localConversion)')
+            && (source.match(/reloadLocalSubscriptionProviders\(/g) || []).length >= 6
+            && source.includes('providerNames: normalizeSubSourceList(sources).map((source) => source.name)')
+            && source.includes('parsedSnapshot[name].proxyCount > 0')
+            && source.includes("item.errorType = 'empty_provider'")
+            && source.includes('正在检查订阅并选择更新方式'),
+          true,
+          'subscription updates reload converted files and verify non-empty runtime providers',
         );
         chk(
           localConverterSource.includes("--proto '=https'")

@@ -4758,23 +4758,31 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
-  const waitForProviderApiReady = async (providerNames = [], tries = 12, delayMs = 750) => {
+  const waitForProviderApiReady = async (
+    providerNames = [],
+    tries = 12,
+    delayMs = 750,
+    { corePid = '' } = {},
+  ) => {
     const targets = [...new Set((providerNames || []).filter(Boolean))];
     const controllerInfo = await buildControllerInfo();
     let lastResponse = null;
     let snapshot = null;
+    let detectedCorePid = String(corePid || '');
     for (let attempt = 1; attempt <= tries; attempt++) {
-      const pid = await getCorePid();
-      if (pid || attempt % 3 == 0 || attempt == tries) {
-        lastResponse = await callMihomoApi('/providers/proxies', 'GET', null, controllerInfo, 3, { corePid: pid });
+      if (!detectedCorePid || attempt % 4 == 0) detectedCorePid = await getCorePid();
+      if (detectedCorePid || attempt == tries) {
+        lastResponse = await callMihomoApi('/providers/proxies', 'GET', null, controllerInfo, 3, {
+          corePid: detectedCorePid,
+        });
         snapshot = lastResponse.success ? parseProviderApiSnapshot(lastResponse.responseText) : null;
         if (snapshot && targets.every((name) => Object.prototype.hasOwnProperty.call(snapshot, name))) {
-          return { ok: true, controllerInfo, snapshot, response: lastResponse };
+          return { ok: true, controllerInfo, corePid: detectedCorePid, snapshot, response: lastResponse };
         }
       }
       if (attempt < tries) await wait(delayMs);
     }
-    return { ok: false, controllerInfo, snapshot, response: lastResponse };
+    return { ok: false, controllerInfo, corePid: detectedCorePid, snapshot, response: lastResponse };
   };
 
   const buildProviderUpdateResult = (providers = [], metadata = {}) => {
@@ -4782,6 +4790,22 @@ KANO_WRITE_CHECK_EOF
     const success = results.filter((item) => item.ok).length;
     const total = results.length;
     return { ...metadata, total, success, failed: total - success, providers: results, okCount: success, results };
+  };
+
+  const mapWithConcurrency = async (items = [], limit = 2, worker = async (item) => item) => {
+    const source = Array.isArray(items) ? items : [];
+    if (source.length == 0) return [];
+    const results = new Array(source.length);
+    let cursor = 0;
+    const runNext = async () => {
+      while (cursor < source.length) {
+        const index = cursor++;
+        results[index] = await worker(source[index], index);
+      }
+    };
+    const workerCount = Math.min(source.length, Math.max(1, Number(limit) || 1));
+    await Promise.all(Array.from({ length: workerCount }, () => runNext()));
+    return results;
   };
 
   const deriveSubscriptionUpdateOutcome = (
@@ -4878,7 +4902,9 @@ KANO_WRITE_CHECK_EOF
       return notRunResult;
     }
 
-    const readiness = await waitForProviderApiReady(requestedNames);
+    const readiness = await waitForProviderApiReady(requestedNames, 12, 750, {
+      corePid: runtime.corePid,
+    });
     if (!readiness.ok) {
       const rawMessage = sanitizeSubscriptionSecrets(
         readiness.response && (readiness.response.responseText || readiness.response.content) || '',
@@ -4912,12 +4938,18 @@ KANO_WRITE_CHECK_EOF
       return unavailableResult;
     }
 
-    const results = [];
-    for (const name of requestedNames) {
+    const results = await mapWithConcurrency(requestedNames, 2, async (name) => {
       let finalItem = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
         await appendTemplateFlowDebug(`provider_update_start name=${name} attempt=${attempt}`);
-        const res = await callMihomoApi(`/providers/proxies/${encodeURIComponent(name)}`, 'PUT', null, readiness.controllerInfo, 12);
+        const res = await callMihomoApi(
+          `/providers/proxies/${encodeURIComponent(name)}`,
+          'PUT',
+          null,
+          readiness.controllerInfo,
+          12,
+          { corePid: readiness.corePid },
+        );
         if (res.success) {
           finalItem = {
             type: 'proxy-provider', name, ok: true, attempts: attempt, statusCode: res.statusCode || null,
@@ -4947,12 +4979,19 @@ KANO_WRITE_CHECK_EOF
       if (!finalItem.ok) {
         await appendTemplateFlowDebug(`provider_update_final name=${name} result=failed type=${finalItem.errorType} attempts=${finalItem.attempts}`);
       }
-      results.push(finalItem);
-    }
+      return finalItem;
+    });
 
     let parsedSnapshot = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const currentSnapshot = await callMihomoApi('/providers/proxies', 'GET', null, readiness.controllerInfo, 3);
+      const currentSnapshot = await callMihomoApi(
+        '/providers/proxies',
+        'GET',
+        null,
+        readiness.controllerInfo,
+        3,
+        { corePid: readiness.corePid },
+      );
       parsedSnapshot = currentSnapshot.success ? parseProviderApiSnapshot(currentSnapshot.responseText) : null;
       const successfulNames = results.filter((item) => item.ok).map((item) => item.name);
       const snapshotReady = parsedSnapshot && successfulNames.every((name) =>
@@ -5227,6 +5266,10 @@ KANO_WRITE_CHECK_EOF
           if [ "$last_stage" = 'download' ]; then
             last_convert="$(tail -n 2 "$err_tmp" 2>/dev/null | tr '\\r\\n' '  ' | cut -c1-260)"
           fi
+          case "$last_http" in
+            2??|401|403|406|418) ;;
+            *) break ;;
+          esac
         done
         rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
         if [ "$candidate_ok" != '1' ]; then

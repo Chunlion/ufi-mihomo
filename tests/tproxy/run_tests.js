@@ -140,7 +140,7 @@ function runFor(label, file) {
     ...RUNTIME_EXPORTS,
     'probeBinaryHelperState', 'installBinaryHelperFromDevicePath',
     'convertSubscriptionsLocally', 'validateLocalSubscriptionUrl',
-    'mergeLocalConversionReloadResult',
+    'mergeLocalConversionReloadResult', 'mapWithConcurrency',
   ];
   const { api } = loadPlugin(file, handler, exportNames);
   let goBehaviorPromise = Promise.resolve();
@@ -741,6 +741,17 @@ function runFor(label, file) {
         [emptyLocalReload.providers[0].errorType, emptyLocalReload.providers[0].cacheAvailable],
         ['empty_provider', false],
         'a runtime provider with zero usable nodes is not reported as updated');
+      let activeWorkers = 0;
+      let maxWorkers = 0;
+      const concurrentResult = await api.mapWithConcurrency([1, 2, 3, 4], 2, async (value) => {
+        activeWorkers++;
+        maxWorkers = Math.max(maxWorkers, activeWorkers);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        activeWorkers--;
+        return value * 2;
+      });
+      chk(concurrentResult, [2, 4, 6, 8], 'bounded provider concurrency preserves result order');
+      chk(maxWorkers, 2, 'provider updates use bounded concurrency');
       if (hasBinaryHelper) {
         shellReply = {
           success: true,
@@ -878,6 +889,8 @@ function runFor(label, file) {
             && localConverterSource.includes('last_stage=convert')
             && localConverterSource.includes("last_kind=empty-provider")
             && localConverterSource.includes("[ \"$proxy_count\" -le 0 ]")
+            && localConverterSource.includes('2??|401|403|406|418) ;;')
+            && localConverterSource.includes('*) break ;;')
             && localConverterSource.includes('existingCache.get(source.name) === true')
             && localConverterSource.includes('${restoreCommands}'),
           true,
@@ -890,6 +903,10 @@ function runFor(label, file) {
         chk(
           subscriptionUpdateSource.includes('reloadLocalSubscriptionProviders(cleanSources, localConversion)')
             && (source.match(/reloadLocalSubscriptionProviders\(/g) || []).length >= 6
+            && source.includes('mapWithConcurrency(requestedNames, 2')
+            && source.includes('corePid: runtime.corePid')
+            && source.includes('{ corePid: readiness.corePid }')
+            && source.includes('attempt % 4 == 0')
             && source.includes('providerNames: normalizeSubSourceList(sources).map((source) => source.name)')
             && source.includes('parsedSnapshot[name].proxyCount > 0')
             && source.includes("item.errorType = 'empty_provider'")

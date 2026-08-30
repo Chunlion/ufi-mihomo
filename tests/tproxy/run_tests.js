@@ -178,7 +178,7 @@ function runFor(label, file) {
   const actionGroupButtonLists = [
     'quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn',
     'subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn',
-    'policyToolsBtn, macBypassBtn, rescueBtn, showLogBtn',
+    'policyToolsBtn, rescueBtn, showLogBtn',
     'binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled',
   ];
   const actionGroupButtonCounts = actionGroupButtonLists
@@ -194,8 +194,8 @@ function runFor(label, file) {
   );
   chk(
     actionGroupButtonCounts,
-    [8, 6, 4, 4],
-    '四组操作按钮均保持成对数量',
+    [8, 6, 3, 4],
+    '网络设置合并重复入口，其余操作组保持成对数量',
   );
   chk(
     panelUiSource.includes('.kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;')
@@ -227,12 +227,28 @@ function runFor(label, file) {
       && panelUiSource.includes("showLogBtn.textContent = '状态与日志';")
       && panelUiSource.includes("quickRunBtn.textContent = '安装 / 启动';")
       && panelUiSource.includes("templateOverrideBtn.textContent = '配置与规则';")
-      && panelUiSource.includes("policyToolsBtn.textContent = '流量接管';")
+      && panelUiSource.includes("policyToolsBtn.textContent = '网络设置';")
+      && !panelUiSource.includes('macBypassBtn')
       && panelUiSource.includes("userAgentBtn.textContent = '订阅请求头';")
       && !panelUiSource.includes('新窗口打开 Web 面板')
       && !/setButtonBusy\([^\n]*\.\.\./.test(source),
     true,
     '按钮文案去除重复词，并统一进行中状态标点',
+  );
+  chk(
+    panelUiSource.includes("visibleButtons.length % 2 == 1")
+      && panelUiSource.includes('kano-action-inner-odd')
+      && panelUiSource.includes('.kano-action-inner.kano-action-inner-odd>button:last-child{grid-column:1/-1;}'),
+    true,
+    '奇数菜单项自动铺满末行',
+  );
+  chk(
+    source.includes('id="mm_policy_device_scope"')
+      && source.includes("get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope)")
+      && source.includes('TUN 模式下，本列表不保证绕过 Mihomo TUN')
+      && source.includes('流量接管已关闭，所有设备均不经过 TProxy'),
+    true,
+    '设备直连页按流量模式显示准确的适用范围',
   );
   chk(
     panelUiSource.includes("appendActionGroup('\\u6838\\u5fc3\\u4e0e\\u9762\\u677f'")
@@ -482,6 +498,23 @@ function runFor(label, file) {
         && policyTools.includes('[ "$prefix" -le 32 ]'),
       true,
       'device bypass shell fallback rejects invalid IPv4 octets and CIDR prefixes',
+    );
+    chk(
+      !policyTools.includes('--set-xmark 0x0/0xffffffff')
+        && policyTools.includes('verify_source_accepts')
+        && policyTools.includes('DEVICE_BYPASS_VERIFY_FAILED')
+        && policyTools.includes('POLICY_RULES_VERIFIED')
+        && policyTools.includes('verify_all || exit 1'),
+      true,
+      'device bypass preserves unrelated fwmarks and verifies installed rules before success',
+    );
+    chk(
+      policyTools.includes('hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN"')
+        && policyTools.includes('hook_is_first "$IPT" nat PREROUTING "$DNS_CHAIN"')
+        && policyTools.includes('hook_is_first "$IPT" filter FORWARD "$QUIC_CHAIN"')
+        && policyTools.includes('verify) verify_all'),
+      true,
+      'policy verification checks active proxy, DNS, and QUIC hook ordering',
     );
     const policyValidators = policyTools.slice(
       policyTools.indexOf('is_ipv4() {'),
@@ -1017,6 +1050,7 @@ function runFor(label, file) {
           && savePolicyStateSource.includes('POLICY_APPLY_RECOVERY=reapplied')
           && savePolicyStateSource.includes('POLICY_RULES_APPLIED')
           && savePolicyStateSource.includes('POLICY_STATE_SAVED')
+          && !savePolicyStateSource.includes('policy_status_rc')
           && savePolicyStateSource.includes("bootEnabled ? addPolicyToolsBootLineCmd() : ''")
           && !savePolicyStateSource.includes('await runShellWithRoot(addPolicyToolsBootLineCmd())'),
         true,

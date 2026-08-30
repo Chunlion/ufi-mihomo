@@ -84,7 +84,7 @@
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.4';
+  const POLICY_SCRIPT_VERSION = '6.5';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -1597,7 +1597,7 @@ EOF_KANO_SERVICE
       return false;
     };
     const policyReady = await ensurePolicyToolsScript();
-    if (!policyReady) createToast('基础修复已完成；网络策略增强脚本暂不可用，可稍后在“流量接管”中重试。', 'yellow', 8000);
+    if (!policyReady) createToast('基础修复已完成；网络策略增强脚本暂不可用，可稍后在“网络设置”中重试。', 'yellow', 8000);
     const checked = await runtimePreflight();
     if (['not_installed', 'damaged'].includes(checked.state)) {
       return failAndRollback('post_preflight', checked.content || checked.message);
@@ -7550,7 +7550,7 @@ EOF_KANO_SERVICE
         'mm_installed_confirm_1',
         installRuntimeReady ? '\u6838\u5fc3\u5df2\u542f\u52a8' : '核心已启动，网络接管未完整生效',
         `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。${installRuntimeReady ? '' : '<br />请在“流量接管”中重新应用后再使用代理。'}`,
+        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。${installRuntimeReady ? '' : '<br />请在“网络设置”中重新应用后再使用代理。'}`,
       );
     } finally {
       disabled_btn_enabled = false;
@@ -7849,18 +7849,15 @@ EOF_KANO_SERVICE
     '    [ -n "$kind" ] || continue',
     '    case "$kind" in',
     '      mac)',
-    '        [ "$TABLE" != "mangle" ] || "$IPT" -t "$TABLE" -A "$CHAIN" -m mac --mac-source "$value" -j MARK --set-xmark 0x0/0xffffffff 2>/dev/null || true',
     '        ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -m mac --mac-source "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED mac $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
     '        ;;',
     '      src)',
     '        if [ "$FAMILY" = "4" ]; then',
-    '          [ "$TABLE" != "mangle" ] || "$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j MARK --set-xmark 0x0/0xffffffff 2>/dev/null || true',
     '          ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED src $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
     '        fi',
     '        ;;',
     '      src6)',
     '        if [ "$FAMILY" = "6" ]; then',
-    '          [ "$TABLE" != "mangle" ] || "$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j MARK --set-xmark 0x0/0xffffffff 2>/dev/null || true',
     '          ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED src6 $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
     '        fi',
     '        ;;',
@@ -7923,6 +7920,52 @@ EOF_KANO_SERVICE
     '  while "$IPT" -t filter -D FORWARD -j "$QUIC_CHAIN" 2>/dev/null; do :; done',
     '  "$IPT" -t filter -I FORWARD 1 -j "$QUIC_CHAIN" || { echo "QUIC_HOOK_INSERT_FAILED IPv$FAMILY"; return 1; }',
     '}',
+    'hook_is_first() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; CHAIN="$4"',
+    '  FIRST_RULE="$("$IPT" -t "$TABLE" -S "$HOOK" 2>/dev/null | awk -v hook="$HOOK" \'$1 == "-A" && $2 == hook {print; exit}\')"',
+    '  [ "$FIRST_RULE" = "-A $HOOK -j $CHAIN" ]',
+    '}',
+    'verify_source_accepts() {',
+    '  IPT="$1"; TABLE="$2"; CHAIN="$3"; FAMILY="$4"',
+    '  normalize_sources | while read kind value; do',
+    '    [ -n "$kind" ] || continue',
+    '    case "$kind" in',
+    '      mac) "$IPT" -t "$TABLE" -C "$CHAIN" -m mac --mac-source "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
+    '      src) [ "$FAMILY" != "4" ] || "$IPT" -t "$TABLE" -C "$CHAIN" -s "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
+    '      src6) [ "$FAMILY" != "6" ] || "$IPT" -t "$TABLE" -C "$CHAIN" -s "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
+    '    esac',
+    '  done',
+    '}',
+    'verify_family() {',
+    '  IPT="$1"; FAMILY="$2"',
+    '  hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN" || { echo "POLICY_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t mangle -C "$POLICY_CHAIN" -j RETURN >/dev/null 2>&1 || { echo "POLICY_RETURN_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  verify_source_accepts "$IPT" mangle "$POLICY_CHAIN" "$FAMILY" || { echo "DEVICE_BYPASS_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  dns_hijack="$(get_opt dns_hijack off)"',
+    '  dns_port="$(get_opt dns_port 1053)"',
+    '  echo "$dns_port" | grep -Eq "^[0-9]{2,5}$" || dns_port=1053',
+    '  if [ "$dns_hijack" = "on" ] && is_port_listening "$dns_port" "$FAMILY" && "$IPT" -t nat -L >/dev/null 2>&1; then',
+    '    hook_is_first "$IPT" nat PREROUTING "$DNS_CHAIN" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t nat -C "$DNS_CHAIN" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t nat -C "$DNS_CHAIN" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  fi',
+    '  if [ "$(get_opt quic_block off)" = "on" ]; then',
+    '    hook_is_first "$IPT" filter FORWARD "$QUIC_CHAIN" || { echo "QUIC_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t filter -C "$QUIC_CHAIN" -p udp --dport 443 -j DROP >/dev/null 2>&1 || { echo "QUIC_DROP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  fi',
+    '}',
+    'verify_all() {',
+    '  IPT="$(get_ipt iptables)"',
+    '  IP6T="$(get_ipt ip6tables)"',
+    '  ipv6="$(get_opt ipv6 off)"',
+    '  [ -n "$IPT" ] || { echo "POLICY_VERIFY_NO_IPV4_BACKEND"; return 1; }',
+    '  verify_family "$IPT" 4 || return 1',
+    '  if [ "$ipv6" = "on" ]; then',
+    '    [ -n "$IP6T" ] || { echo "POLICY_VERIFY_NO_IPV6_BACKEND"; return 1; }',
+    '    verify_family "$IP6T" 6 || return 1',
+    '  fi',
+    '  echo "POLICY_RULES_VERIFIED"',
+    '}',
     'apply_all() {',
     "  trap 'rc=$?; if [ \"$rc\" -ne 0 ]; then flush_all >/dev/null 2>&1 || true; echo \"POLICY_APPLY_ROLLED_BACK\"; fi; trap - EXIT; exit \"$rc\"' EXIT",
     '  IPT="$(get_ipt iptables)"',
@@ -7944,6 +7987,7 @@ EOF_KANO_SERVICE
     '    apply_dns "$IP6T" 6 || exit 1',
     '    apply_quic "$IP6T" 6 || exit 1',
     '  fi',
+    '  verify_all || exit 1',
     '  trap - EXIT',
     '  [ "$ipv6" = "on" ] && echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4/IPv6\uff09" || echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4\uff09"',
     '}',
@@ -7955,8 +7999,7 @@ EOF_KANO_SERVICE
     '}',
     'policy_is_first() {',
     '  IPT="$1"',
-    '  FIRST_RULE="$("$IPT" -t mangle -S PREROUTING 2>/dev/null | awk \'$1 == "-A" && $2 == "PREROUTING" {print; exit}\')"',
-    '  [ "$FIRST_RULE" = "-A PREROUTING -j $POLICY_CHAIN" ]',
+    '  hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN"',
     '}',
     'runtime_firewall_ready() {',
     '  IPT="$1"',
@@ -8066,6 +8109,7 @@ EOF_KANO_SERVICE
     'case "$1" in',
     '  apply) apply_all ;;',
     '  boot-apply) boot_apply ;;',
+    '  verify) verify_all ;;',
     '  flush) flush_all; echo "\u7b56\u7565\u89c4\u5219\u5df2\u6e05\u7a7a" ;;',
     '  status) status_all ;;',
     '  *) apply_all ;;',
@@ -8432,9 +8476,7 @@ KANO_POLICY_TOOLS_EOF
         set +e
         ${shellQuote(CLASH_POLICY_SCRIPT)} apply
         policy_apply_rc=$?
-        ${shellQuote(CLASH_POLICY_SCRIPT)} status
-        policy_status_rc=$?
-        if [ "$policy_apply_rc" -eq 0 ] && [ "$policy_status_rc" -eq 0 ]; then
+        if [ "$policy_apply_rc" -eq 0 ]; then
           touch "$TX/committed"
           echo POLICY_RULES_APPLIED
           trap - EXIT
@@ -8442,7 +8484,7 @@ KANO_POLICY_TOOLS_EOF
           exit 0
         fi
         echo "KANO_ERROR_STAGE=policy_apply"
-        echo "KANO_ERROR_CODE=apply_or_status_failed"
+        echo "KANO_ERROR_CODE=policy_apply_failed"
         trap - EXIT
         restore_policy_transaction
         policy_restore_rc=$?
@@ -8502,11 +8544,7 @@ KANO_POLICY_TOOLS_EOF
 
   const applyPolicyToolsRules = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
-    const res = await runShellWithRoot(`
-        set -e
-        ${shellQuote(CLASH_POLICY_SCRIPT)} apply
-        ${shellQuote(CLASH_POLICY_SCRIPT)} status
-        `);
+    const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply`);
     if (!res.success) {
       createToast(`\u7b56\u7565\u89c4\u5219\u5e94\u7528\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
@@ -8584,6 +8622,8 @@ KANO_POLICY_TOOLS_EOF
           #kano_policy_shell .kp-actions button,#kano_policy_shell .kp-footer button{font-size:.62rem;border-radius:9px;padding:8px 10px;}
           #kano_policy_shell .kp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
           #kano_policy_shell .kp-mini{font-size:.58rem;line-height:1.45;opacity:.68;margin-top:6px;}
+          #kano_policy_shell .kp-scope-note{margin:8px 0 10px;padding:8px 10px;border:1px solid rgba(96,165,250,.25);border-radius:9px;background:rgba(30,64,175,.12);font-size:.59rem;line-height:1.55;}
+          #kano_policy_shell .kp-scope-note.kp-warning{border-color:rgba(251,191,36,.35);background:rgba(120,53,15,.18);color:#fde68a;}
           #kano_policy_shell .kp-maintain-item{display:grid;grid-template-columns:170px 1fr;gap:10px;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);}
           #kano_policy_shell .kp-maintain-item:first-of-type{border-top:none;}
           #kano_policy_shell .kp-maintain-item button{width:100%;}
@@ -8638,6 +8678,7 @@ KANO_POLICY_TOOLS_EOF
                 <div class="kp-card">
                   <div class="kp-card-title">设备直连</div>
                   <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。</div>
+                  <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
                   <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF"></textarea>
                   <div class="kp-actions" style="margin-top:9px;">
                     <button type="button" id="mm_policy_scan_clients">\u626b\u63cf\u5ba2\u6237\u7aef</button>
@@ -8699,6 +8740,20 @@ KANO_POLICY_TOOLS_EOF
     get('#mm_policy_dns').checked = state.options.dns_hijack == 'on';
     get('#mm_policy_dns_port').value = state.options.dns_port || '1053';
     get('#mm_policy_device').value = state.deviceBypass || '';
+    const updateDeviceBypassScope = () => {
+      const mode = get('#mm_policy_traffic_mode').value;
+      const note = get('#mm_policy_device_scope');
+      note.classList.toggle('kp-warning', mode != 'tproxy');
+      if (mode == 'tun') {
+        setText(note, 'TUN 模式下，本列表不保证绕过 Mihomo TUN；设备直连请使用 TProxy 模式。');
+      } else if (mode == 'off') {
+        setText(note, '流量接管已关闭，所有设备均不经过 TProxy。');
+      } else {
+        setText(note, 'TProxy 模式下，匹配设备会同时绕过代理和 DNS 劫持，并跳过 QUIC 拦截。');
+      }
+    };
+    get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
+    updateDeviceBypassScope();
 
     const collectState = () => ({
       options: {
@@ -9515,6 +9570,7 @@ KANO_POLICY_TOOLS_EOF
       #IFRAME_KANO .kano-action-group[open]>summary{background:rgba(37,99,235,.20);border-bottom:1px solid rgba(96,165,250,.18);color:#eff6ff;}
       #IFRAME_KANO .kano-action-group>summary::-webkit-details-marker{display:none;}
       #IFRAME_KANO .kano-action-inner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:7px;}
+      #IFRAME_KANO .kano-action-inner.kano-action-inner-odd>button:last-child{grid-column:1/-1;}
       #IFRAME_KANO .kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;line-height:1.2;text-align:center;font-size:.61rem;}
       #IFRAME_KANO button{border:1px solid rgba(148,163,184,.25);border-radius:9px;padding:5px 9px;background:linear-gradient(180deg,rgba(51,65,85,.94),rgba(30,41,59,.94));color:#e5edf7;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;}
       #IFRAME_KANO button:hover{filter:brightness(1.08);}
@@ -11858,18 +11914,10 @@ ${expectedProviderChecks}
 
     const policyToolsBtn = document.createElement('button');
     policyToolsBtn.classList.add('btn');
-    policyToolsBtn.textContent = '流量接管';
+    policyToolsBtn.textContent = '网络设置';
     policyToolsBtn.onclick = async () => {
       if (!(await ensureReady())) return;
       showPolicyToolsDialog({ initialTab: 'network' });
-    };
-
-    const macBypassBtn = document.createElement('button');
-    macBypassBtn.classList.add('btn');
-    macBypassBtn.textContent = '设备直连';
-    macBypassBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
-      showPolicyToolsDialog({ initialTab: 'device' });
     };
 
     const quickRunBtn = document.createElement('button');
@@ -11896,6 +11944,7 @@ ${expectedProviderChecks}
     const mmBox = document.querySelector('#mm_action_box');
 
     const appendActionGroup = (title, buttons, openGroup = false) => {
+      const visibleButtons = buttons.filter(Boolean);
       const details = document.createElement('details');
       details.className = 'kano-action-group';
       if (openGroup) details.open = true;
@@ -11903,7 +11952,8 @@ ${expectedProviderChecks}
       summary.textContent = title;
       const inner = document.createElement('div');
       inner.className = 'kano-action-inner';
-      buttons.filter(Boolean).forEach((button) => inner.appendChild(button));
+      if (visibleButtons.length % 2 == 1) inner.classList.add('kano-action-inner-odd');
+      visibleButtons.forEach((button) => inner.appendChild(button));
       details.appendChild(summary);
       details.appendChild(inner);
       mmBox.appendChild(details);
@@ -11912,7 +11962,7 @@ ${expectedProviderChecks}
 
     appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
     appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
-    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, macBypassBtn, rescueBtn, showLogBtn], false);
+    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
 
     let colTimer = null;

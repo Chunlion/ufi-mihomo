@@ -297,13 +297,38 @@ function runFor(label, file) {
     'reading policy state does not rewrite files or scan firewall chains',
   );
   const runningStatusSource = source.slice(
-    source.indexOf('const isMMRunning = async () => {'),
+    source.indexOf('const isMMRunning = async (runtimeSnapshot = null) => {'),
     source.indexOf('const askConfirm = ('),
   );
   chk(
-    runningStatusSource.includes("{ corePid: pid }"),
+    runningStatusSource.includes("{ corePid: pid }")
+      && runningStatusSource.includes('hasPidSnapshot')
+      && runningStatusSource.includes('hasApiSnapshot')
+      && runningStatusSource.includes('await Promise.all(['),
     true,
-    'API health check reuses the already detected core PID',
+    'running state reuses known API health and refreshes independent badges concurrently',
+  );
+  const runtimeCacheSource = source.slice(
+    source.indexOf('const flushMihomoRuntimeCaches = async () => {'),
+    source.indexOf('const reloadConfigHot = async'),
+  );
+  chk(
+    runtimeCacheSource.includes('const [controllerInfo, corePid] = await Promise.all([')
+      && runtimeCacheSource.includes("controllerInfo, 5, { corePid }"),
+    true,
+    'cache flush requests share one controller and core PID snapshot',
+  );
+  const trafficModeSource = source.slice(
+    source.indexOf('const readCoreTunEnabled = async'),
+    source.indexOf('const parseProviderNamesFromYamlText ='),
+  );
+  chk(
+    trafficModeSource.includes('const readCoreTunEnabled = async (controllerInfo = null, corePid = null)')
+      && trafficModeSource.includes('const [info, corePid] = await Promise.all([')
+      && (trafficModeSource.match(/\{ corePid \}/g) || []).length >= 2
+      && source.includes("checked.info, 8, { corePid: reloadRes.corePid }"),
+    true,
+    'traffic-mode convergence and controller reload reuse their detected core PID',
   );
   chk(hasBinaryHelper, true, 'unified plugin includes the optional Go helper capability');
 
@@ -906,6 +931,8 @@ function runFor(label, file) {
             && source.includes('mapWithConcurrency(requestedNames, 2')
             && source.includes('corePid: runtime.corePid')
             && source.includes('{ corePid: readiness.corePid }')
+            && source.includes('corePid: readiness.corePid,')
+            && source.includes('await isMMRunning({ corePid: controllerCheck.corePid, apiOk: controllerCheck.success })')
             && source.includes('attempt % 4 == 0')
             && source.includes('providerNames: normalizeSubSourceList(sources).map((source) => source.name)')
             && source.includes('parsedSnapshot[name].proxyCount > 0')

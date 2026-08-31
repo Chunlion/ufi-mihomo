@@ -4405,7 +4405,7 @@ KANO_WRITE_CHECK_EOF
 
     const reloadRes = await reloadConfigHot(oldInfo);
     const checkRes = reloadRes.success
-      ? await callMihomoApi('/version', 'GET', null, checked.info)
+      ? await callMihomoApi('/version', 'GET', null, checked.info, 8, { corePid: reloadRes.corePid })
       : { success: false, statusCode: 0, responseText: 'reload failed' };
     if (!reloadRes.success || !checkRes.success) {
       const configRestored = rollbackPath
@@ -4550,7 +4550,10 @@ KANO_WRITE_CHECK_EOF
   };
 
   const flushMihomoRuntimeCaches = async () => {
-    const controllerInfo = await buildControllerInfo();
+    const [controllerInfo, corePid] = await Promise.all([
+      buildControllerInfo(),
+      getCorePid(),
+    ]);
     const targets = [
       { label: 'DNS', path: '/cache/dns/flush' },
       { label: 'Fake-IP', path: '/cache/fakeip/flush' },
@@ -4558,7 +4561,7 @@ KANO_WRITE_CHECK_EOF
     const responses = await Promise.all(
       targets.map(async (target) => {
         try {
-          return await callMihomoApi(target.path, 'POST', null, controllerInfo, 5);
+          return await callMihomoApi(target.path, 'POST', null, controllerInfo, 5, { corePid });
         } catch (e) {
           return {
             success: false,
@@ -4599,9 +4602,9 @@ KANO_WRITE_CHECK_EOF
     }
     : { enable: false });
 
-  const readCoreTunEnabled = async (controllerInfo = null) => {
+  const readCoreTunEnabled = async (controllerInfo = null, corePid = null) => {
     try {
-      const res = await callMihomoApi('/configs', 'GET', null, controllerInfo, 5);
+      const res = await callMihomoApi('/configs', 'GET', null, controllerInfo, 5, { corePid });
       if (!res.success) return null;
       const config = JSON.parse(res.responseText || '{}');
       return !!(config && config.tun && config.tun.enable);
@@ -4614,8 +4617,11 @@ KANO_WRITE_CHECK_EOF
   const ensureRuntimeTrafficMode = async (trafficMode) => {
     const want = trafficMode == 'tun';
     try {
-      const info = await buildControllerInfo({ fresh: true });
-      const current = await readCoreTunEnabled(info);
+      const [info, corePid] = await Promise.all([
+        buildControllerInfo({ fresh: true }),
+        getCorePid(),
+      ]);
+      const current = await readCoreTunEnabled(info, corePid);
       if (current === null) return false;
       if (current === want) return true;
       const patched = await callMihomoApi(
@@ -4624,11 +4630,12 @@ KANO_WRITE_CHECK_EOF
         JSON.stringify({ tun: tunRuntimePayload(want) }),
         info,
         10,
+        { corePid },
       );
       if (!patched.success) {
         return false;
       }
-      const verified = await readCoreTunEnabled(info);
+      const verified = await readCoreTunEnabled(info, corePid);
       if (verified !== want) {
         return false;
       }
@@ -4893,6 +4900,7 @@ KANO_WRITE_CHECK_EOF
         cacheAvailable: false,
       })), {
         controllerInfo: null,
+        corePid: runtime.corePid || '',
         apiStatusCode: 0,
         apiErrorType: runtime.state == 'damaged' ? 'runtime_damaged' : 'core_not_running',
         notRunReason: runtimeMessage,
@@ -4931,6 +4939,7 @@ KANO_WRITE_CHECK_EOF
       }
       const unavailableResult = buildProviderUpdateResult(results, {
         controllerInfo: readiness.controllerInfo,
+        corePid: readiness.corePid,
         apiStatusCode: readiness.response && readiness.response.statusCode || 0,
         apiErrorType: readiness.response && readiness.response.errorType || 'api_unavailable',
       });
@@ -5013,6 +5022,7 @@ KANO_WRITE_CHECK_EOF
 
     const providerUpdateResult = buildProviderUpdateResult(results, {
       controllerInfo: readiness.controllerInfo,
+      corePid: readiness.corePid,
       apiStatusCode: readiness.response && readiness.response.statusCode || 200,
     });
     if (showToast) {
@@ -5498,6 +5508,7 @@ KANO_WRITE_CHECK_EOF
     });
     return buildProviderUpdateResult(providers, {
       controllerInfo: reloadResult && reloadResult.controllerInfo || null,
+      corePid: reloadResult && reloadResult.corePid || '',
       apiStatusCode: reloadResult && reloadResult.apiStatusCode || 0,
       apiErrorType: reloadResult && reloadResult.apiErrorType || '',
       notRunReason: reloadResult && reloadResult.notRunReason || '',
@@ -5665,11 +5676,14 @@ KANO_WRITE_CHECK_EOF
   };
 
   let runningStatusRequestId = 0;
-  const isMMRunning = async () => {
+  const isMMRunning = async (runtimeSnapshot = null) => {
     const requestId = ++runningStatusRequestId;
-    const pid = await getCorePid();
-    let apiOk = false;
-    if (pid) {
+    const hasPidSnapshot = !!runtimeSnapshot
+      && Object.prototype.hasOwnProperty.call(runtimeSnapshot, 'corePid');
+    const hasApiSnapshot = !!runtimeSnapshot && typeof runtimeSnapshot.apiOk == 'boolean';
+    const pid = hasPidSnapshot ? String(runtimeSnapshot.corePid || '') : await getCorePid();
+    let apiOk = hasApiSnapshot ? runtimeSnapshot.apiOk : false;
+    if (pid && !hasApiSnapshot) {
       const version = await callMihomoApi('/version', 'GET', null, null, 8, { corePid: pid });
       apiOk = !!version.success;
     }
@@ -5680,8 +5694,10 @@ KANO_WRITE_CHECK_EOF
         ? '\u732b\u732b - \u{1f7e2}API\u6b63\u5e38'
         : (pid ? '\u732b\u732b - \u{1f7e1}\u8fdb\u7a0b\u8fd0\u884c/API\u672a\u901a' : '\u732b\u732b - \u{1f534}\u5df2\u505c\u6b62');
     }
-    await refreshRuleModeStatus();
-    await refreshModeBadge();
+    await Promise.all([
+      refreshRuleModeStatus(),
+      refreshModeBadge(),
+    ]);
     return !!pid;
   };
 
@@ -10584,6 +10600,9 @@ ${expectedProviderChecks}
       ((retryResult && retryResult.providers) || []).forEach((item) => merged.set(item.name, item));
       return buildProviderUpdateResult([...merged.values()], {
         controllerInfo: retryResult && retryResult.controllerInfo || previousResult && previousResult.controllerInfo || null,
+        corePid: retryResult && Object.prototype.hasOwnProperty.call(retryResult, 'corePid')
+          ? retryResult.corePid
+          : previousResult && previousResult.corePid || '',
         apiStatusCode: retryResult && retryResult.apiStatusCode || previousResult && previousResult.apiStatusCode || 0,
       });
     };
@@ -10722,9 +10741,13 @@ ${expectedProviderChecks}
       const cleanMode = normalizeSubRuleModeValue(mode);
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const controllerInfo = providerUpdateResult && providerUpdateResult.controllerInfo;
+      const corePid = providerUpdateResult
+        && Object.prototype.hasOwnProperty.call(providerUpdateResult, 'corePid')
+        ? providerUpdateResult.corePid
+        : null;
       const controllerCheckPromise = controllerInfo
-        ? callMihomoApi('/version', 'GET', null, controllerInfo)
-        : buildControllerInfo().then((info) => callMihomoApi('/version', 'GET', null, info));
+        ? callMihomoApi('/version', 'GET', null, controllerInfo, 8, { corePid })
+        : buildControllerInfo().then((info) => callMihomoApi('/version', 'GET', null, info, 8, { corePid }));
       const configCheckPromise = configCheckResult
         ? Promise.resolve(configCheckResult)
         : inspectSubscriptionRuntimeConfig(sources, cleanMode, cleanConvertMode);
@@ -10774,7 +10797,7 @@ ${expectedProviderChecks}
         diagnosticSummary,
         repairable,
       });
-      await isMMRunning();
+      await isMMRunning({ corePid: controllerCheck.corePid, apiOk: controllerCheck.success });
       return outcome.allOk;
     };
 

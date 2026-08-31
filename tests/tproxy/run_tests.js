@@ -535,12 +535,23 @@ function runFor(label, file) {
       'device bypass preserves unrelated fwmarks and verifies installed rules before success',
     );
     chk(
-      policyTools.includes('hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN"')
-        && policyTools.includes('hook_is_first "$IPT" nat PREROUTING "$DNS_CHAIN"')
-        && policyTools.includes('hook_is_first "$IPT" filter FORWARD "$QUIC_CHAIN"')
+      policyTools.includes('hook_is_first "$IPT" mangle PREROUTING "$ACTIVE_POLICY"')
+        && policyTools.includes('hook_is_first "$IPT" nat PREROUTING "$ACTIVE_DNS"')
+        && policyTools.includes('hook_is_first "$IPT" filter FORWARD "$ACTIVE_QUIC"')
         && policyTools.includes('verify) verify_all'),
       true,
       'policy verification checks active proxy, DNS, and QUIC hook ordering',
+    );
+    chk(
+      policyTools.includes('POLICY_CHAIN_A=KANO_POLICY_A')
+        && policyTools.includes('prepare_inactive_chain()')
+        && policyTools.includes('-R "$HOOK" 1 -j "$NEXT"')
+        && policyTools.includes('rollback_family_hooks()')
+        && policyTools.includes('cleanup_family_chains "$IPT"')
+        && !policyTools.slice(policyTools.indexOf('apply_all() {'), policyTools.indexOf('core_is_running() {'))
+          .includes('flush_all >/dev/null'),
+      true,
+      'policy updates build inactive chains, switch one hook, and retain rollback targets',
     );
     const policyValidators = policyTools.slice(
       policyTools.indexOf('is_ipv4() {'),
@@ -905,11 +916,13 @@ function runFor(label, file) {
           'local conversion repairs sidecar permissions and handles expected curl/converter failures under set -e',
         );
         const cacheProbe = localConverterSource.indexOf('${cacheProbeCommands}');
-        const downloads = localConverterSource.indexOf('${downloadCommands}');
+        const downloads = localConverterSource.indexOf("${parallelDownloadCommands.join('\\n')}");
+        const quotaCheck = localConverterSource.indexOf('${totalQuotaCommands}');
         const snapshots = localConverterSource.indexOf('${snapshotCommands}');
         const commits = localConverterSource.indexOf('${commitCommands}');
         chk(
-          cacheProbe >= 0 && downloads > cacheProbe && snapshots > downloads && commits > snapshots
+          cacheProbe >= 0 && downloads > cacheProbe && quotaCheck > downloads
+            && snapshots > quotaCheck && commits > snapshots
             && localConverterSource.includes('last_stage=download')
             && localConverterSource.includes('last_stage=convert')
             && localConverterSource.includes("last_kind=empty-provider")
@@ -920,6 +933,15 @@ function runFor(label, file) {
             && localConverterSource.includes('${restoreCommands}'),
           true,
           'local conversion classifies failures and commits all provider caches transactionally',
+        );
+        chk(
+          localConverterSource.includes('offset += 2')
+            && localConverterSource.includes('> "$TX/result_${jobIndex}.log" 2>&1 &')
+            && localConverterSource.includes('if ! wait "$local_pid_${jobIndex}"')
+            && localConverterSource.includes('LOCAL_JOB_FAILED=0')
+            && localConverterSource.includes('LOCAL_TOTAL_BYTES=$((LOCAL_TOTAL_BYTES + raw_bytes + out_bytes))'),
+          true,
+          'local conversion runs at most two ordered jobs before aggregate quota and atomic commit',
         );
         const subscriptionUpdateSource = source.slice(
           source.indexOf('const updateSubProviders = async'),

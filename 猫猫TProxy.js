@@ -84,7 +84,7 @@
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.5';
+  const POLICY_SCRIPT_VERSION = '6.6';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -5252,14 +5252,6 @@ KANO_WRITE_CHECK_EOF
                     last_convert="converted provider exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
                     break
                   fi
-                  next_total=$((LOCAL_TOTAL_BYTES + raw_bytes + out_bytes))
-                  if [ "$next_total" -gt ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} ]; then
-                    last_stage=download_limit
-                    last_kind=total-quota
-                    last_convert="local conversion exceeds ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} bytes total"
-                    break
-                  fi
-                  LOCAL_TOTAL_BYTES="$next_total"
                   mv -f "$raw_tmp" "${rawPath}"
                   mv -f "$out_tmp" "${outputPath}"
                   candidate_ok=1
@@ -5288,7 +5280,42 @@ KANO_WRITE_CHECK_EOF
           exit 22
         fi
       `;
-    }).join('\n');
+    });
+    const parallelDownloadCommands = [];
+    for (let offset = 0; offset < downloadCommands.length; offset += 2) {
+      const batch = downloadCommands.slice(offset, offset + 2);
+      parallelDownloadCommands.push(batch.map((command, batchIndex) => {
+        const jobIndex = offset + batchIndex + 1;
+        return `
+          (
+            ${command}
+          ) > "$TX/result_${jobIndex}.log" 2>&1 &
+          local_pid_${jobIndex}=$!
+        `;
+      }).join('\n'));
+      parallelDownloadCommands.push(batch.map((_, batchIndex) => {
+        const jobIndex = offset + batchIndex + 1;
+        return `if ! wait "$local_pid_${jobIndex}"; then LOCAL_JOB_FAILED=1; fi`;
+      }).join('\n'));
+      parallelDownloadCommands.push(batch.map((_, batchIndex) => {
+        const jobIndex = offset + batchIndex + 1;
+        return `cat "$TX/result_${jobIndex}.log" 2>/dev/null || true`;
+      }).join('\n'));
+      parallelDownloadCommands.push('[ "$LOCAL_JOB_FAILED" -eq 0 ] || exit 22');
+    }
+    const totalQuotaCommands = cleanSources.map((source, index) => `
+        raw_bytes="$(wc -c < "$TX/raw_${index + 1}" 2>/dev/null || echo 0)"
+        out_bytes="$(wc -c < "$TX/${source.name}.yaml" 2>/dev/null || echo 0)"
+        if ! echo "$raw_bytes $out_bytes" | grep -Eq '^[0-9]+ [0-9]+$'; then
+          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|download_limit|000|size_invalid|local conversion size check failed`)}
+          exit 22
+        fi
+        LOCAL_TOTAL_BYTES=$((LOCAL_TOTAL_BYTES + raw_bytes + out_bytes))
+        if [ "$LOCAL_TOTAL_BYTES" -gt ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} ]; then
+          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|download_limit|000|total-quota|local conversion exceeds ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} bytes total`)}
+          exit 22
+        fi
+      `).join('\n');
     const snapshotCommands = cleanSources.map((source) => {
       const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
       return `
@@ -5324,6 +5351,7 @@ KANO_WRITE_CHECK_EOF
         HELPER=${shellQuote(KANO_HELPER_PATH)}
         committing=0
         LOCAL_TOTAL_BYTES=0
+        LOCAL_JOB_FAILED=0
         umask 077
         is_public_ipv4() {
           printf '%s\n' "$1" | awk -F. '
@@ -5416,7 +5444,8 @@ KANO_WRITE_CHECK_EOF
         mkdir -p "$TX" ${shellQuote(`${CLASH_PROXY_DIR}/proxies`)}
         ${cacheProbeCommands}
         ${getCurlBinCmd()}
-        ${downloadCommands}
+        ${parallelDownloadCommands.join('\n')}
+        ${totalQuotaCommands}
         ${snapshotCommands}
         committing=1
         ${commitCommands}
@@ -5810,7 +5839,7 @@ KANO_WRITE_CHECK_EOF
         for BIN_NAME in iptables ip6tables; do
           for IPT in $(list_cleanup_ipt "$BIN_NAME"); do
             for TABLE in mangle nat filter; do
-              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_DNS_HIJACK KANO_QUIC_BLOCK; do
+              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_POLICY_A KANO_POLICY_B KANO_DNS_HIJACK KANO_DNS_A KANO_DNS_B KANO_QUIC_BLOCK KANO_QUIC_A KANO_QUIC_B; do
                 flush_one_chain "$IPT" "$TABLE" "$CHAIN"
               done
             done
@@ -5825,7 +5854,7 @@ KANO_WRITE_CHECK_EOF
           for IPT in $(list_cleanup_ipt "$BIN_NAME"); do
             cleanup_bin_count=$((cleanup_bin_count + 1))
             for TABLE in mangle nat filter; do
-              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_DNS_HIJACK KANO_QUIC_BLOCK; do
+              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_POLICY_A KANO_POLICY_B KANO_DNS_HIJACK KANO_DNS_A KANO_DNS_B KANO_QUIC_BLOCK KANO_QUIC_A KANO_QUIC_B; do
                 if "$IPT" -t "$TABLE" -S "$CHAIN" >/dev/null 2>&1; then
                   echo "RESCUE_CHAIN_REMAINS:$IPT:$TABLE:$CHAIN"
                   cleanup_failed=1
@@ -7860,9 +7889,15 @@ EOF_KANO_SERVICE
     `DEVICE_FILE=${shellQuote(CLASH_DEVICE_BYPASS_FILE)}`,
     `SERVICE_FILE=${shellQuote(CLASH_SERVICE)}`,
     'POLICY_CHAIN=KANO_POLICY_PRE',
+    'POLICY_CHAIN_A=KANO_POLICY_A',
+    'POLICY_CHAIN_B=KANO_POLICY_B',
     `LEGACY_MAC_CHAIN=${shellQuote(CLASH_MAC_BYPASS_CHAIN)}`,
     'DNS_CHAIN=KANO_DNS_HIJACK',
+    'DNS_CHAIN_A=KANO_DNS_A',
+    'DNS_CHAIN_B=KANO_DNS_B',
     'QUIC_CHAIN=KANO_QUIC_BLOCK',
+    'QUIC_CHAIN_A=KANO_QUIC_A',
+    'QUIC_CHAIN_B=KANO_QUIC_B',
     'list_ipt_candidates() {',
     '  NAME="$1"',
     '  {',
@@ -7958,11 +7993,49 @@ EOF_KANO_SERVICE
     '  # Robust cleanup: remove jumps to CHAIN not only from the hook, but also from',
     '  # previously generated chains. This prevents accidental self-jumps such as',
     '  # KANO_POLICY_PRE -> KANO_POLICY_PRE, which can blackhole traffic.',
-    '  for SRC in PREROUTING OUTPUT FORWARD INPUT "$POLICY_CHAIN" "$DNS_CHAIN" "$QUIC_CHAIN"; do',
+    '  for SRC in PREROUTING OUTPUT FORWARD INPUT "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"; do',
     '    while "$IPT" -t "$TABLE" -D "$SRC" -j "$CHAIN" 2>/dev/null; do :; done',
     '  done',
     '  "$IPT" -t "$TABLE" -F "$CHAIN" 2>/dev/null || true',
     '  "$IPT" -t "$TABLE" -X "$CHAIN" 2>/dev/null || true',
+    '}',
+    'managed_hook_target() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"',
+    '  "$IPT" -t "$TABLE" -S "$HOOK" 2>/dev/null | awk -v hook="$HOOK" -v base="$BASE" -v a="$CHAIN_A" -v b="$CHAIN_B" \'',
+    '    $1 == "-A" && $2 == hook && $3 == "-j" && ($4 == base || $4 == a || $4 == b) { print $4; exit }',
+    "  '",
+    '}',
+    'remove_managed_hooks() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"',
+    '  for CHAIN in "$BASE" "$CHAIN_A" "$CHAIN_B"; do',
+    '    while "$IPT" -t "$TABLE" -D "$HOOK" -j "$CHAIN" 2>/dev/null; do :; done',
+    '  done',
+    '}',
+    'prepare_inactive_chain() {',
+    '  IPT="$1"; TABLE="$2"; ACTIVE="$3"; CHAIN_A="$4"; CHAIN_B="$5"',
+    '  [ "$ACTIVE" = "$CHAIN_A" ] && NEXT="$CHAIN_B" || NEXT="$CHAIN_A"',
+    '  "$IPT" -t "$TABLE" -N "$NEXT" 2>/dev/null || "$IPT" -t "$TABLE" -F "$NEXT" || return 1',
+    '  printf "%s\\n" "$NEXT"',
+    '}',
+    'activate_managed_hook() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; NEXT="$7"',
+    '  ACTIVE="$(managed_hook_target "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B")"',
+    '  if [ -n "$ACTIVE" ] && hook_is_first "$IPT" "$TABLE" "$HOOK" "$ACTIVE"; then',
+    '    "$IPT" -t "$TABLE" -R "$HOOK" 1 -j "$NEXT" || return 1',
+    '  else',
+    '    remove_managed_hooks "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B"',
+    '    "$IPT" -t "$TABLE" -I "$HOOK" 1 -j "$NEXT" || return 1',
+    '  fi',
+    '  hook_is_first "$IPT" "$TABLE" "$HOOK" "$NEXT"',
+    '}',
+    'cleanup_unused_chains() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; ACTIVE="$7"',
+    '  for CHAIN in "$BASE" "$CHAIN_A" "$CHAIN_B"; do',
+    '    [ "$CHAIN" = "$ACTIVE" ] && continue',
+    '    while "$IPT" -t "$TABLE" -D "$HOOK" -j "$CHAIN" 2>/dev/null; do :; done',
+    '    "$IPT" -t "$TABLE" -F "$CHAIN" 2>/dev/null || true',
+    '    "$IPT" -t "$TABLE" -X "$CHAIN" 2>/dev/null || true',
+    '  done',
     '}',
     'add_source_returns() {',
     '  IPT="$1"; TABLE="$2"; CHAIN="$3"; FAMILY="$4"',
@@ -8002,10 +8075,12 @@ EOF_KANO_SERVICE
     '    for IPT in $(list_ipt_candidates "$NAME"); do',
     '      FOUND=1',
     '      flush_chain "$IPT" mangle PREROUTING "$LEGACY_MAC_CHAIN"',
-    '      flush_chain "$IPT" mangle PREROUTING "$POLICY_CHAIN"',
-    '      flush_chain "$IPT" nat PREROUTING "$DNS_CHAIN"',
-    '      flush_chain "$IPT" filter FORWARD "$QUIC_CHAIN"',
-    '      flush_chain "$IPT" filter OUTPUT "$QUIC_CHAIN"',
+    '      for CHAIN in "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"; do flush_chain "$IPT" mangle PREROUTING "$CHAIN"; done',
+    '      for CHAIN in "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; do flush_chain "$IPT" nat PREROUTING "$CHAIN"; done',
+    '      for CHAIN in "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"; do',
+    '        flush_chain "$IPT" filter FORWARD "$CHAIN"',
+    '        flush_chain "$IPT" filter OUTPUT "$CHAIN"',
+    '      done',
     '    done',
     '  done',
     '  [ "$FOUND" = "1" ] || { echo "iptables/ip6tables \u4e0d\u5b58\u5728"; exit 1; }',
@@ -8014,43 +8089,47 @@ EOF_KANO_SERVICE
     '  IPT="$1"; FAMILY="$2"',
     '  traffic_mode="$(get_opt traffic_mode legacy)"',
     '  case "$traffic_mode" in tproxy) transparent=on ;; tun|off) transparent=off ;; *) transparent="$(get_opt transparent on)" ;; esac',
-    '  "$IPT" -t mangle -N "$POLICY_CHAIN" 2>/dev/null || "$IPT" -t mangle -F "$POLICY_CHAIN" || { echo "POLICY_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  while "$IPT" -t mangle -D "$POLICY_CHAIN" -j "$POLICY_CHAIN" 2>/dev/null; do :; done',
+    '  ACTIVE="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  NEXT="$(prepare_inactive_chain "$IPT" mangle "$ACTIVE" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")" || { echo "POLICY_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
     '  if [ "$transparent" = "off" ]; then',
-    '    "$IPT" -t mangle -A "$POLICY_CHAIN" -j ACCEPT || { echo "POLICY_OFF_ACCEPT_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t mangle -A "$NEXT" -j ACCEPT || { echo "POLICY_OFF_ACCEPT_FAILED IPv$FAMILY"; return 1; }',
     '  fi',
-    '  add_source_accepts "$IPT" mangle "$POLICY_CHAIN" "$FAMILY" || { echo "DEVICE_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t mangle -A "$POLICY_CHAIN" -j RETURN || { echo "POLICY_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  while "$IPT" -t mangle -D PREROUTING -j "$POLICY_CHAIN" 2>/dev/null; do :; done',
-    '  "$IPT" -t mangle -I PREROUTING 1 -j "$POLICY_CHAIN" || { echo "POLICY_HOOK_INSERT_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t mangle -C PREROUTING -j "$POLICY_CHAIN" >/dev/null 2>&1 || { echo "POLICY_HOOK_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  add_source_accepts "$IPT" mangle "$NEXT" "$FAMILY" || { echo "DEVICE_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t mangle -A "$NEXT" -j RETURN || { echo "POLICY_RETURN_FAILED IPv$FAMILY"; return 1; }',
+    '  activate_managed_hook "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$NEXT" || { echo "POLICY_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
     '}',
     'apply_dns() {',
     '  IPT="$1"; FAMILY="$2"',
     '  dns_hijack="$(get_opt dns_hijack off)"',
     '  dns_port="$(get_opt dns_port 1053)"',
     '  echo "$dns_port" | grep -Eq "^[0-9]{2,5}$" || dns_port=1053',
-    '  [ "$dns_hijack" = "on" ] || return 0',
-    '  if ! is_port_listening "$dns_port" "$FAMILY"; then echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1a\u7aef\u53e3 $dns_port \u672a\u76d1\u542c"; return 0; fi',
-    '  if ! "$IPT" -t nat -L >/dev/null 2>&1; then echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1anat \u8868\u4e0d\u53ef\u7528"; return 0; fi',
-    '  "$IPT" -t nat -N "$DNS_CHAIN" 2>/dev/null || "$IPT" -t nat -F "$DNS_CHAIN" || { echo "DNS_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  add_source_accepts "$IPT" nat "$DNS_CHAIN" "$FAMILY" || { echo "DNS_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$DNS_CHAIN" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_UDP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$DNS_CHAIN" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_TCP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$DNS_CHAIN" -j RETURN || { echo "DNS_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  while "$IPT" -t nat -D PREROUTING -j "$DNS_CHAIN" 2>/dev/null; do :; done',
-    '  "$IPT" -t nat -I PREROUTING 1 -j "$DNS_CHAIN" || { echo "DNS_HOOK_INSERT_FAILED IPv$FAMILY"; return 1; }',
+    '  if [ "$dns_hijack" != "on" ]; then',
+    '    remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"',
+    '    return 0',
+    '  fi',
+    '  if ! is_port_listening "$dns_port" "$FAMILY"; then remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1a\u7aef\u53e3 $dns_port \u672a\u76d1\u542c"; return 0; fi',
+    '  if ! "$IPT" -t nat -L >/dev/null 2>&1; then remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1anat \u8868\u4e0d\u53ef\u7528"; return 0; fi',
+    '  ACTIVE="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '  NEXT="$(prepare_inactive_chain "$IPT" nat "$ACTIVE" "$DNS_CHAIN_A" "$DNS_CHAIN_B")" || { echo "DNS_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
+    '  add_source_accepts "$IPT" nat "$NEXT" "$FAMILY" || { echo "DNS_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t nat -A "$NEXT" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_UDP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t nat -A "$NEXT" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_TCP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t nat -A "$NEXT" -j RETURN || { echo "DNS_RETURN_FAILED IPv$FAMILY"; return 1; }',
+    '  activate_managed_hook "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$NEXT" || { echo "DNS_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
     '}',
     'apply_quic() {',
     '  IPT="$1"; FAMILY="$2"',
     '  quic_block="$(get_opt quic_block off)"',
-    '  [ "$quic_block" = "on" ] || return 0',
-    '  "$IPT" -t filter -N "$QUIC_CHAIN" 2>/dev/null || "$IPT" -t filter -F "$QUIC_CHAIN" || { echo "QUIC_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  add_source_returns "$IPT" filter "$QUIC_CHAIN" "$FAMILY" || { echo "QUIC_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t filter -A "$QUIC_CHAIN" -p udp --dport 443 -j DROP || { echo "QUIC_DROP_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t filter -A "$QUIC_CHAIN" -j RETURN || { echo "QUIC_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  while "$IPT" -t filter -D FORWARD -j "$QUIC_CHAIN" 2>/dev/null; do :; done',
-    '  "$IPT" -t filter -I FORWARD 1 -j "$QUIC_CHAIN" || { echo "QUIC_HOOK_INSERT_FAILED IPv$FAMILY"; return 1; }',
+    '  if [ "$quic_block" != "on" ]; then',
+    '    remove_managed_hooks "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"',
+    '    return 0',
+    '  fi',
+    '  ACTIVE="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '  NEXT="$(prepare_inactive_chain "$IPT" filter "$ACTIVE" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")" || { echo "QUIC_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
+    '  add_source_returns "$IPT" filter "$NEXT" "$FAMILY" || { echo "QUIC_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t filter -A "$NEXT" -p udp --dport 443 -j DROP || { echo "QUIC_DROP_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t filter -A "$NEXT" -j RETURN || { echo "QUIC_RETURN_FAILED IPv$FAMILY"; return 1; }',
+    '  activate_managed_hook "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$NEXT" || { echo "QUIC_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
     '}',
     'hook_is_first() {',
     '  IPT="$1"; TABLE="$2"; HOOK="$3"; CHAIN="$4"',
@@ -8070,20 +8149,23 @@ EOF_KANO_SERVICE
     '}',
     'verify_family() {',
     '  IPT="$1"; FAMILY="$2"',
-    '  hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN" || { echo "POLICY_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t mangle -C "$POLICY_CHAIN" -j RETURN >/dev/null 2>&1 || { echo "POLICY_RETURN_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  verify_source_accepts "$IPT" mangle "$POLICY_CHAIN" "$FAMILY" || { echo "DEVICE_BYPASS_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  [ -n "$ACTIVE_POLICY" ] && hook_is_first "$IPT" mangle PREROUTING "$ACTIVE_POLICY" || { echo "POLICY_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  "$IPT" -t mangle -C "$ACTIVE_POLICY" -j RETURN >/dev/null 2>&1 || { echo "POLICY_RETURN_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '  verify_source_accepts "$IPT" mangle "$ACTIVE_POLICY" "$FAMILY" || { echo "DEVICE_BYPASS_VERIFY_FAILED IPv$FAMILY"; return 1; }',
     '  dns_hijack="$(get_opt dns_hijack off)"',
     '  dns_port="$(get_opt dns_port 1053)"',
     '  echo "$dns_port" | grep -Eq "^[0-9]{2,5}$" || dns_port=1053',
     '  if [ "$dns_hijack" = "on" ] && is_port_listening "$dns_port" "$FAMILY" && "$IPT" -t nat -L >/dev/null 2>&1; then',
-    '    hook_is_first "$IPT" nat PREROUTING "$DNS_CHAIN" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t nat -C "$DNS_CHAIN" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t nat -C "$DNS_CHAIN" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '    [ -n "$ACTIVE_DNS" ] && hook_is_first "$IPT" nat PREROUTING "$ACTIVE_DNS" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t nat -C "$ACTIVE_DNS" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t nat -C "$ACTIVE_DNS" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
     '  fi',
     '  if [ "$(get_opt quic_block off)" = "on" ]; then',
-    '    hook_is_first "$IPT" filter FORWARD "$QUIC_CHAIN" || { echo "QUIC_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t filter -C "$QUIC_CHAIN" -p udp --dport 443 -j DROP >/dev/null 2>&1 || { echo "QUIC_DROP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '    [ -n "$ACTIVE_QUIC" ] && hook_is_first "$IPT" filter FORWARD "$ACTIVE_QUIC" || { echo "QUIC_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
+    '    "$IPT" -t filter -C "$ACTIVE_QUIC" -p udp --dport 443 -j DROP >/dev/null 2>&1 || { echo "QUIC_DROP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
     '  fi',
     '}',
     'verify_all() {',
@@ -8098,19 +8180,47 @@ EOF_KANO_SERVICE
     '  fi',
     '  echo "POLICY_RULES_VERIFIED"',
     '}',
+    'rollback_managed_hook() {',
+    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; OLD="$7"',
+    '  if [ -n "$OLD" ] && "$IPT" -t "$TABLE" -S "$OLD" >/dev/null 2>&1; then',
+    '    activate_managed_hook "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B" "$OLD" >/dev/null 2>&1 || return 1',
+    '  else',
+    '    remove_managed_hooks "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B"',
+    '  fi',
+    '  cleanup_unused_chains "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B" "$OLD"',
+    '}',
+    'rollback_family_hooks() {',
+    '  IPT="$1"; OLD_POLICY="$2"; OLD_DNS="$3"; OLD_QUIC="$4"',
+    '  rollback_managed_hook "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$OLD_POLICY" || return 1',
+    '  rollback_managed_hook "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$OLD_DNS" || return 1',
+    '  rollback_managed_hook "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$OLD_QUIC" || return 1',
+    '}',
+    'cleanup_family_chains() {',
+    '  IPT="$1"',
+    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '  ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '  cleanup_unused_chains "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$ACTIVE_POLICY"',
+    '  cleanup_unused_chains "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$ACTIVE_DNS"',
+    '  cleanup_unused_chains "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$ACTIVE_QUIC"',
+    '}',
     'apply_all() {',
-    "  trap 'rc=$?; if [ \"$rc\" -ne 0 ]; then flush_all >/dev/null 2>&1 || true; echo \"POLICY_APPLY_ROLLED_BACK\"; fi; trap - EXIT; exit \"$rc\"' EXIT",
     '  IPT="$(get_ipt iptables)"',
     '  IP6T="$(get_ipt ip6tables)"',
     '  ipv6="$(get_opt ipv6 off)"',
     '  [ -n "$IPT" ] || { echo "IPv4 iptables \u4e0d\u5b58\u5728\uff0c\u62d2\u7edd\u5047\u62a5\u89c4\u5219\u5df2\u5e94\u7528"; exit 1; }',
     '  [ "$ipv6" != "on" ] || [ -n "$IP6T" ] || { echo "IPv6 \u5df2\u5f00\u542f\uff0c\u4f46 ip6tables \u4e0d\u5b58\u5728"; exit 1; }',
     '  mkdir -p "$POLICY_DIR"',
-    '  flush_all >/dev/null 2>&1 || true',
-    '  if [ "$ipv6" != "on" ] && [ -n "$IP6T" ] && "$IP6T" -t mangle -S PREROUTING 2>/dev/null | grep -q -- "-j $POLICY_CHAIN"; then',
-    '    echo "IPV6_POLICY_FLUSH_FAILED"',
-    '    exit 1',
+    '  P4_OLD_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  P4_OLD_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '  P4_OLD_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '  P6_OLD_POLICY=""; P6_OLD_DNS=""; P6_OLD_QUIC=""',
+    '  if [ -n "$IP6T" ]; then',
+    '    P6_OLD_POLICY="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '    P6_OLD_DNS="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '    P6_OLD_QUIC="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
     '  fi',
+    "  trap 'rc=$?; if [ \"$rc\" -ne 0 ]; then rollback_family_hooks \"$IPT\" \"$P4_OLD_POLICY\" \"$P4_OLD_DNS\" \"$P4_OLD_QUIC\" >/dev/null 2>&1 || true; [ -z \"$IP6T\" ] || rollback_family_hooks \"$IP6T\" \"$P6_OLD_POLICY\" \"$P6_OLD_DNS\" \"$P6_OLD_QUIC\" >/dev/null 2>&1 || true; echo \"POLICY_APPLY_ROLLED_BACK\"; fi; trap - EXIT; exit \"$rc\"' EXIT",
     '  apply_policy "$IPT" 4 || exit 1',
     '  apply_dns "$IPT" 4 || exit 1',
     '  apply_quic "$IPT" 4 || exit 1',
@@ -8118,8 +8228,14 @@ EOF_KANO_SERVICE
     '    apply_policy "$IP6T" 6 || exit 1',
     '    apply_dns "$IP6T" 6 || exit 1',
     '    apply_quic "$IP6T" 6 || exit 1',
+    '  elif [ -n "$IP6T" ]; then',
+    '    remove_managed_hooks "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"',
+    '    remove_managed_hooks "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"',
+    '    remove_managed_hooks "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"',
     '  fi',
     '  verify_all || exit 1',
+    '  cleanup_family_chains "$IPT"',
+    '  [ -z "$IP6T" ] || cleanup_family_chains "$IP6T"',
     '  trap - EXIT',
     '  [ "$ipv6" = "on" ] && echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4/IPv6\uff09" || echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4\uff09"',
     '}',
@@ -8131,7 +8247,8 @@ EOF_KANO_SERVICE
     '}',
     'policy_is_first() {',
     '  IPT="$1"',
-    '  hook_is_first "$IPT" mangle PREROUTING "$POLICY_CHAIN"',
+    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  [ -n "$ACTIVE_POLICY" ] && hook_is_first "$IPT" mangle PREROUTING "$ACTIVE_POLICY"',
     '}',
     'runtime_firewall_ready() {',
     '  IPT="$1"',
@@ -8210,19 +8327,24 @@ EOF_KANO_SERVICE
     '  echo "[mangle PREROUTING]"',
     '  [ -z "$IPT" ] || "$IPT" -t mangle -S PREROUTING 2>/dev/null || true',
     '  echo',
-    '  echo "[$POLICY_CHAIN]"',
-    '  [ -z "$IPT" ] || "$IPT" -t mangle -S "$POLICY_CHAIN" 2>/dev/null || true',
-    '  echo "[$POLICY_CHAIN counters]"',
-    '  [ -z "$IPT" ] || "$IPT" -t mangle -nvxL "$POLICY_CHAIN" --line-numbers 2>/dev/null || true',
+    '  ACTIVE_POLICY=""',
+    '  [ -z "$IPT" ] || ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '  echo "[active policy chain: ${ACTIVE_POLICY:-none}]"',
+    '  [ -z "$IPT" ] || [ -z "$ACTIVE_POLICY" ] || "$IPT" -t mangle -S "$ACTIVE_POLICY" 2>/dev/null || true',
+    '  echo "[active policy counters]"',
+    '  [ -z "$IPT" ] || [ -z "$ACTIVE_POLICY" ] || "$IPT" -t mangle -nvxL "$ACTIVE_POLICY" --line-numbers 2>/dev/null || true',
     '  echo',
     '  echo "[nat DNS]"',
-    '  [ -z "$IPT" ] || "$IPT" -t nat -S PREROUTING 2>/dev/null | grep "$DNS_CHAIN" || true',
-    '  [ -z "$IPT" ] || "$IPT" -t nat -S "$DNS_CHAIN" 2>/dev/null || true',
+    '  [ -z "$IPT" ] || "$IPT" -t nat -S PREROUTING 2>/dev/null | grep -E "$DNS_CHAIN|$DNS_CHAIN_A|$DNS_CHAIN_B" || true',
+    '  ACTIVE_DNS=""',
+    '  [ -z "$IPT" ] || ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '  [ -z "$IPT" ] || [ -z "$ACTIVE_DNS" ] || "$IPT" -t nat -S "$ACTIVE_DNS" 2>/dev/null || true',
     '  echo',
     '  echo "[filter QUIC]"',
-    '  [ -z "$IPT" ] || "$IPT" -t filter -S FORWARD 2>/dev/null | grep "$QUIC_CHAIN" || true',
-    '  [ -z "$IPT" ] || "$IPT" -t filter -S OUTPUT 2>/dev/null | grep "$QUIC_CHAIN" || true',
-    '  [ -z "$IPT" ] || "$IPT" -t filter -S "$QUIC_CHAIN" 2>/dev/null || true',
+    '  ACTIVE_QUIC=""',
+    '  [ -z "$IPT" ] || ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '  [ -z "$IPT" ] || "$IPT" -t filter -S FORWARD 2>/dev/null | grep -E "$QUIC_CHAIN|$QUIC_CHAIN_A|$QUIC_CHAIN_B" || true',
+    '  [ -z "$IPT" ] || [ -z "$ACTIVE_QUIC" ] || "$IPT" -t filter -S "$ACTIVE_QUIC" 2>/dev/null || true',
     '  echo',
     '  echo "[clients]"',
     '  cat /proc/net/arp 2>/dev/null || true',
@@ -8230,12 +8352,15 @@ EOF_KANO_SERVICE
     '    echo',
     '    echo "[IPv6 mangle PREROUTING]"',
     '    "$IP6T" -t mangle -S PREROUTING 2>/dev/null | grep -E "$POLICY_CHAIN|TPROXY|clash|mihomo|KANO" || true',
-    '    echo "[IPv6 $POLICY_CHAIN]"',
-    '    "$IP6T" -t mangle -S "$POLICY_CHAIN" 2>/dev/null || true',
+    '    ACTIVE_POLICY6="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
+    '    echo "[IPv6 active policy: ${ACTIVE_POLICY6:-none}]"',
+    '    [ -z "$ACTIVE_POLICY6" ] || "$IP6T" -t mangle -S "$ACTIVE_POLICY6" 2>/dev/null || true',
     '    echo "[IPv6 nat DNS]"',
-    '    "$IP6T" -t nat -S "$DNS_CHAIN" 2>/dev/null || true',
+    '    ACTIVE_DNS6="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
+    '    [ -z "$ACTIVE_DNS6" ] || "$IP6T" -t nat -S "$ACTIVE_DNS6" 2>/dev/null || true',
     '    echo "[IPv6 filter QUIC]"',
-    '    "$IP6T" -t filter -S "$QUIC_CHAIN" 2>/dev/null || true',
+    '    ACTIVE_QUIC6="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
+    '    [ -z "$ACTIVE_QUIC6" ] || "$IP6T" -t filter -S "$ACTIVE_QUIC6" 2>/dev/null || true',
     '  fi',
     '}',
     'case "$1" in',

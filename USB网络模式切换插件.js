@@ -1,6 +1,6 @@
 //<script>
 (async () => {
-  const VERSION = '2.1.2';
+  const VERSION = '2.1.3';
   const TITLE = 'USB 网络模式';
   const MODAL_NAME = 'kano_usb_native_mode_manager_modal';
   const STYLE_ID = 'kano_usb_native_mode_manager_style';
@@ -268,17 +268,24 @@ master_of() {
 
 attach_to_bridge() {
   ifname="$1"
-  [ -d "/sys/class/net/$ifname" ] || return 1
-  [ -d "/sys/class/net/$BRIDGE" ] || return 1
-
-  ip link set "$ifname" up 2>/dev/null || return 1
-  current_master=$(master_of "$ifname")
-  if [ "$current_master" != "$BRIDGE" ]; then
-    [ -n "$current_master" ] && ip link set "$ifname" nomaster 2>/dev/null
-    ip link set "$ifname" master "$BRIDGE" 2>/dev/null || return 1
-  fi
-  ip link set "$ifname" up 2>/dev/null
-  return 0
+  bridge_attempt=0
+  while [ "$bridge_attempt" -lt 20 ]; do
+    if [ -d "/sys/class/net/$ifname" ] && [ -d "/sys/class/net/$BRIDGE/bridge" ] &&
+       ip link set "$ifname" up 2>/dev/null; then
+      current_master=$(master_of "$ifname")
+      if [ "$current_master" != "$BRIDGE" ]; then
+        [ -n "$current_master" ] && ip link set "$ifname" nomaster 2>/dev/null
+        ip link set "$ifname" master "$BRIDGE" 2>/dev/null || true
+      fi
+      if [ "$(master_of "$ifname")" = "$BRIDGE" ] &&
+         ip link set "$ifname" up 2>/dev/null; then
+        return 0
+      fi
+    fi
+    bridge_attempt=$((bridge_attempt + 1))
+    sleep 1
+  done
+  return 1
 }
 
 repair_network() {
@@ -599,7 +606,7 @@ case "$1" in
     backup_original_persist
     ;;
   pause)
-    touch "$PAUSE_FILE"
+    : > "$PAUSE_FILE"
     log_msg "daemon enforcement paused"
     ;;
   resume)
@@ -607,7 +614,7 @@ case "$1" in
     log_msg "daemon enforcement resumed"
     ;;
   safe-rndis)
-    touch "$PAUSE_FILE"
+    : > "$PAUSE_FILE"
     backup_original_persist
     setprop persist.sys.usb.config rndis
     apply_mode rndis 0 "safe-rndis"
@@ -659,6 +666,28 @@ uptime_seconds() {
   awk '{print int($1)}' /proc/uptime 2>/dev/null
 }
 
+pause_until_reboot() {
+  pause_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
+  if [ -n "$pause_boot" ]; then
+    printf 'auto:%s\\n' "$pause_boot" > "$PAUSE_FILE"
+  else
+    : > "$PAUSE_FILE"
+  fi
+}
+
+clear_previous_boot_pause() {
+  pause_tag=$(cat "$PAUSE_FILE" 2>/dev/null)
+  current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
+  case "$pause_tag" in
+    auto:*)
+      if [ -n "$current_boot" ] && [ "$pause_tag" != "auto:$current_boot" ]; then
+        rm -f "$PAUSE_FILE"
+        log_msg "previous boot failure pause cleared; retrying saved mode"
+      fi
+      ;;
+  esac
+}
+
 wait_boot_ready() {
   load_config
   log_msg "waiting for boot readiness, minimum uptime=$BOOT_DELAY_SECONDS s"
@@ -675,7 +704,7 @@ wait_boot_ready() {
   i=0
   while [ "$i" -lt 180 ]; do
     if [ -d /config/usb_gadget/g1/configs/b.1 ] && \
-       [ -d /sys/class/net/br0 ] && \
+       [ -d /sys/class/net/br0/bridge ] && \
        [ -n "$(ls /sys/class/udc 2>/dev/null | head -n1)" ] && \
        [ "$(getprop init.svc.vendor.usb_default)" = "running" ]; then
       log_msg "boot dependencies ready at uptime=$(uptime_seconds)s"
@@ -685,7 +714,7 @@ wait_boot_ready() {
     i=$((i + 3))
   done
 
-  log_msg "WARN boot readiness timed out; daemon will continue with retries"
+  log_msg "WARN boot readiness timed out; waiting again without switching USB"
   return 1
 }
 
@@ -709,7 +738,11 @@ start_loop() {
   trap 'rm -f "$PID_FILE"; exit 0' INT TERM EXIT
   log_msg "started pid=$$"
 
-  wait_boot_ready
+  until wait_boot_ready; do
+    load_config
+    [ "$PERMANENT" = "1" ] || exit 0
+    sleep 5
+  done
   load_config
 
   if [ "$PERMANENT" != "1" ]; then
@@ -717,6 +750,7 @@ start_loop() {
     exit 0
   fi
 
+  clear_previous_boot_pause
   if [ -f "$PAUSE_FILE" ]; then
     log_msg "enforcement is paused; daemon stays idle"
   else
@@ -725,7 +759,7 @@ start_loop() {
     rc=$?
     if [ "$rc" -ne 0 ]; then
       log_msg "initial apply failed rc=$rc; pausing to prevent a USB switch loop"
-      touch "$PAUSE_FILE"
+      pause_until_reboot
     fi
   fi
 
@@ -756,6 +790,7 @@ start_loop() {
           touch "$PAUSE_FILE"
           sh "$MANAGER_FILE" safe-rndis >> "$LOG_FILE" 2>&1 || \
             log_msg "ERROR safe RNDIS switch failed after consecutive reconcile failures"
+          pause_until_reboot
           fail_count=0
         fi
       fi
@@ -1095,7 +1130,7 @@ sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
   };
 
   const repairNow = async () => {
-    const res = await run(`sh ${shellQuote(MANAGER_FILE)} repair`, 15000);
+    const res = await run(`sh ${shellQuote(MANAGER_FILE)} repair`, 45000);
     return res.ok;
   };
 

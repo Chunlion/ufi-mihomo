@@ -1,1530 +1,400 @@
 //<script>
 (async () => {
-  const VERSION = '2.1.3';
-  const TITLE = 'USB 网络模式';
-  const MODAL_NAME = 'kano_usb_native_mode_manager_modal';
-  const STYLE_ID = 'kano_usb_native_mode_manager_style';
-
-  const BASE_DIR = '/data/kano_usb_mode_manager_v2';
-  const CONFIG_FILE = `${BASE_DIR}/config.env`;
-  const MANAGER_FILE = `${BASE_DIR}/usb_mode_manager.sh`;
-  const DAEMON_FILE = `${BASE_DIR}/usb_mode_daemon.sh`;
-  const PID_FILE = `${BASE_DIR}/daemon.pid`;
-  const LOG_FILE = `${BASE_DIR}/manager.log`;
-  const PAUSE_FILE = `${BASE_DIR}/paused`;
-  const VERSION_FILE = `${BASE_DIR}/version`;
-  const BOOT_SH_FILE = '/sdcard/ufi_tools_boot.sh';
-  const BOOT_TAG = 'kano_usb_mode_manager_v2';
-  const BOOT_LINE = `# ${BOOT_TAG}\nnohup sh ${DAEMON_FILE} start >/dev/null 2>&1 &`;
-
-  const MODES = [
-    {
-      key: 'rndis',
-      label: 'RNDIS',
-      hint: 'Windows 兼容性最好，使用 F50 原厂 SIPA 通道',
-    },
-    {
-      key: 'ncm',
-      label: 'CDC-NCM',
-      hint: 'Windows 11 原生支持，使用原厂 NCM 组合',
-    },
-    {
-      key: 'ecm',
-      label: 'CDC-ECM',
-      hint: '适合 Linux / OpenWrt，Windows 通常需额外驱动',
-    },
-  ];
-
-  const DEFAULT_CONFIG = {
-    mode: 'rndis',
-    adb: '0',
-    permanent: '0',
-    patrol: '1',
-    autoRollback: '1',
-    bootDelay: '75',
-    pollInterval: '8',
-  };
-
-  const escapeHtml = (value = '') => String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-  const shellQuote = (value = '') => `'${String(value).replace(/'/g, `'\\''`)}'`;
-
-  const encodePayload = (value = '') => {
-    try {
-      return btoa(unescape(encodeURIComponent(String(value))));
-    } catch {
-      return '';
-    }
-  };
-
-  const run = async (command, timeout = 30000) => {
-    const res = await runShellWithRoot(command, timeout);
-    return {
-      ok: Boolean(res?.success),
-      text: String(res?.content || '').trim(),
-      raw: res,
-    };
-  };
-
-  const wait = (ms = 120) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const MANAGER_SCRIPT = `#!/system/bin/sh
-BASE_DIR="/data/kano_usb_mode_manager_v2"
-CONFIG_FILE="$BASE_DIR/config.env"
-STATE_FILE="$BASE_DIR/state.env"
-LOG_FILE="$BASE_DIR/manager.log"
-LOCK_DIR="$BASE_DIR/switch.lock"
-PAUSE_FILE="$BASE_DIR/paused"
-ORIGINAL_PERSIST_FILE="$BASE_DIR/original_persist_usb_config"
-G="/config/usb_gadget/g1"
-BRIDGE="br0"
-
-mkdir -p "$BASE_DIR"
-
-rotate_log() {
-  [ -f "$LOG_FILE" ] || return 0
-  size=$(wc -c < "$LOG_FILE" 2>/dev/null)
-  [ -n "$size" ] || size=0
-  if [ "$size" -gt 262144 ]; then
-    tail -c 131072 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null
-    mv -f "$LOG_FILE.tmp" "$LOG_FILE"
-  fi
-}
-
-log_msg() {
-  rotate_log
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
-}
-
-load_config() {
-  MODE="rndis"
-  WIRED_ADB="0"
-  PERMANENT="0"
-  PATROL_ENABLED="1"
-  AUTO_ROLLBACK="1"
-  BOOT_DELAY_SECONDS="75"
-  POLL_INTERVAL_SECONDS="8"
-  [ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
-
-  case "$MODE" in rndis|ncm|ecm) ;; *) MODE="rndis" ;; esac
-  [ "$WIRED_ADB" = "1" ] || WIRED_ADB="0"
-  [ "$PERMANENT" = "1" ] || PERMANENT="0"
-  [ "$PATROL_ENABLED" = "1" ] || PATROL_ENABLED="0"
-  [ "$AUTO_ROLLBACK" = "0" ] || AUTO_ROLLBACK="1"
-
-  case "$BOOT_DELAY_SECONDS" in *[!0-9]*|'') BOOT_DELAY_SECONDS="75" ;; esac
-  [ "$BOOT_DELAY_SECONDS" -ge 30 ] 2>/dev/null || BOOT_DELAY_SECONDS="30"
-  [ "$BOOT_DELAY_SECONDS" -le 300 ] 2>/dev/null || BOOT_DELAY_SECONDS="300"
-
-  case "$POLL_INTERVAL_SECONDS" in *[!0-9]*|'') POLL_INTERVAL_SECONDS="8" ;; esac
-  [ "$POLL_INTERVAL_SECONDS" -ge 3 ] 2>/dev/null || POLL_INTERVAL_SECONDS="3"
-  [ "$POLL_INTERVAL_SECONDS" -le 60 ] 2>/dev/null || POLL_INTERVAL_SECONDS="60"
-}
-
-target_config() {
-  mode="$1"
-  adb="$2"
-  case "$mode:$adb" in
-    rndis:0) echo "rndis" ;;
-    rndis:1) echo "rndis,adb" ;;
-    ncm:0) echo "ncm,mtp" ;;
-    ncm:1) echo "ncm,mtp,adb" ;;
-    ecm:0) echo "ecm,mtp" ;;
-    ecm:1) echo "ecm,mtp,adb" ;;
-    *) echo "rndis" ;;
-  esac
-}
-
-mode_from_config() {
-  cfg="$1"
-  case "$cfg" in
-    *ncm*) echo "ncm" ;;
-    *ecm*) echo "ecm" ;;
-    *rndis*) echo "rndis" ;;
-    *) echo "unknown" ;;
-  esac
-}
-
-adb_from_config() {
-  cfg="$1"
-  case ",$cfg," in *,adb,*) echo "1" ;; *) echo "0" ;; esac
-}
-
-get_udc_name() {
-  ls /sys/class/udc 2>/dev/null | head -n1
-}
-
-get_udc_state() {
-  udc=$(get_udc_name)
-  if [ -n "$udc" ] && [ -f "/sys/class/udc/$udc/state" ]; then
-    cat "/sys/class/udc/$udc/state" 2>/dev/null | head -n1
-  else
-    echo "unknown"
-  fi
-}
-
-wait_prop() {
-  prop="$1"
-  expected="$2"
-  timeout_s="$3"
-  i=0
-  while [ "$i" -lt "$timeout_s" ]; do
-    value=$(getprop "$prop")
-    [ "$value" = "$expected" ] && return 0
-    sleep 1
-    i=$((i + 1))
-  done
-  return 1
-}
-
-acquire_lock() {
-  i=0
-  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
-    lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
-    if [ -z "$lock_pid" ] || ! kill -0 "$lock_pid" 2>/dev/null; then
-      log_msg "WARN removing stale switch lock pid=$lock_pid"
-      rm -rf "$LOCK_DIR" 2>/dev/null
-      continue
-    fi
-    i=$((i + 1))
-    if [ "$i" -ge 30 ]; then
-      log_msg "ERROR lock timeout owner=$lock_pid"
-      return 1
-    fi
-    sleep 1
-  done
-  echo $$ > "$LOCK_DIR/pid"
-  return 0
-}
-
-release_lock() {
-  rm -rf "$LOCK_DIR" 2>/dev/null
-}
-
-save_state() {
-  result="$1"
-  reason="$2"
-  target="$3"
-  ifname="$4"
-  cat > "$STATE_FILE" <<STATEEOF
-LAST_RESULT="$result"
-LAST_REASON="$reason"
-LAST_TARGET="$target"
-LAST_IFNAME="$ifname"
-LAST_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
-STATEEOF
-}
-
-get_function_ifname() {
-  mode="$1"
-  case "$mode" in
-    ncm) candidates="ncm.gs0 ncm.usb0" ;;
-    ecm) candidates="ecm.gs0 ecm.usb0" ;;
-    rndis) candidates="rndis.gs4 rndis.usb0" ;;
-    *) candidates="" ;;
-  esac
-
-  for name in $candidates; do
-    file="$G/functions/$name/ifname"
-    [ -f "$file" ] || continue
-    ifname=$(cat "$file" 2>/dev/null | head -n1)
-    case "$ifname" in
-      ''|'(unnamed net_device)') continue ;;
-    esac
-    if [ -d "/sys/class/net/$ifname" ]; then
-      echo "$ifname"
-      return 0
-    fi
-  done
-  return 1
-}
-
-wait_function_ifname() {
-  mode="$1"
-  timeout_s="$2"
-  i=0
-  while [ "$i" -lt "$timeout_s" ]; do
-    ifname=$(get_function_ifname "$mode")
-    if [ -n "$ifname" ]; then
-      echo "$ifname"
-      return 0
-    fi
-    sleep 1
-    i=$((i + 1))
-  done
-  return 1
-}
-
-master_of() {
-  ifname="$1"
-  link=$(readlink "/sys/class/net/$ifname/master" 2>/dev/null)
-  [ -n "$link" ] && basename "$link"
-}
-
-attach_to_bridge() {
-  ifname="$1"
-  bridge_attempt=0
-  while [ "$bridge_attempt" -lt 20 ]; do
-    if [ -d "/sys/class/net/$ifname" ] && [ -d "/sys/class/net/$BRIDGE/bridge" ] &&
-       ip link set "$ifname" up 2>/dev/null; then
-      current_master=$(master_of "$ifname")
-      if [ "$current_master" != "$BRIDGE" ]; then
-        [ -n "$current_master" ] && ip link set "$ifname" nomaster 2>/dev/null
-        ip link set "$ifname" master "$BRIDGE" 2>/dev/null || true
-      fi
-      if [ "$(master_of "$ifname")" = "$BRIDGE" ] &&
-         ip link set "$ifname" up 2>/dev/null; then
-        return 0
-      fi
-    fi
-    bridge_attempt=$((bridge_attempt + 1))
-    sleep 1
-  done
-  return 1
-}
-
-repair_network() {
-  mode="$1"
-  case "$mode" in
-    ncm|ecm)
-      ifname=$(wait_function_ifname "$mode" 20) || {
-        log_msg "ERROR $mode netdev not found"
-        return 1
-      }
-      attach_to_bridge "$ifname" || {
-        log_msg "ERROR failed to attach $ifname to $BRIDGE"
-        return 1
-      }
-      log_msg "network repaired: $ifname -> $BRIDGE"
-      echo "$ifname"
-      return 0
-      ;;
-    rndis)
-      if [ -d /sys/class/net/usb0 ] && [ "$(master_of usb0)" = "$BRIDGE" ]; then
-        ip link set usb0 nomaster 2>/dev/null
-        ip link set usb0 down 2>/dev/null
-      fi
-      if [ -d /sys/class/net/sipa_usb0 ]; then
-        attach_to_bridge sipa_usb0 || {
-          log_msg "ERROR failed to attach sipa_usb0 to $BRIDGE"
-          return 1
-        }
-        echo "sipa_usb0"
-        return 0
-      fi
-      ifname=$(get_function_ifname rndis)
-      if [ -n "$ifname" ]; then
-        attach_to_bridge "$ifname" || {
-          log_msg "ERROR failed to attach $ifname to $BRIDGE"
-          return 1
-        }
-        echo "$ifname"
-        return 0
-      fi
-      log_msg "ERROR rndis netdev not found"
-      return 1
-      ;;
-  esac
-  return 1
-}
-
-verify_composition() {
-  mode="$1"
-  target="$2"
-  cfg=$(getprop sys.usb.config)
-  state=$(getprop sys.usb.state)
-  [ "$cfg" = "$target" ] || return 1
-  [ "$state" = "$target" ] || return 1
-
-  link=$(readlink "$G/configs/b.1/f1" 2>/dev/null)
-  case "$mode" in
-    ncm) echo "$link" | grep -q 'ncm\.' || return 1 ;;
-    ecm) echo "$link" | grep -q 'ecm\.' || return 1 ;;
-    rndis) echo "$link" | grep -q 'rndis\.' || return 1 ;;
-  esac
-  return 0
-}
-
-start_adbd_safe() {
-  start adbd 2>/dev/null || setprop ctl.start adbd
-}
-
-raw_apply() {
-  mode="$1"
-  adb="$2"
-  reason="$3"
-  target=$(target_config "$mode" "$adb")
-  current=$(getprop sys.usb.config)
-
-  log_msg "apply begin reason=$reason mode=$mode adb=$adb target=$target current=$current"
-
-  if [ "$current" = "$target" ] && verify_composition "$mode" "$target"; then
-    ifname=$(repair_network "$mode") || return 1
-    save_state "ok" "$reason-no-reenumeration" "$target" "$ifname"
-    log_msg "apply skipped: composition already active"
-    return 0
-  fi
-
-  if [ "$adb" = "1" ]; then
-    start_adbd_safe
-  fi
-
-  setprop sys.usb.config none
-  wait_prop sys.usb.state none 15 || log_msg "WARN sys.usb.state did not reach none"
-  sleep 1
-
-  if [ "$adb" = "1" ]; then
-    start_adbd_safe
-  fi
-
-  setprop sys.usb.config "$target"
-  if ! wait_prop sys.usb.state "$target" 40; then
-    if [ "$mode" = "rndis" ]; then
-      log_msg "WARN property RNDIS failed, trying Android USB service"
-      svc usb setFunctions rndis >/dev/null 2>&1
-      sleep 3
-      [ "$adb" = "1" ] && setprop sys.usb.config rndis,adb
-      wait_prop sys.usb.state "$target" 20 || true
-    fi
-  fi
-
-  if ! verify_composition "$mode" "$target"; then
-    log_msg "ERROR composition verification failed cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state) f1=$(readlink "$G/configs/b.1/f1" 2>/dev/null)"
-    save_state "failed" "$reason" "$target" "unknown"
-    return 1
-  fi
-
-  ifname=$(repair_network "$mode") || {
-    save_state "failed-network" "$reason" "$target" "unknown"
-    return 1
-  }
-
-  carrier="unknown"
-  [ -f "/sys/class/net/$ifname/carrier" ] && carrier=$(cat "/sys/class/net/$ifname/carrier" 2>/dev/null)
-  log_msg "apply success target=$target ifname=$ifname carrier=$carrier udc=$(get_udc_state)"
-  save_state "ok" "$reason" "$target" "$ifname"
-  return 0
-}
-
-rollback_rndis() {
-  log_msg "rollback begin -> RNDIS"
-  setprop persist.sys.usb.config rndis
-  setprop sys.usb.config none
-  wait_prop sys.usb.state none 12 || true
-  sleep 1
-  setprop sys.usb.config rndis
-  if ! wait_prop sys.usb.state rndis 30; then
-    svc usb setFunctions rndis >/dev/null 2>&1
-    sleep 3
-  fi
-  ifname=$(repair_network rndis) || ifname="unknown"
-  if verify_composition rndis rndis &&
-     [ "$(getprop persist.sys.usb.config)" = "rndis" ] &&
-     [ "$ifname" != "unknown" ]; then
-    save_state "rollback-rndis" "auto-rollback" "rndis" "$ifname"
-    log_msg "rollback finished cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state) ifname=$ifname"
-    return 0
-  fi
-  save_state "rollback-failed" "auto-rollback" "rndis" "$ifname"
-  log_msg "ERROR rollback failed cfg=$(getprop sys.usb.config) state=$(getprop sys.usb.state) persist=$(getprop persist.sys.usb.config) ifname=$ifname"
-  return 1
-}
-
-apply_mode() {
-  mode="$1"
-  adb="$2"
-  reason="$3"
-  load_config
-  acquire_lock || return 1
-  trap 'release_lock' EXIT INT TERM
-
-  raw_apply "$mode" "$adb" "$reason"
-  rc=$?
-  if [ "$rc" -ne 0 ] && [ "$AUTO_ROLLBACK" = "1" ] && [ "$mode" != "rndis" ]; then
-    rollback_rndis
-  fi
-
-  release_lock
-  trap - EXIT INT TERM
-  return "$rc"
-}
-
-backup_original_persist() {
-  if [ ! -f "$ORIGINAL_PERSIST_FILE" ]; then
-    getprop persist.sys.usb.config > "$ORIGINAL_PERSIST_FILE"
-    chmod 600 "$ORIGINAL_PERSIST_FILE" 2>/dev/null
-    log_msg "backed up persist.sys.usb.config=$(cat "$ORIGINAL_PERSIST_FILE")"
-  fi
-}
-
-sync_persist() {
-  load_config
-  backup_original_persist
-  target=$(target_config "$MODE" "$WIRED_ADB")
-  setprop persist.sys.usb.config "$target"
-  sleep 1
-  actual=$(getprop persist.sys.usb.config)
-  if [ "$actual" = "$target" ]; then
-    log_msg "persist synced: $target"
-    echo "$target"
-    return 0
-  fi
-  log_msg "WARN persist sync failed expected=$target actual=$actual"
-  echo "$actual"
-  return 1
-}
-
-restore_original_persist() {
-  if [ -f "$ORIGINAL_PERSIST_FILE" ]; then
-    original=$(cat "$ORIGINAL_PERSIST_FILE" 2>/dev/null)
-    [ -n "$original" ] || original="charging"
-    setprop persist.sys.usb.config "$original"
-    log_msg "persist restored: $original"
-    echo "$original"
-    return 0
-  fi
-  return 1
-}
-
-reconcile() {
-  load_config
-  [ "$PERMANENT" = "1" ] || return 0
-  [ -f "$PAUSE_FILE" ] && return 2
-  target=$(target_config "$MODE" "$WIRED_ADB")
-  current=$(getprop sys.usb.config)
-  if [ "$current" != "$target" ] || ! verify_composition "$MODE" "$target"; then
-    apply_mode "$MODE" "$WIRED_ADB" "daemon-reconcile"
-    rc=$?
-    if [ "$rc" -eq 0 ]; then
-      sync_persist >/dev/null 2>&1 || return 1
-    fi
-    return "$rc"
-  fi
-  repair_network "$MODE" >/dev/null 2>&1
-  return $?
-}
-
-status_output() {
-  load_config
-  target=$(target_config "$MODE" "$WIRED_ADB")
-  current=$(getprop sys.usb.config)
-  state=$(getprop sys.usb.state)
-  current_mode=$(mode_from_config "$current")
-  current_adb=$(adb_from_config "$current")
-  udc=$(get_udc_name)
-  udc_state=$(get_udc_state)
-  persist=$(getprop persist.sys.usb.config)
-  ifname=""
-  if [ "$current_mode" = "rndis" ] && [ -d /sys/class/net/sipa_usb0 ]; then
-    ifname="sipa_usb0"
-  elif [ "$current_mode" != "unknown" ]; then
-    ifname=$(get_function_ifname "$current_mode")
-  fi
-  [ -n "$ifname" ] || ifname="unknown"
-
-  if_up="0"
-  carrier="unknown"
-  master="none"
-  if [ -d "/sys/class/net/$ifname" ]; then
-    ip link show "$ifname" 2>/dev/null | grep -q '<[^>]*UP' && if_up="1"
-    [ -f "/sys/class/net/$ifname/carrier" ] && carrier=$(cat "/sys/class/net/$ifname/carrier" 2>/dev/null)
-    master=$(master_of "$ifname")
-    [ -n "$master" ] || master="none"
-  fi
-
-  last_result="none"
-  last_reason="none"
-  last_target="none"
-  last_time="none"
-  if [ -f "$STATE_FILE" ]; then
-    last_result=$(grep '^LAST_RESULT=' "$STATE_FILE" | head -n1 | cut -d= -f2- | tr -d '"')
-    last_reason=$(grep '^LAST_REASON=' "$STATE_FILE" | head -n1 | cut -d= -f2- | tr -d '"')
-    last_target=$(grep '^LAST_TARGET=' "$STATE_FILE" | head -n1 | cut -d= -f2- | tr -d '"')
-    last_time=$(grep '^LAST_TIME=' "$STATE_FILE" | head -n1 | cut -d= -f2- | tr -d '"')
-  fi
-
-  paused="0"
-  [ -f "$PAUSE_FILE" ] && paused="1"
-
-  echo "MODE=$MODE"
-  echo "WIRED_ADB=$WIRED_ADB"
-  echo "PERMANENT=$PERMANENT"
-  echo "PATROL_ENABLED=$PATROL_ENABLED"
-  echo "AUTO_ROLLBACK=$AUTO_ROLLBACK"
-  echo "BOOT_DELAY_SECONDS=$BOOT_DELAY_SECONDS"
-  echo "POLL_INTERVAL_SECONDS=$POLL_INTERVAL_SECONDS"
-  echo "TARGET_CONFIG=$target"
-  echo "CURRENT_CONFIG=$current"
-  echo "CURRENT_STATE=$state"
-  echo "CURRENT_MODE=$current_mode"
-  echo "CURRENT_ADB=$current_adb"
-  echo "UDC=$udc"
-  echo "UDC_STATE=$udc_state"
-  echo "IFNAME=$ifname"
-  echo "IF_UP=$if_up"
-  echo "CARRIER=$carrier"
-  echo "MASTER=$master"
-  echo "PERSIST_CONFIG=$persist"
-  echo "PAUSED=$paused"
-  echo "LAST_RESULT=$last_result"
-  echo "LAST_REASON=$last_reason"
-  echo "LAST_TARGET=$last_target"
-  echo "LAST_TIME=$last_time"
-}
-
-case "$1" in
-  apply)
-    apply_mode "$2" "$3" "manual"
-    ;;
-  apply-config)
-    load_config
-    reason="$2"
-    [ -n "$reason" ] || reason="config"
-    apply_mode "$MODE" "$WIRED_ADB" "$reason"
-    ;;
-  repair)
-    cfg=$(getprop sys.usb.config)
-    mode=$(mode_from_config "$cfg")
-    [ "$mode" = "unknown" ] && exit 1
-    repair_network "$mode"
-    ;;
-  reconcile)
-    reconcile
-    ;;
-  sync-persist)
-    sync_persist
-    ;;
-  restore-persist)
-    restore_original_persist
-    ;;
-  save-original)
-    backup_original_persist
-    ;;
-  pause)
-    : > "$PAUSE_FILE"
-    log_msg "daemon enforcement paused"
-    ;;
-  resume)
-    rm -f "$PAUSE_FILE"
-    log_msg "daemon enforcement resumed"
-    ;;
-  safe-rndis)
-    : > "$PAUSE_FILE"
-    backup_original_persist
-    setprop persist.sys.usb.config rndis
-    apply_mode rndis 0 "safe-rndis"
-    rc=$?
-    if [ "$(getprop persist.sys.usb.config)" != "rndis" ]; then
-      log_msg "ERROR safe RNDIS persist verification failed"
-      exit 1
-    fi
-    exit "$rc"
-    ;;
-  status)
-    status_output
-    ;;
-  *)
-    echo "usage: $0 {apply MODE ADB|apply-config [REASON]|repair|reconcile|sync-persist|restore-persist|save-original|pause|resume|safe-rndis|status}"
-    exit 1
-    ;;
-esac
-`;
-
-  const DAEMON_SCRIPT = `#!/system/bin/sh
-BASE_DIR="/data/kano_usb_mode_manager_v2"
-CONFIG_FILE="$BASE_DIR/config.env"
-MANAGER_FILE="$BASE_DIR/usb_mode_manager.sh"
-PID_FILE="$BASE_DIR/daemon.pid"
-LOG_FILE="$BASE_DIR/manager.log"
-PAUSE_FILE="$BASE_DIR/paused"
-
-mkdir -p "$BASE_DIR"
-
-log_msg() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [daemon] $*" >> "$LOG_FILE"
-}
-
-load_config() {
-  MODE="rndis"
-  WIRED_ADB="0"
-  PERMANENT="0"
-  PATROL_ENABLED="1"
-  BOOT_DELAY_SECONDS="75"
-  POLL_INTERVAL_SECONDS="8"
-  [ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
-  case "$BOOT_DELAY_SECONDS" in *[!0-9]*|'') BOOT_DELAY_SECONDS="75" ;; esac
-  case "$POLL_INTERVAL_SECONDS" in *[!0-9]*|'') POLL_INTERVAL_SECONDS="8" ;; esac
-  [ "$POLL_INTERVAL_SECONDS" -ge 3 ] 2>/dev/null || POLL_INTERVAL_SECONDS="3"
-}
-
-uptime_seconds() {
-  awk '{print int($1)}' /proc/uptime 2>/dev/null
-}
-
-pause_until_reboot() {
-  pause_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
-  if [ -n "$pause_boot" ]; then
-    printf 'auto:%s\\n' "$pause_boot" > "$PAUSE_FILE"
-  else
-    : > "$PAUSE_FILE"
-  fi
-}
-
-clear_previous_boot_pause() {
-  pause_tag=$(cat "$PAUSE_FILE" 2>/dev/null)
-  current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
-  case "$pause_tag" in
-    auto:*)
-      if [ -n "$current_boot" ] && [ "$pause_tag" != "auto:$current_boot" ]; then
-        rm -f "$PAUSE_FILE"
-        log_msg "previous boot failure pause cleared; retrying saved mode"
-      fi
-      ;;
-  esac
-}
-
-wait_boot_ready() {
-  load_config
-  log_msg "waiting for boot readiness, minimum uptime=$BOOT_DELAY_SECONDS s"
-
-  while true; do
-    up=$(uptime_seconds)
-    [ -n "$up" ] || up=0
-    if [ "$up" -ge "$BOOT_DELAY_SECONDS" ]; then
-      break
-    fi
-    sleep 5
-  done
-
-  i=0
-  while [ "$i" -lt 180 ]; do
-    if [ -d /config/usb_gadget/g1/configs/b.1 ] && \
-       [ -d /sys/class/net/br0/bridge ] && \
-       [ -n "$(ls /sys/class/udc 2>/dev/null | head -n1)" ] && \
-       [ "$(getprop init.svc.vendor.usb_default)" = "running" ]; then
-      log_msg "boot dependencies ready at uptime=$(uptime_seconds)s"
-      return 0
-    fi
-    sleep 3
-    i=$((i + 3))
-  done
-
-  log_msg "WARN boot readiness timed out; waiting again without switching USB"
-  return 1
-}
-
-pid_is_daemon() {
-  pid="$1"
-  [ -n "$pid" ] || return 1
-  [ -r "/proc/$pid/cmdline" ] || return 1
-  tr '\\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'usb_mode_daemon.sh'
-}
-
-start_loop() {
-  if [ -f "$PID_FILE" ]; then
-    old_pid=$(cat "$PID_FILE" 2>/dev/null)
-    if kill -0 "$old_pid" 2>/dev/null && pid_is_daemon "$old_pid"; then
-      exit 0
-    fi
-    rm -f "$PID_FILE"
-  fi
-
-  echo $$ > "$PID_FILE"
-  trap 'rm -f "$PID_FILE"; exit 0' INT TERM EXIT
-  log_msg "started pid=$$"
-
-  until wait_boot_ready; do
-    load_config
-    [ "$PERMANENT" = "1" ] || exit 0
-    sleep 5
-  done
-  load_config
-
-  if [ "$PERMANENT" != "1" ]; then
-    log_msg "permanent mode disabled; daemon exits"
-    exit 0
-  fi
-
-  clear_previous_boot_pause
-  if [ -f "$PAUSE_FILE" ]; then
-    log_msg "enforcement is paused; daemon stays idle"
-  else
-    sh "$MANAGER_FILE" sync-persist >> "$LOG_FILE" 2>&1 || true
-    sh "$MANAGER_FILE" apply-config boot >> "$LOG_FILE" 2>&1
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      log_msg "initial apply failed rc=$rc; pausing to prevent a USB switch loop"
-      pause_until_reboot
-    fi
-  fi
-
-  fail_count=0
-  while true; do
-    load_config
-
-    if [ "$PERMANENT" != "1" ]; then
-      log_msg "permanent mode disabled; daemon exits"
-      exit 0
-    fi
-
-    if [ -f "$PAUSE_FILE" ]; then
-      sleep "$POLL_INTERVAL_SECONDS"
-      continue
-    fi
-
-    if [ "$PATROL_ENABLED" = "1" ]; then
-      sh "$MANAGER_FILE" reconcile >> "$LOG_FILE" 2>&1
-      rc=$?
-      if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then
-        fail_count=0
-      else
-        fail_count=$((fail_count + 1))
-        log_msg "reconcile failed rc=$rc count=$fail_count"
-        if [ "$fail_count" -ge 3 ]; then
-          log_msg "three consecutive failures; pausing and switching to safe RNDIS"
-          touch "$PAUSE_FILE"
-          sh "$MANAGER_FILE" safe-rndis >> "$LOG_FILE" 2>&1 || \
-            log_msg "ERROR safe RNDIS switch failed after consecutive reconcile failures"
-          pause_until_reboot
-          fail_count=0
-        fi
-      fi
-    fi
-
-    sleep "$POLL_INTERVAL_SECONDS"
-  done
-}
-
-stop_loop() {
-  if [ -f "$PID_FILE" ]; then
-    pid=$(cat "$PID_FILE" 2>/dev/null)
-    if kill -0 "$pid" 2>/dev/null && pid_is_daemon "$pid"; then
-      kill "$pid" 2>/dev/null
-      sleep 1
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-    rm -f "$PID_FILE"
-  fi
-  log_msg "stopped"
-}
-
-status_loop() {
-  if [ -f "$PID_FILE" ]; then
-    pid=$(cat "$PID_FILE" 2>/dev/null)
-    if kill -0 "$pid" 2>/dev/null && pid_is_daemon "$pid"; then
-      echo "running:$pid"
-      exit 0
-    fi
-    rm -f "$PID_FILE"
-  fi
-  echo "stopped"
-  exit 1
-}
-
-case "$1" in
-  start) start_loop ;;
-  stop) stop_loop ;;
-  restart)
-    stop_loop
-    sleep 1
-    start_loop
-    ;;
-  status) status_loop ;;
-  *)
-    echo "usage: $0 {start|stop|restart|status}"
-    exit 1
-    ;;
-esac
-`;
-
-  const ensureStyle = () => {
-    if (document.getElementById(STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
-      #${MODAL_NAME} .kunm-wrap { display:flex; flex-direction:column; gap:12px; }
-      #${MODAL_NAME} .kunm-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-      #${MODAL_NAME} .kunm-card,
-      #${MODAL_NAME} .kunm-panel { border-radius:16px; border:1px solid rgba(255,255,255,.09); background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)); }
-      #${MODAL_NAME} .kunm-card,
-      #${MODAL_NAME} .kunm-panel { padding:12px 14px; }
-      #${MODAL_NAME} .kunm-label { font-size:.63rem; opacity:.68; margin-bottom:6px; }
-      #${MODAL_NAME} .kunm-value { font-size:.82rem; font-weight:800; overflow-wrap:anywhere; }
-      #${MODAL_NAME} .kunm-good { color:#9bffc2; }
-      #${MODAL_NAME} .kunm-warn { color:#ffd48f; }
-      #${MODAL_NAME} .kunm-bad { color:#ff9e9e; }
-      #${MODAL_NAME} .kunm-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
-      #${MODAL_NAME} .kunm-title { font-size:.8rem; font-weight:800; }
-      #${MODAL_NAME} .kunm-tip { font-size:.65rem; line-height:1.65; opacity:.78; }
-      #${MODAL_NAME} .kunm-mode-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-      #${MODAL_NAME} .kunm-mode { border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.03); padding:12px; cursor:pointer; transition:.2s ease; }
-      #${MODAL_NAME} .kunm-mode.active { border-color:rgba(105,199,120,.75); box-shadow:0 0 0 2px rgba(105,199,120,.15); background:rgba(75,181,98,.12); }
-      #${MODAL_NAME} .kunm-mode-name { font-size:.8rem; font-weight:800; }
-      #${MODAL_NAME} .kunm-mode-tip { font-size:.63rem; opacity:.76; margin-top:5px; line-height:1.55; }
-      #${MODAL_NAME} .kunm-inline { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
-      #${MODAL_NAME} .kunm-field { display:flex; flex-direction:column; gap:6px; min-width:145px; flex:1; }
-      #${MODAL_NAME} .kunm-field input { width:100%; box-sizing:border-box; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.1); outline:none; color:#fff; background:rgba(255,255,255,.04); }
-      #${MODAL_NAME} .kunm-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
-      #${MODAL_NAME} .kunm-pre { white-space:pre-wrap; word-break:break-word; margin:0; font-size:.61rem; line-height:1.65; max-height:220px; overflow:auto; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
-      #${MODAL_NAME} .kunm-badge { display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; font-size:.61rem; font-weight:700; background:rgba(255,255,255,.08); }
-      #${MODAL_NAME} .kunm-danger { background:rgba(197,77,77,.18)!important; }
-      @media (max-width:900px) {
-        #${MODAL_NAME} .kunm-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      }
-      @media (max-width:700px) {
-        #${MODAL_NAME} .kunm-grid,
-        #${MODAL_NAME} .kunm-mode-grid { grid-template-columns:1fr; }
-        #${MODAL_NAME} .kunm-head { flex-direction:column; align-items:flex-start; }
-        #${MODAL_NAME} .kunm-actions button { width:100%; }
-      }
-    `;
-    document.head.appendChild(style);
-  };
-
-  const writeRemoteFile = async (path, content, mode = '755') => {
-    const encoded = encodePayload(content);
-    if (!encoded) return false;
-    const dir = path.slice(0, path.lastIndexOf('/')) || '/';
-    const tempPath = `${path}.tmp`;
-    const res = await run(`
-mkdir -p ${shellQuote(dir)}
-temp_file=${shellQuote(tempPath)}.$$
-if printf '%s' ${shellQuote(encoded)} | base64 -d > "$temp_file" &&
-   chmod ${mode} "$temp_file" &&
-   mv -f "$temp_file" ${shellQuote(path)}; then
-  exit 0
-fi
-rm -f "$temp_file"
-exit 1
-`, 25000);
-    return res.ok;
-  };
-
-  const normalizeConfig = (config = {}) => {
-    const next = { ...DEFAULT_CONFIG, ...config };
-    if (!MODES.some((item) => item.key === next.mode)) next.mode = DEFAULT_CONFIG.mode;
-    next.adb = String(next.adb) === '1' ? '1' : '0';
-    next.permanent = String(next.permanent) === '1' ? '1' : '0';
-    next.patrol = String(next.patrol) === '0' ? '0' : '1';
-    next.autoRollback = String(next.autoRollback) === '0' ? '0' : '1';
-
-    let bootDelay = Number.parseInt(next.bootDelay, 10);
-    if (!Number.isFinite(bootDelay)) bootDelay = 75;
-    next.bootDelay = String(Math.min(300, Math.max(30, bootDelay)));
-
-    let pollInterval = Number.parseInt(next.pollInterval, 10);
-    if (!Number.isFinite(pollInterval)) pollInterval = 8;
-    next.pollInterval = String(Math.min(60, Math.max(3, pollInterval)));
-    return next;
-  };
-
-  const buildConfigText = (config = DEFAULT_CONFIG) => {
-    const next = normalizeConfig(config);
-    return [
-      '#!/system/bin/sh',
-      `MODE="${next.mode}"`,
-      `WIRED_ADB="${next.adb}"`,
-      `PERMANENT="${next.permanent}"`,
-      `PATROL_ENABLED="${next.patrol}"`,
-      `AUTO_ROLLBACK="${next.autoRollback}"`,
-      `BOOT_DELAY_SECONDS="${next.bootDelay}"`,
-      `POLL_INTERVAL_SECONDS="${next.pollInterval}"`,
-      '',
-    ].join('\n');
-  };
-
-  const parseEnv = (text = '') => {
-    const data = {};
-    String(text || '').split(/\r?\n/).forEach((line) => {
-      const trimmed = String(line || '').trim();
-      if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) return;
-      const idx = trimmed.indexOf('=');
-      const key = trimmed.slice(0, idx).trim();
-      let value = trimmed.slice(idx + 1).trim();
-      value = value.replace(/^"/, '').replace(/"$/, '');
-      data[key] = value;
+  'use strict';
+  const VERSION = '2.4.1';
+  const BASE = '/data/kano_usb_mode_manager_v3';
+  const BACKEND = BASE + '/backend.sh';
+  const TITLE = '\u0055\u0053\u0042 \u7f51\u7edc\u6a21\u5f0f';
+  const BACKEND_DATA = 'IyEvc3lzdGVtL2Jpbi9zaAojIEtVTk1fQkFDS0VORF9WRVJTSU9OPTIuNC4xCiMgVXNlIEFuZHJvaWQncyBuYXRpdmUgVVNCIHByb3BlcnR5IGhhbmRsZXJzOyBuZXZlciBjb25zdHJ1Y3QgYSBnYWRnZXQgYnkgaGFuZC4KUEFUSD0iL3N5c3RlbS9iaW46L3N5c3RlbS94YmluOi92ZW5kb3IvYmluOi9vZG0vYmluOi9zYmluOi9iaW46L3Vzci9iaW46JFBBVEgiCmV4cG9ydCBQQVRICnVtYXNrIDA3NwpCQVNFPS9kYXRhL2thbm9fdXNiX21vZGVfbWFuYWdlcl92MwpDT05GSUc9IiRCQVNFL2NvbmZpZy5lbnYiCkxPRz0iJEJBU0UvbWFuYWdlci5sb2ciClNUQVRFPSIkQkFTRS9zdGF0ZS5lbnYiCkxPQ0s9IiRCQVNFL3N3aXRjaC5sb2NrIgpQSURGSUxFPSIkQkFTRS9kYWVtb24ucGlkIgpTVE9QRklMRT0iJEJBU0Uvc3RvcCIKUEFVU0U9IiRCQVNFL3BhdXNlZCIKQk9PVEZJTEU9L3NkY2FyZC91ZmlfdG9vbHNfYm9vdC5zaApTRUxGPSIkQkFTRS9iYWNrZW5kLnNoIgpORVQ9L3N5cy9jbGFzcy9uZXQKVVNCUk9PVD0vc3lzL2NsYXNzL3VkYwpMRUdBQ1k9L3N5cy9jbGFzcy9hbmRyb2lkX3VzYi9hbmRyb2lkMApQUk9DPS9wcm9jCkc9Jyc7IEM9Jyc7IEJSSURHRT0nJzsgRElTQ09WRVJZX0VSUk9SPScnCgp2YWx1ZSgpIHsKICBsb2NhbCBsaW5lIGtleQogIGtleT0iJDIiCiAgWyAtciAiJDEiIF0gfHwgcmV0dXJuIDAKICB3aGlsZSBJRlM9IHJlYWQgLXIgbGluZSB8fCBbIC1uICIkbGluZSIgXTsgZG8KICAgIGNhc2UgIiRsaW5lIiBpbiAiJGtleT0iKikKICAgICAgbGluZT0ke2xpbmUjKj19OyBsaW5lPSR7bGluZSUiJChwcmludGYgJ1xyJykifQogICAgICBjYXNlICIkbGluZSIgaW4gXCIqXCIpIGxpbmU9JHtsaW5lI1wifTsgbGluZT0ke2xpbmUlXCJ9IDs7IGVzYWMKICAgICAgcHJpbnRmICclc1xuJyAiJGxpbmUiOyByZXR1cm4gMCA7OwogICAgZXNhYwogIGRvbmUgPCAiJDEiCn0KbnVtKCkgeyBjYXNlICIkMSIgaW4gJyd8KlshMC05XSopIHByaW50ZiAnJXNcbicgIiQyIiA7OyAqKSBwcmludGYgJyVzXG4nICIkMSIgOzsgZXNhYzsgfQpsb2FkX2NvbmZpZygpIHsKICBsb2NhbCBsaW5lIGtleSBlbnRyeSBzZWVuIGNyCiAgTU9ERT0nJzsgV0lSRURfQURCPScnOyBQRVJNQU5FTlQ9Jyc7IFBBVFJPTF9FTkFCTEVEPScnOyBBVVRPX1JPTExCQUNLPScnCiAgQk9PVF9ERUxBWV9TRUNPTkRTPScnOyBQT0xMX0lOVEVSVkFMX1NFQ09ORFM9Jyc7IEJSSURHRV9PVkVSUklERT0nJwogIHNlZW49J3wnOyBjcj0kKHByaW50ZiAnXHInKQogIGlmIFsgLXIgIiRDT05GSUciIF07IHRoZW4KICAgIHdoaWxlIElGUz0gcmVhZCAtciBsaW5lIHx8IFsgLW4gIiRsaW5lIiBdOyBkbwogICAgICBjYXNlICIkbGluZSIgaW4gKj0qKSA7OyAqKSBjb250aW51ZSA7OyBlc2FjCiAgICAgIGtleT0ke2xpbmUlJT0qfQogICAgICBjYXNlICIka2V5IiBpbiBNT0RFfFdJUkVEX0FEQnxQRVJNQU5FTlR8UEFUUk9MX0VOQUJMRUR8QVVUT19ST0xMQkFDS3xCT09UX0RFTEFZX1NFQ09ORFN8UE9MTF9JTlRFUlZBTF9TRUNPTkRTfEJSSURHRSkgOzsgKikgY29udGludWUgOzsgZXNhYwogICAgICBjYXNlICIkc2VlbiIgaW4gKiJ8JGtleXwiKikgY29udGludWUgOzsgZXNhYwogICAgICBzZWVuPSIkc2VlbiRrZXl8IjsgZW50cnk9JHtsaW5lIyo9fTsgZW50cnk9JHtlbnRyeSUiJGNyIn0KICAgICAgY2FzZSAiJGVudHJ5IiBpbiBcIipcIikgZW50cnk9JHtlbnRyeSNcIn07IGVudHJ5PSR7ZW50cnklXCJ9IDs7IGVzYWMKICAgICAgY2FzZSAiJGtleSIgaW4KICAgICAgICBNT0RFKSBNT0RFPSIkZW50cnkiIDs7IFdJUkVEX0FEQikgV0lSRURfQURCPSIkZW50cnkiIDs7CiAgICAgICAgUEVSTUFORU5UKSBQRVJNQU5FTlQ9IiRlbnRyeSIgOzsgUEFUUk9MX0VOQUJMRUQpIFBBVFJPTF9FTkFCTEVEPSIkZW50cnkiIDs7CiAgICAgICAgQVVUT19ST0xMQkFDSykgQVVUT19ST0xMQkFDSz0iJGVudHJ5IiA7OyBCT09UX0RFTEFZX1NFQ09ORFMpIEJPT1RfREVMQVlfU0VDT05EUz0iJGVudHJ5IiA7OwogICAgICAgIFBPTExfSU5URVJWQUxfU0VDT05EUykgUE9MTF9JTlRFUlZBTF9TRUNPTkRTPSIkZW50cnkiIDs7IEJSSURHRSkgQlJJREdFX09WRVJSSURFPSIkZW50cnkiIDs7CiAgICAgIGVzYWMKICAgIGRvbmUgPCAiJENPTkZJRyIKICBmaQogIEJPT1RfREVMQVlfU0VDT05EUz0kKG51bSAiJEJPT1RfREVMQVlfU0VDT05EUyIgMTIwKQogIFBPTExfSU5URVJWQUxfU0VDT05EUz0kKG51bSAiJFBPTExfSU5URVJWQUxfU0VDT05EUyIgMTApCiAgY2FzZSAiJE1PREUiIGluIG5jbXxlY218cm5kaXMpIDs7ICopIE1PREU9cm5kaXMgOzsgZXNhYwogIFsgIiRXSVJFRF9BREIiID0gMSBdIHx8IFdJUkVEX0FEQj0wCiAgWyAiJFBFUk1BTkVOVCIgPSAxIF0gfHwgUEVSTUFORU5UPTAKICBbICIkUEFUUk9MX0VOQUJMRUQiID0gMCBdIHx8IFBBVFJPTF9FTkFCTEVEPTEKICBbICIkQVVUT19ST0xMQkFDSyIgPSAwIF0gfHwgQVVUT19ST0xMQkFDSz0xCiAgWyAiJEJPT1RfREVMQVlfU0VDT05EUyIgLWdlIDMwIF0gMj4vZGV2L251bGwgJiYgWyAiJEJPT1RfREVMQVlfU0VDT05EUyIgLWxlIDYwMCBdIDI+L2Rldi9udWxsIHx8IEJPT1RfREVMQVlfU0VDT05EUz0xMjAKICBbICIkUE9MTF9JTlRFUlZBTF9TRUNPTkRTIiAtZ2UgNSBdIDI+L2Rldi9udWxsICYmIFsgIiRQT0xMX0lOVEVSVkFMX1NFQ09ORFMiIC1sZSA2MCBdIDI+L2Rldi9udWxsIHx8IFBPTExfSU5URVJWQUxfU0VDT05EUz0xMAogIGNhc2UgIiRCUklER0VfT1ZFUlJJREUiIGluICcnfGF1dG8pIEJSSURHRV9PVkVSUklERT0nJyA7OyAqWyFhLXpBLVowLTlfLjotXSopIEJSSURHRV9PVkVSUklERT0nJyA7OyBlc2FjCn0KcmVhZF9vbmUoKSB7IFsgLXIgIiQxIiBdICYmIHsgX3JlYWRfb25lPScnOyBJRlM9IHJlYWQgLXIgX3JlYWRfb25lIDwgIiQxIjsgcHJpbnRmICclc1xuJyAiJF9yZWFkX29uZSI7IH07IH0KcHJvcCgpIHsgZ2V0cHJvcCAiJDEiIDI+L2Rldi9udWxsOyB9Cm5vdygpIHsgbG9jYWwgdCByOyBJRlM9JyAnIHJlYWQgLXIgdCByIDwgIiRQUk9DL3VwdGltZSI7IHByaW50ZiAnJXNcbicgIiR7dCUlLip9IjsgfQpib290X2lkKCkgeyBsb2NhbCBpZDsgaWQ9JChyZWFkX29uZSAiJFBST0Mvc3lzL2tlcm5lbC9yYW5kb20vYm9vdF9pZCIpOyBbIC1uICIkaWQiIF0gfHwgaWQ9JChhd2sgJyQxID09ICJidGltZSIge3ByaW50ICQyOyBleGl0fScgIiRQUk9DL3N0YXQiIDI+L2Rldi9udWxsKTsgcHJpbnRmICclc1xuJyAiJHtpZDotdW5hdmFpbGFibGV9IjsgfQpsb2coKSB7CiAgbG9jYWwgc2l6ZQogIG1rZGlyIC1wICIkQkFTRSIgfHwgcmV0dXJuIDEKICBzaXplPTA7IFsgISAtZiAiJExPRyIgXSB8fCBzaXplPSQod2MgLWMgPCAiJExPRyIgMj4vZGV2L251bGwpOyBzaXplPSQobnVtICIkc2l6ZSIgMCkKICBpZiBbICIkc2l6ZSIgLWd0IDE5NjYwOCBdOyB0aGVuCiAgICB0YWlsIC1jIDk4MzA0ICIkTE9HIiA+ICIkTE9HLm9sZC50bXAiICYmIG12IC1mICIkTE9HLm9sZC50bXAiICIkTE9HLm9sZCIKICAgIDogPiAiJExPRyIKICBmaQogIHByaW50ZiAnWyVzXSAlc1xuJyAiJChkYXRlICcrJVktJW0tJWQgJUg6JU06JVMnKSIgIiQqIiA+PiAiJExPRyIKfQpyZWNvcmQoKSB7CiAgcHJpbnRmICclc1xuJyAiTEFTVF9SRVNVTFQ9JDEiICJMQVNUX1JFQVNPTj0kMiIgIkxBU1RfVEFSR0VUPSQzIiAiTEFTVF9JRk5BTUU9JDQiIFwKICAgICJMQVNUX1RJTUU9JChkYXRlICcrJVktJW0tJWQgJUg6JU06JVMnKSIgPiAiJFNUQVRFLnRtcC4kJCIgJiYgbXYgLWYgIiRTVEFURS50bXAuJCQiICIkU1RBVEUiCn0KdmFsaWRfbW9kZSgpIHsgY2FzZSAiJDEiIGluIG5jbXxlY218cm5kaXMpIHJldHVybiAwIDs7ICopIHJldHVybiAxIDs7IGVzYWM7IH0KbW9kZV9vZigpIHsgY2FzZSAiLCQxLCIgaW4gKixuY20sKikgZWNobyBuY20gOzsgKixlY20sKikgZWNobyBlY20gOzsgKixybmRpcywqKSBlY2hvIHJuZGlzIDs7ICopIGVjaG8gdW5rbm93biA7OyBlc2FjOyB9CmFkYl9vZigpIHsgY2FzZSAiLCQxLCIgaW4gKixhZGIsKikgZWNobyAxIDs7ICopIGVjaG8gMCA7OyBlc2FjOyB9CnZhbGlkX2NvbWJvKCkgewogIGNhc2UgIiQxIiBpbiBybmRpc3xybmRpcyxhZGJ8bmNtfG5jbSxhZGJ8bmNtLG10cHxuY20sbXRwLGFkYnxtdHAsbmNtfG10cCxuY20sYWRifGVjbXxlY20sYWRifGVjbSxtdHB8ZWNtLG10cCxhZGJ8bXRwLGVjbXxtdHAsZWNtLGFkYikgcmV0dXJuIDAgOzsgKikgcmV0dXJuIDEgOzsgZXNhYwp9CmRlZmF1bHRfdGFyZ2V0KCkgewogIGNhc2UgIiQxOiQyIiBpbiBybmRpczowKSBlY2hvIHJuZGlzIDs7IHJuZGlzOjEpIGVjaG8gcm5kaXMsYWRiIDs7CiAgICBuY206MCkgZWNobyBuY20sbXRwIDs7IG5jbToxKSBlY2hvIG5jbSxtdHAsYWRiIDs7CiAgICBlY206MCkgZWNobyBlY20sbXRwIDs7IGVjbToxKSBlY2hvIGVjbSxtdHAsYWRiIDs7ICopIHJldHVybiAxIDs7IGVzYWMKfQpjaG9vc2VfdGFyZ2V0KCkgewogIGxvY2FsIGxlYXJuZWQgY3VycmVudCByY2ZpbGUgY2FuZGlkYXRlIGNhbmRpZGF0ZXMgZGVmYXVsdAogIGxlYXJuZWQ9JCh2YWx1ZSAiJEJBU0UvbmF0aXZlX3RhcmdldHMuZW52IiAiVEFSR0VUXyQxXyQyIikKICBpZiB2YWxpZF9jb21ibyAiJGxlYXJuZWQiICYmIFsgIiQobW9kZV9vZiAiJGxlYXJuZWQiKSIgPSAiJDEiIF0gJiYgWyAiJChhZGJfb2YgIiRsZWFybmVkIikiID0gIiQyIiBdOyB0aGVuIGVjaG8gIiRsZWFybmVkIjsgcmV0dXJuOyBmaQogIGN1cnJlbnQ9JChwcm9wIHN5cy51c2IuY29uZmlnKQogIGlmIHZhbGlkX2NvbWJvICIkY3VycmVudCIgJiYgWyAiJChwcm9wIHN5cy51c2Iuc3RhdGUpIiA9ICIkY3VycmVudCIgXSAmJgogICAgIFsgIiQobW9kZV9vZiAiJGN1cnJlbnQiKSIgPSAiJDEiIF0gJiYgWyAiJChhZGJfb2YgIiRjdXJyZW50IikiID0gIiQyIiBdOyB0aGVuIGVjaG8gIiRjdXJyZW50IjsgcmV0dXJuOyBmaQogIGRlZmF1bHQ9JChkZWZhdWx0X3RhcmdldCAiJDEiICIkMiIpIHx8IHJldHVybiAxCiAgY2FuZGlkYXRlcz0nJwogICMgUmVhZCBuYXRpdmUgdHJpZ2dlciB2YWx1ZXMgb25seSBhdCBhbiBleHBsaWNpdCBzd2l0Y2gsIG5vdCBvbiBlYWNoIHBvbGwuCiAgZm9yIHJjZmlsZSBpbiAvaW5pdCoucmMgL3ZlbmRvci9ldGMvaW5pdC8qLnJjIC92ZW5kb3IvZXRjL2luaXQvaHcvKi5yYyAvb2RtL2V0Yy9pbml0LyoucmMgL3N5c3RlbS9ldGMvaW5pdC9ody8qLnJjOyBkbwogICAgWyAtciAiJHJjZmlsZSIgXSB8fCBjb250aW51ZQogICAgY2FuZGlkYXRlcz0iJGNhbmRpZGF0ZXMgJChzZWQgLW4gJ3MvLipwcm9wZXJ0eTpzeXNcLnVzYlwuY29uZmlnPVwoW14gJl0qXCkuKi9cMS9wJyAiJHJjZmlsZSIpIgogIGRvbmUKICBmb3IgY2FuZGlkYXRlIGluICRjYW5kaWRhdGVzOyBkbyBbICIkY2FuZGlkYXRlIiAhPSAiJGRlZmF1bHQiIF0gfHwgeyBlY2hvICIkZGVmYXVsdCI7IHJldHVybjsgfTsgZG9uZQogIGZvciBjYW5kaWRhdGUgaW4gJGNhbmRpZGF0ZXM7IGRvCiAgICBpZiB2YWxpZF9jb21ibyAiJGNhbmRpZGF0ZSIgJiYgWyAiJChtb2RlX29mICIkY2FuZGlkYXRlIikiID0gIiQxIiBdICYmIFsgIiQoYWRiX29mICIkY2FuZGlkYXRlIikiID0gIiQyIiBdOyB0aGVuIGVjaG8gIiRjYW5kaWRhdGUiOyByZXR1cm47IGZpCiAgZG9uZQogIGVjaG8gIiRkZWZhdWx0Igp9CmxlYXJuX3RhcmdldCgpIHsKICBsb2NhbCBrZXkKICB2YWxpZF9jb21ibyAiJDEiIHx8IHJldHVybiAwCiAga2V5PSJUQVJHRVRfJChtb2RlX29mICIkMSIpXyQoYWRiX29mICIkMSIpIgogIHsgWyAhIC1yICIkQkFTRS9uYXRpdmVfdGFyZ2V0cy5lbnYiIF0gfHwgZ3JlcCAtdiAiXiRrZXk9IiAiJEJBU0UvbmF0aXZlX3RhcmdldHMuZW52IjsgcHJpbnRmICclcz0lc1xuJyAiJGtleSIgIiQxIjsgfSA+ICIkQkFTRS9uYXRpdmVfdGFyZ2V0cy50bXAuJCQiCiAgbXYgLWYgIiRCQVNFL25hdGl2ZV90YXJnZXRzLnRtcC4kJCIgIiRCQVNFL25hdGl2ZV90YXJnZXRzLmVudiIKfQpmaW5kX2dhZGdldCgpIHsKICBsb2NhbCBjYW5kaWRhdGUgYm91bmQgc2VsZWN0ZWQgY291bnQgY29uZmlnIHNlbGVjdGVkX2NvbmZpZyBjb25maWdfY291bnQgc2VlbiBwcmV2aW91cyBkdXBsaWNhdGUgYm91bmRfY291bnQgbmV0X2NvdW50CiAgRz0nJzsgQz0nJzsgRElTQ09WRVJZX0VSUk9SPScnOyBzZWxlY3RlZD0nJzsgY291bnQ9MDsgYm91bmRfY291bnQ9MDsgc2Vlbj0nJwogIGZvciBjYW5kaWRhdGUgaW4gL2NvbmZpZy91c2JfZ2FkZ2V0LyogL3N5cy9rZXJuZWwvY29uZmlnL3VzYl9nYWRnZXQvKjsgZG8KICAgIFsgLWQgIiRjYW5kaWRhdGUvY29uZmlncyIgXSB8fCBjb250aW51ZQogICAgZHVwbGljYXRlPTAKICAgIGZvciBwcmV2aW91cyBpbiAkc2VlbjsgZG8gWyAhICIkY2FuZGlkYXRlIiAtZWYgIiRwcmV2aW91cyIgXSB8fCBkdXBsaWNhdGU9MTsgZG9uZQogICAgWyAiJGR1cGxpY2F0ZSIgPSAwIF0gfHwgY29udGludWUKICAgIHNlZW49IiRzZWVuICRjYW5kaWRhdGUiOyBjb3VudD0kKChjb3VudCArIDEpKTsgc2VsZWN0ZWQ9IiRjYW5kaWRhdGUiCiAgICBib3VuZD0kKHJlYWRfb25lICIkY2FuZGlkYXRlL1VEQyIpCiAgICBjYXNlICIkYm91bmQiIGluICcnfG5vbmUpIDs7ICopIEc9IiRjYW5kaWRhdGUiOyBib3VuZF9jb3VudD0kKChib3VuZF9jb3VudCArIDEpKSA7OyBlc2FjCiAgZG9uZQogIGlmIFsgIiRib3VuZF9jb3VudCIgLWd0IDEgXTsgdGhlbiBHPScnOyBESVNDT1ZFUllfRVJST1I9bXVsdGlwbGUtYWN0aXZlLWdhZGdldHM7IHJldHVybjsgZmkKICBpZiBbIC16ICIkRyIgXTsgdGhlbgogICAgaWYgWyAiJGNvdW50IiAtZXEgMSBdOyB0aGVuIEc9IiRzZWxlY3RlZCIKICAgIGVsaWYgWyAiJGNvdW50IiAtZ3QgMSBdOyB0aGVuIERJU0NPVkVSWV9FUlJPUj1tdWx0aXBsZS11bmJvdW5kLWdhZGdldHM7IGZpCiAgZmkKICBbIC1uICIkRyIgXSB8fCByZXR1cm4gMAogIHNlbGVjdGVkX2NvbmZpZz0nJzsgY29uZmlnX2NvdW50PTA7IG5ldF9jb3VudD0wCiAgZm9yIGNvbmZpZyBpbiAiJEciL2NvbmZpZ3MvKjsgZG8KICAgIFsgLWQgIiRjb25maWciIF0gfHwgY29udGludWUKICAgIGNvbmZpZ19jb3VudD0kKChjb25maWdfY291bnQgKyAxKSk7IHNlbGVjdGVkX2NvbmZpZz0iJGNvbmZpZyIKICAgIGZvciBjYW5kaWRhdGUgaW4gIiRjb25maWciLyo7IGRvCiAgICAgIFsgLUwgIiRjYW5kaWRhdGUiIF0gfHwgY29udGludWUKICAgICAgY2FzZSAiJChyZWFkbGluayAiJGNhbmRpZGF0ZSIgMj4vZGV2L251bGwpIiBpbiAqbmNtLip8KmVjbS4qfCpybmRpcy4qKSBDPSIkY29uZmlnIjsgbmV0X2NvdW50PSQoKG5ldF9jb3VudCArIDEpKTsgYnJlYWsgOzsgZXNhYwogICAgZG9uZQogIGRvbmUKICBpZiBbICIkbmV0X2NvdW50IiAtZ3QgMSBdOyB0aGVuIEM9Jyc7IERJU0NPVkVSWV9FUlJPUj1tdWx0aXBsZS1uZXR3b3JrLWNvbmZpZ3VyYXRpb25zOyByZXR1cm47IGZpCiAgaWYgWyAteiAiJEMiIF07IHRoZW4KICAgIGlmIFsgIiRjb25maWdfY291bnQiIC1lcSAxIF07IHRoZW4gQz0iJHNlbGVjdGVkX2NvbmZpZyIKICAgIGVsaWYgWyAtZCAiJEcvY29uZmlncy9iLjEiIF07IHRoZW4gQz0iJEcvY29uZmlncy9iLjEiCiAgICBlbHNlIERJU0NPVkVSWV9FUlJPUj1jb25maWd1cmF0aW9uLW5vdC1pZGVudGlmaWFibGU7IGZpCiAgZmkKfQptYXN0ZXJfb2YoKSB7CiAgbG9jYWwgcGF0aAogIHBhdGg9JChyZWFkbGluayAiJE5FVC8kMS9tYXN0ZXIiIDI+L2Rldi9udWxsKQogIGlmIFsgLW4gIiRwYXRoIiBdOyB0aGVuIGVjaG8gIiR7cGF0aCMjKi99IjsgcmV0dXJuOyBmaQogIGZvciBwYXRoIGluICIkTkVUIi8qL2JyaWYvIiQxIjsgZG8KICAgIFsgLWUgIiRwYXRoIiBdIHx8IFsgLUwgIiRwYXRoIiBdIHx8IGNvbnRpbnVlCiAgICBwYXRoPSR7cGF0aCUvYnJpZi8qfTsgZWNobyAiJHtwYXRoIyMqL30iOyByZXR1cm4KICBkb25lCn0KZmluZF9icmlkZ2UoKSB7CiAgbG9jYWwgcCBjb3VudCBvbmx5CiAgQlJJREdFPScnCiAgaWYgWyAtbiAiJEJSSURHRV9PVkVSUklERSIgXTsgdGhlbgogICAgWyAhIC1kICIkTkVULyRCUklER0VfT1ZFUlJJREUvYnJpZGdlIiBdIHx8IEJSSURHRT0iJEJSSURHRV9PVkVSUklERSIKICAgIHJldHVybgogIGZpCiAgIyBicjAgaXMgdGhlIEY1MCBMQU4gYnJpZGdlLCBuZXZlciB0aGUgT3BlbldydCBob3N0J3MgYnJpZGdlLgogIGlmIFsgLWQgIiRORVQvYnIwL2JyaWRnZSIgXTsgdGhlbiBCUklER0U9YnIwOyByZXR1cm47IGZpCiAgY291bnQ9MDsgb25seT0nJwogIGZvciBwIGluICIkTkVUIi8qL2JyaWRnZTsgZG8gWyAtZCAiJHAiIF0gfHwgY29udGludWU7IHA9JHtwJS9icmlkZ2V9OyBvbmx5PSR7cCMjKi99OyBjb3VudD0kKChjb3VudCArIDEpKTsgZG9uZQogIFsgIiRjb3VudCIgLW5lIDEgXSB8fCBCUklER0U9IiRvbmx5Igp9CmRpc2NvdmVyKCkgeyBmaW5kX2dhZGdldDsgZmluZF9icmlkZ2U7IH0KaGFzX2Z1bmN0aW9uKCkgewogIGxvY2FsIGYgdGFyZ2V0CiAgWyAtbiAiJEMiIF0gfHwgcmV0dXJuIDEKICBmb3IgZiBpbiAiJEMiLyo7IGRvCiAgICBbIC1MICIkZiIgXSB8fCBjb250aW51ZQogICAgdGFyZ2V0PSQocmVhZGxpbmsgIiRmIiAyPi9kZXYvbnVsbCk7IHRhcmdldD0ke3RhcmdldCMjKi99CiAgICBjYXNlICIkMTokdGFyZ2V0IiBpbiBuY206bmNtLip8ZWNtOmVjbS4qfHJuZGlzOnJuZGlzLip8YWRiOmZmcy5hZGJ8YWRiOmFkYi4qKSByZXR1cm4gMCA7OyBlc2FjCiAgZG9uZQogIHJldHVybiAxCn0KYWN0aXZlX21vZGUoKSB7CiAgbG9jYWwgbSBmCiAgaWYgWyAtbiAiJEMiIF07IHRoZW4KICAgIGZvciBtIGluIG5jbSBlY20gcm5kaXM7IGRvIGhhc19mdW5jdGlvbiAiJG0iICYmIHsgZWNobyAiJG0iOyByZXR1cm47IH07IGRvbmUKICAgIGVjaG8gdW5rbm93bjsgcmV0dXJuCiAgZmkKICBpZiBbIC1yICIkTEVHQUNZL2Z1bmN0aW9ucyIgXTsgdGhlbiBtb2RlX29mICIkKHJlYWRfb25lICIkTEVHQUNZL2Z1bmN0aW9ucyIpIjsgcmV0dXJuOyBmaQogIG09JChtb2RlX29mICIkKHByb3Agc3lzLnVzYi5zdGF0ZSkiKTsgdmFsaWRfbW9kZSAiJG0iIHx8IG09JChtb2RlX29mICIkKHByb3Agc3lzLnVzYi5jb25maWcpIikKICBlY2hvICIkbSIKfQpnZXRfaWZuYW1lKCkgewogIGxvY2FsIG1vZGUgZiBsaW5rIG5hbWUgZm91bmQgY291bnQgY2ZnIHVzYl9kZXZpY2UKICBtb2RlPSIkMSI7IHZhbGlkX21vZGUgIiRtb2RlIiB8fCByZXR1cm4gMQogIGlmIFsgIiRtb2RlIiA9IHJuZGlzIF0gJiYgWyAtZCAiJE5FVC9zaXBhX3VzYjAiIF07IHRoZW4gZWNobyBzaXBhX3VzYjA7IHJldHVybjsgZmkKICBpZiBbIC1uICIkQyIgXTsgdGhlbgogICAgZm9yIGYgaW4gIiRDIi8qOyBkbwogICAgICBbIC1MICIkZiIgXSB8fCBjb250aW51ZQogICAgICBsaW5rPSQocmVhZGxpbmsgIiRmIiAyPi9kZXYvbnVsbCk7IGxpbms9JHtsaW5rIyMqL30KICAgICAgY2FzZSAiJGxpbmsiIGluICIkbW9kZSIuKikgOzsgKikgY29udGludWUgOzsgZXNhYwogICAgICBuYW1lPSQocmVhZF9vbmUgIiRHL2Z1bmN0aW9ucy8kbGluay9pZm5hbWUiKQogICAgICBjYXNlICIkbmFtZSIgaW4gJyd8KlshYS16QS1aMC05Xy46LV0qKSBjb250aW51ZSA7OyBlc2FjCiAgICAgIFsgISAtZCAiJE5FVC8kbmFtZSIgXSB8fCB7IGVjaG8gIiRuYW1lIjsgcmV0dXJuOyB9CiAgICBkb25lCiAgICAjIFNvbWUgdmVuZG9yIGJ1aWxkcyBvbWl0IGNvbmZpZyBzeW1saW5rcyBmcm9tIHRoZSB2aXNpYmxlIG1vdW50LgogICAgZm9yIGYgaW4gIiRHIi9mdW5jdGlvbnMvIiRtb2RlIi4qL2lmbmFtZTsgZG8KICAgICAgbmFtZT0kKHJlYWRfb25lICIkZiIpCiAgICAgIGNhc2UgIiRuYW1lIiBpbiAnJ3wqWyFhLXpBLVowLTlfLjotXSopIGNvbnRpbnVlIDs7IGVzYWMKICAgICAgWyAhIC1kICIkTkVULyRuYW1lIiBdIHx8IHsgZWNobyAiJG5hbWUiOyByZXR1cm47IH0KICAgIGRvbmUKICBmaQogICMgT25seSB1bmFtYmlndW91cyBnYWRnZXQgbmV0ZGV2czsgZG8gbm90IGd1ZXNzIGFuIEV0aGVybmV0L1dpLUZpIGludGVyZmFjZS4KICBmb3VuZD0nJzsgY291bnQ9MAogIGZvciBmIGluICIkTkVUIi91c2JbMC05XSogIiRORVQiL3JuZGlzWzAtOV0qOyBkbwogICAgWyAtZCAiJGYiIF0gfHwgY29udGludWUKICAgIHVzYl9kZXZpY2U9JChyZWFkbGluayAiJGYvZGV2aWNlL2RyaXZlciIgMj4vZGV2L251bGwpCiAgICBjYXNlICIkdXNiX2RldmljZSIgaW4gKmNkY19uY20qfCpjZGNfZXRoZXIqfCpybmRpc19ob3N0KikgY29udGludWUgOzsgZXNhYwogICAgZm91bmQ9JHtmIyMqL307IGNvdW50PSQoKGNvdW50ICsgMSkpCiAgZG9uZQogIFsgIiRjb3VudCIgLW5lIDEgXSB8fCB7IGVjaG8gIiRmb3VuZCI7IHJldHVybjsgfQogIHJldHVybiAxCn0KYWN0aXZlX2FkYigpIHsKICBpZiBbIC1uICIkQyIgXTsgdGhlbiBoYXNfZnVuY3Rpb24gYWRiICYmIGVjaG8gMSB8fCBlY2hvIDAKICBlbGlmIFsgLXIgIiRMRUdBQ1kvZnVuY3Rpb25zIiBdOyB0aGVuIGFkYl9vZiAiJChyZWFkX29uZSAiJExFR0FDWS9mdW5jdGlvbnMiKSIKICBlbHNlIGFkYl9vZiAiJChwcm9wIHN5cy51c2Iuc3RhdGUpIjsgZmkKfQpjb21wb3NpdGlvbl9hY3RpdmUoKSB7CiAgbG9jYWwgYm91bmQKICBpZiBbIC1uICIkQyIgXTsgdGhlbgogICAgaGFzX2Z1bmN0aW9uICIkMSIgfHwgcmV0dXJuIDEKICAgIGJvdW5kPSQocmVhZF9vbmUgIiRHL1VEQyIpOyBjYXNlICIkYm91bmQiIGluICcnfG5vbmUpIHJldHVybiAxIDs7IGVzYWMKICAgIFsgIiQoYWN0aXZlX2FkYikiID0gIiQyIiBdOyByZXR1cm4KICBmaQogIGlmIFsgLXIgIiRMRUdBQ1kvZnVuY3Rpb25zIiBdOyB0aGVuCiAgICBbICIkKHJlYWRfb25lICIkTEVHQUNZL2VuYWJsZSIpIiA9IDEgXSAmJiBbICIkKG1vZGVfb2YgIiQocmVhZF9vbmUgIiRMRUdBQ1kvZnVuY3Rpb25zIikiKSIgPSAiJDEiIF0gJiYgWyAiJChhY3RpdmVfYWRiKSIgPSAiJDIiIF07IHJldHVybgogIGZpCiAgIyBQcm9wZXJ0eS1vbmx5IGV2aWRlbmNlIGlzIHNob3duIGluIHN0YXR1cywgbmV2ZXIgY2FsbGVkIHZlcmlmaWVkIGNvbXBvc2l0aW9uLgogIHJldHVybiAxCn0KdWRjX3N0YXRlKCkgewogIGxvY2FsIHVkYyBwYXRoCiAgdWRjPSQocmVhZF9vbmUgIiRHL1VEQyIpCiAgaWYgWyAtbiAiJHVkYyIgXSAmJiBbIC1yICIkVVNCUk9PVC8kdWRjL3N0YXRlIiBdOyB0aGVuIHJlYWRfb25lICIkVVNCUk9PVC8kdWRjL3N0YXRlIjsgcmV0dXJuOyBmaQogIGZvciBwYXRoIGluICIkVVNCUk9PVCIvKi9zdGF0ZTsgZG8gWyAtciAiJHBhdGgiIF0gfHwgY29udGludWU7IHJlYWRfb25lICIkcGF0aCI7IHJldHVybjsgZG9uZQogIHJlYWRfb25lICIkTEVHQUNZL3N0YXRlIgp9CmxpbmtfdXAoKSB7CiAgbG9jYWwgZmxhZ3MKICBmbGFncz0kKHJlYWRfb25lICIkTkVULyQxL2ZsYWdzIikKICBjYXNlICIkZmxhZ3MiIGluIDB4fDBYKSByZXR1cm4gMSA7OyAweFswLTlhLWZBLUZdKnxbMC05XSopIDs7ICopIHJldHVybiAxIDs7IGVzYWMKICBjYXNlICIkZmxhZ3MiIGluICpbITAtOWEtZkEtRnhdKikgcmV0dXJuIDEgOzsgZXNhYwogIFsgJCgoZmxhZ3MgJiAxKSkgLW5lIDAgXQp9CmJyaW5nX3VwKCkgewogIGxpbmtfdXAgIiQxIiAmJiByZXR1cm4gMAogIGlwIGxpbmsgc2V0IGRldiAiJDEiIHVwIDI+L2Rldi9udWxsOyBsaW5rX3VwICIkMSIgJiYgcmV0dXJuIDAKICBpZmNvbmZpZyAiJDEiIHVwIDI+L2Rldi9udWxsOyBsaW5rX3VwICIkMSIgJiYgcmV0dXJuIDAKICBidXN5Ym94IGlmY29uZmlnICIkMSIgdXAgMj4vZGV2L251bGw7IGxpbmtfdXAgIiQxIgp9CmF0dGFjaCgpIHsKICBsb2NhbCBtYXN0ZXIgZTEgZTIgZTMKICBbIC1uICIkQlJJREdFIiBdICYmIFsgLWQgIiRORVQvJEJSSURHRS9icmlkZ2UiIF0gJiYgWyAtZCAiJE5FVC8kMSIgXSB8fCByZXR1cm4gNAogIG1hc3Rlcj0kKG1hc3Rlcl9vZiAiJDEiKQogIGlmIFsgLW4gIiRtYXN0ZXIiIF0gJiYgWyAiJG1hc3RlciIgIT0gIiRCUklER0UiIF07IHRoZW4gbG9nICJSRUZVU0VEICQxIGJlbG9uZ3MgdG8gJG1hc3Rlciwgbm90ICRCUklER0UiOyByZXR1cm4gNTsgZmkKICBicmluZ191cCAiJDEiICYmIGJyaW5nX3VwICIkQlJJREdFIiB8fCB7IGxvZyAibGluay11cCBmYWlsZWQ6ICQxIC8gJEJSSURHRSI7IHJldHVybiA1OyB9CiAgWyAiJG1hc3RlciIgIT0gIiRCUklER0UiIF0gfHwgcmV0dXJuIDAKICBlMT0kKGlwIGxpbmsgc2V0IGRldiAiJDEiIG1hc3RlciAiJEJSSURHRSIgMj4mMSkKICBbICIkKG1hc3Rlcl9vZiAiJDEiKSIgIT0gIiRCUklER0UiIF0gfHwgcmV0dXJuIDAKICBlMj0kKGJyY3RsIGFkZGlmICIkQlJJREdFIiAiJDEiIDI+JjEpCiAgWyAiJChtYXN0ZXJfb2YgIiQxIikiICE9ICIkQlJJREdFIiBdIHx8IHJldHVybiAwCiAgZTM9JChidXN5Ym94IGJyY3RsIGFkZGlmICIkQlJJREdFIiAiJDEiIDI+JjEpCiAgWyAiJChtYXN0ZXJfb2YgIiQxIikiICE9ICIkQlJJREdFIiBdIHx8IHJldHVybiAwCiAgbG9nICJicmlkZ2UgYXR0YWNoIGZhaWxlZDogJDEgLT4gJEJSSURHRTsgaXA9WyRlMV0gYnJjdGw9WyRlMl0gYnVzeWJveD1bJGUzXSIKICByZXR1cm4gNQp9CnJlcGFpcl9uZXR3b3JrKCkgewogIGxvY2FsIG4gaWZhY2UgbGltaXQKICBuPTA7IGxpbWl0PSR7MjotNn0KICB3aGlsZSBbICIkbiIgLWx0ICIkbGltaXQiIF07IGRvCiAgICBkaXNjb3ZlcgogICAgWyAtbiAiJEJSSURHRSIgXSB8fCByZXR1cm4gNAogICAgaWZhY2U9JChnZXRfaWZuYW1lICIkMSIpCiAgICBpZiBbIC1uICIkaWZhY2UiIF07IHRoZW4KICAgICAgaWYgWyAiJChtYXN0ZXJfb2YgIiRpZmFjZSIpIiA9ICIkQlJJREdFIiBdICYmIGxpbmtfdXAgIiRpZmFjZSIgJiYgbGlua191cCAiJEJSSURHRSI7IHRoZW4gZWNobyAiJGlmYWNlIjsgcmV0dXJuIDA7IGZpCiAgICAgIGlmIGF0dGFjaCAiJGlmYWNlIjsgdGhlbiBsb2cgIm5ldHdvcmsgcmVwYWlyZWQ6ICRpZmFjZSAtPiAkQlJJREdFIChubyBVU0IgcmVzZXQpIjsgZWNobyAiJGlmYWNlIjsgcmV0dXJuIDA7IGZpCiAgICBmaQogICAgbj0kKChuICsgMSkpOyBbICIkbiIgLWdlICIkbGltaXQiIF0gfHwgc2xlZXAgMQogIGRvbmUKICByZXR1cm4gNQp9CnBpZF9tYXRjaGVzKCkgewogIGNhc2UgIiQxIiBpbiAnJ3wqWyEwLTldKnwwfDEpIHJldHVybiAxIDs7IGVzYWMKICBraWxsIC0wICIkMSIgMj4vZGV2L251bGwgJiYgWyAtciAiJFBST0MvJDEvY21kbGluZSIgXSB8fCByZXR1cm4gMQogIHRyICdcMDAwJyAnICcgPCAiJFBST0MvJDEvY21kbGluZSIgfCBncmVwIC1GICIkMiIgPi9kZXYvbnVsbCAyPiYxCn0KbG9ja19yZWxlYXNlKCkgewogIGlmIFsgIiQocmVhZF9vbmUgIiRMT0NLL3BpZCIpIiA9ICIkJCIgXSAmJiBbICIkKHJlYWRfb25lICIkTE9DSy9ib290IikiID0gIiQoYm9vdF9pZCkiIF07IHRoZW4gcm0gLXJmICIkTE9DSyI7IGZpCn0KbG9ja19jbGFpbSgpIHsKICBsb2NhbCBuIG93bmVyIGN1cnJlbnQKICBuPTA7IGN1cnJlbnQ9JChib290X2lkKTsgbWtkaXIgLXAgIiRCQVNFIiB8fCByZXR1cm4gMQogIHdoaWxlICEgbWtkaXIgIiRMT0NLIiAyPi9kZXYvbnVsbDsgZG8KICAgIG49JCgobiArIDEpKTsgb3duZXI9JChyZWFkX29uZSAiJExPQ0svcGlkIikKICAgIGlmIFsgIiRuIiAtZ2UgMiBdICYmIHsgWyAiJChyZWFkX29uZSAiJExPQ0svYm9vdCIpIiAhPSAiJGN1cnJlbnQiIF0gfHwgISBwaWRfbWF0Y2hlcyAiJG93bmVyIiAiJFNFTEYiOyB9OyB0aGVuCiAgICAgIHJtIC1yZiAiJExPQ0siOyBjb250aW51ZQogICAgZmkKICAgIFsgIiRuIiAtbHQgNCBdIHx8IHJldHVybiA2CiAgICBzbGVlcCAxCiAgZG9uZQogIHByaW50ZiAnJXNcbicgIiQkIiA+ICIkTE9DSy9waWQiOyBwcmludGYgJyVzXG4nICIkY3VycmVudCIgPiAiJExPQ0svYm9vdCIKICB0cmFwICdsb2NrX3JlbGVhc2UnIDAKICB0cmFwICdleGl0IDEzMCcgMgogIHRyYXAgJ2V4aXQgMTQzJyAxNQp9CmdldF9jb29sZG93bigpIHsKICBsb2NhbCB1bnRpbCB0CiAgWyAiJCh2YWx1ZSAiJEJBU0UvcmVjb3ZlcnkuZW52IiBCT09UKSIgPSAiJChib290X2lkKSIgXSB8fCB7IGVjaG8gMDsgcmV0dXJuOyB9CiAgdW50aWw9JChudW0gIiQodmFsdWUgIiRCQVNFL3JlY292ZXJ5LmVudiIgVU5USUwpIiAwKTsgdD0kKG5vdykKICB1bnRpbD0kKCh1bnRpbCAtIHQpKTsgWyAiJHVudGlsIiAtZ2UgMCBdICYmIFsgIiR1bnRpbCIgLWxlIDkwMCBdIHx8IHVudGlsPTAKICBlY2hvICIkdW50aWwiCn0KbWFya19hdHRlbXB0KCkgewogIGxvY2FsIGNvdW50IHQgZGVsYXkKICBjb3VudD0wCiAgaWYgWyAiJCh2YWx1ZSAiJEJBU0UvcmVjb3ZlcnkuZW52IiBCT09UKSIgPSAiJChib290X2lkKSIgXTsgdGhlbiBjb3VudD0kKG51bSAiJCh2YWx1ZSAiJEJBU0UvcmVjb3ZlcnkuZW52IiBDT1VOVCkiIDApOyBmaQogIGNvdW50PSQoKGNvdW50ICsgMSkpOyBbICIkY291bnQiIC1sZSA0IF0gfHwgY291bnQ9NAogIGNhc2UgIiRjb3VudCIgaW4gMSkgZGVsYXk9NjAgOzsgMikgZGVsYXk9MTgwIDs7IDMpIGRlbGF5PTYwMCA7OyAqKSBkZWxheT05MDAgOzsgZXNhYwogIHQ9JChub3cpCiAgcHJpbnRmICclc1xuJyAiQk9PVD0kKGJvb3RfaWQpIiAiQ09VTlQ9JGNvdW50IiAiVU5USUw9JCgodCArIGRlbGF5KSkiID4gIiRCQVNFL3JlY292ZXJ5LnRtcC4kJCIKICBtdiAtZiAiJEJBU0UvcmVjb3ZlcnkudG1wLiQkIiAiJEJBU0UvcmVjb3ZlcnkuZW52Igp9CndhaXRfbm9uZSgpIHsKICBsb2NhbCBuIGJvdW5kCiAgbj0wCiAgd2hpbGUgWyAiJG4iIC1sdCAxMiBdOyBkbwogICAgZGlzY292ZXI7IGJvdW5kPSQocmVhZF9vbmUgIiRHL1VEQyIpCiAgICBpZiBbICIkKHByb3Agc3lzLnVzYi5zdGF0ZSkiID0gbm9uZSBdOyB0aGVuIHJldHVybiAwOyBmaQogICAgaWYgWyAtbiAiJEciIF07IHRoZW4gY2FzZSAiJGJvdW5kIiBpbiAnJ3xub25lKSByZXR1cm4gMCA7OyBlc2FjOyBmaQogICAgaWYgWyAtciAiJExFR0FDWS9lbmFibGUiIF0gJiYgWyAiJChyZWFkX29uZSAiJExFR0FDWS9lbmFibGUiKSIgPSAwIF07IHRoZW4gcmV0dXJuIDA7IGZpCiAgICBuPSQoKG4gKyAxKSk7IHNsZWVwIDEKICBkb25lCiAgcmV0dXJuIDEKfQpyYXdfYXBwbHkoKSB7CiAgbG9jYWwgbW9kZSBhZGIgdGFyZ2V0IG4gaWZhY2UgcmMgZXJyCiAgbW9kZT0iJDEiOyBhZGI9IiQyIjsgdGFyZ2V0PSIkMyIKICBkaXNjb3ZlcgogIGlmIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJG1vZGUiICIkYWRiIiAmJiBbICIkKG1vZGVfb2YgIiQocHJvcCBzeXMudXNiLmNvbmZpZykiKSIgPSAiJG1vZGUiIF0gJiYgWyAiJChhZGJfb2YgIiQocHJvcCBzeXMudXNiLmNvbmZpZykiKSIgPSAiJGFkYiIgXTsgdGhlbgogICAgaWZhY2U9JChyZXBhaXJfbmV0d29yayAiJG1vZGUiIDgpOyByYz0kPwogICAgaWYgWyAiJHJjIiAtZXEgMCBdOyB0aGVuIHJlY29yZCBvayBhbHJlYWR5LWFjdGl2ZSAiJHRhcmdldCIgIiRpZmFjZSI7IGVsc2UgcmVjb3JkIG5ldHdvcmstcGVuZGluZyBicmlkZ2Utbm90LXJlYWR5ICIkdGFyZ2V0IiAiJHtpZmFjZTotdW5hdmFpbGFibGV9IjsgZmkKICAgIHJldHVybiAiJHJjIgogIGZpCiAgIyBGYWlsIGJlZm9yZSBkaXNjb25uZWN0aW5nIHdoZW4gbmF0aXZlIGdhZGdldCBjb250cm9sIGNhbm5vdCBiZSBpbnNwZWN0ZWQuCiAgaWYgWyAteiAiJEMiIF0gJiYgWyAhIC1yICIkTEVHQUNZL2Z1bmN0aW9ucyIgXTsgdGhlbgogICAgbG9nICJSRUZVU0VEIHN3aXRjaDogbmF0aXZlIGdhZGdldCBub3QgaW5zcGVjdGFibGUgKCRESVNDT1ZFUllfRVJST1IpIgogICAgcmVjb3JkIGJsb2NrZWQgbm8tZ2FkZ2V0LWNvbnRyb2wgIiR0YXJnZXQiIHVuYXZhaWxhYmxlOyByZXR1cm4gNwogIGZpCiAgY29tbWFuZCAtdiBzZXRwcm9wID4vZGV2L251bGwgMj4mMSB8fCB7IGxvZyAnc2V0cHJvcCBtaXNzaW5nJzsgcmV0dXJuIDc7IH0KICBsb2cgInN3aXRjaCByZXF1ZXN0OiB0YXJnZXQ9JHRhcmdldCBjdXJyZW50PSQocHJvcCBzeXMudXNiLmNvbmZpZykiCiAgcmVjb3JkIHN3aXRjaGluZyBuYXRpdmUtdHJhbnNpdGlvbiAiJHRhcmdldCIgdW5hdmFpbGFibGUKICBlcnI9JChzZXRwcm9wIHN5cy51c2IuY29uZmlnIG5vbmUgMj4mMSkgfHwgeyBsb2cgInNldHByb3Agbm9uZSBmYWlsZWQ6ICRlcnIiOyByZXR1cm4gMTsgfQogIGlmICEgd2FpdF9ub25lOyB0aGVuIGxvZyAnbm9uZSB0cmFuc2l0aW9uIG5vdCBhY2tub3dsZWRnZWQ7IHJlc3RvcmluZyBwcmlvciBtb2RlJzsgcmV0dXJuIDE7IGZpCiAgIyBJbml0IG93bnMgQURCIGxpZmVjeWNsZS4gRG8gbm90IHN0YXJ0IGFkYmQgYmVmb3JlIEZ1bmN0aW9uRlMgaXMgcmVzZXQuCiAgZXJyPSQoc2V0cHJvcCBzeXMudXNiLmNvbmZpZyAiJHRhcmdldCIgMj4mMSkgfHwgeyBsb2cgInNldHByb3AgdGFyZ2V0IGZhaWxlZDogJGVyciI7IHJldHVybiAxOyB9CiAgbj0wCiAgd2hpbGUgWyAiJG4iIC1sdCAzNSBdOyBkbwogICAgZGlzY292ZXIKICAgIGlmIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJG1vZGUiICIkYWRiIjsgdGhlbiBicmVhazsgZmkKICAgIG49JCgobiArIDEpKTsgc2xlZXAgMQogIGRvbmUKICBpZiAhIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJG1vZGUiICIkYWRiIjsgdGhlbgogICAgbG9nICJjb21wb3NpdGlvbiBmYWlsZWQgY2ZnPSQocHJvcCBzeXMudXNiLmNvbmZpZykgc3RhdGU9JChwcm9wIHN5cy51c2Iuc3RhdGUpIHVkYz0kKHJlYWRfb25lICIkRy9VREMiKSIKICAgIHJlY29yZCBmYWlsZWQtY29tcG9zaXRpb24gbmF0aXZlLXRpbWVvdXQgIiR0YXJnZXQiIHVuYXZhaWxhYmxlOyByZXR1cm4gMQogIGZpCiAgaWZhY2U9JChyZXBhaXJfbmV0d29yayAiJG1vZGUiIDgpOyByYz0kPwogIGxlYXJuX3RhcmdldCAiJHRhcmdldCIKICBpZiBbICIkcmMiIC1lcSAwIF07IHRoZW4KICAgIHJlY29yZCBvayBuYXRpdmUtdmVyaWZpZWQgIiR0YXJnZXQiICIkaWZhY2UiOyBsb2cgIm1vZGUgdmVyaWZpZWQ6ICR0YXJnZXQgaWZuYW1lPSRpZmFjZSIKICBlbHNlCiAgICByZWNvcmQgbmV0d29yay1wZW5kaW5nIGNvbXBvc2l0aW9uLXZlcmlmaWVkICIkdGFyZ2V0IiAiJHtpZmFjZTotdW5hdmFpbGFibGV9IgogICAgbG9nICJtb2RlIHZlcmlmaWVkLCBicmlkZ2UgcGVuZGluZyByYz0kcmM7IG5vIFVTQiBmYWxsYmFjayIKICBmaQogIHJldHVybiAiJHJjIgp9CmFwcGx5X2xvY2tlZCgpIHsKICBsb2NhbCBtb2RlIGFkYiB0YXJnZXQgcHJldmlvdXMgcHJldl9tb2RlIHByZXZfYWRiIHJjIGZhbGxiYWNrIGZhbGxyYwogIG1vZGU9IiQxIjsgYWRiPSIkMiI7IHRhcmdldD0kKGNob29zZV90YXJnZXQgIiRtb2RlIiAiJGFkYiIpIHx8IHJldHVybiA3CiAgZGlzY292ZXIKICBwcmV2aW91cz0kKHByb3Agc3lzLnVzYi5jb25maWcpOyBwcmV2X21vZGU9JChhY3RpdmVfbW9kZSk7IHByZXZfYWRiPSQoYWN0aXZlX2FkYikKICBpZiAhIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJHByZXZfbW9kZSIgIiRwcmV2X2FkYiIgfHwgISB2YWxpZF9jb21ibyAiJHByZXZpb3VzIiB8fAogICAgIFsgIiQobW9kZV9vZiAiJHByZXZpb3VzIikiICE9ICIkcHJldl9tb2RlIiBdIHx8IFsgIiQoYWRiX29mICIkcHJldmlvdXMiKSIgIT0gIiRwcmV2X2FkYiIgXTsgdGhlbiBwcmV2aW91cz0nJzsgZmkKICBpZiAhIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJG1vZGUiICIkYWRiIjsgdGhlbiBtYXJrX2F0dGVtcHQ7IGZpCiAgcmF3X2FwcGx5ICIkbW9kZSIgIiRhZGIiICIkdGFyZ2V0IjsgcmM9JD8KICBpZiBbICIkcmMiIC1lcSAxIF07IHRoZW4KICAgICMgUmVzdG9yZSB0aGUgdmVyaWZpZWQgcHJlLXN3aXRjaCBtb2RlIGJlZm9yZSB0cnlpbmcgYW55IGdlbmVyaWMgUk5ESVMuCiAgICBmYWxsYmFjaz0iJHByZXZpb3VzIgogICAgWyAtbiAiJGZhbGxiYWNrIiBdIHx8IHsgWyAiJEFVVE9fUk9MTEJBQ0siICE9IDEgXSB8fCBmYWxsYmFjaz0kKGRlZmF1bHRfdGFyZ2V0IHJuZGlzICIkYWRiIik7IH0KICAgIGlmIFsgLW4gIiRmYWxsYmFjayIgXTsgdGhlbgogICAgICBsb2cgInJlc3RvcmluZyBwcmV2aW91cy9zYWZlIGNvbXBvc2l0aW9uOiAkZmFsbGJhY2siCiAgICAgIHJhd19hcHBseSAiJChtb2RlX29mICIkZmFsbGJhY2siKSIgIiQoYWRiX29mICIkZmFsbGJhY2siKSIgIiRmYWxsYmFjayI7IGZhbGxyYz0kPwogICAgICBpZiBbICIkZmFsbHJjIiAtZXEgMCBdIHx8IFsgIiRmYWxscmMiIC1lcSA0IF0gfHwgWyAiJGZhbGxyYyIgLWVxIDUgXTsgdGhlbgogICAgICAgIHJlY29yZCBmYWxsYmFjayBvcmlnaW5hbC1yZXF1ZXN0LWZhaWxlZCAiJHRhcmdldCIgIiQoZ2V0X2lmbmFtZSAiJChtb2RlX29mICIkZmFsbGJhY2siKSIpIgogICAgICBlbHNlIHJlY29yZCBmYWxsYmFjay1mYWlsZWQgbmF0aXZlLXJlY292ZXJ5LWZhaWxlZCAiJHRhcmdldCIgdW5hdmFpbGFibGU7IGZpCiAgICBmaQogIGZpCiAgcmV0dXJuICIkcmMiCn0KcmVtZW1iZXJfb3JpZ2luYWxfcGVyc2lzdCgpIHsKICBbIC1mICIkQkFTRS9vcmlnaW5hbF9wZXJzaXN0X3VzYl9jb25maWciIF0gJiYgcmV0dXJuIDAKICBwcm9wIHBlcnNpc3Quc3lzLnVzYi5jb25maWcgPiAiJEJBU0Uvb3JpZ2luYWxfcGVyc2lzdF91c2JfY29uZmlnLnRtcC4kJCIgMj4vZGV2L251bGwgfHwgcmV0dXJuIDEKICBtdiAtZiAiJEJBU0Uvb3JpZ2luYWxfcGVyc2lzdF91c2JfY29uZmlnLnRtcC4kJCIgIiRCQVNFL29yaWdpbmFsX3BlcnNpc3RfdXNiX2NvbmZpZyIKfQpzeW5jX3BlcnNpc3RfdmVyaWZpZWQoKSB7CiAgbG9jYWwgY2ZnCiAgWyAiJFBFUk1BTkVOVCIgPSAxIF0gfHwgcmV0dXJuIDAKICBkaXNjb3ZlcgogIGNvbXBvc2l0aW9uX2FjdGl2ZSAiJE1PREUiICIkV0lSRURfQURCIiB8fCByZXR1cm4gMAogIGNmZz0kKHByb3Agc3lzLnVzYi5jb25maWcpCiAgdmFsaWRfY29tYm8gIiRjZmciIHx8IHJldHVybiAwCiAgWyAiJChtb2RlX29mICIkY2ZnIikiID0gIiRNT0RFIiBdICYmIFsgIiQoYWRiX29mICIkY2ZnIikiID0gIiRXSVJFRF9BREIiIF0gfHwgcmV0dXJuIDAKICByZW1lbWJlcl9vcmlnaW5hbF9wZXJzaXN0IHx8IHJldHVybiAxCiAgaWYgWyAiJChwcm9wIHBlcnNpc3Quc3lzLnVzYi5jb25maWcpIiAhPSAiJGNmZyIgXTsgdGhlbgogICAgc2V0cHJvcCBwZXJzaXN0LnN5cy51c2IuY29uZmlnICIkY2ZnIiAyPi9kZXYvbnVsbCB8fCB7IGxvZyAicGVyc2lzdCBzeW5jIGZhaWxlZCB0YXJnZXQ9JGNmZyI7IHJldHVybiAxOyB9CiAgICBbICIkKHByb3AgcGVyc2lzdC5zeXMudXNiLmNvbmZpZykiID0gIiRjZmciIF0gfHwgeyBsb2cgInBlcnNpc3QgdmVyaWZpY2F0aW9uIGZhaWxlZCB0YXJnZXQ9JGNmZyI7IHJldHVybiAxOyB9CiAgICBsb2cgInBlcnNpc3Qgc3luY2VkOiAkY2ZnIgogIGZpCiAgcmV0dXJuIDAKfQphcHBseV9tb2RlKCkgewogIHZhbGlkX21vZGUgIiQxIiAmJiB7IFsgIiQyIiA9IDAgXSB8fCBbICIkMiIgPSAxIF07IH0gfHwgcmV0dXJuIDcKICBsb2FkX2NvbmZpZzsgbG9ja19jbGFpbSB8fCByZXR1cm4gJD8KICBhcHBseV9sb2NrZWQgIiQxIiAiJDIiOyBfYXBwbHlfcmM9JD8KICBpZiBbICIkMSIgPSAiJE1PREUiIF0gJiYgWyAiJDIiID0gIiRXSVJFRF9BREIiIF07IHRoZW4gc3luY19wZXJzaXN0X3ZlcmlmaWVkIHx8IDo7IGZpCiAgbG9ja19yZWxlYXNlOyB0cmFwIC0gMCAyIDE1CiAgcmV0dXJuICIkX2FwcGx5X3JjIgp9Cmxpbmtfc25hcHNob3QoKSB7CiAgbG9jYWwgbW9kZSBpZmFjZSBzaWduYXR1cmUgcHJldmlvdXMKICBtb2RlPSQoYWN0aXZlX21vZGUpOyBpZmFjZT0kKGdldF9pZm5hbWUgIiRtb2RlIikKICBzaWduYXR1cmU9Im1vZGU9JG1vZGUgY29uZmlnPSQocHJvcCBzeXMudXNiLmNvbmZpZykgc3RhdGU9JChwcm9wIHN5cy51c2Iuc3RhdGUpIGlmbmFtZT0ke2lmYWNlOi11bmF2YWlsYWJsZX0gbWFzdGVyPSQobWFzdGVyX29mICIkaWZhY2UiKSBjYXJyaWVyPSQocmVhZF9vbmUgIiRORVQvJGlmYWNlL2NhcnJpZXIiKSB1ZGM9JCh1ZGNfc3RhdGUpIgogIHByZXZpb3VzPSQocmVhZF9vbmUgIiRCQVNFL2xpbmtfc3RhdGUiKQogIGlmIFsgIiRzaWduYXR1cmUiICE9ICIkcHJldmlvdXMiIF07IHRoZW4KICAgIGxvZyAiJHNpZ25hdHVyZSI7IHByaW50ZiAnJXNcbicgIiRzaWduYXR1cmUiID4gIiRCQVNFL2xpbmtfc3RhdGUiCiAgZmkKfQpyZWNvbmNpbGUoKSB7CiAgbG9jYWwgcmMgY3VycmVudCBpZmFjZSB0IHNpbmNlIHNpZ25hdHVyZSBvbGRzaWcgdGFyZ2V0CiAgbG9hZF9jb25maWc7IFsgIiRQRVJNQU5FTlQiID0gMSBdIHx8IHJldHVybiAwCiAgWyAhIC1lICIkUEFVU0UiIF0gfHwgcmV0dXJuIDIKICBsb2NrX2NsYWltIHx8IHJldHVybiAkPwogIGRpc2NvdmVyOyBsaW5rX3NuYXBzaG90CiAgaWYgY29tcG9zaXRpb25fYWN0aXZlICIkTU9ERSIgIiRXSVJFRF9BREIiOyB0aGVuCiAgICBybSAtZiAiJEJBU0UvZHJpZnQuZW52IgogICAgc3luY19wZXJzaXN0X3ZlcmlmaWVkIHx8IDoKICAgIGlmYWNlPSQocmVwYWlyX25ldHdvcmsgIiRNT0RFIiAyKTsgcmM9JD8KICAgIGlmIFsgIiRyYyIgLWVxIDAgXTsgdGhlbgogICAgICBpZiBbICIkKHZhbHVlICIkU1RBVEUiIExBU1RfUkVTVUxUKSIgIT0gb2sgXTsgdGhlbiByZWNvcmQgb2sgZGFlbW9uLXJlcGFpciAiJChwcm9wIHN5cy51c2IuY29uZmlnKSIgIiRpZmFjZSI7IGZpCiAgICBlbHNlCiAgICAgIGlmIFsgIiQodmFsdWUgIiRTVEFURSIgTEFTVF9SRVNVTFQpIiAhPSBuZXR3b3JrLXBlbmRpbmcgXTsgdGhlbiByZWNvcmQgbmV0d29yay1wZW5kaW5nIGRhZW1vbi1yZXBhaXIgIiQocHJvcCBzeXMudXNiLmNvbmZpZykiICIke2lmYWNlOi11bmF2YWlsYWJsZX0iOyBmaQogICAgZmkKICAgIHJldHVybiAiJHJjIgogIGZpCiAgY3VycmVudD0kKGFjdGl2ZV9tb2RlKTsgdmFsaWRfbW9kZSAiJGN1cnJlbnQiICYmIHJlcGFpcl9uZXR3b3JrICIkY3VycmVudCIgMSA+L2Rldi9udWxsCiAgWyAiJChnZXRfY29vbGRvd24pIiAtZXEgMCBdIHx8IHJldHVybiAzCiAgWyAtbiAiJEMiIF0gfHwgWyAtciAiJExFR0FDWS9mdW5jdGlvbnMiIF0gfHwgcmV0dXJuIDcKICB0PSQobm93KTsgc2lnbmF0dXJlPSIkTU9ERTokV0lSRURfQURCOiQocHJvcCBzeXMudXNiLmNvbmZpZyk6JChwcm9wIHN5cy51c2Iuc3RhdGUpOiRjdXJyZW50IgogIHNpbmNlPSQobnVtICIkKHZhbHVlICIkQkFTRS9kcmlmdC5lbnYiIFNJTkNFKSIgMCk7IG9sZHNpZz0kKHZhbHVlICIkQkFTRS9kcmlmdC5lbnYiIFNJR05BVFVSRSkKICBpZiBbICIkc2lnbmF0dXJlIiAhPSAiJG9sZHNpZyIgXSB8fCBbICIkKHZhbHVlICIkQkFTRS9kcmlmdC5lbnYiIEJPT1QpIiAhPSAiJChib290X2lkKSIgXSB8fCBbICIkdCIgLWx0ICIkc2luY2UiIF07IHRoZW4KICAgIHByaW50ZiAnJXNcbicgIkJPT1Q9JChib290X2lkKSIgIlNJR05BVFVSRT0kc2lnbmF0dXJlIiAiU0lOQ0U9JHQiID4gIiRCQVNFL2RyaWZ0LmVudiIKICAgIHJldHVybiAzCiAgZmkKICBbICQoKHQgLSBzaW5jZSkpIC1nZSAyMCBdIHx8IHJldHVybiAzCiAgIyBBdXRvLXN3aXRjaGluZyBpcyBvcHRpb25hbDsgZGlzYWJsZWQgcGF0cm9sIG1lYW5zIGJyaWRnZS1vbmx5IG1haW50ZW5hbmNlLgogIFsgIiRQQVRST0xfRU5BQkxFRCIgPSAxIF0gfHwgcmV0dXJuIDIKICBhcHBseV9sb2NrZWQgIiRNT0RFIiAiJFdJUkVEX0FEQiIKfQpzdGF0dXMoKSB7CiAgbG9jYWwgbW9kZSBpZmFjZSBhY3R1YWwgc291cmNlIHRhcmdldF9hY3RpdmUgc3RhdGUgY3VycmVudCB3YXJuaW5nCiAgbG9hZF9jb25maWc7IGRpc2NvdmVyCiAgY3VycmVudD0kKHByb3Agc3lzLnVzYi5jb25maWcpOyBzdGF0ZT0kKHByb3Agc3lzLnVzYi5zdGF0ZSk7IG1vZGU9JChhY3RpdmVfbW9kZSk7IGlmYWNlPSQoZ2V0X2lmbmFtZSAiJG1vZGUiKQogIHRhcmdldF9hY3RpdmU9MDsgY29tcG9zaXRpb25fYWN0aXZlICIkTU9ERSIgIiRXSVJFRF9BREIiICYmIHRhcmdldF9hY3RpdmU9MQogIHNvdXJjZT1wcm9wZXJ0aWVzLXVudmVyaWZpZWQKICBbIC16ICIkQyIgXSB8fCBzb3VyY2U9Y29uZmlnZnMKICBpZiBbIC16ICIkQyIgXSAmJiBbIC1yICIkTEVHQUNZL2Z1bmN0aW9ucyIgXTsgdGhlbiBzb3VyY2U9YW5kcm9pZF91c2I7IGZpCiAgd2FybmluZz0iJERJU0NPVkVSWV9FUlJPUiIKICBjb21tYW5kIC12IGdldHByb3AgPi9kZXYvbnVsbCAyPiYxIHx8IHdhcm5pbmc9Z2V0cHJvcC1ub3QtZm91bmQKICBwcmludGYgJyVzXG4nICdQUk9UT0NPTD1LVU5NMycgJ0JBQ0tFTkRfVkVSU0lPTj0yLjQuMScgIlVJRD0kKGlkIC11KSIgIlNPVVJDRT0kc291cmNlIiBcCiAgICAiQ1VSUkVOVF9DT05GSUc9JGN1cnJlbnQiICJDVVJSRU5UX1NUQVRFPSRzdGF0ZSIgIkNVUlJFTlRfTU9ERT0kbW9kZSIgIkNVUlJFTlRfQURCPSQoYWN0aXZlX2FkYikiIFwKICAgICJNT0RFPSRNT0RFIiAiV0lSRURfQURCPSRXSVJFRF9BREIiICJQRVJNQU5FTlQ9JFBFUk1BTkVOVCIgIlBBVFJPTF9FTkFCTEVEPSRQQVRST0xfRU5BQkxFRCIgXAogICAgIkFVVE9fUk9MTEJBQ0s9JEFVVE9fUk9MTEJBQ0siICJCT09UX0RFTEFZX1NFQ09ORFM9JEJPT1RfREVMQVlfU0VDT05EUyIgIlBPTExfSU5URVJWQUxfU0VDT05EUz0kUE9MTF9JTlRFUlZBTF9TRUNPTkRTIiBcCiAgICAiVEFSR0VUX0FDVElWRT0kdGFyZ2V0X2FjdGl2ZSIgIkdBREdFVD0kRyIgIkdBREdFVF9DT05GSUc9JEMiICJCUklER0U9JEJSSURHRSIgIkJSSURHRV9PVkVSUklERT0kQlJJREdFX09WRVJSSURFIiAiSUZOQU1FPSRpZmFjZSIgXAogICAgIk1BU1RFUj0kKG1hc3Rlcl9vZiAiJGlmYWNlIikiICJJRl9VUD0kKGxpbmtfdXAgIiRpZmFjZSIgJiYgZWNobyAxIHx8IGVjaG8gMCkiIFwKICAgICJDQVJSSUVSPSQocmVhZF9vbmUgIiRORVQvJGlmYWNlL2NhcnJpZXIiKSIgIlVEQ19TVEFURT0kKHVkY19zdGF0ZSkiICJQRVJTSVNUX0NPTkZJRz0kKHByb3AgcGVyc2lzdC5zeXMudXNiLmNvbmZpZykiIFwKICAgICJQRVJTSVNUX01BVENIPSQoWyAtbiAiJGN1cnJlbnQiIF0gJiYgWyAiJChwcm9wIHBlcnNpc3Quc3lzLnVzYi5jb25maWcpIiA9ICIkY3VycmVudCIgXSAmJiBlY2hvIDEgfHwgZWNobyAwKSIgXAogICAgIlBBVVNFRD0kKFsgLWUgIiRQQVVTRSIgXSAmJiBlY2hvIDEgfHwgZWNobyAwKSIgIkRBRU1PTj0kKGRhZW1vbl9zdGF0dXMpIiAiQ09PTERPV05fU0VDT05EUz0kKGdldF9jb29sZG93bikiIFwKICAgICJMQVNUX1JFU1VMVD0kKHZhbHVlICIkU1RBVEUiIExBU1RfUkVTVUxUKSIgIkxBU1RfUkVBU09OPSQodmFsdWUgIiRTVEFURSIgTEFTVF9SRUFTT04pIiBcCiAgICAiTEFTVF9UQVJHRVQ9JCh2YWx1ZSAiJFNUQVRFIiBMQVNUX1RBUkdFVCkiICJMQVNUX1RJTUU9JCh2YWx1ZSAiJFNUQVRFIiBMQVNUX1RJTUUpIiAiV0FSTklORz0kd2FybmluZyIgJ1NUQVRVU19DT01QTEVURT0xJwp9CmRhZW1vbl9zdGF0dXMoKSB7CiAgbG9jYWwgcGlkCiAgcGlkPSQocmVhZF9vbmUgIiRQSURGSUxFIikKICBpZiBbICIkKHJlYWRfb25lICIkQkFTRS9kYWVtb24uYm9vdCIpIiA9ICIkKGJvb3RfaWQpIiBdICYmIHBpZF9tYXRjaGVzICIkcGlkIiAiJFNFTEYgZGFlbW9uIjsgdGhlbiBlY2hvICJydW5uaW5nOiRwaWQiOyBlbHNlIGVjaG8gc3RvcHBlZDsgZmkKfQpkYWVtb25fY2xlYW51cCgpIHsKICBpZiBbICIkKHJlYWRfb25lICIkUElERklMRSIpIiA9ICIkJCIgXTsgdGhlbiBybSAtZiAiJFBJREZJTEUiICIkQkFTRS9kYWVtb24uYm9vdCI7IGZpCiAgaWYgWyAiJChyZWFkX29uZSAiJEJBU0UvZGFlbW9uLmxvY2svcGlkIikiID0gIiQkIiBdOyB0aGVuIHJtIC1yZiAiJEJBU0UvZGFlbW9uLmxvY2siOyBmaQp9CmRhZW1vbigpIHsKICBsb2NhbCBuIG93bmVyIHByZXZpb3VzIHJjIHN0b3BfcmVxdWVzdGVkIHN0YWJsZSBwcmV2X3NpZyBzaWcgcmVhZHkgZmlyc3QKICBta2RpciAtcCAiJEJBU0UiIHx8IHJldHVybiAxCiAgaWYgISBta2RpciAiJEJBU0UvZGFlbW9uLmxvY2siIDI+L2Rldi9udWxsOyB0aGVuCiAgICBzbGVlcCAxCiAgICBvd25lcj0kKHJlYWRfb25lICIkQkFTRS9kYWVtb24ubG9jay9waWQiKQogICAgaWYgcGlkX21hdGNoZXMgIiRvd25lciIgIiRTRUxGIGRhZW1vbiI7IHRoZW4gcmV0dXJuIDA7IGZpCiAgICBybSAtcmYgIiRCQVNFL2RhZW1vbi5sb2NrIjsgbWtkaXIgIiRCQVNFL2RhZW1vbi5sb2NrIiAyPi9kZXYvbnVsbCB8fCByZXR1cm4gMAogIGZpCiAgcHJpbnRmICclc1xuJyAiJCQiID4gIiRCQVNFL2RhZW1vbi5sb2NrL3BpZCIKICBwcmludGYgJyVzXG4nICIkJCIgPiAiJFBJREZJTEUiOyBib290X2lkID4gIiRCQVNFL2RhZW1vbi5ib290IgogIHN0b3BfcmVxdWVzdGVkPTA7IHByZXZpb3VzPScnOyBzdGFibGU9MDsgcHJldl9zaWc9Jyc7IGZpcnN0PTEKICBbICIkKHJlYWRfb25lICIkQkFTRS9hcHBsaWVkLmJvb3QiKSIgIT0gIiQoYm9vdF9pZCkiIF0gfHwgZmlyc3Q9MAogIHRyYXAgJ3N0b3BfcmVxdWVzdGVkPTEnIDIgMTUKICB0cmFwICdkYWVtb25fY2xlYW51cCcgMAogIGxvZyAnZGFlbW9uIHZlcnNpb249Mi40LjEgc3RhcnRlZCcKICB3aGlsZSBbICIkc3RvcF9yZXF1ZXN0ZWQiID0gMCBdICYmIFsgISAtZiAiJFNUT1BGSUxFIiBdOyBkbwogICAgbG9hZF9jb25maWc7IFsgIiRQRVJNQU5FTlQiID0gMSBdIHx8IGJyZWFrCiAgICBpZiBbIC1lICIkUEFVU0UiIF07IHRoZW4gc2xlZXAgMzsgY29udGludWU7IGZpCiAgICBpZiBbICIkKG5vdykiIC1sdCAiJEJPT1RfREVMQVlfU0VDT05EUyIgXTsgdGhlbiBzbGVlcCAzOyBjb250aW51ZTsgZmkKICAgIGRpc2NvdmVyCiAgICBzaWc9IiQocHJvcCBzeXMudXNiLmNvbmZpZyk6JChwcm9wIHN5cy51c2Iuc3RhdGUpOiRHOiRDOiRCUklER0UiCiAgICBpZiBbICIkc2lnIiA9ICIkcHJldl9zaWciIF07IHRoZW4gc3RhYmxlPSQoKHN0YWJsZSArIDEpKTsgZWxzZSBzdGFibGU9MDsgZmkKICAgIHByZXZfc2lnPSIkc2lnIgogICAgaWYgWyAiJHN0YWJsZSIgLWx0IDIgXTsgdGhlbiBzbGVlcCAzOyBjb250aW51ZTsgZmkKICAgIGlmIFsgIiRmaXJzdCIgPSAxIF07IHRoZW4KICAgICAgIyBPbmUgc2F2ZWQtbW9kZSBhdHRlbXB0IGFmdGVyIGJvb3QgZXZlbiB3aXRoIGNvbnRpbnVpbmcgcGF0cm9sIGRpc2FibGVkLgogICAgICBpZiBbIC1uICIkQlJJREdFIiBdICYmIHsgWyAtbiAiJEMiIF0gfHwgWyAtciAiJExFR0FDWS9mdW5jdGlvbnMiIF07IH07IHRoZW4KICAgICAgICAiJFNIRUxMX0JJTiIgIiRTRUxGIiBhcHBseSAiJE1PREUiICIkV0lSRURfQURCIiA+PiAiJExPRyIgMj4mMTsgcmM9JD8KICAgICAgICBjYXNlICIkcmMiIGluCiAgICAgICAgICAwfDF8NHw1KSBmaXJzdD0wOyBib290X2lkID4gIiRCQVNFL2FwcGxpZWQuYm9vdCIgOzsKICAgICAgICBlc2FjCiAgICAgIGVsc2UgcmM9NDsgZmkKICAgIGVsc2UKICAgICAgIiRTSEVMTF9CSU4iICIkU0VMRiIgcmVjb25jaWxlID4+ICIkTE9HIiAyPiYxOyByYz0kPwogICAgZmkKICAgIGlmIFsgIiRyYyIgIT0gIiRwcmV2aW91cyIgXTsgdGhlbiBsb2cgImRhZW1vbiByZXN1bHQ9JHJjICgwPXJlYWR5IDE9bW9kZS1mYWlsZWQgMj1wYXVzZWQgMz1jb29sZG93biA0PWJyaWRnZS1taXNzaW5nIDU9bmV0d29yay1wZW5kaW5nIDY9YnVzeSA3PXVuc3VwcG9ydGVkKSI7IHByZXZpb3VzPSIkcmMiOyBmaQogICAgWyAiJHN0b3BfcmVxdWVzdGVkIiAhPSAwIF0gfHwgWyAtZiAiJFNUT1BGSUxFIiBdIHx8IHNsZWVwICIkUE9MTF9JTlRFUlZBTF9TRUNPTkRTIgogIGRvbmUKICBsb2cgJ2RhZW1vbiBzdG9wcGVkJwp9CnN0b3BfZGFlbW9uKCkgewogIGxvY2FsIHBpZCBuCiAgbWtkaXIgLXAgIiRCQVNFIiB8fCByZXR1cm4gMQogIDogPiAiJFNUT1BGSUxFIgogIHBpZD0kKHJlYWRfb25lICIkUElERklMRSIpCiAgaWYgcGlkX21hdGNoZXMgIiRwaWQiICIkU0VMRiBkYWVtb24iOyB0aGVuCiAgICBraWxsICIkcGlkIiAyPi9kZXYvbnVsbAogICAgbj0wCiAgICB3aGlsZSBwaWRfbWF0Y2hlcyAiJHBpZCIgIiRTRUxGIGRhZW1vbiI7IGRvCiAgICAgIFsgIiRuIiAtbHQgMTEwIF0gfHwgeyBsb2cgJ3N0b3AgcGVuZGluZzogaW4tZmxpZ2h0IHRyYW5zaXRpb24gbGVmdCB1bnRvdWNoZWQnOyByZXR1cm4gNjsgfQogICAgICBzbGVlcCAxOyBuPSQoKG4gKyAxKSkKICAgIGRvbmUKICBmaQogIHJldHVybiAwCn0Kc3RhcnRfZGFlbW9uKCkgewogIGNhc2UgIiQoZGFlbW9uX3N0YXR1cykiIGluIHJ1bm5pbmc6KikgcmV0dXJuIDAgOzsgZXNhYwogIHJtIC1mICIkU1RPUEZJTEUiCiAgbm9odXAgIiRTSEVMTF9CSU4iICIkU0VMRiIgZGFlbW9uIDwvZGV2L251bGwgPj4gIiRMT0ciIDI+JjEgJgp9CnNldF9ib290KCkgewogIGxvY2FsIHRtcCBsaW5lCiAgbWtkaXIgLXAgIiRCQVNFIiB8fCByZXR1cm4gMQogIFsgLWYgIiRCT09URklMRSIgXSB8fCA6ID4gIiRCT09URklMRSIgfHwgcmV0dXJuIDEKICBjcCAtcCAiJEJPT1RGSUxFIiAiJEJBU0UvYm9vdC5iZWZvcmUtbGFzdC1jaGFuZ2UiIHx8IHJldHVybiAxCiAgdG1wPSIkQk9PVEZJTEUua3VubS4kJCIKICAjIE1hdGNoIG9ubHkgdGhpcyBwbHVnaW4ncyBrbm93biBkYWVtb24gcGF0aHM7IGxlYXZlIHVucmVsYXRlZCBib290IGFjdGlvbnMuCiAgY3AgLXAgIiRCT09URklMRSIgIiR0bXAiIHx8IHJldHVybiAxCiAgZ3JlcCAtdiAtZSAna2Fub191c2JfbW9kZV9tYW5hZ2VyX3YyJyAtZSAna2Fub191c2JfbmV0d29ya19tYW5hZ2VyL3VzYl9uZXR3b3JrX2RhZW1vbi5zaCcgXAogICAgLWUgJ2thbm9fdXNiX21vZGVfbWFuYWdlcl92MycgIiRCT09URklMRSIgPiAiJHRtcC5jb250ZW50IgogIF9ncmVwX3JjPSQ/OyBbICIkX2dyZXBfcmMiIC1sZSAxIF0gfHwgeyBybSAtZiAiJHRtcCIgIiR0bXAuY29udGVudCI7IHJldHVybiAxOyB9CiAgY2F0ICIkdG1wLmNvbnRlbnQiID4gIiR0bXAiOyBfY29weV9yYz0kPzsgcm0gLWYgIiR0bXAuY29udGVudCIKICBbICIkX2NvcHlfcmMiID0gMCBdIHx8IHsgcm0gLWYgIiR0bXAiOyByZXR1cm4gMTsgfQogIGlmIFsgIiQxIiA9IDEgXTsgdGhlbgogICAgIyBQdXQgdGhlIGhvb2sgZmlyc3Qgc28gYW4gZXhpc3RpbmcgZXhpdCBjb21tYW5kIGNhbm5vdCBtYWtlIGl0IHVucmVhY2hhYmxlLgogICAgeyBwcmludGYgJyMhL3N5c3RlbS9iaW4vc2hcbiMga2Fub191c2JfbW9kZV9tYW5hZ2VyX3YzXG5ub2h1cCAlcyAlcyBkYWVtb24gPC9kZXYvbnVsbCA+PiAlcyAyPiYxICZcbicgIiRTSEVMTF9CSU4iICIkU0VMRiIgIiRMT0ciOyBjYXQgIiR0bXAiOyB9ID4gIiR0bXAud2l0aC1ob29rIgogICAgbXYgLWYgIiR0bXAud2l0aC1ob29rIiAiJHRtcCIgfHwgcmV0dXJuIDEKICBmaQogICIkU0hFTExfQklOIiAtbiAiJHRtcCIgfHwgeyBybSAtZiAiJHRtcCI7IHJldHVybiAxOyB9CiAgbXYgLWYgIiR0bXAiICIkQk9PVEZJTEUiCn0Kc2F2ZV9jb25maWcoKSB7CiAgIyBBcmd1bWVudHMgYXJlIHZhbGlkYXRlZCBhbmQgcGFyc2VkIGFzIGRhdGEsIG5ldmVyIHNvdXJjZWQgYXMgc2hlbGwgY29kZS4KICB2YWxpZF9tb2RlICIkMSIgfHwgcmV0dXJuIDcKICBjYXNlICIkMjokMzokNDokNSIgaW4gWzAxXTpbMDFdOlswMV06WzAxXSkgOzsgKikgcmV0dXJuIDcgOzsgZXNhYwogIGNhc2UgIiQ2OiQ3IiBpbiAqWyEwLTk6XSp8Oip8KjopIHJldHVybiA3IDs7IGVzYWMKICBbICIkNiIgLWdlIDMwIF0gJiYgWyAiJDYiIC1sZSA2MDAgXSAmJiBbICIkNyIgLWdlIDUgXSAmJiBbICIkNyIgLWxlIDYwIF0gfHwgcmV0dXJuIDcKICBjYXNlICIkOCIgaW4gJyd8YXV0bykgOzsgKlshYS16QS1aMC05Xy46LV0qKSByZXR1cm4gNyA7OyBlc2FjCiAgcHJpbnRmICclc1xuJyAiTU9ERT0kMSIgIldJUkVEX0FEQj0kMiIgIlBFUk1BTkVOVD0kMyIgIlBBVFJPTF9FTkFCTEVEPSQ0IiAiQVVUT19ST0xMQkFDSz0kNSIgXAogICAgIkJPT1RfREVMQVlfU0VDT05EUz0kNiIgIlBPTExfSU5URVJWQUxfU0VDT05EUz0kNyIgIkJSSURHRT0kOCIgPiAiJENPTkZJRy50bXAuJCQiICYmIG12IC1mICIkQ09ORklHLnRtcC4kJCIgIiRDT05GSUciCn0KY29uZmlndXJlKCkgewogIHN0b3BfZGFlbW9uIHx8IHJldHVybiAkPwogIGxvY2tfY2xhaW0gfHwgcmV0dXJuICQ/CiAgY3AgLXAgIiRDT05GSUciICIkQkFTRS9jb25maWcucHJldmlvdXMiIDI+L2Rldi9udWxsIHx8IDoKICBzYXZlX2NvbmZpZyAiJEAiIHx8IHJldHVybiAkPwogIGlmICEgc2V0X2Jvb3QgIiQzIjsgdGhlbgogICAgWyAhIC1mICIkQkFTRS9jb25maWcucHJldmlvdXMiIF0gfHwgY3AgLXAgIiRCQVNFL2NvbmZpZy5wcmV2aW91cyIgIiRDT05GSUciCiAgICByZWNvcmQgZmFpbGVkIGJvb3QtaG9vay11cGRhdGUgJycgJyc7IHJldHVybiAxCiAgZmkKICBybSAtZiAiJFBBVVNFIiAiJEJBU0UvcmVjb3ZlcnkuZW52IiAiJEJBU0UvZHJpZnQuZW52IgogIGxvYWRfY29uZmlnCiAgYXBwbHlfbG9ja2VkICIkTU9ERSIgIiRXSVJFRF9BREIiOyBfY29uZmlndXJlX3JjPSQ/CiAgc3luY19wZXJzaXN0X3ZlcmlmaWVkIHx8IDoKICBsb2NrX3JlbGVhc2U7IHRyYXAgLSAwIDIgMTUKICAjIEZpcnN0IHdvcmtlciBhcHBsaWVzIG9uY2Ugbm93OyBkYWVtb24gdXNlcyByZWNvbmNpbGUgaW5zdGVhZCBvZiBhbm90aGVyIGltbWVkaWF0ZSBzd2l0Y2guCiAgaWYgWyAiJFBFUk1BTkVOVCIgPSAxIF07IHRoZW4KICAgIHByaW50ZiAnJXNcbicgIiQoYm9vdF9pZCkiID4gIiRCQVNFL2FwcGxpZWQuYm9vdCIKICAgIHN0YXJ0X2RhZW1vbgogIGZpCiAgcmV0dXJuICIkX2NvbmZpZ3VyZV9yYyIKfQpzYWZlX3Jlc3RvcmUoKSB7CiAgc3RvcF9kYWVtb24gfHwgcmV0dXJuICQ/CiAgc2V0X2Jvb3QgMCB8fCByZXR1cm4gMQogIGxvYWRfY29uZmlnCiAgbG9ja19jbGFpbSB8fCByZXR1cm4gJD8KICBwcmludGYgJ21hbnVhbFxuJyA+ICIkUEFVU0UiCiAgc2F2ZV9jb25maWcgcm5kaXMgIiRXSVJFRF9BREIiIDAgMCAxIDEyMCAxMCBhdXRvIHx8IHJldHVybiAxCiAgIyBQZXJzaXN0ZW5jZSBpcyBub3Qgd3JpdHRlbiB1bnRpbCB0aGUgbmF0aXZlIFJORElTIGNvbXBvc2l0aW9uIGlzIHZlcmlmaWVkLgogIHJhd19hcHBseSBybmRpcyAiJFdJUkVEX0FEQiIgIiQoZGVmYXVsdF90YXJnZXQgcm5kaXMgIiRXSVJFRF9BREIiKSI7IF9zYWZlX3JjPSQ/CiAgaWYgWyAiJF9zYWZlX3JjIiAtZXEgMCBdIHx8IFsgIiRfc2FmZV9yYyIgLWVxIDQgXSB8fCBbICIkX3NhZmVfcmMiIC1lcSA1IF07IHRoZW4KICAgIHJlbWVtYmVyX29yaWdpbmFsX3BlcnNpc3QgfHwgOgogICAgc2V0cHJvcCBwZXJzaXN0LnN5cy51c2IuY29uZmlnICIkKGRlZmF1bHRfdGFyZ2V0IHJuZGlzICIkV0lSRURfQURCIikiIHx8IHJldHVybiAxCiAgZmkKICByZXR1cm4gIiRfc2FmZV9yYyIKfQpkaWFnbm9zZSgpIHsKICBsb2NhbCBmCiAgc3RhdHVzCiAgcHJpbnRmICdcbi0tLSB0b29scyAtLS1cbicKICBwcmludGYgJ1NIRUxMPSVzXG5QQVRIPSVzXG4nICIkU0hFTExfQklOIiAiJFBBVEgiCiAgZm9yIGYgaW4gc2ggZ2V0cHJvcCBzZXRwcm9wIGlwIGlmY29uZmlnIGJyY3RsIGJ1c3lib3ggYmFzZTY0IGNrc3VtIG5vaHVwOyBkbyBjb21tYW5kIC12ICIkZiIgMj4mMTsgZG9uZQogIHByaW50ZiAnXG4tLS0gbmF0aXZlIFVTQiBwYXRocyAtLS1cbicKICBscyAtbGQgL2NvbmZpZy91c2JfZ2FkZ2V0LyogL3N5cy9rZXJuZWwvY29uZmlnL3VzYl9nYWRnZXQvKiAiJExFR0FDWSIgMj4mMQogIFsgLXogIiRDIiBdIHx8IGxzIC1sICIkQyIgMj4mMQogIHByaW50ZiAnXG4tLS0gbmV0ZGV2cyAtLS1cbicKICBpcCBsaW5rIHNob3cgMj4mMTsgWyAteiAiJEJSSURHRSIgXSB8fCBpcCBhZGRyIHNob3cgIiRCUklER0UiIDI+JjEKICBwcmludGYgJ1xuLS0tIHJlY2VudCBwbHVnaW4gbG9nIC0tLVxuJzsgdGFpbCAtbiA3MCAiJExPRyIgMj4mMQogIHByaW50ZiAnXG4tLS0gVVNCIC8gcG9saWN5IGVycm9ycyAtLS1cbicKICBkbWVzZyAyPiYxIHwgZ3JlcCAtaUUgJ3VzYnxuY218ZWNtfHJuZGlzfHNpcGF8dWRjfGF2YzouKmRlbmllZCcgfCB0YWlsIC1uIDYwCiAgcmV0dXJuIDAKfQpzZWxmdGVzdCgpIHsKICBsb2NhbCBfc2NvcGUKICBfc2NvcGU9b3V0ZXIKICBfa3VubV9zY29wZV9wcm9iZSgpIHsgbG9jYWwgX3Njb3BlOyBfc2NvcGU9aW5uZXI7IH0KICBfa3VubV9zY29wZV9wcm9iZQogIFsgIiRfc2NvcGUiID0gb3V0ZXIgXSB8fCB7IGVjaG8gJ1NFTEZURVNUX0ZBSUxFRD1sb2NhbC1zY29wZSc7IHJldHVybiAxOyB9CiAgWyAiJChtb2RlX29mICduY20sbXRwLGFkYicpIiA9IG5jbSBdICYmIFsgIiQoYWRiX29mICduY20sbXRwLGFkYicpIiA9IDEgXSB8fCByZXR1cm4gMQogIHByaW50ZiAnJXNcbicgJ1NFTEZURVNUPUtVTk1fMi40LjFfT0snCn0KClNIRUxMX0JJTj0vc3lzdGVtL2Jpbi9zaApbIC14ICIkU0hFTExfQklOIiBdIHx8IFNIRUxMX0JJTj0kKGNvbW1hbmQgLXYgc2gpCmNhc2UgIiQxIiBpbgogIHNlbGZ0ZXN0fHN0YXR1c3xkaWFnbm9zZXxkYWVtb24tc3RhdHVzKSA7OwogICopIFsgIiQoaWQgLXUpIiA9IDAgXSB8fCB7IGVjaG8gJ1JPT1RfUkVRVUlSRUQ9MSc7IGV4aXQgMTM7IH0gOzsKZXNhYwpjYXNlICIkMSIgaW4KICBzZWxmdGVzdCkgc2VsZnRlc3QgOzsKICBzdGF0dXMpIHN0YXR1cyA7OwogIGRpYWdub3NlKSBkaWFnbm9zZSA7OwogIGFwcGx5KSBta2RpciAtcCAiJEJBU0UiOyBhcHBseV9tb2RlICIkMiIgIiQzIiA7OwogIHJlcGFpcikgbWtkaXIgLXAgIiRCQVNFIjsgbG9hZF9jb25maWc7IGxvY2tfY2xhaW0gfHwgZXhpdCAkPzsgZGlzY292ZXI7IF9yZXBhaXJfbW9kZT0kKGFjdGl2ZV9tb2RlKTsgdmFsaWRfbW9kZSAiJF9yZXBhaXJfbW9kZSIgfHwgeyBlY2hvICdBQ1RJVkVfTU9ERV9VTktOT1dOPTEnOyBleGl0IDc7IH07IHJlcGFpcl9uZXR3b3JrICIkX3JlcGFpcl9tb2RlIiAxMCA7OwogIHJlY29uY2lsZSkgcmVjb25jaWxlIDs7CiAgY29uZmlndXJlKSBzaGlmdDsgbWtkaXIgLXAgIiRCQVNFIjsgY29uZmlndXJlICIkQCIgOzsKICBzYWZlLXJuZGlzKSBta2RpciAtcCAiJEJBU0UiOyBzYWZlX3Jlc3RvcmUgOzsKICBwYXVzZSkgbWtkaXIgLXAgIiRCQVNFIjsgcHJpbnRmICdtYW51YWxcbicgPiAiJFBBVVNFIjsgc3RvcF9kYWVtb24gOzsKICByZXN1bWUpIG1rZGlyIC1wICIkQkFTRSI7IHJtIC1mICIkUEFVU0UiICIkQkFTRS9yZWNvdmVyeS5lbnYiICIkQkFTRS9kcmlmdC5lbnYiOyBzdGFydF9kYWVtb24gOzsKICBkYWVtb24pIGRhZW1vbiA7OwogIHN0YXJ0KSBta2RpciAtcCAiJEJBU0UiOyBzdGFydF9kYWVtb24gOzsKICBzdG9wKSBzdG9wX2RhZW1vbiA7OwogIGRhZW1vbi1zdGF0dXMpIGRhZW1vbl9zdGF0dXMgOzsKICAqKSBlY2hvICd1c2FnZTogYmFja2VuZC5zaCB7c2VsZnRlc3R8c3RhdHVzfGRpYWdub3NlfGFwcGx5IE1PREUgQURCfHJlcGFpcnxjb25maWd1cmUgTU9ERSBBREIgS0VFUCBQQVRST0wgUk9MTEJBQ0sgREVMQVkgSU5URVJWQUwgQlJJREdFfHNhZmUtcm5kaXN8cGF1c2V8cmVzdW1lfGRhZW1vbnxzdGFydHxzdG9wfGRhZW1vbi1zdGF0dXN9JzsgZXhpdCA3IDs7CmVzYWMK';
+  const BACKEND_SUM = '890490775:31551';
+  const BACKEND_BYTES = 31551;
+  const API = typeof globalThis !== 'undefined' ? globalThis : window;
+  if (API.__kunm3 && API.__kunm3.destroy) API.__kunm3.destroy();
+  const session = { closed: false, busy: false, modal: null, timer: null, statusTimer: null, last: null, transport: '', destroy: null };
+  API.__kunm3 = session;
+  let queue = Promise.resolve();
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const sq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+  const escape = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const env = text => {
+    const result = Object.create(null);
+    String(text || '').split(/\r?\n/).forEach(line => {
+      const match = line.trim().match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
+      if (match) result[match[1]] = match[2].replace(/^"(.*)"$/, '$1');
     });
+    return result;
+  };
+  const responseText = raw => {
+    if (typeof raw === 'string') {
+      if (/^\s*[\[{]/.test(raw)) {
+        try { const obj = JSON.parse(raw); if (typeof obj !== 'string') return responseText(obj); } catch (_) {}
+      }
+      return raw;
+    }
+    if (raw == null) return '';
+    if (Array.isArray(raw)) return raw.map(responseText).filter(Boolean).join('\n');
+    if (typeof raw === 'object') {
+      for (const key of ['content','stdout','output','data','result','text','message']) {
+        if (raw[key] != null) {
+          const text = responseText(raw[key]);
+          if (text.indexOf('__K3_') !== -1) return text;
+        }
+      }
+      return ['content','stdout','output','stderr','data','result','text','message'].filter(k => raw[k] != null).map(k => responseText(raw[k])).filter(Boolean).join('\n');
+    }
+    return '';
+  };
+  const rpc = (command, timeout = 20000) => {
+    const task = async () => {
+      if (typeof runShellWithRoot !== 'function') throw new Error('\u672a\u627e\u5230 runShellWithRoot\uff1a\u8bf7\u5728 F50 \u539f\u540e\u53f0\u63d2\u4ef6\u7ba1\u7406\u4e2d\u52a0\u8f7d\uff0c\u4e0d\u662f OpenWrt LuCI\u3002');
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2,9);
+      const begin = '__K3_B_' + id + '__';
+      const end = '__K3_E_' + id + '__=';
+      const script = "printf '%s\\n' " + sq(begin) + "\n(\nexport PATH=/system/bin:/system/xbin:/vendor/bin:/odm/bin:/sbin:/bin:/usr/bin:$PATH\n" + command + "\n) 2>&1\n_k3_rc=$?\nprintf '\\n%s%s\\n' " + sq(end) + ' "$_k3_rc"\n';
+      let raw;
+      try { raw = await runShellWithRoot(script, timeout); }
+      catch (e) { throw new Error('\u540e\u53f0\u547d\u4ee4\u8bf7\u6c42\u5931\u8d25\uff1a' + (e.message || String(e))); }
+      const text = responseText(raw).replace(/\r\n/g,'\n');
+      const start = text.indexOf(begin);
+      const finish = text.lastIndexOf(end);
+      if (start < 0 || finish <= start || !/^\d+/.test(text.slice(finish + end.length))) {
+        let debug; try { debug = JSON.stringify(raw); } catch (_) { debug = String(raw); }
+        session.transport = text.slice(-3500) || String(debug === undefined ? raw : debug).slice(0,3500);
+        throw new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\u6574\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
+      }
+      return { code: Number(text.slice(finish + end.length).match(/^\d+/)[0]), text: text.slice(start + begin.length, finish).trim() };
+    };
+    const result = queue.then(task, task);
+    queue = result.catch(() => {});
+    return result;
+  };
+  const requireOK = (res, label) => { if (res.code !== 0) throw new Error(label + ' (exit=' + res.code + ')\n' + res.text); return res.text; };
+  const shellHeader = 'SH=/system/bin/sh; [ -x "$SH" ] || SH=$(command -v sh)\n';
+  const probeCommand = shellHeader + `
+printf 'PROBE_UID=%s\\n' "$(id -u)"
+if command -v getprop >/dev/null 2>&1 && command -v setprop >/dev/null 2>&1; then echo NATIVE_API=1; else echo NATIVE_API=0; fi
+printf 'PROBE_CONFIG=%s\\n' "$(getprop sys.usb.config 2>/dev/null)"
+printf 'PROBE_STATE=%s\\n' "$(getprop sys.usb.state 2>/dev/null)"
+printf 'PROBE_PERSIST=%s\\n' "$(getprop persist.sys.usb.config 2>/dev/null)"
+if [ -r ${sq(BASE + '/config.env')} ]; then
+  printf 'CONFIG_SOURCE=v3\\n'; cat ${sq(BASE + '/config.env')}
+elif [ -r /data/kano_usb_mode_manager_v2/config.env ]; then
+  printf 'CONFIG_SOURCE=v2\\n'; cat /data/kano_usb_mode_manager_v2/config.env
+fi
+if [ -r ${sq(BACKEND)} ]; then
+  if "$SH" -n ${sq(BACKEND)}; then "$SH" ${sq(BACKEND)} status; else printf 'BACKEND_ERROR=syntax\\n'; fi
+else printf 'BACKEND_ERROR=not-installed\\n'; fi
+printf '\\nPROBE_COMPLETE=1\\n'
+`;
+  const readState = async () => {
+    const res = await rpc(probeCommand);
+    requireOK(res, '\u8bfb\u53d6\u72b6\u6001\u5931\u8d25');
+    const data = env(res.text);
+    if (data.PROBE_COMPLETE !== '1') throw new Error('\u72b6\u6001\u56de\u5305\u88ab\u622a\u65ad\uff1a\n' + res.text);
+    if (data.PROBE_UID !== '0') throw new Error('\u6ca1\u6709 root \u6743\u9650\uff0c\u8bf7\u5148\u5f00\u542f F50 \u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002\n' + res.text);
+    if (data.NATIVE_API !== '1') throw new Error('\u672a\u68c0\u6d4b\u5230 F50 \u7684 getprop/setprop\u3002\u8bf7\u5728 F50 \u539f\u540e\u53f0\u4f7f\u7528\u672c\u63d2\u4ef6\uff0c\u4e0d\u8981\u5728 OpenWrt LuCI \u4e2d\u8fd0\u884c\u3002\n' + res.text);
+    data.INSTALLED = data.PROTOCOL === 'KUNM3' && data.STATUS_COMPLETE === '1' && data.BACKEND_VERSION === VERSION;
+    data.RAW = res.text;
+    if (!data.INSTALLED) {
+      data.CURRENT_CONFIG = data.PROBE_CONFIG;
+      data.CURRENT_STATE = data.PROBE_STATE;
+      data.PERSIST_CONFIG = data.PROBE_PERSIST;
+      data.SOURCE = 'properties-unverified';
+    }
+    session.last = data;
     return data;
   };
-
-  const readConfig = async () => {
-    const res = await run(`cat ${shellQuote(CONFIG_FILE)} 2>/dev/null || true`, 8000);
-    const env = parseEnv(res.text);
-    return normalizeConfig({
-      mode: env.MODE,
-      adb: env.WIRED_ADB,
-      permanent: env.PERMANENT,
-      patrol: env.PATROL_ENABLED,
-      autoRollback: env.AUTO_ROLLBACK,
-      bootDelay: env.BOOT_DELAY_SECONDS,
-      pollInterval: env.POLL_INTERVAL_SECONDS,
-    });
-  };
-
-  const saveConfig = async (config) => writeRemoteFile(CONFIG_FILE, buildConfigText(config), '600');
-
-  const migrateLegacy = async () => {
-    await run(`
-if [ -f /data/kano_usb_network_manager/usb_network_daemon.sh ]; then
-  sh /data/kano_usb_network_manager/usb_network_daemon.sh stop >/dev/null 2>&1 || true
+  const checksumCmd = path => `size=$(wc -c < ${sq(path)} 2>/dev/null | tr -d ' ' ) || exit 19
+[ "$size" = ${sq(String(BACKEND_BYTES))} ] || { echo "SIZE_MISMATCH=$size expected=${BACKEND_BYTES}"; exit 20; }
+if command -v cksum >/dev/null 2>&1; then
+  sum=$(cksum ${sq(path)} 2>/dev/null) || exit 19; set -- $sum
+  [ "$1:$2" = ${sq(BACKEND_SUM)} ] || { echo "CHECKSUM_MISMATCH=$1:$2"; exit 20; }
+elif command -v busybox >/dev/null 2>&1 && busybox cksum ${sq(path)} >/dev/null 2>&1; then
+  set -- $(busybox cksum ${sq(path)}); [ "$1:$2" = ${sq(BACKEND_SUM)} ] || exit 20
 fi
-touch ${shellQuote(BOOT_SH_FILE)}
-sed -i '/kano_usb_network_manager/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || true
-`, 12000);
-  };
-
-  const installManagedFiles = async (config = null, restartExisting = true) => {
-    const current = normalizeConfig(config || await readConfig());
-    await migrateLegacy();
-    const previousDaemon = await daemonStatus();
-    if (previousDaemon.running && !(await stopDaemon())) return false;
-
-    const results = await Promise.all([
-      writeRemoteFile(MANAGER_FILE, MANAGER_SCRIPT, '755'),
-      writeRemoteFile(DAEMON_FILE, DAEMON_SCRIPT, '755'),
-      saveConfig(current),
-    ]);
-    if (!results.every(Boolean)) return false;
-    if (!(await writeRemoteFile(VERSION_FILE, VERSION, '600'))) return false;
-    await run(`sh ${shellQuote(MANAGER_FILE)} save-original >/dev/null 2>&1 || true`, 8000);
-
-    if (restartExisting && previousDaemon.running && current.permanent === '1') {
-      return restartDaemon();
-    }
-    return true;
-  };
-
-  const backendReady = async () => {
-    const res = await run(`
-[ -x ${shellQuote(MANAGER_FILE)} ] && \
-[ -x ${shellQuote(DAEMON_FILE)} ] && \
-[ "$(cat ${shellQuote(VERSION_FILE)} 2>/dev/null)" = ${shellQuote(VERSION)} ]
-printf '%s' $?
-`, 5000);
-    return res.ok && String(res.text).trim().endsWith('0');
-  };
-
-  let backendPreparePromise = null;
-  const prepareBackend = () => {
-    if (!backendPreparePromise) {
-      backendPreparePromise = (async () => {
-        if (await backendReady()) return true;
-        const config = await readConfig();
-        const ok = await installManagedFiles(config);
-        if (!ok) backendPreparePromise = null;
-        return ok;
-      })().catch((error) => {
-        backendPreparePromise = null;
-        throw error;
-      });
-    }
-    return backendPreparePromise;
-  };
-
-
-  const setBootEnabled = async (enabled) => {
-    const encodedBlock = encodePayload(`${BOOT_LINE}\n`);
-    const cmd = enabled
-      ? `
-touch ${shellQuote(BOOT_SH_FILE)}
-sed -i '/${BOOT_TAG}/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || true
-printf '\n' >> ${shellQuote(BOOT_SH_FILE)}
-printf '%s' ${shellQuote(encodedBlock)} | base64 -d >> ${shellQuote(BOOT_SH_FILE)}
-`
-      : `
-touch ${shellQuote(BOOT_SH_FILE)}
-sed -i '/${BOOT_TAG}/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || true
 `;
-    const res = await run(cmd, 12000);
-    return res.ok;
+  const backendValid = async () => {
+    const res = await rpc(shellHeader + `[ -r ${sq(BACKEND)} ] || exit 1\n` + checksumCmd(BACKEND) + `"$SH" -n ${sq(BACKEND)} && "$SH" ${sq(BACKEND)} selftest`);
+    return res.code === 0 && res.text.indexOf('SELFTEST=KUNM_2.4.1_OK') >= 0;
   };
-
-  const daemonStatus = async () => {
-    const res = await run(`sh ${shellQuote(DAEMON_FILE)} status`, 8000);
-    return {
-      running: res.ok && String(res.text).startsWith('running:'),
-      text: res.text || 'stopped',
-    };
+  const showProgress = (text, tone = 'info') => { const node = session.modal && session.modal.querySelector('#k3_message'); if (node) { node.textContent = text; node.className = 'k3_status ' + tone; } };
+  const setOutput = text => { const node = session.modal && session.modal.querySelector('#k3_output'); if (node) { node.textContent = String(text || ''); node.classList.toggle('has', Boolean(text)); } };
+  const legacyScan = signal => `
+for p in /proc/[0-9]*/cmdline; do
+  [ -r "$p" ] || continue
+  pid="\${p%/cmdline}"; pid="\${pid##*/}"
+  [ "$pid" != "$$" ] || continue
+  for path in /data/kano_usb_mode_manager_v2/usb_mode_daemon.sh /data/kano_usb_network_manager/usb_network_daemon.sh /data/kano_usb_mode_manager_v3/backend.sh; do
+    if tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x "$path" >/dev/null; then
+      if [ "$path" = /data/kano_usb_mode_manager_v3/backend.sh ]; then
+        tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x daemon >/dev/null || continue
+      fi
+      ${signal ? 'kill "$pid" 2>/dev/null || true' : 'echo "DAEMON_BUSY=$pid"'}
+    fi
+  done
+  for path in /data/kano_usb_mode_manager_v2/usb_mode_manager.sh /data/kano_usb_mode_manager_v3/backend.sh; do
+    if tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x "$path" >/dev/null; then
+      ${signal ? ':' : 'echo "WORKER_BUSY=$pid"'}
+    fi
+  done
+done
+`;
+  const quiesce = async () => {
+    showProgress('\u6b63\u5728\u505c\u6b62\u65e7\u5b88\u62a4\uff0c\u4e0d\u4e2d\u65ad\u8fdb\u884c\u4e2d\u7684 USB \u5207\u6362\u2026');
+    requireOK(await rpc(`
+[ "$(id -u)" = 0 ] || { echo ROOT_REQUIRED=1; exit 13; }
+for b in /data/kano_usb_mode_manager_v2 /data/kano_usb_network_manager /data/kano_usb_mode_manager_v3; do
+  [ ! -d "$b" ] || printf 'manual\\n' > "$b/paused"
+done
+[ ! -d ${sq(BASE)} ] || : > ${sq(BASE + '/stop')}
+` + legacyScan(true)), '\u505c\u6b62\u65e7\u5b88\u62a4\u5931\u8d25');
+    for (let i = 0; i < 55; i++) {
+      const res = await rpc(legacyScan(false));
+      requireOK(res, '\u8bfb\u53d6\u8fdb\u7a0b\u5931\u8d25');
+      if (!res.text.includes('_BUSY=')) return;
+      showProgress('\u65e7\u5207\u6362\u4efb\u52a1\u5c1a\u672a\u7ed3\u675f\uff0c\u672c\u6b21\u672a\u53d1\u8d77\u65b0\u5207\u6362\u3002\n' + res.text);
+      await delay(2000);
+    }
+    throw new Error('\u65e7\u5207\u6362\u4efb\u52a1\u672a\u9000\u51fa\uff0c\u5df2\u505c\u6b62\u90e8\u7f72\uff0c\u6ca1\u6709\u5f3a\u5236\u6740\u6389 USB \u5de5\u4f5c\u8fdb\u7a0b\u3002');
   };
-
-  const restartDaemon = async () => {
-    await run(`sh ${shellQuote(DAEMON_FILE)} stop >/dev/null 2>&1 || true`, 8000);
-    const res = await run(`nohup sh ${shellQuote(DAEMON_FILE)} start >/dev/null 2>&1 &`, 8000);
-    return res.ok;
+  const install = async (force = false) => {
+    const state = await readState();
+    if (!force && state.INSTALLED && await backendValid()) return;
+    showProgress('\u6821\u9a8c\u5e76\u5206\u5757\u4e0a\u4f20\u540e\u53f0\u2026');
+    const token = Date.now().toString(36);
+    const encoded = BASE + '/stage-' + token + '.b64';
+    const stage = BASE + '/stage-' + token + '.sh';
+    requireOK(await rpc(`mkdir -p ${sq(BASE)} && chmod 700 ${sq(BASE)} && : > ${sq(encoded)}`), '\u521b\u5efa\u90e8\u7f72\u76ee\u5f55\u5931\u8d25');
+    try {
+      // Small sequential requests avoid firmware command-size limits and root-RPC races.
+      for (let i = 0; i < BACKEND_DATA.length; i += 2048) {
+        requireOK(await rpc(`printf '%s' ${sq(BACKEND_DATA.slice(i,i+2048))} >> ${sq(encoded)}`), '\u4e0a\u4f20\u5206\u5757\u5931\u8d25');
+        showProgress('\u4e0a\u4f20\u540e\u53f0 ' + Math.min(100,Math.round((i+2048)*100/BACKEND_DATA.length)) + '%');
+      }
+      const verify = await rpc(shellHeader + `
+base64 -d ${sq(encoded)} > ${sq(stage)} 2>/dev/null || busybox base64 -d ${sq(encoded)} > ${sq(stage)} 2>/dev/null || toybox base64 -d ${sq(encoded)} > ${sq(stage)} || exit 18
+` + checksumCmd(stage) + `"$SH" -n ${sq(stage)} && "$SH" ${sq(stage)} selftest`);
+      requireOK(verify, '\u540e\u53f0\u5b8c\u6574\u6027\u6216 Shell \u81ea\u68c0\u5931\u8d25\uff0c\u672a\u66ff\u6362\u65e7\u6587\u4ef6');
+      if (!verify.text.includes('SELFTEST=KUNM_2.4.1_OK')) throw new Error('\u672a\u53d6\u5f97\u81ea\u68c0\u901a\u8fc7\u6807\u8bb0');
+      await quiesce();
+      const commit = await rpc(`
+backup=${sq(BASE + '/backups/' + token)}
+mkdir -p "$backup" || exit 1
+for b in /data/kano_usb_mode_manager_v2 /data/kano_usb_mode_manager_v3; do
+  [ -d "$b" ] || continue
+  name="\${b##*/}"
+  mkdir -p "$backup/$name" || exit 1
+  for f in config.env usb_mode_manager.sh usb_mode_daemon.sh backend.sh version original_persist_usb_config paused; do
+    [ ! -f "$b/$f" ] || cp -p "$b/$f" "$backup/$name/$f" || exit 1
+  done
+done
+[ ! -f /sdcard/ufi_tools_boot.sh ] || cp -p /sdcard/ufi_tools_boot.sh "$backup/ufi_tools_boot.sh" || exit 1
+if [ ! -f ${sq(BASE + '/config.env')} ] && [ -r /data/kano_usb_mode_manager_v2/config.env ]; then
+  cp /data/kano_usb_mode_manager_v2/config.env ${sq(BASE + '/config.env')} || exit 1
+fi
+chmod 700 ${sq(stage)} && mv -f ${sq(stage)} ${sq(BACKEND)} || exit 1
+printf '%s\\n' ${sq(VERSION)} > ${sq(BASE + '/version')}
+echo DEPLOYED=2.4.1
+`);
+      requireOK(commit, '\u90e8\u7f72\u63d0\u4ea4\u5931\u8d25');
+      if (!await backendValid()) throw new Error('\u90e8\u7f72\u540e\u6821\u9a8c\u5931\u8d25\uff0c\u672a\u542f\u52a8\u5b88\u62a4');
+      showProgress('\u540e\u53f0\u5df2\u5b89\u88c5\u5e76\u81ea\u68c0\u901a\u8fc7\uff1b\u5c1a\u672a\u5207\u6362 USB\u3002');
+    } finally {
+      await rpc(`rm -f ${sq(encoded)} ${sq(stage)}`).catch(() => {});
+    }
   };
-
-  const stopDaemon = async () => {
-    const res = await run(`sh ${shellQuote(DAEMON_FILE)} stop >/dev/null 2>&1`, 8000);
-    return res.ok;
+  const launch = async (args, label) => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    const script = BASE + '/job-' + id + '.sh';
+    const status = BASE + '/job-' + id + '.status';
+    const output = BASE + '/job-' + id + '.log';
+    const body = shellHeader + `"$SH" ${sq(BACKEND)} ${args.map(sq).join(' ')} > ${sq(output)} 2>&1\nrc=$?\nprintf '%s\\n' "$rc" > ${sq(status + '.tmp')}\nmv -f ${sq(status + '.tmp')} ${sq(status)}\n`;
+    requireOK(await rpc(shellHeader + `printf '%s' ${sq(body)} > ${sq(script)} && "$SH" -n ${sq(script)} || exit 1
+nohup "$SH" ${sq(script)} </dev/null >/dev/null 2>&1 &
+echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
+    showProgress(label + '\uff1bUSB \u53ef\u80fd\u77ed\u6682\u91cd\u8fde\u3002\u8bf7\u4f7f\u7528 F50 \u81ea\u8eab Wi-Fi \u67e5\u770b\u7ed3\u679c\u3002');
+    for (let i = 0; i < 85; i++) {
+      await delay(2000);
+      let res;
+      try { res = await rpc(`[ -f ${sq(status)} ] && { printf 'JOB_DONE='; cat ${sq(status)}; cat ${sq(output)}; } || echo JOB_RUNNING=1`, 12000); }
+      catch (e) {
+        throw new Error('\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u4f46\u7ba1\u7406\u8fde\u63a5\u4e2d\u65ad\uff0c\u5c1a\u672a\u786e\u8ba4\u7ed3\u679c\u3002\u8fde\u63a5 F50 Wi-Fi \u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\uff0c\u4e0d\u8981\u8fde\u7eed\u91cd\u8bd5\u5207\u6362\u3002\n' + e.message);
+      }
+      const match = res.text.match(/^JOB_DONE=(\d+)/m);
+      if (!match) continue;
+      await rpc(`rm -f ${sq(script)} ${sq(status)} ${sq(output)}`).catch(() => {});
+      const code = Number(match[1]);
+      const detail = res.text.replace(/^JOB_DONE=\d+\s*/,'').trim();
+      if (code === 4 || code === 5) {
+        showProgress('\u4efb\u52a1\u5b8c\u6210\uff0c\u4f46\u7f51\u5361/\u6865\u63a5\u4ecd\u672a\u5c31\u7eea\uff1b\u672a\u56e0\u6b64\u91cd\u7f6e USB\u3002');
+        if (detail) setOutput(detail);
+        return code;
+      }
+      if (code !== 0) throw new Error('\u4efb\u52a1\u672a\u6210\u529f (exit=' + code + ')\u3002\u8bf7\u67e5\u770b\u72b6\u6001\u548c\u8bca\u65ad\uff0c\u4e0d\u8981\u8fde\u7eed\u5207\u6362\u3002\n' + detail);
+      showProgress('\u4efb\u52a1\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u8bfb\u53d6\u5b9e\u9645\u72b6\u6001\u3002');
+      return 0;
+    }
+    throw new Error('\u4efb\u52a1\u5c1a\u672a\u8fd4\u56de\u5b8c\u6210\u6807\u8bb0\uff1b\u672a\u5f3a\u5236\u6740\u8fdb\u7a0b\u3002\u70b9\u201c\u5bfc\u51fa\u8bca\u65ad\u201d\u67e5\u770b\u3002');
   };
-
-
-  const readLogPreview = async () => {
-    const res = await run(`tail -n 120 ${shellQuote(LOG_FILE)} 2>/dev/null || true`, 6000);
-    return res.text || '暂无日志';
+  const text = {
+    config:'当前 USB 配置', state:'系统状态', iface:'网卡 / 桥接', daemon:'自动维护',
+    missing:'未取得', notInstalled:'后台未安装', paused:'已暂停', running:'运行中', stopped:'未运行'
   };
-
-  const parseStateSections = (text = '') => {
-    const sections = {};
-    let current = '';
-    String(text || '').split(/\r?\n/).forEach((line) => {
-      const match = line.match(/^__KUNM_([A-Z]+)__$/);
-      if (match) {
-        current = match[1];
-        sections[current] = [];
+  const html = () => `<style>
+.k3{--k3-line:rgba(255,255,255,.09);--k3-panel:rgba(255,255,255,.035);--k3-accent:#69c778;--k3-good:#9bffc2;--k3-warn:#ffd48f;--k3-bad:#ff9e9e;font-family:inherit;font-size:13px;line-height:1.6;color:inherit}
+.k3 *{box-sizing:border-box}.k3_wrap{display:flex;flex-direction:column;gap:12px;min-width:0}.k3_grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.k3_card,.k3_panel{border:1px solid var(--k3-line);border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025))}.k3_card{padding:12px 14px;min-width:0}.k3_panel{padding:14px}
+.k3_label{font-size:11px;opacity:.65;margin-bottom:6px}.k3_value{font-size:14px;font-weight:700;overflow-wrap:anywhere}.k3_meta{font-size:11px;opacity:.72;margin-top:4px;overflow-wrap:anywhere}.k3_section_head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.k3_section_title{font-size:13px;font-weight:700}
+.k3_modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.k3 .k3_mode{min-width:0;border:1px solid var(--k3-line);border-radius:14px;background:rgba(255,255,255,.025);padding:12px;text-align:left;cursor:pointer;color:inherit}.k3_mode strong{display:block;font-size:13px}.k3_mode span{display:block;font-size:11px;opacity:.7;margin-top:4px;overflow-wrap:anywhere}.k3 .k3_mode.active{border-color:rgba(105,199,120,.75);box-shadow:0 0 0 2px rgba(105,199,120,.12);background:rgba(75,181,98,.12)}
+.k3_settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}.k3_switch{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.025);cursor:pointer}.k3_switch span{font-size:12px}.k3_switch input{appearance:none;-webkit-appearance:none;flex:0 0 32px;width:32px;height:18px;margin:0;border:1px solid rgba(255,255,255,.18);border-radius:20px;background:rgba(255,255,255,.12);cursor:pointer}.k3_switch input:before{content:'';display:block;width:12px;height:12px;margin:2px;border-radius:50%;background:#ddd}.k3_switch input:checked{background:rgba(75,181,98,.65);border-color:var(--k3-accent)}.k3_switch input:checked:before{transform:translateX(12px);background:#fff}
+.k3_advanced{margin-top:10px}.k3_advanced summary{font-size:12px;opacity:.75;cursor:pointer}.k3_fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}.k3_field{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:11px}.k3_field input{width:100%;min-width:0;border:1px solid var(--k3-line);border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.04);font:inherit;color:inherit}
+.k3_actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.k3 .k3_btn{min-width:0;min-height:36px;padding:8px 10px;border:1px solid var(--k3-line);border-radius:10px;background:rgba(255,255,255,.045);font:inherit;font-size:12px;line-height:1.4;color:inherit;cursor:pointer}.k3 .k3_btn:hover{background:rgba(255,255,255,.08)}.k3 .k3_btn.primary{background:rgba(75,181,98,.18);border-color:rgba(105,199,120,.5);font-weight:700}.k3 .k3_btn.danger{background:rgba(197,77,77,.15);border-color:rgba(255,118,118,.3)}.k3 button:disabled,.k3 input:disabled{opacity:.45;cursor:wait}.k3 button:focus-visible,.k3 input:focus-visible,.k3 summary:focus-visible{outline:2px solid var(--k3-accent);outline-offset:3px}
+.k3_status{padding:10px 12px;border:1px solid var(--k3-line);border-radius:12px;background:var(--k3-panel);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.k3_status.info{border-left:3px solid var(--k3-accent)}.k3_status.good{border-left:3px solid var(--k3-good)}.k3_status.warn{border-left:3px solid var(--k3-warn)}.k3_status.bad{border-left:3px solid var(--k3-bad)}.k3_output{display:none;margin:0;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid var(--k3-line);border-radius:12px;background:rgba(0,0,0,.12);font:11px/1.6 Consolas,monospace}.k3_output.has{display:block}.k3_details{font:11px/1.6 Consolas,monospace;opacity:.65;overflow-wrap:anywhere}.k3_ok{color:var(--k3-good)}.k3_warn{color:var(--k3-warn)}.k3_bad{color:var(--k3-bad)}
+@media(max-width:900px){.k3_grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.k3_panel{padding:12px}.k3_settings,.k3_fields{grid-template-columns:1fr}.k3_actions{grid-template-columns:repeat(2,minmax(0,1fr))}.k3_actions .primary{grid-column:1/-1}.k3_modes{gap:7px}.k3 .k3_mode{padding:10px 8px}.k3_mode span{font-size:10px}}@media(max-width:360px){.k3_grid{grid-template-columns:1fr}}
+</style><div class="k3"><div class="k3_wrap">
+<div class="k3_grid">
+  <div class="k3_card" id="k3_card_config"><div class="k3_label">${text.config}</div><div class="k3_value" id="k3_config">${text.missing}</div><div class="k3_meta" id="k3_config_meta">-</div></div>
+  <div class="k3_card" id="k3_card_state"><div class="k3_label">${text.state}</div><div class="k3_value" id="k3_state">${text.missing}</div><div class="k3_meta" id="k3_state_meta">-</div></div>
+  <div class="k3_card" id="k3_card_iface"><div class="k3_label">${text.iface}</div><div class="k3_value" id="k3_iface">${text.missing}</div><div class="k3_meta" id="k3_iface_meta">-</div></div>
+  <div class="k3_card" id="k3_card_daemon"><div class="k3_label">${text.daemon}</div><div class="k3_value" id="k3_daemon">${text.missing}</div><div class="k3_meta" id="k3_daemon_meta">-</div></div>
+</div>
+<div class="k3_panel"><div class="k3_section_head"><div class="k3_section_title">目标模式</div><span id="k3_target_badge" class="k3_meta">未验证</span></div>
+<div class="k3_modes"><button type="button" class="k3_mode" data-mode="ncm"><strong>CDC-NCM</strong><span>OpenWrt / Linux 优先</span></button><button type="button" class="k3_mode" data-mode="ecm"><strong>CDC-ECM</strong><span>兼容 Linux / OpenWrt</span></button><button type="button" class="k3_mode" data-mode="rndis"><strong>RNDIS</strong><span>恢复与兼容模式</span></button></div>
+<select id="k3_mode" hidden><option value="ncm">ncm</option><option value="ecm">ecm</option><option value="rndis">rndis</option></select></div>
+<div class="k3_panel"><div class="k3_section_title" style="margin-bottom:10px">启动与维护</div><div class="k3_settings">
+<label class="k3_switch"><span>开机延时保持</span><input type="checkbox" id="k3_keep"></label><label class="k3_switch"><span>自动修复</span><input type="checkbox" id="k3_patrol"></label><label class="k3_switch"><span>有线 ADB</span><input type="checkbox" id="k3_adb"></label><label class="k3_switch"><span>失败时允许 RNDIS 回退</span><input type="checkbox" id="k3_rollback"></label></div>
+<details class="k3_advanced"><summary>高级参数</summary><div class="k3_fields"><label class="k3_field">启动等待（秒）<input id="k3_boot" type="number" min="30" max="600" value="120"></label><label class="k3_field">巡检间隔（秒）<input id="k3_poll" type="number" min="5" max="60" value="10"></label><label class="k3_field">F50 桥名<input id="k3_bridge" type="text" value="auto" maxlength="15" placeholder="auto"></label></div></details></div>
+<div class="k3_panel"><div class="k3_actions"><button class="k3_btn primary" type="button" id="k3_btn_save">保存并切换</button><button class="k3_btn" type="button" id="k3_btn_reload">刷新状态</button><button class="k3_btn" type="button" id="k3_btn_repair">修复桥接</button><button class="k3_btn" type="button" id="k3_btn_install">修复后台</button><button class="k3_btn" type="button" id="k3_btn_pause">暂停维护</button><button class="k3_btn" type="button" id="k3_btn_resume">恢复维护</button><button class="k3_btn" type="button" id="k3_btn_readlog">查看日志</button><button class="k3_btn" type="button" id="k3_btn_diagnose">导出诊断</button><button class="k3_btn danger" type="button" id="k3_btn_rescue">恢复 RNDIS</button></div></div>
+<div id="k3_message" class="k3_status info" role="status">正在读取状态…</div><pre id="k3_output" class="k3_output"></pre><div id="k3_details" class="k3_details"></div>
+</div></div>`;
+  const syncModeCards = () => {
+    const root = session.modal; if (!root) return;
+    const current = root.querySelector('#k3_mode')?.value;
+    root.querySelectorAll('.k3_mode').forEach(node => node.classList.toggle('active', node.dataset.mode === current));
+  };
+  const renderState = (s, fill) => {
+    const root = session.modal; if (!root) return;
+    const put = (id, val) => { const n = root.querySelector('#k3_' + id); if (n) n.textContent = (val == null || val === '') ? text.missing : val; };
+    put('config', s.CURRENT_CONFIG);
+    put('config_meta', s.PERSIST_CONFIG ? ('持久: ' + s.PERSIST_CONFIG + (s.PERSIST_MATCH === '1' ? ' · 已同步' : ' · 未同步')) : '持久配置未取得');
+    put('state', s.CURRENT_STATE);
+    put('state_meta', '模式: ' + (s.CURRENT_MODE || '-') + ' · UDC: ' + (s.UDC_STATE || '-'));
+    put('iface', s.INSTALLED ? ((s.IFNAME || '未枚举') + ' → ' + (s.MASTER || '未加桥')) : '等待后台验证');
+    put('iface_meta', 'carrier: ' + (s.CARRIER || '-') + ' · bridge: ' + (s.BRIDGE || '-'));
+    put('daemon', !s.INSTALLED ? text.notInstalled : s.PAUSED === '1' ? text.paused : /^running:/.test(s.DAEMON || '') ? text.running : text.stopped);
+    put('daemon_meta', s.COOLDOWN_SECONDS && s.COOLDOWN_SECONDS !== '0' ? ('重试冷却 ' + s.COOLDOWN_SECONDS + 's') : (s.PATROL_ENABLED === '0' ? '自动切换关闭' : '自动修复开启'));
+    put('details', '后台 ' + (s.BACKEND_VERSION || '未安装') + ' · 证据 ' + (s.SOURCE || '-') + ' · Gadget ' + (s.GADGET || '-') + ' · 上次 ' + (s.LAST_RESULT || '-') + ' / ' + (s.LAST_REASON || '-') + ' · ' + (s.LAST_TIME || '-'));
+    const targetGood = s.INSTALLED && s.TARGET_ACTIVE === '1';
+    const badge = root.querySelector('#k3_target_badge'); if (badge) { badge.textContent = targetGood ? '目标已生效' : s.INSTALLED ? '目标未生效' : '后台未验证'; badge.className = 'k3_meta ' + (targetGood ? 'k3_ok' : 'k3_warn'); }
+    if (fill) {
+      const actual = (s.CURRENT_CONFIG || '').split(',').find(m => ['ncm','ecm','rndis'].includes(m));
+      root.querySelector('#k3_mode').value = ['ncm','ecm','rndis'].includes(s.MODE) ? s.MODE : actual || 'ncm';
+      root.querySelector('#k3_adb').checked = s.WIRED_ADB != null ? s.WIRED_ADB === '1' : (s.CURRENT_CONFIG || '').split(',').includes('adb');
+      root.querySelector('#k3_keep').checked = s.PERMANENT === '1';
+      root.querySelector('#k3_patrol').checked = s.PATROL_ENABLED !== '0';
+      root.querySelector('#k3_rollback').checked = s.AUTO_ROLLBACK !== '0';
+      root.querySelector('#k3_boot').value = Math.max(30,Math.min(600,Number(s.BOOT_DELAY_SECONDS)||120));
+      root.querySelector('#k3_poll').value = Math.max(5,Math.min(60,Number(s.POLL_INTERVAL_SECONDS)||10));
+      root.querySelector('#k3_bridge').value = s.BRIDGE_OVERRIDE || 'auto';
+      syncModeCards();
+    }
+    if (s.WARNING) setOutput('探测警告：' + s.WARNING + '\n' + s.RAW);
+  };
+  const uiArgs = () => {
+    const q = id => session.modal.querySelector('#k3_' + id);
+    const mode = q('mode').value;
+    const boot = Number(q('boot').value), poll = Number(q('poll').value), bridge = q('bridge').value.trim() || 'auto';
+    if (!['ncm','ecm','rndis'].includes(mode) || !Number.isInteger(boot) || boot < 30 || boot > 600 || !Number.isInteger(poll) || poll < 5 || poll > 60 || !/^[a-zA-Z0-9_.:-]{1,15}$/.test(bridge)) throw new Error('\u53c2\u6570\u4e0d\u5408\u6cd5\uff1a\u542f\u52a8\u7b49\u5f85 30\u2013600\uff0c\u5de1\u68c0 5\u201360 \u79d2\uff1b\u6865\u540d\u53ea\u80fd\u5305\u542b\u5b57\u6bcd\u3001\u6570\u5b57\u548c _ . : -\u3002');
+    return ['configure',mode,...['adb','keep','patrol','rollback'].map(k=>q(k).checked?'1':'0'),String(boot),String(poll),bridge];
+  };
+  const act = async fn => {
+    if (session.busy) return;
+    session.busy = true;
+    const root = session.modal;
+    if (root) root.querySelectorAll('button,input,select').forEach(n => n.disabled = true);
+    try { await fn(); }
+    catch (e) { showProgress(e.message || String(e), 'bad'); setOutput(e.stack || String(e)); }
+    finally { session.busy = false; if (root) root.querySelectorAll('button,input,select').forEach(n => n.disabled = false); }
+  };
+  const downloadText = (name, content) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  const refresh = async fill => { const s = await readState(); renderState(s,fill); return s; };
+  const bind = () => {
+    session.modal.querySelectorAll('.k3_mode').forEach(node => { node.onclick = () => { const select=session.modal.querySelector('#k3_mode'); if(select){ select.value=node.dataset.mode; syncModeCards(); } }; });
+    const on = (name, fn) => { session.modal.querySelector('#k3_btn_' + name).onclick = () => act(fn); };
+    on('reload',async()=> { const s = await refresh(false); showProgress(s.INSTALLED ? '\u72b6\u6001\u5df2\u8bfb\u53d6\uff0c\u672a\u4fee\u6539 USB\u3002' : '\u65b0\u540e\u53f0\u672a\u5b89\u88c5\u6216\u4e0d\u53ef\u7528\u3002\u5148\u70b9\u201c\u4fee\u590d/\u5b89\u88c5\u540e\u53f0\u201d\u3002'); });
+    on('install',async()=> { await install(true); await refresh(false); });
+    on('save',async()=> {
+      const args = uiArgs();
+      if (!window.confirm('\u5c06\u5207\u6362 F50 \u7684 USB \u6a21\u5f0f\uff0c\u6709\u7ebf\u7f51\u7edc\u53ef\u80fd\u77ed\u6682\u65ad\u5f00\u3002\u8bf7\u786e\u4fdd\u80fd\u901a\u8fc7 F50 Wi-Fi \u8fdb\u5165\u540e\u53f0\u3002\u7ee7\u7eed\uff1f')) return;
+      await install(); await launch(args,'\u5df2\u63d0\u4ea4\u4fdd\u5b58\u548c\u5207\u6362'); await refresh(false);
+    });
+    on('repair',async()=> { await install(); await launch(['repair'],'\u5df2\u63d0\u4ea4\u6865\u63a5\u4fee\u590d'); await refresh(false); });
+    on('pause',async()=> { await quiesce(); showProgress('\u5b88\u62a4\u5df2\u505c\u6b62\u5e76\u6682\u505c\uff1b\u672a\u5207\u6362 USB\u3002'); await refresh(false); });
+    on('resume',async()=> {
+      await install(); const s = await readState();
+      if (s.PERMANENT !== '1') throw new Error('\u8bf7\u5148\u5f00\u542f\u201c\u5f00\u673a\u5ef6\u65f6\u4fdd\u6301\u201d\uff0c\u5e76\u70b9\u201c\u4fdd\u5b58\u5e76\u5207\u6362\u201d\u3002');
+      await launch(['resume'],'\u6b63\u5728\u6062\u590d\u7ef4\u62a4'); await refresh(false);
+    });
+    on('rescue',async()=> {
+      if (!window.confirm('\u505c\u6b62\u81ea\u52a8\u7ef4\u62a4\u5e76\u6062\u590d RNDIS\uff0c\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684 ADB \u9009\u62e9\u3002USB \u4f1a\u91cd\u8fde\uff0c\u786e\u8ba4\u7ee7\u7eed\uff1f')) return;
+      await install(); await launch(['safe-rndis'],'\u6b63\u5728\u6062\u590d RNDIS'); await refresh(false);
+    });
+    on('readlog',async()=> { const res = await rpc(`tail -n 100 ${sq(BASE+'/manager.log')} 2>&1; tail -n 30 /data/kano_usb_mode_manager_v2/manager.log 2>/dev/null; true`); setOutput(res.text || '\u6682\u65e0\u65e5\u5fd7'); });
+    on('diagnose',async()=> {
+      let s;
+      try { s = await readState(); }
+      catch (e) {
+        const report = 'USB Network Mode v' + VERSION + '\n' + new Date().toISOString() + '\n\n' + e.message + '\n' + session.transport;
+        setOutput(report); downloadText('USB_Network_Diagnostic_' + Date.now() + '.txt', report);
+        showProgress('\u5df2\u5bfc\u51fa\u901a\u4fe1/\u6743\u9650\u9519\u8bef\u8bca\u65ad\uff1b\u672a\u4fee\u6539 USB\u3002');
         return;
       }
-      if (current) sections[current].push(line);
+      const cmd = s.INSTALLED ? shellHeader + `"$SH" ${sq(BACKEND)} diagnose` : shellHeader + `id; command -v getprop; getprop sys.usb.config; getprop sys.usb.state; ls -ld /config/usb_gadget/* /sys/kernel/config/usb_gadget/* /sys/class/android_usb/android0 2>&1; ip link show 2>&1; tail -n 60 /data/kano_usb_mode_manager_v2/manager.log 2>&1; true`;
+      const res = await rpc(cmd,25000);
+      const report = 'USB Network Mode v'+VERSION+'\n'+new Date().toISOString()+'\n\n'+s.RAW+'\n\n'+res.text;
+      setOutput(report); downloadText('USB_Network_Diagnostic_'+Date.now()+'.txt',report);
+      showProgress('\u8bca\u65ad\u5df2\u751f\u6210\uff1b\u672a\u6539\u53d8 USB\u3002\u5206\u4eab\u524d\u53ef\u9690\u53bb IP\u3001MAC \u7b49\u8bbe\u5907\u4fe1\u606f\u3002');
     });
-    Object.keys(sections).forEach((key) => {
-      sections[key] = sections[key].join('\n').trim();
-    });
-    return sections;
   };
-
-  const getState = async ({ includeLog = false } = {}) => {
-    const res = await run(`
-printf '%s\n' '__KUNM_CONFIG__'
-cat ${shellQuote(CONFIG_FILE)} 2>/dev/null || true
-printf '%s\n' '__KUNM_BOOT__'
-if grep -q ${shellQuote(BOOT_TAG)} ${shellQuote(BOOT_SH_FILE)} 2>/dev/null; then echo 1; else echo 0; fi
-printf '%s\n' '__KUNM_DAEMON__'
-sh ${shellQuote(DAEMON_FILE)} status 2>/dev/null || true
-printf '%s\n' '__KUNM_MANAGER__'
-sh ${shellQuote(MANAGER_FILE)} status 2>/dev/null || true
-`, 12000);
-    const sections = parseStateSections(res.text);
-    const env = parseEnv(sections.CONFIG || '');
-    const config = normalizeConfig({
-      mode: env.MODE,
-      adb: env.WIRED_ADB,
-      permanent: env.PERMANENT,
-      patrol: env.PATROL_ENABLED,
-      autoRollback: env.AUTO_ROLLBACK,
-      bootDelay: env.BOOT_DELAY_SECONDS,
-      pollInterval: env.POLL_INTERVAL_SECONDS,
-    });
-    const daemonText = sections.DAEMON || 'stopped';
-    const state = {
-      config,
-      bootEnabled: (sections.BOOT || '').trim() === '1',
-      daemon: {
-        running: daemonText.startsWith('running:'),
-        text: daemonText,
-      },
-      manager: parseEnv(sections.MANAGER || ''),
-      logText: '正在加载…',
-    };
-    if (includeLog) state.logText = await readLogPreview();
-    return state;
+  const stopStatusRefresh = () => { if (session.statusTimer) clearInterval(session.statusTimer); session.statusTimer = null; };
+  const startStatusRefresh = () => {
+    stopStatusRefresh();
+    let refreshing = false;
+    session.statusTimer = setInterval(async () => {
+      if (refreshing || document.hidden || session.closed || session.busy || !session.modal || !session.modal.isConnected) return;
+      refreshing = true;
+      try { await refresh(false); } catch (_) {}
+      finally { refreshing = false; }
+    }, 10000);
   };
-
-  const applyNow = async (mode, adb) => {
-    const res = await run(`nohup sh ${shellQuote(MANAGER_FILE)} apply ${shellQuote(mode)} ${shellQuote(adb)} >/dev/null 2>&1 &`, 8000);
-    return res.ok;
-  };
-
-  const repairNow = async () => {
-    const res = await run(`sh ${shellQuote(MANAGER_FILE)} repair`, 45000);
-    return res.ok;
-  };
-
-  const persistAndRestart = async (config) => {
-    const saved = await saveConfig(config);
-    if (!saved) return false;
-
-    if (config.permanent === '1') {
-      const bootOk = await setBootEnabled(true);
-      if (!bootOk) return false;
-      await run(`rm -f ${shellQuote(PAUSE_FILE)}; sh ${shellQuote(MANAGER_FILE)} sync-persist >/dev/null 2>&1 || true`, 12000);
-      return restartDaemon();
+  const open = async () => {
+    if (session.busy) return;
+    if (typeof checkAdvancedFunc === 'function') {
+      try { if (!(await checkAdvancedFunc())) { window.alert('\u8bf7\u5148\u5f00\u542f\u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002'); return; } }
+      catch(e) { window.alert('\u9ad8\u7ea7\u529f\u80fd\u68c0\u67e5\u5931\u8d25\uff1a'+e.message); return; }
+    }
+    if (session.modal) session.modal.remove();
+    if (typeof createModal === 'function' && typeof showModal === 'function') {
+      const modal = createModal({name:'kunm3_modal',title:TITLE+' v'+VERSION,maxWidth:'1000px',showConfirm:false,onClose:()=>{ stopStatusRefresh(); return true; },contentStyle:'max-height:80vh;overflow:auto;',content:html()});
+      session.modal = modal.el; showModal(modal.id);
     } else {
-      if (!(await stopDaemon())) return false;
-      const bootOk = await setBootEnabled(false);
-      if (!bootOk) return false;
-      await run(`sh ${shellQuote(MANAGER_FILE)} restore-persist >/dev/null 2>&1 || true`, 10000);
+      const overlay = document.createElement('div'); overlay.id='kunm3_modal';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0009;display:flex;align-items:center;justify-content:center;padding:15px';
+      const panel=document.createElement('div'); panel.style.cssText='background:#222;color:#eee;max-width:1000px;width:100%;max-height:90vh;overflow:auto;padding:18px;border-radius:14px';
+      const close=document.createElement('button'); close.textContent='\u5173\u95ed'; close.onclick=()=>{ stopStatusRefresh(); overlay.remove(); }; panel.appendChild(close);
+      const content=document.createElement('div'); content.innerHTML=html(); panel.appendChild(content); overlay.appendChild(panel); document.body.appendChild(overlay); session.modal=overlay;
     }
-    return true;
+    bind();
+    await act(async()=> { const s = await refresh(true); showProgress(s.INSTALLED ? '\u72b6\u6001\u5df2\u8bfb\u53d6\uff1b\u672a\u81ea\u52a8\u5207\u6362 USB\u3002' : '\u5148\u70b9\u201c\u4fee\u590d/\u5b89\u88c5\u540e\u53f0\u201d\u3002\u6b64\u65f6\u5c5e\u6027\u503c\u4ec5\u7528\u4e8e\u8bca\u65ad\uff0c\u4e0d\u4ee3\u8868\u7f51\u5361\u5df2\u8fde\u901a\u3002'); });
+    startStatusRefresh();
   };
-
-  const safeRestoreRndis = async () => {
-    if (!(await stopDaemon())) return false;
-    if (!(await setBootEnabled(false))) return false;
-    const safeConfig = normalizeConfig({
-      ...(await readConfig()),
-      mode: 'rndis',
-      adb: '0',
-      permanent: '0',
-    });
-    if (!(await saveConfig(safeConfig))) return false;
-    const res = await run(`nohup sh ${shellQuote(MANAGER_FILE)} safe-rndis >/dev/null 2>&1 &`, 8000);
-    return res.ok;
-  };
-
-  const uninstallAll = async () => {
-    if (!(await stopDaemon())) return false;
-    if (!(await setBootEnabled(false))) return false;
-    const safeRes = await run(`sh ${shellQuote(MANAGER_FILE)} safe-rndis >/dev/null 2>&1`, 80000);
-    if (!safeRes.ok) return false;
-    const res = await run(`rm -rf ${shellQuote(BASE_DIR)}`, 12000);
-    if (res.ok) backendPreparePromise = null;
-    return res.ok;
-  };
-
-  const renderModeCards = (selectedMode) => MODES.map((item) => `
-    <div class="kunm-mode ${item.key === selectedMode ? 'active' : ''}" data-mode="${escapeHtml(item.key)}">
-      <div class="kunm-mode-name">${escapeHtml(item.label)}</div>
-      <div class="kunm-mode-tip">${escapeHtml(item.hint)}</div>
-    </div>
-  `).join('');
-
-  const statusClass = (good, warn = false) => (good ? 'kunm-good' : warn ? 'kunm-warn' : 'kunm-bad');
-
-  const buildContent = (state) => {
-    const m = state.manager || {};
-    const targetMatches = Boolean(m.TARGET_CONFIG) && m.TARGET_CONFIG === m.CURRENT_CONFIG && m.CURRENT_CONFIG === m.CURRENT_STATE;
-    const bridgeOk = m.CURRENT_MODE === 'rndis'
-      ? (m.IFNAME === 'sipa_usb0' && m.MASTER === 'br0')
-      : (m.IFNAME !== 'unknown' && m.MASTER === 'br0');
-    const paused = m.PAUSED === '1';
-
-    return `
-      <div class="kunm-wrap">
-        <div class="kunm-grid">
-          <div class="kunm-card">
-            <div class="kunm-label">启动模式</div>
-            <div class="kunm-value">${escapeHtml(state.config.mode.toUpperCase())}${state.config.adb === '1' ? ' + ADB' : ''}${state.config.permanent === '1' ? ' · 开机保持' : ' · 临时'}</div>
-          </div>
-          <div class="kunm-card">
-            <div class="kunm-label">当前 USB 组合</div>
-            <div class="kunm-value ${statusClass(targetMatches, m.CURRENT_CONFIG === 'none')}">${escapeHtml(m.CURRENT_CONFIG || 'unknown')}</div>
-          </div>
-          <div class="kunm-card">
-            <div class="kunm-label">网络接口</div>
-            <div class="kunm-value ${statusClass(bridgeOk, m.IFNAME === 'unknown')}">${escapeHtml(m.IFNAME || 'unknown')} → ${escapeHtml(m.MASTER || 'none')}</div>
-          </div>
-          <div class="kunm-card">
-            <div class="kunm-label">自动维护</div>
-            <div class="kunm-value ${paused ? 'kunm-warn' : (state.bootEnabled && state.daemon.running) ? 'kunm-good' : ''}">${paused ? '已暂停' : state.bootEnabled ? (state.daemon.running ? '运行中' : '未运行') : '未启用'}</div>
-          </div>
-        </div>
-
-        <div class="kunm-panel">
-          <div class="kunm-head">
-            <div>
-              <div class="kunm-title">网络模式</div>
-              <div class="kunm-tip">使用 F50 原厂 USB 组合，不手工改写 Gadget。</div>
-            </div>
-            <span class="kunm-badge ${targetMatches ? 'kunm-good' : 'kunm-warn'}">${targetMatches ? '已生效' : '未同步'}</span>
-          </div>
-          <div class="kunm-mode-grid" id="kunm_mode_grid">${renderModeCards(state.config.mode)}</div>
-        </div>
-
-        <div class="kunm-panel">
-          <div class="kunm-head">
-            <div>
-              <div class="kunm-title">启动与维护</div>
-              <div class="kunm-tip">保存后可在开机时保持所选模式；达到设定等待时间后自动校验并修复网络接口。</div>
-            </div>
-          </div>
-          <div class="kunm-inline">
-            <div id="kunm_adb_switch_box"></div>
-            <div id="kunm_permanent_switch_box"></div>
-            <div id="kunm_patrol_switch_box"></div>
-            <div id="kunm_rollback_switch_box"></div>
-            <label class="kunm-field">
-              <span class="kunm-tip">启动等待（秒）</span>
-              <input id="kunm_boot_delay" type="number" min="30" max="300" step="5" value="${escapeHtml(state.config.bootDelay)}">
-            </label>
-            <label class="kunm-field">
-              <span class="kunm-tip">检查间隔（秒）</span>
-              <input id="kunm_poll_interval" type="number" min="3" max="60" step="1" value="${escapeHtml(state.config.pollInterval)}">
-            </label>
-          </div>
-        </div>
-
-        <div class="kunm-panel">
-          <div class="kunm-head">
-            <div>
-              <div class="kunm-title">状态</div>
-              <div class="kunm-tip">持久配置：${escapeHtml(m.PERSIST_CONFIG || 'unknown')}；UDC：${escapeHtml(m.UDC_STATE || 'unknown')}；链路：${escapeHtml(m.CARRIER || 'unknown')}；上次：${escapeHtml(m.LAST_RESULT || 'none')}（${escapeHtml(m.LAST_TIME || 'none')}）。</div>
-            </div>
-          </div>
-          <div class="kunm-actions">
-            <button id="kunm_save_btn">保存</button>
-            <button id="kunm_apply_btn">立即切换</button>
-            <button id="kunm_repair_btn">修复网络接口</button>
-            <button id="kunm_reload_btn">刷新</button>
-            <button id="kunm_resume_btn">恢复自动维护</button>
-            <button id="kunm_safe_btn" class="kunm-danger">恢复 RNDIS</button>
-            <button id="kunm_uninstall_btn" class="kunm-danger">卸载</button>
-          </div>
-        </div>
-
-        <div class="kunm-panel">
-          <div class="kunm-head">
-            <div>
-              <div class="kunm-title">日志</div>
-              <div class="kunm-tip">连续 3 次切换失败后自动暂停并回退 RNDIS。</div>
-            </div>
-            <button id="kunm_log_toggle_btn">自动刷新</button>
-          </div>
-          <pre class="kunm-pre" id="kunm_log_preview">${escapeHtml(state.logText)}</pre>
-        </div>
-      </div>
-    `;
-  };
-
-  const ensureLogRefreshState = (modalEl) => {
-    if (!modalEl.__kunmLogState) {
-      modalEl.__kunmLogState = { timer: null, enabled: false };
-    }
-    return modalEl.__kunmLogState;
-  };
-
-  const bindModalEvents = async (modalEl, refreshFn, initialState = null) => {
-    let currentState = initialState || await getState({ includeLog: false });
-    let selectedMode = currentState.config.mode;
-    const logState = ensureLogRefreshState(modalEl);
-
-    const adbSwitch = createSwitch({
-      text: '有线 ADB',
-      value: currentState.config.adb === '1',
-      onChange: () => {},
-    });
-    const permanentSwitch = createSwitch({
-      text: '开机保持模式',
-      value: currentState.config.permanent === '1',
-      onChange: () => {},
-    });
-    const patrolSwitch = createSwitch({
-      text: '自动修复',
-      value: currentState.config.patrol === '1',
-      onChange: () => {},
-    });
-    const rollbackSwitch = createSwitch({
-      text: '失败回退 RNDIS',
-      value: currentState.config.autoRollback === '1',
-      onChange: () => {},
-    });
-
-    const mountSwitch = (selector, node) => {
-      const box = modalEl.querySelector(selector);
-      if (!box) return;
-      box.innerHTML = '';
-      box.appendChild(node);
-    };
-    mountSwitch('#kunm_adb_switch_box', adbSwitch);
-    mountSwitch('#kunm_permanent_switch_box', permanentSwitch);
-    mountSwitch('#kunm_patrol_switch_box', patrolSwitch);
-    mountSwitch('#kunm_rollback_switch_box', rollbackSwitch);
-
-    const syncModeUi = () => {
-      modalEl.querySelectorAll('.kunm-mode').forEach((el) => {
-        el.classList.toggle('active', el.dataset.mode === selectedMode);
-      });
-    };
-
-    modalEl.querySelectorAll('.kunm-mode').forEach((el) => {
-      el.onclick = () => {
-        selectedMode = el.dataset.mode || 'rndis';
-        syncModeUi();
-      };
-    });
-
-    const readUiConfig = () => normalizeConfig({
-      mode: selectedMode,
-      adb: adbSwitch.querySelector('input')?.checked ? '1' : '0',
-      permanent: permanentSwitch.querySelector('input')?.checked ? '1' : '0',
-      patrol: patrolSwitch.querySelector('input')?.checked ? '1' : '0',
-      autoRollback: rollbackSwitch.querySelector('input')?.checked ? '1' : '0',
-      bootDelay: modalEl.querySelector('#kunm_boot_delay')?.value || '75',
-      pollInterval: modalEl.querySelector('#kunm_poll_interval')?.value || '8',
-    });
-
-    modalEl.querySelector('#kunm_save_btn').onclick = async () => {
-      const nextConfig = readUiConfig();
-      createToast('正在保存...', 'pink', 3500);
-      const installed = await prepareBackend();
-      if (!installed) {
-        createToast('保存失败：插件未初始化', 'red', 4000);
-        return;
-      }
-      const ok = await persistAndRestart(nextConfig);
-      if (!ok) {
-        createToast('保存失败：无法更新开机配置', 'red', 5000);
-        return;
-      }
-      createToast(nextConfig.permanent === '1' ? '已保存，开机将保持当前模式' : '已保存', 'green', 5000);
-      currentState = await refreshFn();
-      selectedMode = currentState.config.mode;
-      syncModeUi();
-    };
-
-    modalEl.querySelector('#kunm_apply_btn').onclick = async () => {
-      const nextConfig = readUiConfig();
-      const savedConfig = await readConfig();
-      const differsFromPermanent = savedConfig.permanent === '1'
-        && (savedConfig.mode !== nextConfig.mode || savedConfig.adb !== nextConfig.adb);
-      if (differsFromPermanent) {
-        await stopDaemon();
-        await run(`sh ${shellQuote(MANAGER_FILE)} pause >/dev/null 2>&1 || true`, 8000);
-        createToast('已暂停自动维护，避免覆盖本次临时切换', 'pink', 4500);
-      } else {
-        createToast('正在切换，USB 将重新连接', 'pink', 5000);
-      }
-      if (!(await applyNow(nextConfig.mode, nextConfig.adb))) {
-        createToast('切换命令启动失败，请查看日志', 'red', 5000);
-      }
-    };
-
-    modalEl.querySelector('#kunm_repair_btn').onclick = async () => {
-      createToast('正在修复网络接口...', 'pink', 3000);
-      const ok = await repairNow();
-      createToast(ok ? '网络接口已修复' : '修复失败，请查看日志', ok ? 'green' : 'red', 4000);
-      await refreshFn();
-    };
-
-    modalEl.querySelector('#kunm_reload_btn').onclick = async () => {
-      currentState = await refreshFn();
-      selectedMode = currentState.config.mode;
-      syncModeUi();
-    };
-
-    modalEl.querySelector('#kunm_resume_btn').onclick = async () => {
-      const config = await readConfig();
-      if (config.permanent !== '1') {
-        createToast('请先开启“开机保持模式”并保存', 'pink', 4000);
-        return;
-      }
-      const resumed = await run(`sh ${shellQuote(MANAGER_FILE)} resume >/dev/null 2>&1`, 8000);
-      const restarted = resumed.ok && await restartDaemon();
-      createToast(restarted ? '自动维护已恢复' : '恢复失败，请查看日志', restarted ? 'green' : 'red', 4000);
-      setTimeout(() => refreshFn(), 2500);
-    };
-
-    modalEl.querySelector('#kunm_safe_btn').onclick = async () => {
-      createToast('正在恢复 RNDIS...', 'pink', 5000);
-      const ok = await safeRestoreRndis();
-      createToast(ok ? '恢复命令已启动，请等待 USB 重连' : '恢复失败，请查看日志', ok ? 'green' : 'red', 5000);
-      setTimeout(() => refreshFn(), 5000);
-    };
-
-    modalEl.querySelector('#kunm_uninstall_btn').onclick = async () => {
-      createToast('正在卸载...', 'pink', 5000);
-      const ok = await uninstallAll();
-      createToast(ok ? '已卸载，当前模式为 RNDIS' : '卸载失败', ok ? 'green' : 'red', 5000);
-    };
-
-    const syncLogButton = () => {
-      const btn = modalEl.querySelector('#kunm_log_toggle_btn');
-      if (!btn) return;
-      btn.textContent = logState.timer ? '停止自动刷新' : '自动刷新';
-    };
-
-    const stopLogRefresh = () => {
-      if (logState.timer) clearInterval(logState.timer);
-      logState.timer = null;
-      logState.enabled = false;
-      syncLogButton();
-    };
-
-    const refreshLogOnly = async () => {
-      const el = modalEl.querySelector('#kunm_log_preview');
-      if (!el) return;
-      el.textContent = await readLogPreview();
-    };
-
-    modalEl.querySelector('#kunm_log_toggle_btn').onclick = async () => {
-      if (logState.timer) {
-        stopLogRefresh();
-        return;
-      }
-      logState.enabled = true;
-      await refreshLogOnly();
-      logState.timer = setInterval(refreshLogOnly, 3000);
-      syncLogButton();
-    };
-
-    syncLogButton();
-
-    const closeBtn = modalEl.querySelector(`#${MODAL_NAME}_close`);
-    if (closeBtn) closeBtn.addEventListener('click', stopLogRefresh);
-  };
-
-  const buildLoadingContent = () => `
-    <div class="kunm-wrap">
-      <div class="kunm-panel">
-        <div class="kunm-title">正在读取状态…</div>
-      </div>
-    </div>
-  `;
-
-  const openModal = async () => {
-    ensureStyle();
-    document.querySelector(`#${MODAL_NAME}`)?.remove();
-
-    const { id, el } = createModal({
-      name: MODAL_NAME,
-      title: TITLE,
-      maxWidth: '1040px',
-      showConfirm: false,
-      onClose: () => true,
-      contentStyle: 'max-height:78vh;',
-      content: buildLoadingContent(),
-    });
-    showModal(id);
-
-    const installed = await prepareBackend();
-    if (!installed) {
-      const contentEl = el.querySelector('.content');
-      if (contentEl) contentEl.innerHTML = '<div class="kunm-panel"><div class="kunm-title">初始化失败</div></div>';
-      createToast('初始化失败', 'red', 4000);
-      return;
-    }
-
-    const loadLogOnce = async () => {
-      const logEl = el.querySelector('#kunm_log_preview');
-      if (!logEl) return;
-      logEl.textContent = await readLogPreview();
-    };
-
-    const renderState = async (state) => {
-      const contentEl = el.querySelector('.content');
-      if (!contentEl) return state;
-      contentEl.innerHTML = buildContent(state);
-      await bindModalEvents(el, refreshModal, state);
-      loadLogOnce();
-      return state;
-    };
-
-    const refreshModal = async () => {
-      const nextState = await getState({ includeLog: false });
-      return renderState(nextState);
-    };
-
-    const state = await getState({ includeLog: false });
-    await renderState(state);
-  };
-
-  const mainBtn = document.createElement('button');
-  mainBtn.textContent = 'USB 网络模式';
-  mainBtn.onclick = async () => {
-    if (!(await checkAdvancedFunc())) {
-      createToast('请先启用高级功能', 'pink');
-      return;
-    }
-    await openModal();
-  };
-
-  while (!document.querySelector('.actions-buttons')) {
-    await wait(120);
-  }
-  document.querySelector('.actions-buttons')?.appendChild(mainBtn);
+  const button = document.createElement('button'); button.id='kunm3_main'; button.textContent=TITLE+' v'+VERSION; button.onclick=()=>open().catch(e=>window.alert(e.message));
+  session.destroy=()=> { session.closed=true; if(session.timer)clearTimeout(session.timer); stopStatusRefresh(); button.remove(); if(session.modal)session.modal.remove(); };
+  const mount=()=> { if(session.closed)return; const holder=document.querySelector('.actions-buttons'); if(holder){ holder.appendChild(button); }else{ session.timer=setTimeout(mount,1000); } };
+  mount();
 })();
 //</script>

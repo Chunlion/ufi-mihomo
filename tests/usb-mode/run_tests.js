@@ -140,6 +140,58 @@ function run(name, script) {
     await callback();
     assert.equal(requests, 1, 'hidden page must not request status');
     passed++; console.log('PASS status polling coalesces slow requests and pauses in hidden pages');
+
+    const rpcReply = (script, body = 'ok', code = 0) => {
+      const begin = script.match(/__K3_B_[a-z0-9]+__/i)?.[0];
+      const end = script.match(/__K3_E_[a-z0-9]+__=/i)?.[0];
+      assert(begin && end, 'RPC markers must be present');
+      return { success: true, content: `${begin}\n${body}\n${end}${code}\n` };
+    };
+    let rpcCalls = 0;
+    const retryContext = {
+      document: { hidden: false }, setInterval() { return 1; }, clearInterval() {},
+      setTimeout(fn) { fn(); return 1; }, Date, Math, Promise,
+      runShellWithRoot: async script => {
+        rpcCalls++;
+        if (rpcCalls === 1) throw new Error('signal is aborted without reason');
+        return rpcCalls === 2 ? { success: false, content: 'signal is aborted without reason' } : rpcReply(script);
+      },
+    };
+    vm.runInNewContext(source.replace(marker, `globalThis.api = { rpc }; return;\n${marker}`), retryContext);
+    const retryResult = await retryContext.api.rpc('echo ok', 100, { transientRetries: 2 });
+    assert.equal(retryResult.text, 'ok');
+    assert.equal(rpcCalls, 3, 'read-only RPC must retry the bounded number of transient aborts');
+    passed++; console.log('PASS read-only RPC recovers from transient host aborts');
+
+    rpcCalls = 0;
+    retryContext.runShellWithRoot = async () => {
+      rpcCalls++;
+      return { success: false, content: 'signal is aborted without reason' };
+    };
+    let mutationError;
+    try { await retryContext.api.rpc('touch /data/test', 100); } catch (error) { mutationError = error; }
+    assert.equal(rpcCalls, 1, 'mutating RPC must not be replayed automatically');
+    assert.equal(mutationError?.transient, true);
+    assert(!mutationError.message.includes('signal is aborted'), 'internal abort text must not reach the UI');
+    passed++; console.log('PASS mutating RPC aborts are concise and never replayed');
+
+    let pollAttempts = 0;
+    const launchContext = {
+      document: { hidden: false }, setInterval() { return 1; }, clearInterval() {},
+      setTimeout(fn) { fn(); return 1; }, Date, Math, Promise,
+      runShellWithRoot: async script => {
+        if (script.includes('JOB_RUNNING=1')) {
+          pollAttempts++;
+          if (pollAttempts <= 2) return { success: false, content: 'signal is aborted without reason' };
+          return rpcReply(script, 'JOB_DONE=0');
+        }
+        return rpcReply(script);
+      },
+    };
+    vm.runInNewContext(source.replace(marker, `globalThis.api = { launch }; return;\n${marker}`), launchContext);
+    assert.equal(await launchContext.api.launch(['repair'], 'repair'), 0);
+    assert.equal(pollAttempts, 3, 'job polling must resume after a disconnected USB transport returns');
+    passed++; console.log('PASS submitted jobs keep polling across a transient USB disconnect');
     console.log(`${passed} tests passed`);
   } finally {
     assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));

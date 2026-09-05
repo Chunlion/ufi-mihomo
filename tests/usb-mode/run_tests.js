@@ -157,7 +157,7 @@ function run(name, script) {
         return rpcCalls === 2 ? { success: false, content: 'signal is aborted without reason' } : rpcReply(script);
       },
     };
-    vm.runInNewContext(source.replace(marker, `globalThis.api = { rpc }; return;\n${marker}`), retryContext);
+    vm.runInNewContext(source.replace(marker, `globalThis.api = { rpc, install, legacyScan, session }; return;\n${marker}`), retryContext);
     const retryResult = await retryContext.api.rpc('echo ok', 100, { transientRetries: 2 });
     assert.equal(retryResult.text, 'ok');
     assert.equal(rpcCalls, 3, 'read-only RPC must retry the bounded number of transient aborts');
@@ -173,7 +173,43 @@ function run(name, script) {
     assert.equal(rpcCalls, 1, 'mutating RPC must not be replayed automatically');
     assert.equal(mutationError?.transient, true);
     assert(!mutationError.message.includes('signal is aborted'), 'internal abort text must not reach the UI');
+    assert(!/USB|重连|通信.*中断/.test(mutationError.message), 'request cancellation must not be reported as a USB disconnect');
+    assert.equal(retryContext.api.session.transport, 'signal is aborted without reason');
     passed++; console.log('PASS mutating RPC aborts are concise and never replayed');
+
+    await assert.rejects(retryContext.api.install(true), /读取后台状态：后台请求被取消或超时/);
+    assert.equal(retryContext.api.session.transport, '读取后台状态: signal is aborted without reason');
+    passed++; console.log('PASS installation reports the failing step and retains host diagnostics');
+
+    const processRoot = sandbox.p('scan-proc');
+    const cmdlines = {
+      901: ['sh', '/data/kano_usb_mode_manager_v3/backend.sh', 'daemon'],
+      902: ['sh', '/data/kano_usb_mode_manager_v3/backend.sh', 'apply'],
+      903: ['sh', '/data/kano_usb_mode_manager_v2/usb_mode_daemon.sh'],
+      904: ['sh', '/data/kano_usb_mode_manager_v2/usb_mode_manager.sh'],
+      905: ['sh', '-c', 'echo /data/kano_usb_mode_manager_v3/backend.sh daemon'],
+      906: ['sh', '/data/kano_usb_mode_manager_v3/backend.sh.bak', 'daemon'],
+      907: ['sh', '/data/kano_usb_network_manager/usb_network_daemon.sh'],
+    };
+    for (const [pid, args] of Object.entries(cmdlines)) {
+      fs.mkdirSync(path.join(processRoot, pid), { recursive: true });
+      fs.writeFileSync(path.join(processRoot, pid, 'cmdline'), sandbox.rewrite(args.join('\0')) + '\0');
+    }
+    const scan = signal => retryContext.api.legacyScan(signal).replace('/proc/[0-9]*', `${sandbox.posix}/scan-proc/[0-9]*`);
+    run('process scan matches exact arguments and only stops daemon processes', `
+      result=$(${scan(false)})
+      [ "$result" = 'DAEMON_BUSY=901
+WORKER_BUSY=901
+WORKER_BUSY=902
+DAEMON_BUSY=903
+WORKER_BUSY=904
+DAEMON_BUSY=907' ] || exit 1
+      kill() { echo "STOP=$1"; }
+      result=$(${scan(true)})
+      [ "$result" = 'STOP=901
+STOP=903
+STOP=907' ]
+    `);
 
     let pollAttempts = 0;
     const launchContext = {
@@ -190,8 +226,8 @@ function run(name, script) {
     };
     vm.runInNewContext(source.replace(marker, `globalThis.api = { launch }; return;\n${marker}`), launchContext);
     assert.equal(await launchContext.api.launch(['repair'], 'repair'), 0);
-    assert.equal(pollAttempts, 3, 'job polling must resume after a disconnected USB transport returns');
-    passed++; console.log('PASS submitted jobs keep polling across a transient USB disconnect');
+    assert.equal(pollAttempts, 3, 'job polling must resume after a cancelled query');
+    passed++; console.log('PASS submitted jobs keep polling after a cancelled query');
     console.log(`${passed} tests passed`);
   } finally {
     assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));

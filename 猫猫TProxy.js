@@ -258,6 +258,22 @@ ${script}`,
     return `${F50_FILES_DIR}/${normalized}`;
   };
 
+  const uploadFileToDevice = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${KANO_baseURL}/upload_img`, {
+      method: 'POST',
+      headers: common_headers,
+      body: formData,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
+    if (!result || typeof result.url !== 'string' || !result.url.trim()) {
+      throw new Error((result && result.error) || '上传失败');
+    }
+    return getUploadedPath(result.url);
+  };
+
   const parseInstallToolboxResult = (result = {}) => {
     const content = String(result.content || '');
     const marker = (name) => {
@@ -2122,24 +2138,16 @@ EOF_KANO_SERVICE
       createToast('转换组件文件为空', 'red', 5000);
       return false;
     }
-    const formData = new FormData();
-    formData.append('file', file);
-    let uploadResult = null;
+    let uploadedPath = '';
     try {
-      const response = await fetch(`${KANO_baseURL}/upload_img`, {
-        method: 'POST',
-        headers: common_headers,
-        body: formData,
-      });
-      uploadResult = await response.json();
-      if (!response.ok || !uploadResult.url) throw new Error(uploadResult.error || `HTTP ${response.status}`);
+      uploadedPath = await uploadFileToDevice(file);
     } catch (e) {
       createToast(`转换组件上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 8000);
       return false;
     }
 
     return installBinaryHelperFromDevicePath({
-      sourcePath: getUploadedPath(uploadResult.url),
+      sourcePath: uploadedPath,
       label: 'install_binary_helper_file',
     });
   };
@@ -2956,18 +2964,9 @@ EOF_KANO_SERVICE
     const stagePath = `${targetPath}.kano_stage_${token}`;
     let uploadedPath = '';
     try {
-      const formData = new FormData();
-      formData.append('file', new File([value], `kano_yaml_stage_${token}.yaml`, { type: 'text/yaml' }));
-      const uploadResponse = await fetch(`${KANO_baseURL}/upload_img`, {
-        method: 'POST',
-        headers: common_headers,
-        body: formData,
-      });
-      const uploadResult = await uploadResponse.json();
-      if (!uploadResponse.ok || !uploadResult.url) {
-        throw new Error(uploadResult.error || `HTTP ${uploadResponse.status}`);
-      }
-      uploadedPath = getUploadedPath(uploadResult.url);
+      uploadedPath = await uploadFileToDevice(
+        new File([value], `kano_yaml_stage_${token}.yaml`, { type: 'text/yaml' }),
+      );
     } catch (e) {
       return {
         ok: false,
@@ -6431,18 +6430,7 @@ KANO_WRITE_CHECK_EOF
     let subRollbackPath = '';
     let subSourcesPersisted = false;
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await (
-        await fetch(`${KANO_baseURL}/upload_img`, {
-          method: 'POST',
-          headers: common_headers,
-          body: formData,
-        })
-      ).json();
-
-      if (!res.url) throw res.error || '';
-      const uploadedPath = getUploadedPath(res.url);
+      const uploadedPath = await uploadFileToDevice(file);
       const foundFile = await runShellWithRoot(`
                         [ -s ${shellQuote(uploadedPath)} ] && echo 1 || echo 0
                     `);
@@ -9342,27 +9330,13 @@ KANO_POLICY_TOOLS_EOF
       createToast('无法创建 config.yaml 回滚点，已取消配置包导入。', 'red', 9000);
       return false;
     }
-    const formData = new FormData();
-    formData.append('file', file);
-    let res = null;
+    let uploadedPath = '';
     try {
-      res = await (
-        await fetch(`${KANO_baseURL}/upload_img`, {
-          method: 'POST',
-          headers: common_headers,
-          body: formData,
-        })
-      ).json();
+      uploadedPath = await uploadFileToDevice(file);
     } catch (e) {
       createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
       return false;
     }
-    if (!res || !res.url) {
-      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${safeTextToHtml(res && res.error ? res.error : '')}`, 'red', 9000);
-      return false;
-    }
-
-    const uploadedPath = getUploadedPath(res.url);
     const requiredNamesCmd = requiredNames.map((name) => shellQuote(name)).join(' ');
     const restoreStageFilesCmd = restoreFiles.map((item) => {
       const mode = /\.(?:yaml|yml)$/i.test(item.label) ? '644' : '600';
@@ -11403,16 +11377,9 @@ ${expectedProviderChecks}
     };
 
     const uploadEditorContent = async (content, filename) => {
-      const formData = new FormData();
-      formData.append('file', new File([content], filename, { type: 'text/plain;charset=utf-8' }));
-      const response = await fetch(`${KANO_baseURL}/upload_img`, {
-        method: 'POST',
-        headers: common_headers,
-        body: formData,
-      });
-      const result = await response.json();
-      if (!result.url) throw new Error(result.error || '上传失败');
-      const uploadedPath = getUploadedPath(result.url);
+      const uploadedPath = await uploadFileToDevice(
+        new File([content], filename, { type: 'text/plain;charset=utf-8' }),
+      );
       const found = await runShellWithRoot(`[ -f ${shellQuote(uploadedPath)} ] && echo 1 || echo 0`);
       if (!found.success || String(found.content || '').trim() != '1') throw new Error('上传文件未找到');
       return uploadedPath;

@@ -1389,10 +1389,10 @@ ${rejectIfManagerActiveCmd()}
       const poll = await runShell(`cat ${shellQuote(FIX_STATE)} 2>/dev/null || true`, 8000);
       last = poll.content;
       onProgress(last);
-      if (/(?:^|\n)DONE=1(?:\n|$)/.test(last)) return last;
+      if (poll.success && /(?:^|\n)DONE=1(?:\n|$)/.test(last)) return last;
     }
     toast('执行仍在进行中（可能有常驻服务未退出），可稍后点「检查状态」查看结果。', 'yellow', 8000);
-    return last;
+    return null;
   };
 
   // ==========================================================================

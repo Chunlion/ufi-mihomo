@@ -953,9 +953,9 @@ sed -i '/kano_usb_network_manager/d' ${shellQuote(BOOT_SH_FILE)} 2>/dev/null || 
       writeRemoteFile(MANAGER_FILE, MANAGER_SCRIPT, '755'),
       writeRemoteFile(DAEMON_FILE, DAEMON_SCRIPT, '755'),
       saveConfig(current),
-      writeRemoteFile(VERSION_FILE, VERSION, '600'),
     ]);
     if (!results.every(Boolean)) return false;
+    if (!(await writeRemoteFile(VERSION_FILE, VERSION, '600'))) return false;
     await run(`sh ${shellQuote(MANAGER_FILE)} save-original >/dev/null 2>&1 || true`, 8000);
 
     if (restartExisting && previousDaemon.running && current.permanent === '1') {
@@ -983,7 +983,10 @@ printf '%s' $?
         const ok = await installManagedFiles(config);
         if (!ok) backendPreparePromise = null;
         return ok;
-      })();
+      })().catch((error) => {
+        backendPreparePromise = null;
+        throw error;
+      });
     }
     return backendPreparePromise;
   };

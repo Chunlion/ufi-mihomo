@@ -1,7 +1,8 @@
 //<script>
 (async () => {
   'use strict';
-  const VERSION = '2.4.1';
+  const VERSION = '2.4.2';
+  const BACKEND_VERSION = '2.4.1';
   const BASE = '/data/kano_usb_mode_manager_v3';
   const BACKEND = BASE + '/backend.sh';
   const TITLE = '\u0055\u0053\u0042 \u7f51\u7edc\u6a21\u5f0f';
@@ -44,25 +45,48 @@
     }
     return '';
   };
-  const rpc = (command, timeout = 20000) => {
+  const transientTransportError = value => /(?:signal is aborted|aborterror|operation was aborted|networkerror|failed to fetch)/i.test(String(value || ''));
+  const makeTransportError = detail => {
+    const error = new Error('\u540e\u53f0\u901a\u4fe1\u6682\u65f6\u4e2d\u65ad\uff0c\u8bf7\u7b49\u5f85 USB \u91cd\u8fde\u540e\u91cd\u8bd5\u3002');
+    error.transient = true;
+    error.detail = String(detail || '');
+    return error;
+  };
+  const rpc = (command, timeout = 20000, { transientRetries = 0 } = {}) => {
     const task = async () => {
       if (typeof runShellWithRoot !== 'function') throw new Error('\u672a\u627e\u5230 runShellWithRoot\uff1a\u8bf7\u5728 F50 \u539f\u540e\u53f0\u63d2\u4ef6\u7ba1\u7406\u4e2d\u52a0\u8f7d\uff0c\u4e0d\u662f OpenWrt LuCI\u3002');
-      const id = Date.now().toString(36) + Math.random().toString(36).slice(2,9);
-      const begin = '__K3_B_' + id + '__';
-      const end = '__K3_E_' + id + '__=';
-      const script = "printf '%s\\n' " + sq(begin) + "\n(\nexport PATH=/system/bin:/system/xbin:/vendor/bin:/odm/bin:/sbin:/bin:/usr/bin:$PATH\n" + command + "\n) 2>&1\n_k3_rc=$?\nprintf '\\n%s%s\\n' " + sq(end) + ' "$_k3_rc"\n';
-      let raw;
-      try { raw = await runShellWithRoot(script, timeout); }
-      catch (e) { throw new Error('\u540e\u53f0\u547d\u4ee4\u8bf7\u6c42\u5931\u8d25\uff1a' + (e.message || String(e))); }
-      const text = responseText(raw).replace(/\r\n/g,'\n');
-      const start = text.indexOf(begin);
-      const finish = text.lastIndexOf(end);
-      if (start < 0 || finish <= start || !/^\d+/.test(text.slice(finish + end.length))) {
+      let lastTransient = '';
+      for (let attempt = 0; attempt <= transientRetries; attempt++) {
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2,9);
+        const begin = '__K3_B_' + id + '__';
+        const end = '__K3_E_' + id + '__=';
+        const script = "printf '%s\\n' " + sq(begin) + "\n(\nexport PATH=/system/bin:/system/xbin:/vendor/bin:/odm/bin:/sbin:/bin:/usr/bin:$PATH\n" + command + "\n) 2>&1\n_k3_rc=$?\nprintf '\\n%s%s\\n' " + sq(end) + ' "$_k3_rc"\n';
+        let raw;
+        try { raw = await runShellWithRoot(script, timeout); }
+        catch (e) {
+          const detail = (e && e.message) || String(e);
+          if (!transientTransportError(detail)) throw new Error('\u540e\u53f0\u547d\u4ee4\u8bf7\u6c42\u5931\u8d25\uff1a' + detail);
+          lastTransient = detail;
+          if (attempt < transientRetries) { await delay(800); continue; }
+          throw makeTransportError(detail);
+        }
+        const text = responseText(raw).replace(/\r\n/g,'\n');
+        const start = text.indexOf(begin);
+        const finish = text.lastIndexOf(end);
+        if (start >= 0 && finish > start && /^\d+/.test(text.slice(finish + end.length))) {
+          return { code: Number(text.slice(finish + end.length).match(/^\d+/)[0]), text: text.slice(start + begin.length, finish).trim() };
+        }
         let debug; try { debug = JSON.stringify(raw); } catch (_) { debug = String(raw); }
-        session.transport = text.slice(-3500) || String(debug === undefined ? raw : debug).slice(0,3500);
-        throw new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\u6574\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
+        const detail = text.slice(-3500) || String(debug === undefined ? raw : debug).slice(0,3500);
+        if (transientTransportError(detail)) {
+          lastTransient = detail;
+          if (attempt < transientRetries) { await delay(800); continue; }
+          throw makeTransportError(detail);
+        }
+        session.transport = detail;
+        throw new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
       }
-      return { code: Number(text.slice(finish + end.length).match(/^\d+/)[0]), text: text.slice(start + begin.length, finish).trim() };
+      throw makeTransportError(lastTransient);
     };
     const result = queue.then(task, task);
     queue = result.catch(() => {});
@@ -87,13 +111,13 @@ else printf 'BACKEND_ERROR=not-installed\\n'; fi
 printf '\\nPROBE_COMPLETE=1\\n'
 `;
   const readState = async () => {
-    const res = await rpc(probeCommand);
+    const res = await rpc(probeCommand, 20000, { transientRetries: 2 });
     requireOK(res, '\u8bfb\u53d6\u72b6\u6001\u5931\u8d25');
     const data = env(res.text);
     if (data.PROBE_COMPLETE !== '1') throw new Error('\u72b6\u6001\u56de\u5305\u88ab\u622a\u65ad\uff1a\n' + res.text);
     if (data.PROBE_UID !== '0') throw new Error('\u6ca1\u6709 root \u6743\u9650\uff0c\u8bf7\u5148\u5f00\u542f F50 \u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002\n' + res.text);
     if (data.NATIVE_API !== '1') throw new Error('\u672a\u68c0\u6d4b\u5230 F50 \u7684 getprop/setprop\u3002\u8bf7\u5728 F50 \u539f\u540e\u53f0\u4f7f\u7528\u672c\u63d2\u4ef6\uff0c\u4e0d\u8981\u5728 OpenWrt LuCI \u4e2d\u8fd0\u884c\u3002\n' + res.text);
-    data.INSTALLED = data.PROTOCOL === 'KUNM3' && data.STATUS_COMPLETE === '1' && data.BACKEND_VERSION === VERSION;
+    data.INSTALLED = data.PROTOCOL === 'KUNM3' && data.STATUS_COMPLETE === '1' && data.BACKEND_VERSION === BACKEND_VERSION;
     data.RAW = res.text;
     if (!data.INSTALLED) {
       data.CURRENT_CONFIG = data.PROBE_CONFIG;
@@ -114,7 +138,7 @@ elif command -v busybox >/dev/null 2>&1 && busybox cksum ${sq(path)} >/dev/null 
 fi
 `;
   const backendValid = async () => {
-    const res = await rpc(shellHeader + `[ -r ${sq(BACKEND)} ] || exit 1\n` + checksumCmd(BACKEND) + `"$SH" -n ${sq(BACKEND)} && "$SH" ${sq(BACKEND)} selftest`);
+    const res = await rpc(shellHeader + `[ -r ${sq(BACKEND)} ] || exit 1\n` + checksumCmd(BACKEND) + `"$SH" -n ${sq(BACKEND)} && "$SH" ${sq(BACKEND)} selftest`, 20000, { transientRetries: 1 });
     return res.code === 0 && res.text.indexOf('SELFTEST=KUNM_2.4.1_OK') >= 0;
   };
   const showProgress = (text, tone = 'info') => { const node = session.modal && session.modal.querySelector('#k3_message'); if (node) { node.textContent = text; node.className = 'k3_status ' + tone; } };
@@ -149,7 +173,7 @@ done
 [ ! -d ${sq(BASE)} ] || : > ${sq(BASE + '/stop')}
 ` + legacyScan(true)), '\u505c\u6b62\u65e7\u5b88\u62a4\u5931\u8d25');
     for (let i = 0; i < 55; i++) {
-      const res = await rpc(legacyScan(false));
+      const res = await rpc(legacyScan(false), 20000, { transientRetries: 1 });
       requireOK(res, '\u8bfb\u53d6\u8fdb\u7a0b\u5931\u8d25');
       if (!res.text.includes('_BUSY=')) return;
       showProgress('\u65e7\u5207\u6362\u4efb\u52a1\u5c1a\u672a\u7ed3\u675f\uff0c\u672c\u6b21\u672a\u53d1\u8d77\u65b0\u5207\u6362\u3002\n' + res.text);
@@ -193,7 +217,7 @@ if [ ! -f ${sq(BASE + '/config.env')} ] && [ -r /data/kano_usb_mode_manager_v2/c
   cp /data/kano_usb_mode_manager_v2/config.env ${sq(BASE + '/config.env')} || exit 1
 fi
 chmod 700 ${sq(stage)} && mv -f ${sq(stage)} ${sq(BACKEND)} || exit 1
-printf '%s\\n' ${sq(VERSION)} > ${sq(BASE + '/version')}
+printf '%s\\n' ${sq(BACKEND_VERSION)} > ${sq(BASE + '/version')}
 echo DEPLOYED=2.4.1
 `);
       requireOK(commit, '\u90e8\u7f72\u63d0\u4ea4\u5931\u8d25');
@@ -216,8 +240,12 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
     for (let i = 0; i < 85; i++) {
       await delay(2000);
       let res;
-      try { res = await rpc(`[ -f ${sq(status)} ] && { printf 'JOB_DONE='; cat ${sq(status)}; cat ${sq(output)}; } || echo JOB_RUNNING=1`, 12000); }
+      try { res = await rpc(`[ -f ${sq(status)} ] && { printf 'JOB_DONE='; cat ${sq(status)}; cat ${sq(output)}; } || echo JOB_RUNNING=1`, 12000, { transientRetries: 1 }); }
       catch (e) {
+        if (e && e.transient) {
+          showProgress('\u0055\u0053\u0042 \u6b63\u5728\u91cd\u8fde\uff0c\u7ee7\u7eed\u7b49\u5f85\u540e\u53f0\u7ed3\u679c\u2026', 'warn');
+          continue;
+        }
         throw new Error('\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u4f46\u7ba1\u7406\u8fde\u63a5\u4e2d\u65ad\uff0c\u5c1a\u672a\u786e\u8ba4\u7ed3\u679c\u3002\u8fde\u63a5 F50 Wi-Fi \u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\uff0c\u4e0d\u8981\u8fde\u7eed\u91cd\u8bd5\u5207\u6362\u3002\n' + e.message);
       }
       const match = res.text.match(/^JOB_DONE=(\d+)/m);
@@ -313,7 +341,7 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
     const root = session.modal;
     if (root) root.querySelectorAll('button,input,select').forEach(n => n.disabled = true);
     try { await fn(); }
-    catch (e) { showProgress(e.message || String(e), 'bad'); setOutput(e.stack || String(e)); }
+    catch (e) { showProgress(e.message || String(e), 'bad'); setOutput(e.message || String(e)); }
     finally { session.busy = false; if (root) root.querySelectorAll('button,input,select').forEach(n => n.disabled = false); }
   };
   const downloadText = (name, content) => {

@@ -1337,6 +1337,40 @@ function runFor(label, file) {
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {
     await goBehaviorPromise;
+    const upload = loadPlugin(file, handler, ['uploadFileToDevice', 'installBinaryHelperFromFile']);
+    upload.ctx.KANO_baseURL = 'http://192.168.0.1:2333';
+    upload.ctx.common_headers = {};
+    const uploadedFile = { name: 'template.yaml', size: 1 };
+    let request = null;
+    let appendedFile = null;
+    upload.ctx.FormData = class { append(key, value) { appendedFile = [key, value]; } };
+    upload.ctx.fetch = async (url, options) => {
+      request = [url, options.method, options.headers === upload.ctx.common_headers];
+      return { ok: true, json: async () => ({ url: '/uploads/template.yaml' }) };
+    };
+    chk(await upload.api.uploadFileToDevice(uploadedFile),
+      '/data/data/com.minikano.f50_sms/files/uploads/template.yaml', 'successful upload resolves the device path');
+    chk(request, ['http://192.168.0.1:2333/upload_img', 'POST', true], 'upload preserves the host endpoint and headers');
+    chk(appendedFile, ['file', uploadedFile], 'upload sends the original file');
+    let jsonRead = false;
+    upload.ctx.fetch = async () => ({
+      ok: false, status: 503,
+      json: async () => { jsonRead = true; return { url: '/uploads/stale.yaml' }; },
+    });
+    let httpError = '';
+    try { await upload.api.uploadFileToDevice(uploadedFile); } catch (e) { httpError = e.message; }
+    chk(httpError, 'HTTP 503', 'HTTP failure rejects even when the response could contain a path');
+    chk(jsonRead, false, 'HTTP failure does not parse a potentially non-JSON error page');
+    for (const body of [null, {}, { url: {} }, { url: ' ' }, { url: '../config.yaml' }]) {
+      upload.ctx.fetch = async () => ({ ok: true, json: async () => body });
+      let rejected = false;
+      try { await upload.api.uploadFileToDevice(uploadedFile); } catch { rejected = true; }
+      chk(rejected, true, `invalid upload response rejects: ${JSON.stringify(body)}`);
+    }
+    chk(await upload.api.installBinaryHelperFromFile(uploadedFile), false,
+      'invalid uploaded helper path is handled as an upload failure');
+    chk(upload.ctx.__toasts.some((message) => message.includes('转换组件上传失败')), true,
+      'invalid helper path displays the existing upload error');
     shellReply = { success: true, content: 'root' };
     chk(await api.checkAdvanceFunc({ fresh: true }), true, 'advanced access probe detects root');
     const callsAfterFreshAccessProbe = shellCallCount;

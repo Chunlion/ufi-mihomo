@@ -1,7 +1,7 @@
 //<script>
 (async () => {
   'use strict';
-  const VERSION = '2.4.2';
+  const VERSION = '2.4.3';
   const BACKEND_VERSION = '2.4.1';
   const BASE = '/data/kano_usb_mode_manager_v3';
   const BACKEND = BASE + '/backend.sh';
@@ -47,9 +47,10 @@
   };
   const transientTransportError = value => /(?:signal is aborted|aborterror|operation was aborted|networkerror|failed to fetch)/i.test(String(value || ''));
   const makeTransportError = detail => {
-    const error = new Error('\u540e\u53f0\u901a\u4fe1\u6682\u65f6\u4e2d\u65ad\uff0c\u8bf7\u7b49\u5f85 USB \u91cd\u8fde\u540e\u91cd\u8bd5\u3002');
+    const error = new Error('后台请求被取消或超时，尚未确认命令结果。');
     error.transient = true;
     error.detail = String(detail || '');
+    session.transport = error.detail;
     return error;
   };
   const rpc = (command, timeout = 20000, { transientRetries = 0 } = {}) => {
@@ -148,19 +149,36 @@ for p in /proc/[0-9]*/cmdline; do
   [ -r "$p" ] || continue
   pid="\${p%/cmdline}"; pid="\${pid##*/}"
   [ "$pid" != "$$" ] || continue
-  for path in /data/kano_usb_mode_manager_v2/usb_mode_daemon.sh /data/kano_usb_network_manager/usb_network_daemon.sh /data/kano_usb_mode_manager_v3/backend.sh; do
-    if tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x "$path" >/dev/null; then
-      if [ "$path" = /data/kano_usb_mode_manager_v3/backend.sh ]; then
-        tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x daemon >/dev/null || continue
-      fi
-      ${signal ? 'kill "$pid" 2>/dev/null || true' : 'echo "DAEMON_BUSY=$pid"'}
-    fi
-  done
-  for path in /data/kano_usb_mode_manager_v2/usb_mode_manager.sh /data/kano_usb_mode_manager_v3/backend.sh; do
-    if tr '\\000' '\\n' < "$p" 2>/dev/null | grep -F -x "$path" >/dev/null; then
-      ${signal ? ':' : 'echo "WORKER_BUSY=$pid"'}
-    fi
-  done
+  args="
+$(tr '\\000' '\\n' < "$p" 2>/dev/null)
+"
+  daemon=0; worker=0
+  case "$args" in
+    *'
+/data/kano_usb_mode_manager_v2/usb_mode_daemon.sh
+'*|*'
+/data/kano_usb_network_manager/usb_network_daemon.sh
+'*) daemon=1 ;;
+  esac
+  case "$args" in
+    *'
+/data/kano_usb_mode_manager_v2/usb_mode_manager.sh
+'*) worker=1 ;;
+  esac
+  case "$args" in
+    *'
+/data/kano_usb_mode_manager_v3/backend.sh
+'*)
+      worker=1
+      case "$args" in *'
+daemon
+'*) daemon=1 ;; esac
+      ;;
+  esac
+  if [ "$daemon" = 1 ]; then
+    ${signal ? 'kill "$pid" 2>/dev/null || true' : 'echo "DAEMON_BUSY=$pid"'}
+  fi
+  ${signal ? '' : '[ "$worker" != 1 ] || echo "WORKER_BUSY=$pid"'}
 done
 `;
   const quiesce = async () => {
@@ -182,25 +200,32 @@ done
     throw new Error('\u65e7\u5207\u6362\u4efb\u52a1\u672a\u9000\u51fa\uff0c\u5df2\u505c\u6b62\u90e8\u7f72\uff0c\u6ca1\u6709\u5f3a\u5236\u6740\u6389 USB \u5de5\u4f5c\u8fdb\u7a0b\u3002');
   };
   const install = async (force = false) => {
+    let step = '读取后台状态';
+    try {
     const state = await readState();
     if (!force && state.INSTALLED && await backendValid()) return;
     showProgress('\u6821\u9a8c\u5e76\u5206\u5757\u4e0a\u4f20\u540e\u53f0\u2026');
     const token = Date.now().toString(36);
     const encoded = BASE + '/stage-' + token + '.b64';
     const stage = BASE + '/stage-' + token + '.sh';
+    step = '创建上传文件';
     requireOK(await rpc(`mkdir -p ${sq(BASE)} && chmod 700 ${sq(BASE)} && : > ${sq(encoded)}`), '\u521b\u5efa\u90e8\u7f72\u76ee\u5f55\u5931\u8d25');
     try {
       // Small sequential requests avoid firmware command-size limits and root-RPC races.
       for (let i = 0; i < BACKEND_DATA.length; i += 2048) {
+        step = '上传后台分块 ' + (i / 2048 + 1);
         requireOK(await rpc(`printf '%s' ${sq(BACKEND_DATA.slice(i,i+2048))} >> ${sq(encoded)}`), '\u4e0a\u4f20\u5206\u5757\u5931\u8d25');
         showProgress('\u4e0a\u4f20\u540e\u53f0 ' + Math.min(100,Math.round((i+2048)*100/BACKEND_DATA.length)) + '%');
       }
+      step = '校验上传文件';
       const verify = await rpc(shellHeader + `
 base64 -d ${sq(encoded)} > ${sq(stage)} 2>/dev/null || busybox base64 -d ${sq(encoded)} > ${sq(stage)} 2>/dev/null || toybox base64 -d ${sq(encoded)} > ${sq(stage)} || exit 18
 ` + checksumCmd(stage) + `"$SH" -n ${sq(stage)} && "$SH" ${sq(stage)} selftest`);
       requireOK(verify, '\u540e\u53f0\u5b8c\u6574\u6027\u6216 Shell \u81ea\u68c0\u5931\u8d25\uff0c\u672a\u66ff\u6362\u65e7\u6587\u4ef6');
       if (!verify.text.includes('SELFTEST=KUNM_2.4.1_OK')) throw new Error('\u672a\u53d6\u5f97\u81ea\u68c0\u901a\u8fc7\u6807\u8bb0');
+      step = '停止旧守护并等待任务退出';
       await quiesce();
+      step = '替换后台文件';
       const commit = await rpc(`
 backup=${sq(BASE + '/backups/' + token)}
 mkdir -p "$backup" || exit 1
@@ -221,10 +246,18 @@ printf '%s\\n' ${sq(BACKEND_VERSION)} > ${sq(BASE + '/version')}
 echo DEPLOYED=2.4.1
 `);
       requireOK(commit, '\u90e8\u7f72\u63d0\u4ea4\u5931\u8d25');
+      step = '校验已安装后台';
       if (!await backendValid()) throw new Error('\u90e8\u7f72\u540e\u6821\u9a8c\u5931\u8d25\uff0c\u672a\u542f\u52a8\u5b88\u62a4');
       showProgress('\u540e\u53f0\u5df2\u5b89\u88c5\u5e76\u81ea\u68c0\u901a\u8fc7\uff1b\u5c1a\u672a\u5207\u6362 USB\u3002');
     } finally {
       await rpc(`rm -f ${sq(encoded)} ${sq(stage)}`).catch(() => {});
+    }
+    } catch (e) {
+      if (e && e.transient) {
+        session.transport = step + ': ' + e.detail;
+        e.message = step + '：' + e.message;
+      }
+      throw e;
     }
   };
   const launch = async (args, label) => {
@@ -243,7 +276,7 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
       try { res = await rpc(`[ -f ${sq(status)} ] && { printf 'JOB_DONE='; cat ${sq(status)}; cat ${sq(output)}; } || echo JOB_RUNNING=1`, 12000, { transientRetries: 1 }); }
       catch (e) {
         if (e && e.transient) {
-          showProgress('\u0055\u0053\u0042 \u6b63\u5728\u91cd\u8fde\uff0c\u7ee7\u7eed\u7b49\u5f85\u540e\u53f0\u7ed3\u679c\u2026', 'warn');
+          showProgress('本次查询未取得结果，正在重新查询…', 'warn');
           continue;
         }
         throw new Error('\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u4f46\u7ba1\u7406\u8fde\u63a5\u4e2d\u65ad\uff0c\u5c1a\u672a\u786e\u8ba4\u7ed3\u679c\u3002\u8fde\u63a5 F50 Wi-Fi \u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\uff0c\u4e0d\u8981\u8fde\u7eed\u91cd\u8bd5\u5207\u6362\u3002\n' + e.message);

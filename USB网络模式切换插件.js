@@ -1,7 +1,7 @@
 //<script>
 (async () => {
   'use strict';
-  const VERSION = '2.4.3';
+  const VERSION = '2.4.4';
   const BACKEND_VERSION = '2.4.1';
   const BASE = '/data/kano_usb_mode_manager_v3';
   const BACKEND = BASE + '/backend.sh';
@@ -35,13 +35,7 @@
     if (raw == null) return '';
     if (Array.isArray(raw)) return raw.map(responseText).filter(Boolean).join('\n');
     if (typeof raw === 'object') {
-      for (const key of ['content','stdout','output','data','result','text','message']) {
-        if (raw[key] != null) {
-          const text = responseText(raw[key]);
-          if (text.indexOf('__K3_') !== -1) return text;
-        }
-      }
-      return ['content','stdout','output','stderr','data','result','text','message'].filter(k => raw[k] != null).map(k => responseText(raw[k])).filter(Boolean).join('\n');
+      return ['content','stdout','output','stderr','data','result','text','message','error'].filter(k => raw[k] != null).map(k => responseText(raw[k])).filter(Boolean).join('\n');
     }
     return '';
   };
@@ -72,10 +66,9 @@
           throw makeTransportError(detail);
         }
         const text = responseText(raw).replace(/\r\n/g,'\n');
-        const start = text.indexOf(begin);
-        const finish = text.lastIndexOf(end);
-        if (start >= 0 && finish > start && /^\d+/.test(text.slice(finish + end.length))) {
-          return { code: Number(text.slice(finish + end.length).match(/^\d+/)[0]), text: text.slice(start + begin.length, finish).trim() };
+        const frame = text.match(new RegExp('(?:^|\n)' + begin + '\n([\\s\\S]*?)\n' + end + '(\\d+)(?=\n|$)'));
+        if (frame) {
+          return { code: Number(frame[2]), text: frame[1].trim() };
         }
         let debug; try { debug = JSON.stringify(raw); } catch (_) { debug = String(raw); }
         const detail = text.slice(-3500) || String(debug === undefined ? raw : debug).slice(0,3500);
@@ -85,7 +78,9 @@
           throw makeTransportError(detail);
         }
         session.transport = detail;
-        throw new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
+        const error = new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
+        error.unconfirmed = true;
+        throw error;
       }
       throw makeTransportError(lastTransient);
     };
@@ -253,8 +248,8 @@ echo DEPLOYED=2.4.1
       await rpc(`rm -f ${sq(encoded)} ${sq(stage)}`).catch(() => {});
     }
     } catch (e) {
-      if (e && e.transient) {
-        session.transport = step + ': ' + e.detail;
+      if (e && (e.transient || e.unconfirmed)) {
+        session.transport = step + ': ' + (e.detail || session.transport);
         e.message = step + '：' + e.message;
       }
       throw e;
@@ -266,22 +261,30 @@ echo DEPLOYED=2.4.1
     const status = BASE + '/job-' + id + '.status';
     const output = BASE + '/job-' + id + '.log';
     const body = shellHeader + `"$SH" ${sq(BACKEND)} ${args.map(sq).join(' ')} > ${sq(output)} 2>&1\nrc=$?\nprintf '%s\\n' "$rc" > ${sq(status + '.tmp')}\nmv -f ${sq(status + '.tmp')} ${sq(status)}\n`;
-    requireOK(await rpc(shellHeader + `printf '%s' ${sq(body)} > ${sq(script)} && "$SH" -n ${sq(script)} || exit 1
+    let submitted = false;
+    try {
+      requireOK(await rpc(shellHeader + `printf '%s' ${sq(body)} > ${sq(script)} && "$SH" -n ${sq(script)} || exit 1
 nohup "$SH" ${sq(script)} </dev/null >/dev/null 2>&1 &
 echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
-    showProgress(label + '\uff1bUSB \u53ef\u80fd\u77ed\u6682\u91cd\u8fde\u3002\u8bf7\u4f7f\u7528 F50 \u81ea\u8eab Wi-Fi \u67e5\u770b\u7ed3\u679c\u3002');
+      submitted = true;
+    } catch (e) {
+      // A lost acknowledgement does not mean the worker failed to start.
+      if (!e || (!e.transient && !e.unconfirmed)) throw e;
+    }
+    showProgress(submitted ? label + '\uff1bUSB \u53ef\u80fd\u77ed\u6682\u91cd\u8fde\u3002\u8bf7\u4f7f\u7528 F50 \u81ea\u8eab Wi-Fi \u67e5\u770b\u7ed3\u679c\u3002' : '未收到启动确认，正在查询本次任务结果…');
     for (let i = 0; i < 85; i++) {
       await delay(2000);
       let res;
       try { res = await rpc(`[ -f ${sq(status)} ] && { printf 'JOB_DONE='; cat ${sq(status)}; cat ${sq(output)}; } || echo JOB_RUNNING=1`, 12000, { transientRetries: 1 }); }
       catch (e) {
-        if (e && e.transient) {
+        if (e && (e.transient || e.unconfirmed)) {
           showProgress('本次查询未取得结果，正在重新查询…', 'warn');
           continue;
         }
-        throw new Error('\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u4f46\u7ba1\u7406\u8fde\u63a5\u4e2d\u65ad\uff0c\u5c1a\u672a\u786e\u8ba4\u7ed3\u679c\u3002\u8fde\u63a5 F50 Wi-Fi \u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\uff0c\u4e0d\u8981\u8fde\u7eed\u91cd\u8bd5\u5207\u6362\u3002\n' + e.message);
+        throw new Error('查询任务结果失败，尚未确认是否完成。\n' + e.message);
       }
-      const match = res.text.match(/^JOB_DONE=(\d+)/m);
+      requireOK(res, '读取任务结果失败');
+      const match = res.text.match(/^JOB_DONE=(\d+)\r?$/m);
       if (!match) continue;
       await rpc(`rm -f ${sq(script)} ${sq(status)} ${sq(output)}`).catch(() => {});
       const code = Number(match[1]);
@@ -295,7 +298,7 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
       showProgress('\u4efb\u52a1\u5df2\u5b8c\u6210\uff0c\u6b63\u5728\u8bfb\u53d6\u5b9e\u9645\u72b6\u6001\u3002');
       return 0;
     }
-    throw new Error('\u4efb\u52a1\u5c1a\u672a\u8fd4\u56de\u5b8c\u6210\u6807\u8bb0\uff1b\u672a\u5f3a\u5236\u6740\u8fdb\u7a0b\u3002\u70b9\u201c\u5bfc\u51fa\u8bca\u65ad\u201d\u67e5\u770b\u3002');
+    throw new Error(submitted ? '\u4efb\u52a1\u5c1a\u672a\u8fd4\u56de\u5b8c\u6210\u6807\u8bb0\uff1b\u672a\u5f3a\u5236\u6740\u8fdb\u7a0b\u3002\u70b9\u201c\u5bfc\u51fa\u8bca\u65ad\u201d\u67e5\u770b\u3002' : '未确认本次任务是否启动或完成。请刷新状态并导出诊断，避免重复切换。');
   };
   const text = {
     config:'当前 USB 配置', state:'系统状态', iface:'网卡 / 桥接', daemon:'自动维护',
@@ -416,7 +419,7 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
       }
       const cmd = s.INSTALLED ? shellHeader + `"$SH" ${sq(BACKEND)} diagnose` : shellHeader + `id; command -v getprop; getprop sys.usb.config; getprop sys.usb.state; ls -ld /config/usb_gadget/* /sys/kernel/config/usb_gadget/* /sys/class/android_usb/android0 2>&1; ip link show 2>&1; tail -n 60 /data/kano_usb_mode_manager_v2/manager.log 2>&1; true`;
       const res = await rpc(cmd,25000);
-      const report = 'USB Network Mode v'+VERSION+'\n'+new Date().toISOString()+'\n\n'+s.RAW+'\n\n'+res.text;
+      const report = 'USB Network Mode v'+VERSION+'\n'+new Date().toISOString()+'\n\n'+s.RAW+'\n\n'+res.text+(session.transport ? '\n\nLast request error:\n'+session.transport : '');
       setOutput(report); downloadText('USB_Network_Diagnostic_'+Date.now()+'.txt',report);
       showProgress('\u8bca\u65ad\u5df2\u751f\u6210\uff1b\u672a\u6539\u53d8 USB\u3002\u5206\u4eab\u524d\u53ef\u9690\u53bb IP\u3001MAC \u7b49\u8bbe\u5907\u4fe1\u606f\u3002');
     });

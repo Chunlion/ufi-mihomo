@@ -163,6 +163,20 @@ function run(name, script) {
     assert.equal(rpcCalls, 3, 'read-only RPC must retry the bounded number of transient aborts');
     passed++; console.log('PASS read-only RPC recovers from transient host aborts');
 
+    retryContext.runShellWithRoot = async script => ({ content: script, data: rpcReply(script, 'actual output', 7) });
+    const framed = await retryContext.api.rpc('echo actual output');
+    assert.equal(framed.code, 7);
+    assert.equal(framed.text, 'actual output', 'echoed command text must not hide the actual response');
+    retryContext.runShellWithRoot = async script => ({ content: script });
+    await assert.rejects(retryContext.api.rpc('echo ok'), error => error.unconfirmed === true);
+    retryContext.runShellWithRoot = async script => {
+      const reply = rpcReply(script);
+      reply.content = reply.content.replace(/0\n$/, '0truncated');
+      return reply;
+    };
+    await assert.rejects(retryContext.api.rpc('echo ok'), error => error.unconfirmed === true);
+    passed++; console.log('PASS RPC ignores command echoes and rejects malformed completion markers');
+
     rpcCalls = 0;
     retryContext.runShellWithRoot = async () => {
       rpcCalls++;
@@ -228,6 +242,31 @@ STOP=907' ]
     assert.equal(await launchContext.api.launch(['repair'], 'repair'), 0);
     assert.equal(pollAttempts, 3, 'job polling must resume after a cancelled query');
     passed++; console.log('PASS submitted jobs keep polling after a cancelled query');
+
+    for (const acknowledgement of ['aborted', 'incomplete']) {
+      let submissions = 0, queries = 0;
+      launchContext.runShellWithRoot = async script => {
+        if (script.includes('JOB_PID=')) {
+          submissions++;
+          return { content: acknowledgement === 'aborted' ? 'signal is aborted without reason' : '' };
+        }
+        if (script.includes('JOB_RUNNING=1')) {
+          queries++;
+          return queries === 1 ? { content: '' } : rpcReply(script, 'JOB_DONE=0');
+        }
+        return rpcReply(script);
+      };
+      assert.equal(await launchContext.api.launch(['repair'], 'repair'), 0);
+      assert.equal(submissions, 1, 'lost startup acknowledgements must never replay the worker');
+      assert.equal(queries, 2);
+    }
+    passed++; console.log('PASS jobs recover lost startup acknowledgements without duplicate submissions');
+
+    launchContext.runShellWithRoot = async script => rpcReply(script, 'permission denied', 13);
+    await assert.rejects(launchContext.api.launch(['repair'], 'repair'), /exit=13/);
+    launchContext.runShellWithRoot = async script => rpcReply(script, 'JOB_DONE=0', script.includes('JOB_RUNNING=1') ? 1 : 0);
+    await assert.rejects(launchContext.api.launch(['repair'], 'repair'), /读取任务结果失败/);
+    passed++; console.log('PASS confirmed startup and query failures never report job success');
     console.log(`${passed} tests passed`);
   } finally {
     assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));

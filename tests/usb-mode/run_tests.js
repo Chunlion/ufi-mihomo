@@ -141,6 +141,46 @@ function run(name, script) {
     assert.equal(requests, 1, 'hidden page must not request status');
     passed++; console.log('PASS status polling coalesces slow requests and pauses in hidden pages');
 
+    run('NCM repair separates peer MACs and removes only inactive ports on the same bridge', functions + `
+      G="$BASE/gadget"; C="$G/config"; NET="$BASE/net"; BRIDGE=br0
+      mkdir -p "$G/functions/ncm.gs0" "$G/functions/ecm.gs0" "$G/functions/rndis.gs0" "$C" "$NET/usb1"
+      has_function() { [ "$1" = ncm ]; }
+      echo usb1 > "$G/functions/ncm.gs0/ifname"
+      echo usb0 > "$G/functions/ecm.gs0/ifname"
+      echo rndis0 > "$G/functions/rndis.gs0/ifname"
+      echo 54:1f:8d:18:8f:0b > "$G/functions/ncm.gs0/host_addr"
+      echo 54:1f:8d:18:8f:0b > "$NET/usb1/address"
+      echo br0 > "$NET/usb0.master"
+      master_of() { case "$1" in usb0) cat "$NET/usb0.master" ;; usb1) echo br0 ;; rndis0) echo otherbridge ;; esac; }
+      bring_up() { return 0; }
+      ip() {
+        case "$*" in
+          'link set dev usb1 down') return 0 ;;
+          'link set dev usb1 address '*) echo "$6" > "$NET/usb1/address" ;;
+          'link set dev usb0 nomaster') : > "$NET/usb0.master" ;;
+          *) exit 92 ;;
+        esac
+      }
+      prepare_network ncm usb1 || exit 1
+      [ "$(cat "$NET/usb1/address")" = 56:1f:8d:18:8f:0b ] && [ ! -s "$NET/usb0.master" ] || exit 1
+      ip() { exit 93; }
+      prepare_network ncm usb1 || exit 1
+      master_of() { echo otherbridge; }
+      if prepare_network ncm usb1; then exit 94; fi
+      prepare_network ecm usb0
+    `);
+    run('boot hook clears stale stop state through start while preserving manual pause', functions + `
+      SHELL_BIN='${DASH}'
+      printf '#!/bin/sh\\ntrue\\n' > "$BOOTFILE"
+      set_boot 1 || exit 1
+      grep -F ' start </dev/null' "$BOOTFILE" >/dev/null || exit 1
+      : > "$STOPFILE"; printf 'manual\\n' > "$PAUSE"
+      daemon_status() { echo stopped; }
+      nohup() { echo "$*" > "$BASE/start-args"; }
+      start_daemon; wait
+      [ ! -e "$STOPFILE" ] && [ "$(read_one "$PAUSE")" = manual ] && [ -s "$BASE/start-args" ]
+    `);
+
     const rpcReply = (script, body = 'ok', code = 0) => {
       const begin = script.match(/__K3_B_[a-z0-9]+__/i)?.[0];
       const end = script.match(/__K3_E_[a-z0-9]+__=/i)?.[0];

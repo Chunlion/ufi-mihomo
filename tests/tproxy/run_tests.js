@@ -132,6 +132,9 @@ function runFor(label, file) {
   const handler = async (command) => {
     shellCallCount++;
     lastShellCommand = String(command || '');
+    if (lastShellCommand.includes('BOOT_STATE=') && lastShellCommand.includes('BOOT_MESSAGE=')) {
+      return { success: true, content: 'BOOT_STATE=disabled\n' };
+    }
     return shellReply;
   };
   const hasBinaryHelper = source.includes('const KANO_HELPER_PATH =');
@@ -440,16 +443,36 @@ function runFor(label, file) {
   );
   const bootLines = api.addBootLinesCmd();
   const removeBootLines = api.removeBootLinesCmd();
+  const bootTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'kano-boot-test-'));
+  try {
+    const bootPath = path.join(bootTemp, 'boot.sh');
+    const bootInput = '#!/bin/sh\necho unrelated\n/data/clash/Scripts/Clash.Service start\n';
+    fs.writeFileSync(bootPath, bootInput);
+    const rewrite = api.removeBootLinesCmd({ enable: true })
+      .replaceAll('/sdcard/ufi_tools_boot.sh', './boot.sh')
+      .replaceAll('/dev/kano_boot_write.lock', './lock');
+    const failedWrite = spawnSync('sh', ['-c', 'mv() { return 1; };\n' + rewrite], { encoding: 'utf8', cwd: bootTemp });
+    chk(failedWrite.status !== 0 && fs.readFileSync(bootPath, 'utf8') === bootInput, true,
+      '启动项提交失败时保留完整原文件');
+    const rewriteResult = spawnSync('sh', ['-c', rewrite + '\n' + rewrite], { encoding: 'utf8', cwd: bootTemp });
+    const rewritten = fs.readFileSync(bootPath, 'utf8');
+    chk(rewriteResult.status === 0 && rewritten.includes('echo unrelated\n')
+      && rewritten.split('nohup /data/clash/Scripts/Clash.Service boot').length === 2
+      && !rewritten.includes('Clash.Service start'), true, `自启迁移保留其他插件且重复执行不增加启动项 ${rewriteResult.stderr}`);
+  } finally {
+    fs.rmSync(bootTemp, { recursive: true, force: true });
+  }
   chk(
-    bootLines.includes('mkdir -p "/data/clash/Clash" && inotifyd /data/clash/Scripts/Clash.Inotify')
+    api.buildServiceWrapperScript().includes('mkdir -p "/data/clash/Clash" ||')
+      && api.buildServiceWrapperScript().includes('inotifyd /data/clash/Scripts/Clash.Inotify')
       && source.includes("mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} || exit 1"),
     true,
     'installer and boot entry create the inotify watch directory before starting the watcher',
   );
   chk(
-    bootLines.includes('/data/clash/Scripts/Clash.PolicyTools boot-apply')
-      && bootLines.indexOf('/data/clash/Scripts/Clash.Service start')
-        < bootLines.indexOf('/data/clash/Scripts/Clash.PolicyTools boot-apply')
+    bootLines.includes('nohup /data/clash/Scripts/Clash.Service boot </dev/null >/dev/null 2>&1 &')
+      && api.buildServiceWrapperScript().indexOf('"$0" start')
+        < api.buildServiceWrapperScript().indexOf('/data/clash/Scripts/Clash.PolicyTools boot-apply')
       && removeBootLines.includes('-v legacy_policy=')
       && removeBootLines.includes('$0 != legacy_policy'),
     true,
@@ -1441,6 +1464,7 @@ function runFor(label, file) {
     const menuCommands = [];
     const menu = loadPlugin(file, async (command) => {
       menuCommands.push(command);
+      if (command.includes('BOOT_STATE=')) return { success: true, content: 'BOOT_STATE=disabled\n' };
       return { success: true, content: '1' };
     }, ['ensureInstalled', 'waitForLanHost']);
     chk(await menu.api.ensureInstalled({ readOnly: true }), true, '已安装时可直接打开菜单');

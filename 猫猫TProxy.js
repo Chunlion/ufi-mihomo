@@ -58,7 +58,7 @@
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_RUNTIME_MANAGER_VERSION = '1.0.5';
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.1';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.2';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
   const BOOT_GATE_END = '# F50_BOOT_FIX_END';
@@ -66,6 +66,7 @@
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
   const BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
+  const BOOT_ASYNC_LINE = `nohup ${CLASH_SERVICE} boot </dev/null >/dev/null 2>&1 &`;
   const LEGACY_BOOT_SERVICE_LINE = `${CLASH_RUNTIME_MANAGER} --boot`;
   const LEGACY_BOOT_FIX_WRAPPER_LINE = '/data/f50_boot_fix/clash_boot.sh >/dev/null 2>&1 &';
   const CLASH_INOTIFY_DIR = `${CLASH_DIR}/Clash`;
@@ -440,10 +441,18 @@ ${script}`,
     editableLocalFiles().find((fileInfo) => fileInfo.path == path) || null;
 
 
-  const removeBootLinesCmd = () => `
-        if [ -f ${shellQuote(BOOT_FILE)} ]; then
+  const removeBootLinesCmd = ({ enable = false } = {}) => `
+        (
+          set -e
+          BOOT_LOCK=/dev/kano_boot_write.lock
+          mkdir "$BOOT_LOCK" || { echo BOOT_WRITE_BUSY; exit 1; }
           BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano`)}.$$
+          trap 'rm -f "$BOOT_TMP"; rmdir "$BOOT_LOCK"' EXIT
+          trap 'exit 1' HUP INT TERM
+          BOOT_SOURCE=${shellQuote(BOOT_FILE)}
+          [ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
           awk \
+            -v async=${shellQuote(BOOT_ASYNC_LINE)} \
             -v cleanup=${shellQuote(BOOT_CLEANUP_LINE)} \
             -v runtime=${shellQuote(LEGACY_BOOT_SERVICE_LINE)} \
             -v service=${shellQuote(BOOT_SERVICE_LINE)} \
@@ -453,26 +462,16 @@ ${script}`,
             -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '$0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != legacy_policy && $0 != policy && $0 != mac { print }' \
-            ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
-            mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
-          BOOT_RC=$?
-          rm -f "$BOOT_TMP" 2>/dev/null || true
-          [ "$BOOT_RC" -eq 0 ] || exit "$BOOT_RC"
-        fi
+            '$0 != async && $0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != legacy_policy && $0 != policy && $0 != mac { print }' \
+            "$BOOT_SOURCE" > "$BOOT_TMP" || exit 1
+          ${enable ? `printf '%s\\n' ${shellQuote(BOOT_ASYNC_LINE)} >> "$BOOT_TMP" || exit 1` : ''}
+          sh -n "$BOOT_TMP" || exit 1
+          mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)} || exit 1
+        ) || exit $?
         `;
 
   // 策略脚本仍保留为高级功能，但不再成为基础开机自启的必需项。
-  const addPolicyToolsBootLineCmd = () => `
-        touch ${shellQuote(BOOT_FILE)}
-        BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano_policy`)}.$$
-        awk -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} '$0 != legacy_policy { print }' ${shellQuote(BOOT_FILE)} > "$BOOT_TMP" &&
-          mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)}
-        BOOT_RC=$?
-        rm -f "$BOOT_TMP" 2>/dev/null || true
-        [ "$BOOT_RC" -eq 0 ] || exit "$BOOT_RC"
-        grep -qxF ${shellQuote(BOOT_POLICY_TOOLS_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_POLICY_TOOLS_LINE)} >> ${shellQuote(BOOT_FILE)}
-        `;
+  const addPolicyToolsBootLineCmd = () => addBootLinesCmd();
 
   const syncSafePolicyFilesCmd = () => `
         mkdir -p ${shellQuote(CLASH_POLICY_DIR)} ${shellQuote(CLASH_SAFE_POLICY_DIR)}
@@ -563,13 +562,8 @@ KANO_YQ_SMOKE_EOF
         `;
 
   const addBootLinesCmd = () => `
-        ${removeBootLinesCmd()}
-        touch ${shellQuote(BOOT_FILE)}
-        chmod 755 ${shellQuote(CLASH_SERVICE)} 2>/dev/null || true
-        mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} 2>/dev/null || true
-        grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_SERVICE_LINE)} >> ${shellQuote(BOOT_FILE)}
-        grep -qxF ${shellQuote(BOOT_INOTIFY_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_INOTIFY_LINE)} >> ${shellQuote(BOOT_FILE)}
-        grep -qxF ${shellQuote(BOOT_POLICY_TOOLS_LINE)} ${shellQuote(BOOT_FILE)} || echo ${shellQuote(BOOT_POLICY_TOOLS_LINE)} >> ${shellQuote(BOOT_FILE)}
+        [ -x ${shellQuote(CLASH_SERVICE)} ] && grep -qxF ${shellQuote(`# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}`)} ${shellQuote(CLASH_SERVICE)} || exit 1
+        ${removeBootLinesCmd({ enable: true })}
         `;
 
   const buildRuntimeManagerScript = () => `#!/system/bin/sh
@@ -1035,6 +1029,54 @@ validate_config() {
 
 [ -x "$binary" ] || { echo "找不到适用于当前架构的 clashctl: $binary"; exit 1; }
 action="$1"
+if [ "$action" = boot ]; then
+  export PATH=${KANO_INSTALL_TOOLBOX_BIN}:/system/bin:/system/xbin:/vendor/bin:/bin:/usr/bin:$PATH
+  BOOT_LOCK=/dev/kano_clash_boot.lock
+  mkdir "$BOOT_LOCK" 2>/dev/null || exit 0
+  trap 'rmdir "$BOOT_LOCK" 2>/dev/null' EXIT
+  trap 'exit 1' HUP INT TERM
+  started=$(cut -d. -f1 /proc/uptime)
+  exec >/data/kano_policy_boot.log 2>&1
+  boot_result() {
+    elapsed=$(( $(cut -d. -f1 /proc/uptime) - started ))
+    printf 'BOOT_STAGE=%s ELAPSED=%s RC=%s\\n' "$1" "$elapsed" "$2"
+  }
+  boot_result core_start 0
+  if [ -z "$(find_runtime_pid)" ]; then
+    "$0" start
+    rc=$?
+    [ "$rc" -eq 0 ] || { boot_result core_failed "$rc"; exit "$rc"; }
+  fi
+  watcher=0
+  for p in /proc/[0-9]*/cmdline; do
+    [ -r "$p" ] || continue
+    cmd=$(tr '\\0' ' ' < "$p" 2>/dev/null)
+    case "$cmd" in *inotifyd*"${CLASH_DIR}/Scripts/Clash.Inotify"*) watcher=1; break ;; esac
+  done
+  if [ "$watcher" -eq 0 ]; then
+    mkdir -p "${CLASH_INOTIFY_DIR}" || { boot_result watcher_failed 1; exit 1; }
+    inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >/dev/null 2>&1 &
+    watcher_pid=$!
+    sleep 1
+    kill -0 "$watcher_pid" 2>/dev/null || { boot_result watcher_failed 1; exit 1; }
+  fi
+  boot_result policy_start 0
+  if [ ! -x ${CLASH_POLICY_SCRIPT} ]; then
+    boot_result policy_missing 1
+    exit 1
+  fi
+  policy_attempt=0
+  while [ "$policy_attempt" -lt 3 ]; do
+    policy_attempt=$((policy_attempt + 1))
+    ${CLASH_POLICY_SCRIPT} boot-apply
+    rc=$?
+    if [ "$rc" -eq 0 ]; then boot_result ready 0; exit 0; fi
+    boot_result policy_retry "$rc"
+    [ "$policy_attempt" -ge 3 ] || sleep 10
+  done
+  boot_result policy_failed "$rc"
+  exit "$rc"
+fi
 case "$action" in start|restart) validate_config || exit $? ;; esac
 
 "$binary" "$@"
@@ -1232,7 +1274,7 @@ KANO_RUNTIME_MANAGER_EOF
 
   const parseBootIntegrationResult = (result = {}) => {
     const values = parseKeyValueOutput(result.content || '');
-    const state = ['disabled', 'direct', 'managed', 'manager_damaged'].includes(values.BOOT_STATE)
+    const state = ['disabled', 'direct', 'managed', 'manager_damaged', 'incomplete'].includes(values.BOOT_STATE)
       ? values.BOOT_STATE
       : 'disabled';
     return {
@@ -1252,7 +1294,26 @@ KANO_RUNTIME_MANAGER_EOF
         echo "BOOT_MESSAGE=猫猫未写入开机启动命令"
         exit 0
       fi
+      if grep -qxF ${shellQuote(BOOT_ASYNC_LINE)} "$BOOT"; then
+        if sh -n "$BOOT" && [ -x ${shellQuote(CLASH_SERVICE)} ] &&
+            grep -qxF ${shellQuote(`# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}`)} ${shellQuote(CLASH_SERVICE)} &&
+            sh -n ${shellQuote(CLASH_SERVICE)} && [ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] &&
+            [ -r ${shellQuote(`${CLASH_DIR}/Scripts/Clash.Inotify`)} ]; then
+          echo "BOOT_STATE=direct"
+          echo "BOOT_MESSAGE=原生后台自启；启动结果见日志 kano_policy_boot.log"
+        else
+          echo "BOOT_STATE=incomplete"
+          echo "BOOT_MESSAGE=自启组件缺失或脚本校验失败，请修复"
+        fi
+        exit 0
+      fi
       if grep -qxF ${shellQuote(BOOT_SERVICE_LINE)} "$BOOT"; then
+        if ! grep -qxF ${shellQuote(BOOT_POLICY_TOOLS_LINE)} "$BOOT" ||
+            ! { grep -qxF ${shellQuote(BOOT_INOTIFY_LINE)} "$BOOT" || grep -qxF ${shellQuote(LEGACY_BOOT_INOTIFY_LINE)} "$BOOT"; }; then
+          echo "BOOT_STATE=incomplete"
+          echo "BOOT_MESSAGE=旧版自启项不完整，请修复"
+          exit 0
+        fi
         echo "BOOT_STATE=direct"
         echo "BOOT_MESSAGE=UFI 原生开机启动（Clash.Service start）"
         exit 0
@@ -1265,6 +1326,9 @@ KANO_RUNTIME_MANAGER_EOF
       echo "BOOT_STATE=disabled"
       echo "BOOT_MESSAGE=猫猫未写入开机启动命令"
     `, 10 * 1000);
+    if (!result.success || !/(^|\n)BOOT_STATE=/.test(String(result.content || ''))) {
+      throw new Error('未能读取开机自启状态，请重试');
+    }
     return parseBootIntegrationResult(result);
   };
 

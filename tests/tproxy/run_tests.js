@@ -1438,6 +1438,86 @@ function runFor(label, file) {
       `generated subscription transaction passes sh -n: ${subscriptionPersistSyntax.stderr.trim()}`);
 
     shellReply = { success: true, content: '0' };
+    const menuCommands = [];
+    const menu = loadPlugin(file, async (command) => {
+      menuCommands.push(command);
+      return { success: true, content: '1' };
+    }, ['ensureInstalled', 'waitForLanHost']);
+    chk(await menu.api.ensureInstalled({ readOnly: true }), true, '已安装时可直接打开菜单');
+    chk(menuCommands.length, 1, '菜单入口仅检查安装，不写服务或迁移自启');
+    await menu.api.ensureInstalled();
+    chk(menuCommands.length > 2, true, '运行操作仍执行原有服务准备检查');
+    let lanWaits = 0;
+    const lanContext = vm.createContext({
+      window: { location: { hostname: '192.168.0.1' } },
+      wait: async () => { lanWaits++; },
+    });
+    vm.runInContext(`this.waitForLanHost = (${menu.api.waitForLanHost.toString()});`, lanContext);
+    chk(await lanContext.waitForLanHost(), '192.168.0.1', '设备信息未就绪时直接使用当前后台地址');
+    chk(lanWaits, 0, '直连后台不再经过两秒轮询');
+    lanContext.window.location.hostname = 'panel.example.com';
+    lanContext.wait = async () => { lanContext.window.UFI_DATA = { lan_ipaddr: '192.168.0.3' }; };
+    chk(await lanContext.waitForLanHost(), '192.168.0.3', '域名访问仍等待设备地址，避免把代理域名当作局域网地址');
+    delete lanContext.window.UFI_DATA;
+    vm.runInContext("const UFI_DATA = { lan_ipaddr: '192.168.0.2' };", lanContext);
+    chk(await lanContext.waitForLanHost(), '192.168.0.2', '兼容仅存在于全局词法作用域的设备信息');
+
+    const iframe = { src: 'about:blank', getAttribute() { return this.src; } };
+    const storage = new Map([['#collapse_mm', 'open']]);
+    const timers = new Map();
+    let timerId = 0;
+    let urlRequests = 0;
+    let resolveUrl;
+    let collapse;
+    const panelContext = vm.createContext({
+      document: {
+        querySelector: (selector) => selector == '#mm_iframe' ? iframe : { style: {} },
+        getElementById: () => iframe,
+      },
+      localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+      buildPanelUrl: () => { urlRequests++; return new Promise((resolve) => { resolveUrl = resolve; }); },
+      createToast() {}, console,
+      boot_on: { style: {} }, checkIsBootUp: async () => false,
+      setTimeout: (fn, delay) => { timers.set(++timerId, { fn, delay }); return timerId; },
+      clearTimeout: (id) => timers.delete(id),
+      collapseGen: (...args) => { collapse = args[3]; },
+    });
+    const panelStart = source.indexOf("    const WEB_VISIBLE_KEY =");
+    const panelEnd = source.indexOf("    const refresh = document.createElement", panelStart);
+    const collapseStart = source.indexOf('    let colTimer = null;');
+    const collapseEnd = source.indexOf('    (async () => {', collapseStart);
+    vm.runInContext(source.slice(panelStart, panelEnd) + source.slice(collapseStart, collapseEnd)
+      + '\nthis.panel = { refreshPanel, setWebPanelVisible };', panelContext);
+    const panel = panelContext.panel;
+    const firstLoad = panel.refreshPanel({ forceReload: false });
+    const duplicateLoad = panel.refreshPanel({ forceReload: false });
+    chk(urlRequests, 1, '同时初始化和展开面板只读取一次地址');
+    storage.set('#collapse_mm', 'close');
+    collapse('close');
+    resolveUrl('http://192.168.0.1:7788/ui/?t=1');
+    await Promise.all([firstLoad, duplicateLoad]);
+    chk(iframe.src, 'about:blank', '收起后迟到的加载结果不能重新激活面板');
+    storage.set('#collapse_mm', 'open');
+    const secondLoad = panel.refreshPanel({ forceReload: false });
+    resolveUrl('http://192.168.0.1:7788/ui/?t=2');
+    await secondLoad;
+    collapse('close');
+    collapse('open');
+    await panel.refreshPanel({ forceReload: false });
+    chk(urlRequests, 2, '短暂收起再展开复用已加载面板');
+    const manualRefresh = panel.refreshPanel();
+    chk(urlRequests, 3, '显式刷新仍重新获取地址');
+    await panel.setWebPanelVisible(false);
+    resolveUrl('http://192.168.0.1:7788/ui/?t=3');
+    await manualRefresh;
+    chk(iframe.src, 'about:blank', '隐藏面板使正在进行的刷新失效');
+    collapse('close');
+    const idleUnload = [...timers.values()].find((timer) => timer.delay == 30000);
+    chk(!!idleUnload, true, '收起三十秒后释放面板');
+    iframe.src = 'http://192.168.0.1:7788/ui/';
+    idleUnload.fn();
+    chk(iframe.src, 'about:blank', '收起超时停止内嵌页面');
+
     const lexicalOnly = loadPlugin(file, handler, ['yamlHasGeneratedMarker'], { lexicalHostOnly: true });
     chk(
       await lexicalOnly.api.yamlHasGeneratedMarker('/x'),

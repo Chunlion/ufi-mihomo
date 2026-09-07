@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy v7.4.3 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.4 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -5686,7 +5686,10 @@ KANO_WRITE_CHECK_EOF
 
   const waitForLanHost = async (tries = 20) => {
     for (let i = 0; i < tries; i++) {
-      if (window.UFI_DATA && UFI_DATA.lan_ipaddr) return UFI_DATA.lan_ipaddr;
+      const data = typeof UFI_DATA !== 'undefined' ? UFI_DATA : window.UFI_DATA;
+      if (data && data.lan_ipaddr) return data.lan_ipaddr;
+      const host = (window.location && window.location.hostname) || '';
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('[')) return host;
       await wait(100);
     }
     return (window.location && window.location.hostname) || '127.0.0.1';
@@ -5777,8 +5780,9 @@ KANO_WRITE_CHECK_EOF
     return !!(res.success && String(res.content || '').trim().split(/\s+/).includes('1'));
   };
 
-  const ensureInstalled = async () => {
+  const ensureInstalled = async ({ readOnly = false } = {}) => {
     if (await checkIsInstalled()) {
+      if (readOnly) return true;
       const wrapperResult = await ensureServiceWrapper();
       if (!wrapperResult.success) {
         createToast(`Clash.Service 启动保护修复失败<br>${safeTextToHtml(wrapperResult.content || '')}`, 'red', 9000);
@@ -5789,7 +5793,7 @@ KANO_WRITE_CHECK_EOF
       }
       return true;
     }
-    let state = await checkInstallState({ fresh: true });
+    let state = readOnly ? { state: 'not_installed' } : await checkInstallState({ fresh: true });
     if (!['not_installed', 'damaged'].includes(state.state)) return true;
     if (state.state == 'damaged' && state.repairable) {
       createToast(`检测到安装损坏，正在安全修复<br>${safeTextToHtml(state.message || state.content)}`, 'yellow', 8000);
@@ -5810,8 +5814,8 @@ KANO_WRITE_CHECK_EOF
     return false;
   };
 
-  const ensureReady = async () =>
-    (await ensureAdvanced()) && (await ensureInstalled());
+  const ensureReady = async (options = {}) =>
+    (await ensureAdvanced()) && (await ensureInstalled(options));
 
   const flushGeneratedRulesCmd = () => `
         list_cleanup_ipt() {
@@ -9845,7 +9849,7 @@ KANO_POLICY_TOOLS_EOF
             <div id="mm_action_box"></div>
             <div id="mm_web_panel_wrap" class="kano-mm-web-panel">
               <div class="kano-mm-web-head"><span>\u5185\u5d4c Web \u9762\u677f</span></div>
-              <iframe id="mm_iframe" src="javascript:;"></iframe>
+              <iframe id="mm_iframe" src="about:blank"></iframe>
             </div>
         </div>
     </div>
@@ -9857,6 +9861,8 @@ KANO_POLICY_TOOLS_EOF
     const WEB_VISIBLE_KEY = 'kano_mm_web_panel_visible';
     const isWebPanelVisible = () => localStorage.getItem(WEB_VISIBLE_KEY) != 'hidden';
     let webPanelToggleBtn = null;
+    let panelLoadRequestId = 0;
+    let panelLoadPromise = null;
     const setWebPanelVisible = async (visible, { load = true } = {}) => {
       const wrap = document.querySelector('#mm_web_panel_wrap');
       const iframe = document.querySelector('#mm_iframe');
@@ -9868,20 +9874,33 @@ KANO_POLICY_TOOLS_EOF
         webPanelToggleBtn.classList.toggle('kano-primary', visible);
       }
       if (visible && load && localStorage.getItem('#collapse_mm') == 'open') {
-        iframe.src = await buildPanelUrl();
+        await refreshPanel({ forceReload: false });
       }
       if (!visible) {
-        iframe.src = 'javascript:;';
+        panelLoadRequestId++;
+        iframe.src = 'about:blank';
       }
     };
-    const refreshPanel = async ({ forceShow = false } = {}) => {
+    const refreshPanel = async ({ forceShow = false, forceReload = true } = {}) => {
       if (forceShow) await setWebPanelVisible(true, { load: false });
       if (!isWebPanelVisible()) {
         createToast('面板已隐藏，请先点击“显示面板”。', 'yellow', 4500);
         return;
       }
       const iframe = document.querySelector('#mm_iframe');
-      if (iframe) iframe.src = await buildPanelUrl();
+      if (!iframe) return;
+      const currentSrc = iframe.getAttribute('src');
+      if (!forceReload && currentSrc && currentSrc != 'about:blank' && currentSrc != 'javascript:;') return;
+      const requestId = ++panelLoadRequestId;
+      if (!panelLoadPromise) {
+        panelLoadPromise = buildPanelUrl().finally(() => { panelLoadPromise = null; });
+      }
+      const url = await panelLoadPromise;
+      if (requestId == panelLoadRequestId && isWebPanelVisible()
+          && localStorage.getItem('#collapse_mm') == 'open'
+          && document.querySelector('#mm_iframe') == iframe) {
+        iframe.src = url;
+      }
     };
 
     const refresh = document.createElement('button');
@@ -9913,7 +9932,7 @@ KANO_POLICY_TOOLS_EOF
     controllerSettingsBtn.classList.add('btn');
     controllerSettingsBtn.textContent = '面板连接';
     controllerSettingsBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       await showControllerSettingsDialog({
         afterSave: async () => {
           if (isWebPanelVisible()) await refreshPanel();
@@ -10077,7 +10096,7 @@ KANO_POLICY_TOOLS_EOF
     userAgentBtn.classList.add('btn');
     userAgentBtn.textContent = '订阅请求头';
     userAgentBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       const currentValue = await loadProviderUserAgent({ fresh: true });
       const storedCustom = currentValue == KANO_PROVIDER_USER_AGENT ? '' : currentValue;
       const { el, close } = createFixedToast(
@@ -11639,7 +11658,7 @@ ${expectedProviderChecks}
     editBtn.classList.add('btn');
     editBtn.textContent = '配置文件';
     editBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       await showEditableLocalFilesDialog();
     };
 
@@ -11810,7 +11829,7 @@ ${expectedProviderChecks}
     subBtn.classList.add('btn');
     subBtn.textContent = '\u8ba2\u9605\u8bbe\u7f6e';
     subBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       importSub();
     };
 
@@ -12088,7 +12107,7 @@ ${expectedProviderChecks}
     templateOverrideBtn.classList.add('btn');
     templateOverrideBtn.textContent = '配置与规则';
     templateOverrideBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       const [ruleOverride, jsOverrideSaved] = await Promise.all([
         readRuleOverrideConfig(),
         hasSavedJsOverride(),
@@ -12160,7 +12179,7 @@ ${expectedProviderChecks}
     policyToolsBtn.classList.add('btn');
     policyToolsBtn.textContent = '网络设置';
     policyToolsBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       showPolicyToolsDialog({ initialTab: 'network' });
     };
 
@@ -12212,31 +12231,30 @@ ${expectedProviderChecks}
     let colTimer = null;
     let colTimer1 = null;
     collapseGen('#collapse_mm_btn', '#collapse_mm', '#collapse_mm', (e) => {
-      checkIsBootUp().then((isBootUp) => {
-        if (isBootUp) {
-          boot_on.style.background = 'var(--dark-btn-color-active)';
-        } else {
-          boot_on.style.background = '';
-        }
-      });
       colTimer && clearTimeout(colTimer);
       colTimer1 && clearTimeout(colTimer1);
       if (e == 'open') {
+        checkIsBootUp().then((isBootUp) => {
+          boot_on.style.background = isBootUp ? 'var(--dark-btn-color-active)' : '';
+        }).catch((e) => console.error('猫猫自启状态读取失败', e));
         colTimer1 = setTimeout(() => {
-          if (isWebPanelVisible()) refreshPanel();
+          if (isWebPanelVisible()) {
+            refreshPanel({ forceReload: false }).catch((e) => console.error('猫猫面板加载失败', e));
+          }
         }, 300);
       } else {
+        panelLoadRequestId++;
         colTimer = setTimeout(() => {
           const iframe = document.getElementById('mm_iframe');
-          if (iframe) iframe.src = `javascript:;`;
-        }, 300);
+          if (iframe) iframe.src = 'about:blank';
+        }, 30 * 1000);
       }
     });
     (async () => {
       try {
         await setWebPanelVisible(isWebPanelVisible(), { load: false });
         if (localStorage.getItem('#collapse_mm') == 'open' && isWebPanelVisible()) {
-          await refreshPanel();
+          await refreshPanel({ forceReload: false });
         }
         // 页面加载只读状态，不自动写防火墙、不迁移自启、不下载 Go helper。
         await isMMRunning();

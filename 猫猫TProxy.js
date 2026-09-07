@@ -1,5 +1,5 @@
 //<script>
-// 猫猫TProxy v7.4.4 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.5 FINAL - unified Go-first runtime with automatic Shell fallback
 ((hostRunShellWithRoot) => {
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -87,7 +87,7 @@
   const POLICY_SCRIPT_VERSION = '6.6';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
-  const CONTROLLER_INFO_CACHE_TTL = 1500;
+  const CONTROLLER_INFO_CACHE_TTL = 10 * 1000;
   const ADVANCED_ACCESS_CACHE_TTL = 30 * 1000;
   const ADVANCED_ACCESS_FAILURE_CACHE_TTL = 2 * 1000;
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
@@ -9863,6 +9863,11 @@ KANO_POLICY_TOOLS_EOF
     let webPanelToggleBtn = null;
     let panelLoadRequestId = 0;
     let panelLoadPromise = null;
+    const releasePanelFrame = () => {
+      panelLoadRequestId++;
+      const iframe = document.querySelector('#mm_iframe');
+      if (iframe) iframe.src = 'about:blank';
+    };
     const setWebPanelVisible = async (visible, { load = true } = {}) => {
       const wrap = document.querySelector('#mm_web_panel_wrap');
       const iframe = document.querySelector('#mm_iframe');
@@ -9877,8 +9882,7 @@ KANO_POLICY_TOOLS_EOF
         await refreshPanel({ forceReload: false });
       }
       if (!visible) {
-        panelLoadRequestId++;
-        iframe.src = 'about:blank';
+        releasePanelFrame();
       }
     };
     const refreshPanel = async ({ forceShow = false, forceReload = true } = {}) => {
@@ -10089,9 +10093,6 @@ KANO_POLICY_TOOLS_EOF
       if (!(await ensureAdvanced())) return;
       helperUploadEl.click();
     };
-    // Read-only status probe on page load. Never downloads or installs the optional helper automatically.
-    refreshBinaryHelperButton().catch((e) => console.error('辅助内核状态探测失败', e));
-
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
     userAgentBtn.textContent = '订阅请求头';
@@ -12183,6 +12184,46 @@ ${expectedProviderChecks}
       showPolicyToolsDialog({ initialTab: 'network' });
     };
 
+    const performanceBtn = document.createElement('button');
+    performanceBtn.classList.add('btn');
+    performanceBtn.textContent = '性能与兼容';
+    performanceBtn.onclick = () => {
+      const id = `mm_performance_${createRandomString(4)}`;
+      const { el, close } = createFixedToast(
+        id,
+        `<div style="pointer-events:all;width:90vw;max-width:540px;">
+          <div class="title" style="margin:0">性能与兼容</div>
+          <div style="margin-top:10px;font-size:.64rem;line-height:1.7;">内嵌面板按需加载；收起 30 秒后自动释放。地址读取结果会短暂复用，避免重复请求后台。</div>
+          <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:14px;">
+            <button id="${id}_reload">重新加载面板</button>
+            <button id="${id}_release">释放面板</button>
+            <button id="${id}_controller">面板连接</button>
+          </div>
+          <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;">
+            <button id="${id}_close">关闭</button>
+          </div>
+        </div>`,
+      );
+      const reloadBtn = el.querySelector(`#${id}_reload`);
+      const releaseBtn = el.querySelector(`#${id}_release`);
+      const controllerBtn = el.querySelector(`#${id}_controller`);
+      const closeBtn = el.querySelector(`#${id}_close`);
+      if (reloadBtn) reloadBtn.onclick = async () => {
+        close();
+        await refreshPanel({ forceShow: true });
+      };
+      if (releaseBtn) releaseBtn.onclick = () => {
+        releasePanelFrame();
+        createToast('内嵌面板已释放；需要时点击“刷新面板”重新打开。', 'green', 4500);
+        close();
+      };
+      if (controllerBtn) controllerBtn.onclick = () => {
+        close();
+        controllerSettingsBtn.click();
+      };
+      if (closeBtn) closeBtn.onclick = close;
+    };
+
     const quickRunBtn = document.createElement('button');
     quickRunBtn.classList.add('btn');
     quickRunBtn.textContent = '安装 / 启动';
@@ -12225,8 +12266,14 @@ ${expectedProviderChecks}
 
     appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
     appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
-    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, rescueBtn, showLogBtn], false);
-    appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
+    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, performanceBtn, rescueBtn, showLogBtn], false);
+    const componentsGroup = appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
+    let binaryHelperProbeStarted = false;
+    componentsGroup.addEventListener('toggle', () => {
+      if (!componentsGroup.open || binaryHelperProbeStarted) return;
+      binaryHelperProbeStarted = true;
+      refreshBinaryHelperButton().catch((e) => console.error('辅助内核状态探测失败', e));
+    });
 
     let colTimer = null;
     let colTimer1 = null;
@@ -12241,12 +12288,11 @@ ${expectedProviderChecks}
           if (isWebPanelVisible()) {
             refreshPanel({ forceReload: false }).catch((e) => console.error('猫猫面板加载失败', e));
           }
-        }, 300);
+        }, 80);
       } else {
         panelLoadRequestId++;
         colTimer = setTimeout(() => {
-          const iframe = document.getElementById('mm_iframe');
-          if (iframe) iframe.src = 'about:blank';
+          releasePanelFrame();
         }, 30 * 1000);
       }
     });

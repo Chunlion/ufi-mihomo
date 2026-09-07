@@ -4231,11 +4231,13 @@ KANO_WRITE_CHECK_EOF
     if (!fresh && controllerInfoLoadPromise) return controllerInfoLoadPromise;
 
     const loadPromise = readControllerInfo({ fresh });
-    if (!fresh) controllerInfoLoadPromise = loadPromise;
+    controllerInfoLoadPromise = loadPromise;
     try {
       const info = await loadPromise;
-      controllerInfoCache = info;
-      controllerInfoCacheExpiresAt = Date.now() + CONTROLLER_INFO_CACHE_TTL;
+      if (controllerInfoLoadPromise == loadPromise) {
+        controllerInfoCache = info;
+        controllerInfoCacheExpiresAt = Date.now() + CONTROLLER_INFO_CACHE_TTL;
+      }
       return info;
     } finally {
       if (controllerInfoLoadPromise == loadPromise) controllerInfoLoadPromise = null;
@@ -10089,9 +10091,6 @@ KANO_POLICY_TOOLS_EOF
       if (!(await ensureAdvanced())) return;
       helperUploadEl.click();
     };
-    // Read-only status probe on page load. Never downloads or installs the optional helper automatically.
-    refreshBinaryHelperButton().catch((e) => console.error('辅助内核状态探测失败', e));
-
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
     userAgentBtn.textContent = '订阅请求头';
@@ -12226,7 +12225,21 @@ ${expectedProviderChecks}
     appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
     appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
     appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, rescueBtn, showLogBtn], false);
-    appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
+    const componentsGroup = appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
+    let componentProbePending = false;
+    let componentProbeLoaded = false;
+    componentsGroup.addEventListener('toggle', async () => {
+      if (!componentsGroup.open || componentProbePending || componentProbeLoaded) return;
+      componentProbePending = true;
+      try {
+        await refreshBinaryHelperButton();
+        componentProbeLoaded = true;
+      } catch (e) {
+        console.error('辅助内核状态探测失败', e);
+      } finally {
+        componentProbePending = false;
+      }
+    });
 
     let colTimer = null;
     let colTimer1 = null;
@@ -12254,7 +12267,7 @@ ${expectedProviderChecks}
       try {
         await setWebPanelVisible(isWebPanelVisible(), { load: false });
         if (localStorage.getItem('#collapse_mm') == 'open' && isWebPanelVisible()) {
-          await refreshPanel({ forceReload: false });
+          refreshPanel({ forceReload: false }).catch((e) => console.error('猫猫面板加载失败', e));
         }
         // 页面加载只读状态，不自动写防火墙、不迁移自启、不下载 Go helper。
         await isMMRunning();

@@ -125,7 +125,7 @@ const RUNTIME_EXPORTS = [
 
 function runFor(label, file) {
   console.log(`\n######## ${label} (${path.basename(file)}) ########`);
-  const source = fs.readFileSync(file, 'utf8');
+  const source = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   let shellReply = { success: true, content: '' };
   let lastShellCommand = '';
   let shellCallCount = 0;
@@ -1461,6 +1461,34 @@ function runFor(label, file) {
     delete lanContext.window.UFI_DATA;
     vm.runInContext("const UFI_DATA = { lan_ipaddr: '192.168.0.2' };", lanContext);
     chk(await lanContext.waitForLanHost(), '192.168.0.2', '兼容仅存在于全局词法作用域的设备信息');
+
+    const controllerReads = [];
+    const controllerContext = vm.createContext({
+      Date,
+      CONTROLLER_INFO_CACHE_TTL: 1500,
+      readControllerInfo: () => new Promise((resolve) => controllerReads.push(resolve)),
+    });
+    vm.runInContext('let controllerInfoCache = null; let controllerInfoCacheExpiresAt = 0; let controllerInfoLoadPromise = null;\n'
+      + source.slice(source.indexOf('  const buildControllerInfo ='), source.indexOf('  const yamlSingleQuote ='))
+      + '\nthis.controller = { buildControllerInfo, invalidateControllerInfo };', controllerContext);
+    const controller = controllerContext.controller;
+    const oldRead = controller.buildControllerInfo();
+    const freshRead = controller.buildControllerInfo({ fresh: true });
+    const sharedRead = controller.buildControllerInfo();
+    controllerReads[1]({ secret: 'new' });
+    await freshRead;
+    chk(await sharedRead, { secret: 'new' }, '普通控制器请求复用正在进行的强制刷新');
+    controllerReads[0]({ secret: 'old' });
+    await oldRead;
+    chk(await controller.buildControllerInfo(), { secret: 'new' }, '迟到的控制器响应不能覆盖新缓存');
+    const invalidatedRead = controller.buildControllerInfo({ fresh: true });
+    controller.invalidateControllerInfo();
+    controllerReads[2]({ secret: 'invalidated' });
+    await invalidatedRead;
+    const replacementRead = controller.buildControllerInfo();
+    chk(controllerReads.length, 4, '保存配置使在途控制器请求失去缓存写入资格');
+    controllerReads[3]({ secret: 'saved' });
+    await replacementRead;
 
     const iframe = { src: 'about:blank', getAttribute() { return this.src; } };
     const storage = new Map([['#collapse_mm', 'open']]);

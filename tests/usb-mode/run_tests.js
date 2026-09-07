@@ -187,6 +187,49 @@ function run(name, script) {
       assert(begin && end, 'RPC markers must be present');
       return { success: true, content: `${begin}\n${body}\n${end}${code}\n` };
     };
+    const stateRequests = [];
+    let modalReads = 0;
+    const stateContext = {
+      Date, Math, Promise,
+      setTimeout(fn) { fn(); return 1; },
+      runShellWithRoot: script => new Promise(resolve => stateRequests.push({ script, resolve })),
+    };
+    vm.runInNewContext(source.replace(marker, `globalThis.api = { readState, refresh, session, open, startStatusRefresh }; return;\n${marker}`), stateContext);
+    const stateApi = stateContext.api;
+    const pendingState = stateApi.readState();
+    assert.equal(stateApi.readState(), pendingState);
+    await Promise.resolve();
+    assert.equal(stateRequests.length, 1);
+    const oldModal = { isConnected: true, querySelector() { modalReads++; return null; } };
+    stateApi.session.modal = oldModal;
+    const pendingRefresh = stateApi.refresh(false);
+    stateApi.session.modal = { ...oldModal };
+    const stateBody = 'PROBE_UID=0\nNATIVE_API=1\nPROBE_COMPLETE=1\nPROBE_CONFIG=ncm,mtp';
+    stateRequests[0].resolve(rpcReply(stateRequests[0].script, stateBody));
+    await pendingRefresh;
+    assert.equal(modalReads, 0, 'a previous modal must not render into a replacement');
+    const nextRefresh = stateApi.refresh(false);
+    await Promise.resolve();
+    assert.equal(stateRequests.length, 2, 'completed state is not reused as a stale cache');
+    stateRequests[1].resolve(rpcReply(stateRequests[1].script, stateBody));
+    await nextRefresh;
+    assert(modalReads > 0, 'the current modal still receives state');
+    passed++; console.log('PASS state queries share in-flight work and obsolete modals cannot render');
+
+    let advancedChecks = 0, finishCheck;
+    stateContext.checkAdvancedFunc = () => {
+      advancedChecks++;
+      return new Promise(resolve => { finishCheck = resolve; });
+    };
+    const firstOpen = stateApi.open();
+    await stateApi.open();
+    assert.equal(advancedChecks, 1, 'repeated clicks must not duplicate the opening flow');
+    stateApi.session.closed = true;
+    finishCheck(true);
+    await firstOpen;
+    stateApi.startStatusRefresh();
+    passed++; console.log('PASS pending open and status polling stop when the plugin is destroyed');
+
     let rpcCalls = 0;
     const retryContext = {
       document: { hidden: false }, setInterval() { return 1; }, clearInterval() {},
@@ -216,6 +259,20 @@ function run(name, script) {
     };
     await assert.rejects(retryContext.api.rpc('echo ok'), error => error.unconfirmed === true);
     passed++; console.log('PASS RPC ignores command echoes and rejects malformed completion markers');
+
+    rpcCalls = 0;
+    retryContext.runShellWithRoot = async script => {
+      rpcCalls++;
+      return rpcCalls === 1 ? { content: '' } : rpcReply(script, 'recovered');
+    };
+    const recovered = await retryContext.api.rpc('echo state', 100, { transientRetries: 1 });
+    assert.equal(recovered.text, 'recovered');
+    assert.equal(rpcCalls, 2);
+    rpcCalls = 0;
+    retryContext.runShellWithRoot = async () => { rpcCalls++; return { content: '' }; };
+    await assert.rejects(retryContext.api.rpc('touch /data/test'), error => error.unconfirmed === true);
+    assert.equal(rpcCalls, 1, 'incomplete mutation replies must not replay the command');
+    passed++; console.log('PASS incomplete read-only replies retry without replaying mutations');
 
     rpcCalls = 0;
     retryContext.runShellWithRoot = async () => {

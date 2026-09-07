@@ -459,6 +459,12 @@ function runFor(label, file) {
     chk(rewriteResult.status === 0 && rewritten.includes('echo unrelated\n')
       && rewritten.split('nohup /data/clash/Scripts/Clash.Service boot').length === 2
       && !rewritten.includes('Clash.Service start'), true, `自启迁移保留其他插件且重复执行不增加启动项 ${rewriteResult.stderr}`);
+    fs.mkdirSync(path.join(bootTemp, 'lock'));
+    fs.writeFileSync(path.join(bootTemp, 'lock', 'pid'), '999999999\n');
+    const staleLock = spawnSync('sh', ['-c', rewrite], { encoding: 'utf8', cwd: bootTemp });
+    chk(staleLock.status, 0, '自启写入自动回收已退出进程的锁');
+    const activeLock = spawnSync('sh', ['-c', 'mkdir lock; echo $$ > lock/pid;\n' + rewrite], { encoding: 'utf8', cwd: bootTemp });
+    chk(activeLock.status !== 0 && fs.readFileSync(bootPath, 'utf8') === rewritten, true, '活跃写入锁阻止并发修改');
   } finally {
     fs.rmSync(bootTemp, { recursive: true, force: true });
   }
@@ -1485,6 +1491,79 @@ function runFor(label, file) {
     delete lanContext.window.UFI_DATA;
     vm.runInContext("const UFI_DATA = { lan_ipaddr: '192.168.0.2' };", lanContext);
     chk(await lanContext.waitForLanHost(), '192.168.0.2', '兼容仅存在于全局词法作用域的设备信息');
+
+    let bootClick;
+    let bootState = { state: 'incomplete', enabled: true };
+    const bootWrites = [];
+    const bootContext = vm.createContext({
+      boot_on: { addEventListener: (_event, callback) => { bootClick = callback; } },
+      ensureReady: async () => true, acquireCriticalOperation: () => 1,
+      setButtonBusy() {}, releaseCriticalOperation() {}, applyBootButtonState() {}, createToast() {},
+      escapeHtml: (v) => v, safeTextToHtml: (v) => v,
+      inspectBootIntegration: async () => bootState,
+      ensureServiceWrapper: async () => ({ success: true }), ensurePolicyToolsScript: async () => true,
+      addBootLinesCmd: () => 'enable', removeBootLinesCmd: () => 'disable',
+      runShellWithRoot: async (cmd) => { bootWrites.push(cmd); return { success: true }; },
+    });
+    const bootClickStart = source.indexOf("    boot_on.addEventListener('click'");
+    vm.runInContext(source.slice(bootClickStart, source.indexOf('    inspectBootIntegration()', bootClickStart)), bootContext);
+    await bootClick();
+    chk(bootWrites, ['enable'], '自启不完整时按钮执行修复而不是关闭');
+    bootState = { state: 'direct', enabled: true, formatCurrent: true };
+    vm.runInContext(source.slice(source.indexOf('  const migrateBootPolicyIntegration ='), source.indexOf('  const downloadCoreArchive ='))
+      + '\nthis.migrate = migrateBootPolicyIntegration;', bootContext);
+    await bootContext.migrate();
+    chk(bootWrites, ['enable'], '完整新版自启不再重复写入启动文件');
+
+    const logReads = [];
+    const logContext = vm.createContext({
+      closed: false, rawMessage: '', LOG_FILE: '/data/log', shellQuote: shellQuoteForTest,
+      el: { querySelector: () => ({ innerHTML: '' }) },
+      runShellWithRoot: () => new Promise((resolve) => logReads.push(resolve)),
+      sanitizeSubscriptionSecrets: (v) => v, textToHtml: (v) => v, createToast() {},
+    });
+    const logStart = source.indexOf('    let logRefreshPending =');
+    vm.runInContext(source.slice(logStart, source.indexOf('    if (rBtn)', logStart))
+      + '\nthis.refresh = refresh;', logContext);
+    const firstLog = logContext.refresh();
+    await logContext.refresh();
+    chk(logReads.length, 1, '日志刷新未完成时不会再次读取');
+    logReads[0]({ success: true, content: 'latest' });
+    await firstLog;
+    chk(logContext.rawMessage, 'latest', '日志下载内容随刷新更新');
+
+    const preflightReads = [];
+    const preflightContext = vm.createContext({ Date,
+      runtimePreflight: () => new Promise((resolve) => preflightReads.push(resolve)),
+    });
+    vm.runInContext(source.slice(source.indexOf('  let runtimePreflightCache ='), source.indexOf('  const checkIsInstalled ='))
+      + '\nthis.check = checkInstallState;', preflightContext);
+    const oldPreflight = preflightContext.check();
+    const newPreflight = preflightContext.check({ fresh: true });
+    const sharedPreflight = preflightContext.check();
+    chk(preflightReads.length, 2, '运行检查复用正在进行的请求');
+    preflightReads[1]({ state: 'healthy' });
+    await newPreflight;
+    await sharedPreflight;
+    preflightReads[0]({ state: 'damaged' });
+    await oldPreflight;
+    chk(await preflightContext.check(), { state: 'healthy' }, '旧运行检查不能覆盖新状态');
+
+    const flowWrites = [];
+    const flowTimers = [];
+    const flowContext = vm.createContext({ Date, console,
+      shellQuote: shellQuoteForTest, sanitizeSubscriptionSecrets: (v) => v,
+      KANO_TEMPLATE_FLOW_DEBUG: '/data/test-flow',
+      setTimeout: (fn) => { flowTimers.push(fn); return flowTimers.length; },
+      runShellWithRoot: async (cmd) => { flowWrites.push(cmd); return { success: true }; },
+    });
+    vm.runInContext(source.slice(source.indexOf('  const templateFlowMessages ='), source.indexOf('  const runDangerousShellWithRoot ='))
+      + '\nthis.append = appendTemplateFlowDebug;', flowContext);
+    await flowContext.append('first');
+    await flowContext.append('second');
+    chk(flowWrites.length, 0, '调试记录不等待后台写入');
+    await flowTimers[0]();
+    chk(flowWrites.length === 1 && flowWrites[0].includes('first') && flowWrites[0].includes('second'), true, '同批调试记录合并为一次后台写入');
 
     const snapshotReads = [];
     const snapshotContext = vm.createContext({

@@ -691,6 +691,46 @@ const gateOf = (text) => {
     assert(!/<details[^>]*\sopen(?:\s|>)/.test(html), '面板默认保持收起以节省空间');
   });
 
+  await test('T28 配置兼容 CRLF、前导零和末行无换行', async () => {
+    await freshInstall(MULTI);
+    const manager = sbx.read('data/f50_boot_fix/boot_manager.sh');
+    const functions = manager.slice(0, manager.indexOf('\nMODE=boot'));
+    fs.writeFileSync(sbx.p('data/f50_boot_fix/config'),
+      'MIN_UPTIME=008\r\nMAX_WAIT=000\r\nRETRY_DELAY=$(touch /tmp/injected)\r\nWATCH_INTERVAL=09');
+    const result = sbx.runShell(functions + `
+      load_config
+      [ "$MIN_UPTIME:$MAX_WAIT:$RETRY_DELAY:$WATCH_INTERVAL" = 8:0:15:9 ] || exit 1
+      [ "$((MIN_UPTIME + WATCH_INTERVAL))" = 17 ]
+    `, 10000, { rewrite: false });
+    assert(result.status === 0, '配置按十进制读取，非法值保留默认值');
+  });
+
+  await test('T29 快照比较识别等长修改、末尾换行和工具失败', async () => {
+    await freshInstall(MULTI);
+    const manager = sbx.read('data/f50_boot_fix/boot_manager.sh');
+    const functions = manager.slice(0, manager.indexOf('\nMODE=boot'));
+    const result = sbx.runShell(functions + `
+      a="$FIX_DIR/compare-a"; b="$FIX_DIR/compare-b"
+      command() {
+        if [ "$1" = -v ]; then
+          case "$2" in cmp|cksum) return 1 ;; esac
+        fi
+        builtin command "$@"
+      }
+      printf 'echo a\\n' > "$a"; printf 'echo b\\n' > "$b"
+      if files_equal "$a" "$b"; then exit 1; fi
+      cat "$a" > "$b"
+      files_equal "$a" "$b" || exit 2
+      printf '\\n' >> "$b"
+      if files_equal "$a" "$b"; then exit 3; fi
+      command() { [ "$1:$2" = -v:cksum ]; }
+      cksum() { return 1; }
+      if files_equal "$a" "$b"; then exit 4; fi
+      exit 0
+    `, 10000, { rewrite: false });
+    assert(result.status === 0, '缺少工具时逐内容比较，工具失败不会误报相同');
+  });
+
   // -------------------------------------------------------------------------
   const passed = results.filter((r) => r.ok).length;
   console.log(`\n=== 结果: ${passed}/${results.length} 通过 ===`);

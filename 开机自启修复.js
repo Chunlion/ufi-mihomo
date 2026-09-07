@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '3.1.0';
+  const MANAGER_VERSION = '3.1.1';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -157,13 +157,18 @@
     '# 只接受白名单键 + 纯数字值，避免配置文件把管理器带崩。',
     'load_config() {',
     '  [ -f "$CONFIG_FILE" ] || return 0',
+    '  cfg_cr=$(printf "\\r")',
     '  while IFS= read -r cfg_line || [ -n "$cfg_line" ]; do',
+    '    cfg_line=${cfg_line%"$cfg_cr"}',
     '    case "$cfg_line" in',
     '      MIN_UPTIME=* | MAX_WAIT=* | FILE_MAX_WAIT=* | ENTRY_TIMEOUT=* | WHOLE_TIMEOUT=* | RETRY_FAILED=* | RETRY_DELAY=* | MAX_ENTRIES=* | WATCH_INTERVAL=* | NATIVE_GRACE_UPTIME=*)',
     '        cfg_val=${cfg_line#*=}',
     '        case "$cfg_val" in',
     '          "" | *[!0-9]*) ;;',
-    '          *) eval "$cfg_line" ;;',
+    '          *)',
+    '            while [ "${cfg_val#0}" != "$cfg_val" ]; do cfg_val=${cfg_val#0}; done',
+    '            eval "${cfg_line%%=*}=${cfg_val:-0}"',
+    '            ;;',
     '        esac',
     '        ;;',
     '      *) ;;',
@@ -334,14 +339,14 @@
     '    return $?',
     '  fi',
     '  if command -v cksum >/dev/null 2>&1; then',
-    '    set -- $(cksum "$fe_a" 2>/dev/null); fe_ac="$1:$2"',
-    '    set -- $(cksum "$fe_b" 2>/dev/null); fe_bc="$1:$2"',
+    '    fe_ac=$(cksum < "$fe_a" 2>/dev/null) || return 1',
+    '    fe_bc=$(cksum < "$fe_b" 2>/dev/null) || return 1',
     '    [ -n "$fe_ac" ] && [ "$fe_ac" = "$fe_bc" ]',
     '    return $?',
     '  fi',
-    '  fe_as=$(wc -c < "$fe_a" 2>/dev/null | tr -d " ")',
-    '  fe_bs=$(wc -c < "$fe_b" 2>/dev/null | tr -d " ")',
-    '  [ -n "$fe_as" ] && [ "$fe_as" = "$fe_bs" ]',
+    '  fe_ac=$(cat "$fe_a" && printf ".") || return 1',
+    '  fe_bc=$(cat "$fe_b" && printf ".") || return 1',
+    '  [ "$fe_ac" = "$fe_bc" ]',
     '}',
     '',
     'save_boot_snapshot() {',

@@ -1,7 +1,7 @@
 //<script>
 (async () => {
   'use strict';
-  const VERSION = '2.4.5';
+  const VERSION = '2.4.6';
   const BACKEND_VERSION = '2.4.5';
   const BASE = '/data/kano_usb_mode_manager_v3';
   const BACKEND = BASE + '/backend.sh';
@@ -14,6 +14,8 @@
   const session = { closed: false, busy: false, modal: null, timer: null, statusTimer: null, last: null, transport: '', destroy: null };
   API.__kunm3 = session;
   let queue = Promise.resolve();
+  let statePromise = null;
+  let opening = false;
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const sq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
   const escape = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -77,6 +79,7 @@
           if (attempt < transientRetries) { await delay(800); continue; }
           throw makeTransportError(detail);
         }
+        if (attempt < transientRetries) { await delay(800); continue; }
         session.transport = detail;
         const error = new Error('\u540e\u53f0\u56de\u5305\u4e0d\u5b8c\uff0c\u672a\u786e\u8ba4\u547d\u4ee4\u7ed3\u679c\uff1a\n' + session.transport);
         error.unconfirmed = true;
@@ -106,23 +109,28 @@ if [ -r ${sq(BACKEND)} ]; then
 else printf 'BACKEND_ERROR=not-installed\\n'; fi
 printf '\\nPROBE_COMPLETE=1\\n'
 `;
-  const readState = async () => {
-    const res = await rpc(probeCommand, 20000, { transientRetries: 2 });
-    requireOK(res, '\u8bfb\u53d6\u72b6\u6001\u5931\u8d25');
-    const data = env(res.text);
-    if (data.PROBE_COMPLETE !== '1') throw new Error('\u72b6\u6001\u56de\u5305\u88ab\u622a\u65ad\uff1a\n' + res.text);
-    if (data.PROBE_UID !== '0') throw new Error('\u6ca1\u6709 root \u6743\u9650\uff0c\u8bf7\u5148\u5f00\u542f F50 \u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002\n' + res.text);
-    if (data.NATIVE_API !== '1') throw new Error('\u672a\u68c0\u6d4b\u5230 F50 \u7684 getprop/setprop\u3002\u8bf7\u5728 F50 \u539f\u540e\u53f0\u4f7f\u7528\u672c\u63d2\u4ef6\uff0c\u4e0d\u8981\u5728 OpenWrt LuCI \u4e2d\u8fd0\u884c\u3002\n' + res.text);
-    data.INSTALLED = data.PROTOCOL === 'KUNM3' && data.STATUS_COMPLETE === '1' && data.BACKEND_VERSION === BACKEND_VERSION;
-    data.RAW = res.text;
-    if (!data.INSTALLED) {
-      data.CURRENT_CONFIG = data.PROBE_CONFIG;
-      data.CURRENT_STATE = data.PROBE_STATE;
-      data.PERSIST_CONFIG = data.PROBE_PERSIST;
-      data.SOURCE = 'properties-unverified';
-    }
-    session.last = data;
-    return data;
+  const readState = () => {
+    if (statePromise) return statePromise;
+    const read = async () => {
+      const res = await rpc(probeCommand, 20000, { transientRetries: 2 });
+      requireOK(res, '\u8bfb\u53d6\u72b6\u6001\u5931\u8d25');
+      const data = env(res.text);
+      if (data.PROBE_COMPLETE !== '1') throw new Error('\u72b6\u6001\u56de\u5305\u88ab\u622a\u65ad\uff1a\n' + res.text);
+      if (data.PROBE_UID !== '0') throw new Error('\u6ca1\u6709 root \u6743\u9650\uff0c\u8bf7\u5148\u5f00\u542f F50 \u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002\n' + res.text);
+      if (data.NATIVE_API !== '1') throw new Error('\u672a\u68c0\u6d4b\u5230 F50 \u7684 getprop/setprop\u3002\u8bf7\u5728 F50 \u539f\u540e\u53f0\u4f7f\u7528\u672c\u63d2\u4ef6\uff0c\u4e0d\u8981\u5728 OpenWrt LuCI \u4e2d\u8fd0\u884c\u3002\n' + res.text);
+      data.INSTALLED = data.PROTOCOL === 'KUNM3' && data.STATUS_COMPLETE === '1' && data.BACKEND_VERSION === BACKEND_VERSION;
+      data.RAW = res.text;
+      if (!data.INSTALLED) {
+        data.CURRENT_CONFIG = data.PROBE_CONFIG;
+        data.CURRENT_STATE = data.PROBE_STATE;
+        data.PERSIST_CONFIG = data.PROBE_PERSIST;
+        data.SOURCE = 'properties-unverified';
+      }
+      session.last = data;
+      return data;
+    };
+    statePromise = read().finally(() => { statePromise = null; });
+    return statePromise;
   };
   const checksumCmd = path => `size=$(wc -c < ${sq(path)} 2>/dev/null | tr -d ' ' ) || exit 19
 [ "$size" = ${sq(String(BACKEND_BYTES))} ] || { echo "SIZE_MISMATCH=$size expected=${BACKEND_BYTES}"; exit 20; }
@@ -385,7 +393,12 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
     const url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  const refresh = async fill => { const s = await readState(); renderState(s,fill); return s; };
+  const refresh = async fill => {
+    const modal = session.modal;
+    const s = await readState();
+    if (!session.closed && modal && modal === session.modal && modal.isConnected) renderState(s,fill);
+    return s;
+  };
   const bind = () => {
     session.modal.querySelectorAll('.k3_mode').forEach(node => { node.onclick = () => { const select=session.modal.querySelector('#k3_mode'); if(select){ select.value=node.dataset.mode; syncModeCards(); } }; });
     const on = (name, fn) => { session.modal.querySelector('#k3_btn_' + name).onclick = () => act(fn); };
@@ -427,6 +440,7 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
   const stopStatusRefresh = () => { if (session.statusTimer) clearInterval(session.statusTimer); session.statusTimer = null; };
   const startStatusRefresh = () => {
     stopStatusRefresh();
+    if (session.closed || !session.modal || !session.modal.isConnected) return;
     let refreshing = false;
     session.statusTimer = setInterval(async () => {
       if (refreshing || document.hidden || session.closed || session.busy || !session.modal || !session.modal.isConnected) return;
@@ -436,25 +450,30 @@ echo "JOB_PID=$!"`), '\u4efb\u52a1\u672a\u6210\u529f\u542f\u52a8');
     }, 10000);
   };
   const open = async () => {
-    if (session.busy) return;
-    if (typeof checkAdvancedFunc === 'function') {
-      try { if (!(await checkAdvancedFunc())) { window.alert('\u8bf7\u5148\u5f00\u542f\u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002'); return; } }
-      catch(e) { window.alert('\u9ad8\u7ea7\u529f\u80fd\u68c0\u67e5\u5931\u8d25\uff1a'+e.message); return; }
-    }
-    if (session.modal) session.modal.remove();
-    if (typeof createModal === 'function' && typeof showModal === 'function') {
-      const modal = createModal({name:'kunm3_modal',title:TITLE+' v'+VERSION,maxWidth:'1000px',showConfirm:false,onClose:()=>{ stopStatusRefresh(); return true; },contentStyle:'max-height:80vh;overflow:auto;',content:html()});
-      session.modal = modal.el; showModal(modal.id);
-    } else {
-      const overlay = document.createElement('div'); overlay.id='kunm3_modal';
-      overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0009;display:flex;align-items:center;justify-content:center;padding:15px';
-      const panel=document.createElement('div'); panel.style.cssText='background:#222;color:#eee;max-width:1000px;width:100%;max-height:90vh;overflow:auto;padding:18px;border-radius:14px';
-      const close=document.createElement('button'); close.textContent='\u5173\u95ed'; close.onclick=()=>{ stopStatusRefresh(); overlay.remove(); }; panel.appendChild(close);
-      const content=document.createElement('div'); content.innerHTML=html(); panel.appendChild(content); overlay.appendChild(panel); document.body.appendChild(overlay); session.modal=overlay;
-    }
-    bind();
-    await act(async()=> { const s = await refresh(true); showProgress(s.INSTALLED ? '\u72b6\u6001\u5df2\u8bfb\u53d6\uff1b\u672a\u81ea\u52a8\u5207\u6362 USB\u3002' : '\u5148\u70b9\u201c\u4fee\u590d/\u5b89\u88c5\u540e\u53f0\u201d\u3002\u6b64\u65f6\u5c5e\u6027\u503c\u4ec5\u7528\u4e8e\u8bca\u65ad\uff0c\u4e0d\u4ee3\u8868\u7f51\u5361\u5df2\u8fde\u901a\u3002'); });
-    startStatusRefresh();
+    if (session.busy || opening || session.closed) return;
+    opening = true;
+    try {
+      if (typeof checkAdvancedFunc === 'function') {
+        try { if (!(await checkAdvancedFunc())) { window.alert('\u8bf7\u5148\u5f00\u542f\u540e\u53f0\u9ad8\u7ea7\u529f\u80fd\u3002'); return; } }
+        catch(e) { window.alert('\u9ad8\u7ea7\u529f\u80fd\u68c0\u67e5\u5931\u8d25\uff1a'+e.message); return; }
+      }
+      if (session.closed) return;
+      stopStatusRefresh();
+      if (session.modal) session.modal.remove();
+      if (typeof createModal === 'function' && typeof showModal === 'function') {
+        const modal = createModal({name:'kunm3_modal',title:TITLE+' v'+VERSION,maxWidth:'1000px',showConfirm:false,onClose:()=>{ stopStatusRefresh(); return true; },contentStyle:'max-height:80vh;overflow:auto;',content:html()});
+        session.modal = modal.el; showModal(modal.id);
+      } else {
+        const overlay = document.createElement('div'); overlay.id='kunm3_modal';
+        overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0009;display:flex;align-items:center;justify-content:center;padding:15px';
+        const panel=document.createElement('div'); panel.style.cssText='background:#222;color:#eee;max-width:1000px;width:100%;max-height:90vh;overflow:auto;padding:18px;border-radius:14px';
+        const close=document.createElement('button'); close.textContent='\u5173\u95ed'; close.onclick=()=>{ stopStatusRefresh(); overlay.remove(); }; panel.appendChild(close);
+        const content=document.createElement('div'); content.innerHTML=html(); panel.appendChild(content); overlay.appendChild(panel); document.body.appendChild(overlay); session.modal=overlay;
+      }
+      bind();
+      await act(async()=> { const s = await refresh(true); showProgress(s.INSTALLED ? '\u72b6\u6001\u5df2\u8bfb\u53d6\uff1b\u672a\u81ea\u52a8\u5207\u6362 USB\u3002' : '\u5148\u70b9\u201c\u4fee\u590d/\u5b89\u88c5\u540e\u53f0\u201d\u3002\u6b64\u65f6\u5c5e\u6027\u503c\u4ec5\u7528\u4e8e\u8bca\u65ad\uff0c\u4e0d\u4ee3\u8868\u7f51\u5361\u5df2\u8fde\u901a\u3002'); });
+      startStatusRefresh();
+    } finally { opening = false; }
   };
   const button = document.createElement('button'); button.id='kunm3_main'; button.textContent=TITLE+' v'+VERSION; button.onclick=()=>open().catch(e=>window.alert(e.message));
   session.destroy=()=> { session.closed=true; if(session.timer)clearTimeout(session.timer); stopStatusRefresh(); button.remove(); if(session.modal)session.modal.remove(); };

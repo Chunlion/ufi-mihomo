@@ -1944,9 +1944,10 @@ EOF_KANO_SERVICE
       '--config', CLASH_CONFIG,
       '--options', CLASH_POLICY_OPTIONS_FILE,
     ]);
-    if (!fresh) binarySnapshotLoadPromise = loadPromise;
+    binarySnapshotLoadPromise = loadPromise;
     try {
       const snapshot = await loadPromise;
+      if (binarySnapshotLoadPromise != loadPromise) return snapshot;
       if (snapshot) {
         binarySnapshotCache = snapshot;
         binarySnapshotExpiresAt = Date.now() + KANO_HELPER_SNAPSHOT_TTL;
@@ -5698,12 +5699,13 @@ KANO_WRITE_CHECK_EOF
   };
 
   const buildPanelUrl = async () => {
-    const host = await waitForLanHost();
+    const hostPromise = waitForLanHost();
     try {
-      const info = await buildControllerInfo();
+      const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
       return `http://${host}:${info.port || '7788'}/ui/?t=${Date.now()}`;
     } catch (e) {
       console.error(e);
+      const host = await hostPromise;
       return `http://${host}:7788/ui/?t=${Date.now()}`;
     }
   };
@@ -12232,8 +12234,8 @@ ${expectedProviderChecks}
       if (!componentsGroup.open || componentProbePending || componentProbeLoaded) return;
       componentProbePending = true;
       try {
-        await refreshBinaryHelperButton();
-        componentProbeLoaded = true;
+        const probe = await refreshBinaryHelperButton();
+        componentProbeLoaded = probe.shellSuccess && probe.state != 'unknown';
       } catch (e) {
         console.error('辅助内核状态探测失败', e);
       } finally {

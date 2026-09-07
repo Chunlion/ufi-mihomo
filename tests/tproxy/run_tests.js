@@ -1462,6 +1462,31 @@ function runFor(label, file) {
     vm.runInContext("const UFI_DATA = { lan_ipaddr: '192.168.0.2' };", lanContext);
     chk(await lanContext.waitForLanHost(), '192.168.0.2', '兼容仅存在于全局词法作用域的设备信息');
 
+    const snapshotReads = [];
+    const snapshotContext = vm.createContext({
+      Date, KANO_HELPER_SNAPSHOT_TTL: 1500, CLASH_CONFIG: '', CLASH_POLICY_OPTIONS_FILE: '',
+      runBinaryHelperJson: () => new Promise((resolve) => snapshotReads.push(resolve)),
+    });
+    vm.runInContext('let binarySnapshotCache = null; let binarySnapshotExpiresAt = 0; let binarySnapshotLoadPromise = null; let binarySnapshotUnavailableUntil = 0;\n'
+      + source.slice(source.indexOf('  const readBinarySnapshot ='), source.indexOf('  const installBinaryHelperFromDevicePath ='))
+      + '\nthis.snapshots = { readBinarySnapshot, invalidateBinarySnapshot };', snapshotContext);
+    const snapshots = snapshotContext.snapshots;
+    const oldSnapshot = snapshots.readBinarySnapshot();
+    const newSnapshot = snapshots.readBinarySnapshot({ fresh: true });
+    snapshotReads[1]({ version: 'new' });
+    await newSnapshot;
+    snapshotReads[0](null);
+    await oldSnapshot;
+    chk(await snapshots.readBinarySnapshot(), { version: 'new' }, '旧快照请求失败不能覆盖新快照或写入失败缓存');
+    const pendingSnapshot = snapshots.readBinarySnapshot({ fresh: true });
+    snapshots.invalidateBinarySnapshot();
+    snapshotReads[2]({ version: 'stale' });
+    await pendingSnapshot;
+    const reloadedSnapshot = snapshots.readBinarySnapshot();
+    chk(snapshotReads.length, 4, '快照失效后迟到的响应不能恢复旧缓存');
+    snapshotReads[3]({ version: 'saved' });
+    await reloadedSnapshot;
+
     const controllerReads = [];
     const controllerContext = vm.createContext({
       Date,

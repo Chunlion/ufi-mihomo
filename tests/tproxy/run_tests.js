@@ -110,12 +110,12 @@ const EXPORTS = [
   'removeLegacyManagedRulePrefix', 'applyManagedRules', 'validateManagedConfigObject',
   'validateConfigObjectStructure', 'applyManagedDashboardFields', 'applyRequiredF50Fields',
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
-  'buildManagedRuleProviders', 'isPlainYamlObject', 'parseInstallToolboxResult',
-  'ensureInstallToolbox', 'sanitizeSubscriptionSecrets',
+  'buildManagedRuleProviders', 'isPlainYamlObject',
+  'sanitizeSubscriptionSecrets',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
-  'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi', 'buildRuntimeManagerScript',
+  'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi',
   'buildServiceWrapperScript', 'buildPolicyToolsScript', 'flushGeneratedRulesCmd',
   'verifyGeneratedRulesFlushedCmd', 'verifyCoreStoppedCmd', 'removePluginOwnedArtifactsCmd', 'fileTransactionHelpersCmd',
   'persistSubSourceState', 'savePolicyState',
@@ -512,17 +512,6 @@ function runFor(label, file) {
 
   {
     console.log('--- unified runtime preflight / API / boot behavior ---');
-    const runtimeManager = api.buildRuntimeManagerScript();
-    const runtimeSyntax = spawnSync('sh', ['-n'], {
-      input: runtimeManager,
-      encoding: 'utf8',
-    });
-    const bashSyntax = runtimeSyntax.status === 0 ? null : spawnSync('bash', ['-n'], {
-      input: runtimeManager,
-      encoding: 'utf8',
-    });
-    const syntaxDetail = [runtimeSyntax.stderr, bashSyntax && bashSyntax.stderr].filter(Boolean).join(' ').trim();
-    chk(runtimeSyntax.status, 0, `generated runtime manager passes sh -n${syntaxDetail ? `: ${syntaxDetail}` : ''}`);
     const serviceWrapper = api.buildServiceWrapperScript();
     const serviceWrapperSyntax = spawnSync('sh', ['-n'], {
       input: serviceWrapper,
@@ -610,42 +599,10 @@ function runFor(label, file) {
         && serviceWrapper.includes('"$CORE" -t -f "$CONFIG"')
         && serviceWrapper.includes('timeout 60 "$CORE" -t -f "$CONFIG"')
         && serviceWrapper.includes('comm="$(cat "$p/comm"')
-        && runtimeManager.includes('comm="$(cat "$p/comm"')
         && serviceWrapper.includes('SERVICE_START_VERIFIED_PID=')
         && serviceWrapper.includes('SERVICE_START_VERIFY_FAILED:'),
       true,
       'standalone and boot service starts reject invalid config and verify a stable runtime process',
-    );
-    chk(
-      runtimeManager.slice(runtimeManager.indexOf('start_runtime() {')).indexOf('validate_core_config || return $?')
-        < runtimeManager.slice(runtimeManager.indexOf('start_runtime() {')).indexOf('"$SERVICE" stop >/dev/null 2>&1 || true')
-        && runtimeManager.includes('KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start'),
-      true,
-      'runtime manager validates before stopping and avoids a duplicate config test',
-    );
-    chk(
-      runtimeManager.includes('TOOLBOX_BIN=/data/kano_tproxy_tools/bin')
-        && runtimeManager.includes('[ ! -d "$TOOLBOX_BIN" ] || PATH="$TOOLBOX_BIN:$PATH"')
-        && runtimeManager.includes('export PATH TMPDIR'),
-      true,
-      'boot runtime restores the managed toolbox PATH before probing curl',
-    );
-    chk(
-      runtimeManager.includes('CURL_BIN=/data/data/com.minikano.f50_sms/files/curl')
-        && runtimeManager.includes('[ -x "$CURL_BIN" ] || CURL_BIN="$TOOLBOX_BIN/curl"'),
-      true,
-      'boot runtime probes the UFI-TOOLS curl binary before PATH fallbacks',
-    );
-    chk(
-      runtimeManager.includes('[ "$action" != "--boot" ] || attempt_limit=60'),
-      true,
-      'boot runtime allows a longer API startup window',
-    );
-    chk(
-      runtimeManager.includes('if [ "$action" = "--boot" ] && [ -n "$pid" ]; then')
-        && runtimeManager.includes('核心进程已启动，开机阶段保留运行并交由后台继续检查'),
-      true,
-      'boot runtime never kills an already-running core only because API probing is unavailable',
     );
     const startVerificationSource = source.slice(
       source.indexOf('const waitForRunningCoreApi = async'),
@@ -746,11 +703,18 @@ function runFor(label, file) {
         true,
         'self-heal preserves user data and has rollback',
       );
+      const repairArchiveSource = source.slice(
+        source.indexOf('  const stageAndCommitRepairArchive ='),
+        source.indexOf('      advanced_missing=""'),
+      );
       chk(
-        source.includes('controller_from_cached_archive')
-          && source.includes('"$UNZIP" -p "$RECOVERY_ARCHIVE" "$ARCHIVE_CONTROLLER"'),
+        repairArchiveSource.includes('unzip -t "$ZIP"')
+          && repairArchiveSource.indexOf('unzip -t "$ZIP"') < repairArchiveSource.indexOf('unzip -q "$ZIP"')
+          && repairArchiveSource.includes('CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_arm64"')
+          && repairArchiveSource.includes('CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_armv7"')
+          && repairArchiveSource.includes('REPAIR_COMPAT_SERVICE_REBUILT=1'),
         true,
-        'runtime preflight can restore a missing ABI controller from the validated cached archive',
+        'archive repair validates the package and selects the ABI controller before rebuilding a missing service',
       );
       chk(source.includes('not_run_core_stopped') && source.includes('ok: configCheck.ok'),
         true, 'subscription config health remains independent from core/API health');
@@ -892,7 +856,7 @@ function runFor(label, file) {
         );
         const helperPreferredSource = source.slice(
           source.indexOf('const installBinaryHelperPreferred = async'),
-          source.indexOf('let autoEnsureHelperDone = false'),
+          source.indexOf('const installBinaryHelperFromFile ='),
         );
         const firstGitee = helperPreferredSource.indexOf('installBinaryHelperFromGitee');
         const firstBundled = helperPreferredSource.indexOf('installBinaryHelperFromBundled');
@@ -1515,23 +1479,6 @@ function runFor(label, file) {
     await bootContext.migrate();
     chk(bootWrites, ['enable'], '完整新版自启不再重复写入启动文件');
 
-    const logReads = [];
-    const logContext = vm.createContext({
-      closed: false, rawMessage: '', LOG_FILE: '/data/log', shellQuote: shellQuoteForTest,
-      el: { querySelector: () => ({ innerHTML: '' }) },
-      runShellWithRoot: () => new Promise((resolve) => logReads.push(resolve)),
-      sanitizeSubscriptionSecrets: (v) => v, textToHtml: (v) => v, createToast() {},
-    });
-    const logStart = source.indexOf('    let logRefreshPending =');
-    vm.runInContext(source.slice(logStart, source.indexOf('    if (rBtn)', logStart))
-      + '\nthis.refresh = refresh;', logContext);
-    const firstLog = logContext.refresh();
-    await logContext.refresh();
-    chk(logReads.length, 1, '日志刷新未完成时不会再次读取');
-    logReads[0]({ success: true, content: 'latest' });
-    await firstLog;
-    chk(logContext.rawMessage, 'latest', '日志下载内容随刷新更新');
-
     const preflightReads = [];
     const preflightContext = vm.createContext({ Date,
       runtimePreflight: () => new Promise((resolve) => preflightReads.push(resolve)),
@@ -1559,8 +1506,8 @@ function runFor(label, file) {
     });
     vm.runInContext(source.slice(source.indexOf('  const templateFlowMessages ='), source.indexOf('  const runDangerousShellWithRoot ='))
       + '\nthis.append = appendTemplateFlowDebug;', flowContext);
-    await flowContext.append('first');
-    await flowContext.append('second');
+    flowContext.append('first');
+    flowContext.append('second');
     chk(flowWrites.length, 0, '调试记录不等待后台写入');
     await flowTimers[0]();
     chk(flowWrites.length === 1 && flowWrites[0].includes('first') && flowWrites[0].includes('second'), true, '同批调试记录合并为一次后台写入');
@@ -1698,30 +1645,6 @@ function runFor(label, file) {
     shellReply = { success: true, content: 'garbage-without-marker' };
     chk(await api.createConfigRollbackPoint('x'), null, '输出缺少标记行 -> null');
 
-    console.log('--- install toolbox preflight ---');
-    shellReply = {
-      success: true,
-      content: 'TOOLBOX_ADDED= unzip timeout\nTOOLBOX_MISSING= \nTOOLBOX_OPTIONAL_MISSING= zip jq\nTOOLBOX_READY\n',
-    };
-    const toolboxReady = await api.ensureInstallToolbox();
-    chk(toolboxReady.success, true, 'ready marker and shell success are both required');
-    chk(toolboxReady.added, ['unzip', 'timeout'], 'auto-completed tools are parsed');
-    chk(toolboxReady.optionalMissing, ['zip', 'jq'], 'optional missing tools are reported separately');
-    chk(
-      lastShellCommand.includes('for tool in curl unzip timeout')
-        && lastShellCommand.includes('cmp ip inotifyd')
-        && lastShellCommand.includes('command -v iptables')
-        && lastShellCommand.includes('/system/bin/toybox'),
-      true,
-      'preflight checks required tools, firewall capability, and multicall fallbacks',
-    );
-    shellReply = {
-      success: false,
-      content: 'TOOLBOX_ADDED=\nTOOLBOX_MISSING= unzip iptables\nTOOLBOX_OPTIONAL_MISSING=\n',
-    };
-    const toolboxFailed = await api.ensureInstallToolbox();
-    chk(toolboxFailed.success, false, 'missing required tools fail the preflight');
-    chk(toolboxFailed.missing, ['unzip', 'iptables'], 'required missing tools are returned to the UI');
   })();
 }
 

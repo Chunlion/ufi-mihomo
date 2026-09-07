@@ -57,11 +57,7 @@
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_RUNTIME_MANAGER_VERSION = '1.0.5';
   const CLASH_SERVICE_WRAPPER_VERSION = '1.0.3';
-  const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
-  const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
-  const BOOT_GATE_END = '# F50_BOOT_FIX_END';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
@@ -139,7 +135,7 @@ ${script}`,
       }
     }
   };
-  const appendTemplateFlowDebug = async (message = '') => {
+  const appendTemplateFlowDebug = (message = '') => {
     templateFlowMessages.push(`${new Date().toISOString()} ${sanitizeSubscriptionSecrets(String(message || '')).replace(/[\r\n]+/g, ' ').slice(0, 2000)}`);
     if (templateFlowMessages.length > 100) templateFlowMessages.shift();
     if (templateFlowTimer === null && !templateFlowWriting) {
@@ -148,7 +144,7 @@ ${script}`,
   };
 
   const runDangerousShellWithRoot = async (script = '', timeout = 20 * 1000, label = 'dangerous') => {
-    await appendTemplateFlowDebug(`dangerous_shell ${label}`);
+    appendTemplateFlowDebug(`dangerous_shell ${label}`);
     return runShellWithRoot(script, timeout);
   };
 
@@ -292,138 +288,6 @@ ${script}`,
       throw new Error((result && result.error) || '上传失败');
     }
     return getUploadedPath(result.url);
-  };
-
-  const parseInstallToolboxResult = (result = {}) => {
-    const content = String(result.content || '');
-    const marker = (name) => {
-      const prefix = `${name}=`;
-      const line = content.split(/\r?\n/).find((item) => item.startsWith(prefix));
-      return line ? line.slice(prefix.length).trim().split(/\s+/).filter(Boolean) : [];
-    };
-    return {
-      success: !!result.success && /(?:^|\n)TOOLBOX_READY(?:\r?\n|$)/.test(content),
-      added: marker('TOOLBOX_ADDED'),
-      missing: marker('TOOLBOX_MISSING'),
-      optionalMissing: marker('TOOLBOX_OPTIONAL_MISSING'),
-      content,
-    };
-  };
-
-  const ensureInstallToolbox = async () => {
-    const result = await runShellWithRoot(`
-      set +e
-      TOOLBOX_DIR=${shellQuote(KANO_INSTALL_TOOLBOX_DIR)}
-      TOOLBOX_BIN=${shellQuote(KANO_INSTALL_TOOLBOX_BIN)}
-      F50_FILES=${shellQuote(F50_FILES_DIR)}
-      BASE_PATH="$PATH"
-      case "$BASE_PATH" in
-        "$TOOLBOX_BIN":*) BASE_PATH="\${BASE_PATH#*:}" ;;
-      esac
-      export PATH="$BASE_PATH"
-      mkdir -p "$TOOLBOX_BIN" || {
-        echo "TOOLBOX_MISSING=toolbox-directory"
-        exit 1
-      }
-      chmod 755 "$TOOLBOX_DIR" "$TOOLBOX_BIN" 2>/dev/null || {
-        echo "TOOLBOX_MISSING=toolbox-permission"
-        exit 1
-      }
-
-      added=""
-      missing=""
-      optional_missing=""
-
-      write_direct_wrapper() {
-        tool="$1"
-        source="$2"
-        target="$TOOLBOX_BIN/$tool"
-        printf '#!/system/bin/sh\\nexec "%s" "$@"\\n' "$source" > "$target" || return 1
-        chmod 755 "$target" || return 1
-        return 0
-      }
-
-      write_applet_wrapper() {
-        tool="$1"
-        source="$2"
-        target="$TOOLBOX_BIN/$tool"
-        printf '#!/system/bin/sh\\nexec "%s" "%s" "$@"\\n' "$source" "$tool" > "$target" || return 1
-        chmod 755 "$target" || return 1
-        return 0
-      }
-
-      ensure_tool() {
-        tool="$1"
-        rm -f "$TOOLBOX_BIN/$tool" 2>/dev/null || return 1
-        native="$( (PATH="$BASE_PATH"; command -v "$tool") 2>/dev/null )"
-        if [ -n "$native" ] && [ -x "$native" ]; then
-          "$native" --help >/dev/null 2>&1
-          native_rc=$?
-          case "$native_rc" in 126|127) ;; *) return 0 ;; esac
-        fi
-
-        direct="$F50_FILES/$tool"
-        if [ -x "$direct" ]; then
-          "$direct" --help >/dev/null 2>&1
-          direct_rc=$?
-          case "$direct_rc" in
-            126|127) ;;
-            *)
-              write_direct_wrapper "$tool" "$direct" || return 1
-              added="$added $tool"
-              return 0
-              ;;
-          esac
-        fi
-
-        path_busybox="$( (PATH="$BASE_PATH"; command -v busybox) 2>/dev/null )"
-        path_toybox="$( (PATH="$BASE_PATH"; command -v toybox) 2>/dev/null )"
-        for multicall in \
-          "$F50_FILES/busybox" "$F50_FILES/toybox" \
-          /system/bin/toybox /system/bin/busybox /system/xbin/busybox \
-          /vendor/bin/toybox /vendor/bin/busybox \
-          "$path_busybox" "$path_toybox"; do
-          [ -n "$multicall" ] && [ -x "$multicall" ] || continue
-          "$multicall" "$tool" --help >/dev/null 2>&1
-          applet_rc=$?
-          case "$applet_rc" in 126|127) continue ;; esac
-          write_applet_wrapper "$tool" "$multicall" || return 1
-          added="$added $tool"
-          return 0
-        done
-        return 1
-      }
-
-      for tool in curl unzip timeout awk sed grep find du wc head tail tr chmod cp mv rm mkdir ln date cat cut basename dirname readlink od sort uniq xargs stat cmp ip inotifyd; do
-        ensure_tool "$tool" || missing="$missing $tool"
-      done
-      for tool in tar gzip zip sha256sum md5sum cksum jq ss netstat; do
-        ensure_tool "$tool" || optional_missing="$optional_missing $tool"
-      done
-
-      firewall=""
-      for candidate in \
-        "$( (PATH="$BASE_PATH"; command -v iptables) 2>/dev/null )" \
-        "$( (PATH="$BASE_PATH"; command -v iptables-nft) 2>/dev/null )" \
-        "$( (PATH="$BASE_PATH"; command -v iptables-legacy) 2>/dev/null )" \
-        /system/bin/iptables /system/bin/iptables-nft /system/bin/iptables-legacy; do
-        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-          firewall="$candidate"
-          break
-        fi
-      done
-      [ -n "$firewall" ] || missing="$missing iptables"
-
-      echo "TOOLBOX_ADDED=$added"
-      echo "TOOLBOX_MISSING=$missing"
-      echo "TOOLBOX_OPTIONAL_MISSING=$optional_missing"
-      if [ -n "$missing" ]; then
-        exit 1
-      fi
-      export PATH="$TOOLBOX_BIN:$BASE_PATH"
-      echo "TOOLBOX_READY"
-    `, 30 * 1000);
-    return parseInstallToolboxResult(result);
   };
 
   // ===== File and boot helpers =====
@@ -601,407 +465,6 @@ KANO_YQ_SMOKE_EOF
         [ -x ${shellQuote(CLASH_SERVICE)} ] && grep -qxF ${shellQuote(`# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}`)} ${shellQuote(CLASH_SERVICE)} || exit 1
         ${removeBootLinesCmd({ enable: true })}
         `;
-
-  const buildRuntimeManagerScript = () => `#!/system/bin/sh
-# KANO_RUNTIME_MANAGER_VERSION=${CLASH_RUNTIME_MANAGER_VERSION}
-set +e
-CLASH_DIR=${CLASH_DIR}
-SERVICE=${CLASH_SERVICE}
-CORE=${CLASH_CORE}
-CONFIG=${CLASH_CONFIG}
-YQ=${CLASH_DIR}/Tools/yq_linux_arm64
-POLICY=${CLASH_POLICY_SCRIPT}
-RECOVERY_ARCHIVE=${DOWNLOAD_ZIP}
-TOOLBOX_BIN=${KANO_INSTALL_TOOLBOX_BIN}
-DIAG=/data/kano_diag_runtime
-TMPDIR="$DIAG/tmp"
-HOME="$DIAG/home"
-[ ! -d "$TOOLBOX_BIN" ] || PATH="$TOOLBOX_BIN:$PATH"
-export PATH TMPDIR TMP="$TMPDIR" TEMP="$TMPDIR" HOME XDG_CONFIG_HOME="$HOME"
-mkdir -p "$TMPDIR" "$HOME" 2>/dev/null || {
-  echo "PREFLIGHT_STATE=damaged"
-  echo "PROBE_ERRORS=runtime_directory"
-  echo "MESSAGE=无法创建 /data 诊断运行目录"
-  exit 2
-}
-chmod 700 "$DIAG" "$TMPDIR" "$HOME" 2>/dev/null || true
-
-append_word() {
-  current="$(eval "printf '%s' \\"\\$$1\\"")"
-  if [ -n "$current" ]; then
-    eval "$1=\\"$current,$2\\""
-  else
-    eval "$1=\\"$2\\""
-  fi
-}
-
-detect_abi() {
-  ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-  ABILIST="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-  MACHINE="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-  case "$ABI $ABILIST $MACHINE" in
-    *arm64-v8a*|*aarch64*|*armv8*) ABI_KIND=arm64; CONTROLLER="$CLASH_DIR/Scripts/clashctl_arm64"; ARCHIVE_CONTROLLER="Scripts/clashctl_arm64"; ELF_CLASS=2; ELF_MACHINE=183 ;;
-    *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) ABI_KIND=armv7; CONTROLLER="$CLASH_DIR/Scripts/clashctl_armv7"; ARCHIVE_CONTROLLER="Scripts/clashctl_armv7"; ELF_CLASS=1; ELF_MACHINE=40 ;;
-    *) ABI_KIND=unsupported; CONTROLLER=""; ARCHIVE_CONTROLLER=""; ELF_CLASS=0; ELF_MACHINE=0 ;;
-  esac
-}
-
-verify_elf() {
-  target="$1"
-  expected_class="$2"
-  expected_machine="$3"
-  [ -s "$target" ] || return 1
-  command -v od >/dev/null 2>&1 || return 2
-  magic="$(od -An -t x1 -N 4 "$target" 2>/dev/null | tr -d ' \\n')"
-  [ "$magic" = "7f454c46" ] || return 1
-  class="$(od -An -t u1 -j 4 -N 1 "$target" 2>/dev/null | tr -d ' ')"
-  machine="$(od -An -t u1 -j 18 -N 2 "$target" 2>/dev/null | awk '{print $1 + ($2 * 256)}')"
-  [ "$class" = "$expected_class" ] && [ "$machine" = "$expected_machine" ]
-}
-
-repair_controller_from_archive() {
-  [ -n "$CONTROLLER" ] && [ -n "$ARCHIVE_CONTROLLER" ] && [ -s "$RECOVERY_ARCHIVE" ] || return 1
-  UNZIP=""
-  for candidate in /data/kano_tproxy_tools/bin/unzip "$(command -v unzip 2>/dev/null)"; do
-    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
-    UNZIP="$candidate"
-    break
-  done
-  [ -n "$UNZIP" ] || return 1
-  "$UNZIP" -t "$RECOVERY_ARCHIVE" >/dev/null 2>&1 || return 1
-  NEW_CONTROLLER="$CONTROLLER.kano_new.$$"
-  rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-  "$UNZIP" -p "$RECOVERY_ARCHIVE" "$ARCHIVE_CONTROLLER" > "$NEW_CONTROLLER" 2>/dev/null || {
-    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-    return 1
-  }
-  verify_elf "$NEW_CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE" || {
-    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-    return 1
-  }
-  chmod 755 "$NEW_CONTROLLER" 2>/dev/null || {
-    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-    return 1
-  }
-  archive_probe="$("$NEW_CONTROLLER" --help 2>&1)"
-  archive_rc=$?
-  case "$archive_rc:$archive_probe" in
-    126:*|127:*|*:*Exec\\ format*|*:*not\\ found*)
-      rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-      return 1
-      ;;
-  esac
-  mv -f "$NEW_CONTROLLER" "$CONTROLLER" 2>/dev/null || {
-    rm -f "$NEW_CONTROLLER" 2>/dev/null || true
-    return 1
-  }
-  chmod 755 "$CONTROLLER" 2>/dev/null || true
-  return 0
-}
-
-remove_missing_label() {
-  missing_label="$1"
-  MISSING="$(printf '%s' "$MISSING" | awk -F, -v label="$missing_label" '{
-    out=""
-    for (i=1; i<=NF; i++) if ($i != label && $i !~ ("^" label ":")) out=(out ? out "," : "") $i
-    print out
-  }')"
-}
-
-find_core_pid() {
-  for p in /proc/[0-9]*; do
-    [ -r "$p/cmdline" ] || continue
-    PID="\${p##*/}"
-    exe="$(readlink "$p/exe" 2>/dev/null)"
-    cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
-    comm="$(cat "$p/comm" 2>/dev/null | tr -d '\\r\\n')"
-    case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
-    case "$exe|$cmdline|$comm" in
-      *"$CORE"*|*"/Clash.Core"*|*"/mihomo"*|*"|Clash.Core"|*"|mihomo") ;;
-      *) continue ;;
-    esac
-    printf '%s\\n' "$PID"
-    return 0
-  done
-  return 1
-}
-
-validate_core_config() {
-  CONFIG_TEST_LOG="$DIAG/config_test.out"
-  [ -x "$CORE" ] || { echo "CONFIG_TEST_STATE=core_unavailable"; return 6; }
-  [ -s "$CONFIG" ] || { echo "CONFIG_TEST_STATE=config_missing"; return 6; }
-  if command -v timeout >/dev/null 2>&1; then
-    (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-  else
-    (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-  fi
-  config_test_rc=$?
-  if [ "$config_test_rc" -ne 0 ]; then
-    echo "CONFIG_TEST_STATE=invalid"
-    echo "CONFIG_TEST_RC=$config_test_rc"
-    tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
-    return 6
-  fi
-  echo "CONFIG_TEST_STATE=valid"
-  return 0
-}
-
-emit_preflight() {
-  echo "PREFLIGHT_STATE=$STATE"
-  echo "ABI=$ABI_KIND"
-  echo "CONTROLLER=$CONTROLLER"
-  echo "MISSING=$MISSING"
-  echo "PERMISSION_ERRORS=$PERMISSION_ERRORS"
-  echo "PROBE_ERRORS=$PROBE_ERRORS"
-  echo "CONFIG_VALID=$CONFIG_VALID"
-  echo "REPAIRABLE=$REPAIRABLE"
-  echo "REPAIRED=$REPAIRED"
-  echo "CORE_PID=$(find_core_pid)"
-  echo "MESSAGE=$MESSAGE"
-}
-
-preflight() {
-  STATE=installed_stopped
-  MISSING=""
-  PERMISSION_ERRORS=""
-  PROBE_ERRORS=""
-  CONFIG_VALID=0
-  REPAIRABLE=0
-  REPAIRED=""
-  MESSAGE="运行组件和配置检查通过"
-  detect_abi
-  if [ ! -d "$CLASH_DIR" ]; then
-    STATE=not_installed
-    MESSAGE="未找到安装目录"
-    emit_preflight
-    return 3
-  fi
-  if [ "$ABI_KIND" = "unsupported" ]; then
-    STATE=damaged
-    REPAIRABLE=0
-    PROBE_ERRORS=unsupported_abi
-    MESSAGE="不支持的 CPU ABI"
-    emit_preflight
-    return 2
-  fi
-  for item in "service:$SERVICE" "core:$CORE" "yq:$YQ" "controller:$CONTROLLER" "config:$CONFIG"; do
-    label="$item"
-    path="$item"
-    label="$(printf '%s' "$label" | cut -d: -f1)"
-    path="$(printf '%s' "$path" | cut -d: -f2-)"
-    if [ -L "$path" ] && [ ! -e "$path" ]; then
-      append_word MISSING "$label:broken_link"
-    elif [ ! -s "$path" ]; then
-      append_word MISSING "$label"
-    fi
-  done
-
-  GENERIC="$CLASH_DIR/Scripts/clashctl"
-  if [ ! -s "$CONTROLLER" ] && [ -s "$GENERIC" ] && [ ! -L "$GENERIC" ]; then
-    verify_elf "$GENERIC" "$ELF_CLASS" "$ELF_MACHINE"
-    elf_rc=$?
-    if [ "$elf_rc" -eq 0 ]; then
-      chmod 755 "$GENERIC" 2>/dev/null || true
-      generic_probe="$("$GENERIC" --help 2>&1)"
-      generic_rc=$?
-      case "$generic_rc:$generic_probe" in
-        126:*|127:*|*:*Exec\\ format*|*:*not\\ found*) ;;
-        *)
-          cp "$GENERIC" "$CONTROLLER" 2>/dev/null &&
-            chmod 755 "$CONTROLLER" 2>/dev/null &&
-            append_word REPAIRED controller_from_validated_generic
-          if [ -n "$CONTROLLER" ] && [ -s "$CONTROLLER" ]; then
-            remove_missing_label controller
-          fi
-          ;;
-      esac
-    fi
-  fi
-
-  if [ ! -s "$CONTROLLER" ] && repair_controller_from_archive; then
-    append_word REPAIRED controller_from_cached_archive
-    remove_missing_label controller
-  fi
-
-  if [ -s "$CONTROLLER" ]; then
-    verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE"
-    elf_rc=$?
-    if [ "$elf_rc" -eq 1 ]; then
-      if [ -s "$GENERIC" ] && [ ! -L "$GENERIC" ]; then
-        verify_elf "$GENERIC" "$ELF_CLASS" "$ELF_MACHINE"
-        generic_elf_rc=$?
-        generic_probe="$("$GENERIC" --help 2>&1)"
-        generic_rc=$?
-        case "$generic_elf_rc:$generic_rc:$generic_probe" in
-          0:126:*|0:127:*|0:*:*Exec\\ format*|0:*:*not\\ found*) ;;
-          0:*)
-            cp "$GENERIC" "$CONTROLLER" 2>/dev/null &&
-              chmod 755 "$CONTROLLER" 2>/dev/null &&
-              append_word REPAIRED controller_replaced_from_validated_generic
-            ;;
-          *) ;;
-        esac
-      fi
-      if ! verify_elf "$CONTROLLER" "$ELF_CLASS" "$ELF_MACHINE"; then
-        if repair_controller_from_archive; then
-          append_word REPAIRED controller_replaced_from_cached_archive
-        else
-          append_word PROBE_ERRORS controller_architecture
-        fi
-      fi
-    elif [ "$elf_rc" -eq 2 ]; then
-      append_word PROBE_ERRORS elf_reader_unavailable
-    fi
-  fi
-
-  for item in "service:$SERVICE" "core:$CORE" "yq:$YQ" "controller:$CONTROLLER"; do
-    label="$(printf '%s' "$item" | cut -d: -f1)"
-    path="$(printf '%s' "$item" | cut -d: -f2-)"
-    [ -s "$path" ] || continue
-    if [ ! -x "$path" ]; then
-      chmod 755 "$path" 2>/dev/null
-      if [ -x "$path" ]; then
-        append_word REPAIRED "$label:chmod"
-      else
-        append_word PERMISSION_ERRORS "$label"
-      fi
-    fi
-  done
-
-  if [ -x "$CONTROLLER" ] && ! printf '%s' "$PROBE_ERRORS" | grep -q controller_architecture; then
-    controller_probe="$("$CONTROLLER" --help 2>&1)"
-    controller_rc=$?
-    case "$controller_rc:$controller_probe" in
-      126:*|127:*|*:*Exec\\ format*|*:*not\\ found*) append_word PROBE_ERRORS controller_execute ;;
-    esac
-  fi
-  if [ -x "$SERVICE" ]; then
-    service_probe="$("$SERVICE" --help 2>&1)"
-    service_rc=$?
-    case "$service_rc:$service_probe" in
-      126:*|127:*|*:*找不到适用于当前架构*|*:*Exec\\ format*) append_word PROBE_ERRORS service_controller ;;
-    esac
-  fi
-  # FINAL relaxed mode: page/runtime preflight never executes Core/yq as a hard validator.
-  # Presence and actual runtime/API behavior decide health; advanced features report their own errors locally.
-  [ -s "$CONFIG" ] && CONFIG_VALID=1
-
-  if [ -n "$MISSING" ] || [ -n "$PERMISSION_ERRORS" ] || [ -n "$PROBE_ERRORS" ] || [ "$CONFIG_VALID" != "1" ]; then
-    STATE=damaged
-    REPAIRABLE=1
-    MESSAGE="运行组件或配置损坏，需要安全修复"
-    emit_preflight
-    return 2
-  fi
-
-  if [ -e "$GENERIC" ] || [ -L "$GENERIC" ]; then
-    generic_target="$(readlink "$GENERIC" 2>/dev/null)"
-    if [ -n "$generic_target" ] && [ "$generic_target" != "$(basename "$CONTROLLER")" ]; then
-      rm -f "$GENERIC" 2>/dev/null || true
-    fi
-  fi
-  if [ ! -e "$GENERIC" ]; then
-    ln -s "$(basename "$CONTROLLER")" "$GENERIC" 2>/dev/null ||
-      { cp "$CONTROLLER" "$GENERIC" 2>/dev/null && chmod 755 "$GENERIC" 2>/dev/null; }
-    [ -e "$GENERIC" ] && append_word REPAIRED generic_controller
-  fi
-  pid="$(find_core_pid)"
-  [ -z "$pid" ] || STATE=running_api_unavailable
-  emit_preflight
-  return 0
-}
-
-rescue_runtime() {
-  "$SERVICE" stop >/dev/null 2>&1 || true
-  [ ! -x "$POLICY" ] || "$POLICY" flush >/dev/null 2>&1 || true
-}
-
-start_runtime() {
-  action="$1"
-  preflight
-  preflight_rc=$?
-  [ "$preflight_rc" -eq 0 ] || return "$preflight_rc"
-  validate_core_config || return $?
-  if [ "$action" = "--restart" ]; then
-    "$SERVICE" stop >/dev/null 2>&1 || true
-  fi
-  [ ! -x "$POLICY" ] || "$POLICY" flush >/dev/null 2>&1 || true
-  KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start >"$DIAG/service_start.out" 2>&1
-  service_start_rc=$?
-  if [ "$service_start_rc" -ne 0 ]; then
-    echo "START_STATE=service_failed"
-    echo "API_STATUS=not_run"
-    echo "HTTP_CODE=000"
-    echo "MESSAGE=Clash.Service 启动失败"
-    cat "$DIAG/service_start.out" 2>/dev/null || true
-    rescue_runtime
-    return 4
-  fi
-
-  controller="$("$YQ" e '.external-controller // ""' "$CONFIG" 2>/dev/null | head -n 1)"
-  secret="$("$YQ" e '.secret // ""' "$CONFIG" 2>/dev/null | head -n 1)"
-  controller="$(printf '%s' "$controller" | sed 's#^http://##;s#^https://##')"
-  case "$controller" in
-    ""|null) controller=127.0.0.1:7788 ;;
-    0.0.0.0:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^[^:]*://')" ;;
-    localhost:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^[^:]*://')" ;;
-    \\[::\\]:*) controller="127.0.0.1:$(printf '%s' "$controller" | sed 's/^.*://')" ;;
-  esac
-  CURL_BIN=${F50_FILES_DIR}/curl
-  [ -x "$CURL_BIN" ] || CURL_BIN="$TOOLBOX_BIN/curl"
-  [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
-  [ -x "$CURL_BIN" ] || CURL_BIN=""
-  last_status=unavailable
-  last_http=000
-  attempt=0
-  attempt_limit=20
-  [ "$action" != "--boot" ] || attempt_limit=60
-  while [ "$attempt" -lt "$attempt_limit" ]; do
-    attempt=$((attempt + 1))
-    pid="$(find_core_pid)"
-    if [ -n "$pid" ] && [ -n "$CURL_BIN" ]; then
-      if [ -n "$secret" ] && [ "$secret" != "null" ]; then
-        last_http="$("$CURL_BIN" -sS -m 2 -o "$DIAG/api.out" -w '%{http_code}' -H "Authorization: Bearer $secret" "http://$controller/version" 2>"$DIAG/api.err")"
-      else
-        last_http="$("$CURL_BIN" -sS -m 2 -o "$DIAG/api.out" -w '%{http_code}' "http://$controller/version" 2>"$DIAG/api.err")"
-      fi
-      curl_rc=$?
-      case "$curl_rc:$last_http" in
-        0:2*) echo "START_STATE=healthy"; echo "API_STATUS=healthy"; echo "HTTP_CODE=$last_http"; echo "MESSAGE=核心和控制 API 已就绪"; return 0 ;;
-        0:401|0:403) last_status=auth_failed; break ;;
-        7:*) last_status=refused ;;
-        28:*) last_status=timeout ;;
-        *) last_status=http_error ;;
-      esac
-    elif [ -z "$pid" ]; then
-      last_status=core_not_running
-    else
-      last_status=curl_missing
-      break
-    fi
-    sleep 1
-  done
-  pid="$(find_core_pid)"
-  echo "START_STATE=running_api_unavailable"
-  echo "API_STATUS=$last_status"
-  echo "HTTP_CODE=$last_http"
-  if [ "$action" = "--boot" ] && [ -n "$pid" ]; then
-    echo "MESSAGE=核心进程已启动，开机阶段保留运行并交由后台继续检查"
-    return 0
-  fi
-  echo "MESSAGE=核心未在等待时间内通过控制 API 健康检查"
-  rescue_runtime
-  return 5
-}
-
-ACTION="$1"
-[ -n "$ACTION" ] || ACTION=--check
-case "$ACTION" in
-  --check) preflight ;;
-  --start|--restart|--boot) start_runtime "$ACTION" ;;
-  *) echo "usage: $0 --check|--start|--restart|--boot"; exit 64 ;;
-esac
-`;
 
   const parseKeyValueOutput = (content = '') => {
     const values = {};
@@ -1209,29 +672,6 @@ KANO_SERVICE_WRAPPER_EOF
     return apiResult && apiResult.success ? 'healthy' : 'running_api_unavailable';
   };
 
-  const ensureRuntimeManagerScript = async ({ force = false } = {}) => {
-    const script = buildRuntimeManagerScript();
-    const marker = `# KANO_RUNTIME_MANAGER_VERSION=${CLASH_RUNTIME_MANAGER_VERSION}`;
-    const result = await runShellWithRoot(`
-      set -e
-      [ -s ${shellQuote(CLASH_SERVICE)} ] || { echo "RUNTIME_MANAGER_SKIPPED=service_missing"; exit 3; }
-      TARGET=${shellQuote(CLASH_RUNTIME_MANAGER)}
-      NEW="$TARGET.new.$$"
-      if [ ${shellQuote(force ? '1' : '0')} != "1" ] && [ -x "$TARGET" ] && grep -qxF ${shellQuote(marker)} "$TARGET"; then
-        echo "RUNTIME_MANAGER_READY=${CLASH_RUNTIME_MANAGER_VERSION}"
-        exit 0
-      fi
-      cat > "$NEW" <<'KANO_RUNTIME_MANAGER_EOF'
-${script}
-KANO_RUNTIME_MANAGER_EOF
-      chmod 755 "$NEW"
-      sh -n "$NEW" || { rm -f "$NEW"; echo "RUNTIME_MANAGER_SYNTAX_FAILED"; exit 1; }
-      mv "$NEW" "$TARGET"
-      echo "RUNTIME_MANAGER_READY=${CLASH_RUNTIME_MANAGER_VERSION}"
-    `, 20 * 1000);
-    return !!(result.success && String(result.content || '').includes('RUNTIME_MANAGER_READY='));
-  };
-
   const runtimePreflight = async ({ freshController = true } = {}) => {
     // Basic preflight must stay non-invasive. In particular, never run `Clash.Core -t`
     // from page/status refresh: on some F50 builds a slow config-test process can outlive
@@ -1371,13 +811,6 @@ KANO_RUNTIME_MANAGER_EOF
     return parseBootIntegrationResult(result);
   };
 
-  const migrateLegacyBootIntegration = async () => {
-    const state = await inspectBootIntegration();
-    if (state.state != 'managed') return true;
-    const migrated = await runShellWithRoot(addBootLinesCmd(), 10 * 1000);
-    return !!migrated.success;
-  };
-
   const migrateBootPolicyIntegration = async () => {
     const state = await inspectBootIntegration();
     if (!state.enabled) return true;
@@ -1394,7 +827,6 @@ KANO_RUNTIME_MANAGER_EOF
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
         LOG=${shellQuote(DOWNLOAD_LOG)}
-        [ -s "$ZIP" ] || exit 1
         [ -s "$ZIP" ] || exit 1
         command -v unzip >/dev/null 2>&1 || exit 1
         unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
@@ -2216,27 +1648,6 @@ EOF_KANO_SERVICE
     const bundledOk = await installBinaryHelperFromBundled({ quiet: true });
     if (bundledOk) return true;
     return installBinaryHelperFromGitee({ quiet });
-  };
-
-  let autoEnsureHelperDone = false;
-
-  const autoEnsureBinaryHelper = async () => {
-    if (autoEnsureHelperDone) return true;
-    autoEnsureHelperDone = true;
-    try {
-      const probe = await probeBinaryHelperState();
-      if (probe.state == 'installed') return true;
-      if (!(await checkIsInstalled()) || !(await checkAdvanceFunc())) return false;
-      const ok = await installBinaryHelperPreferred({
-        quiet: true,
-        preferGitee: probe.state != 'missing',
-      });
-      if (ok) invalidateBinarySnapshot();
-      return ok;
-    } catch (e) {
-      console.error('auto ensure binary helper failed', e);
-      return false;
-    }
   };
 
   const installBinaryHelperFromFile = async (file) => {
@@ -4031,7 +3442,7 @@ EOF_KANO_SERVICE
   ) => {
     await loadProviderUserAgent();
     const cleanSources = normalizeSubSourceList(sources);
-    await appendTemplateFlowDebug(`enter writeRuntimeConfigFromTemplate json_bridge=1 forceTemplate=${forceTemplate ? '1' : '0'} sources=${cleanSources.length}`);
+    appendTemplateFlowDebug(`enter writeRuntimeConfigFromTemplate json_bridge=1 forceTemplate=${forceTemplate ? '1' : '0'} sources=${cleanSources.length}`);
 
     const writeCheckStart = async () => {
       await runShellWithRoot(`
@@ -4057,7 +3468,7 @@ KANO_WRITE_CHECK_EOF
           printf 'failed_time=%s\\n' "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
         } >> ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
         `, 10 * 1000);
-      await appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate failed step=${step} detail=${detail.replace(/[\r\n]+/g, ' ').slice(0, 500)}`);
+      appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate failed step=${step} detail=${detail.replace(/[\r\n]+/g, ' ').slice(0, 500)}`);
       const checkRes = await runShellWithRoot(`cat ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} 2>/dev/null || true`, 10 * 1000);
       createToast(
         `生成运行配置失败，config.yaml 未提交<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
@@ -4107,7 +3518,7 @@ KANO_WRITE_CHECK_EOF
         echo 'CONFIG_SOURCE_COMMITTED=template.yaml'
         `, 15 * 1000);
     if (!sourceRes.success) {
-      await appendTemplateFlowDebug('warning: config source sidecar write failed after config commit');
+      appendTemplateFlowDebug('warning: config source sidecar write failed after config commit');
     }
 
     const oldSize = ((write.content.split('\n').find((line) => line.startsWith('YAML_OLD_SIZE=')) || '').replace(/^YAML_OLD_SIZE=/, '').trim());
@@ -4129,7 +3540,7 @@ KANO_WRITE_CHECK_EOF
         } >> ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
         `, 15 * 1000);
 
-    await appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate committed json_bridge=1 providers=${normalized.providerNames.join(',')} unchanged=${write.unchanged ? '1' : '0'}`);
+    appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate committed json_bridge=1 providers=${normalized.providerNames.join(',')} unchanged=${write.unchanged ? '1' : '0'}`);
     if (showToast) {
       createToast(
         '运行配置已通过结构检查并原子写入',
@@ -4747,7 +4158,7 @@ KANO_WRITE_CHECK_EOF
       if (verified !== want) {
         return false;
       }
-      await appendTemplateFlowDebug(`runtime tun converged want=${want ? '1' : '0'}`);
+      appendTemplateFlowDebug(`runtime tun converged want=${want ? '1' : '0'}`);
       return true;
     } catch (e) {
       console.error('ensure runtime traffic mode failed', e);
@@ -5043,7 +4454,7 @@ KANO_WRITE_CHECK_EOF
         };
       });
       for (const item of results) {
-        await appendTemplateFlowDebug(`provider_update_final name=${item.name} result=failed type=${item.errorType} attempts=0`);
+        appendTemplateFlowDebug(`provider_update_final name=${item.name} result=failed type=${item.errorType} attempts=0`);
       }
       const unavailableResult = buildProviderUpdateResult(results, {
         controllerInfo: readiness.controllerInfo,
@@ -5058,7 +4469,7 @@ KANO_WRITE_CHECK_EOF
     const results = await mapWithConcurrency(requestedNames, 2, async (name) => {
       let finalItem = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
-        await appendTemplateFlowDebug(`provider_update_start name=${name} attempt=${attempt}`);
+        appendTemplateFlowDebug(`provider_update_start name=${name} attempt=${attempt}`);
         const res = await callMihomoApi(
           `/providers/proxies/${encodeURIComponent(name)}`,
           'PUT',
@@ -5072,7 +4483,7 @@ KANO_WRITE_CHECK_EOF
             type: 'proxy-provider', name, ok: true, attempts: attempt, statusCode: res.statusCode || null,
             errorType: '', message: '', rawMessage: '', urlMasked: '', via: 'mihomo',
           };
-          await appendTemplateFlowDebug(`provider_update_final name=${name} result=success attempts=${attempt}`);
+          appendTemplateFlowDebug(`provider_update_final name=${name} result=success attempts=${attempt}`);
           break;
         }
 
@@ -5085,16 +4496,16 @@ KANO_WRITE_CHECK_EOF
           errorType: classified.type, message: classified.message, rawMessage,
           urlMasked: rawUrl ? maskSubscriptionUrl(rawUrl) : '', via: '',
         };
-        await appendTemplateFlowDebug(`provider_update_failed name=${name} type=${classified.type} attempt=${attempt}`);
+        appendTemplateFlowDebug(`provider_update_failed name=${name} type=${classified.type} attempt=${attempt}`);
         if (!classified.retryable || attempt >= 3) break;
         const delayMs = attempt * 1000;
-        await appendTemplateFlowDebug(`provider_update_retry name=${name} next_attempt=${attempt + 1} delay_ms=${delayMs}`);
+        appendTemplateFlowDebug(`provider_update_retry name=${name} next_attempt=${attempt + 1} delay_ms=${delayMs}`);
         createToast(`正在重试 ${escapeHtml(name)}（${attempt + 1}/3）`, 'yellow', delayMs + 1200);
         await wait(delayMs);
       }
 
       if (!finalItem.ok) {
-        await appendTemplateFlowDebug(`provider_update_final name=${name} result=failed type=${finalItem.errorType} attempts=${finalItem.attempts}`);
+        appendTemplateFlowDebug(`provider_update_final name=${name} result=failed type=${finalItem.errorType} attempts=${finalItem.attempts}`);
       }
       return finalItem;
     });
@@ -5167,7 +4578,7 @@ KANO_WRITE_CHECK_EOF
 
     const archive = await downloadCoreArchive({ allowCached: true });
     if (!archive.ok) {
-      await appendTemplateFlowDebug(`local_converter_repair archive_failed stage=${archive.stage || 'unknown'}`);
+      appendTemplateFlowDebug(`local_converter_repair archive_failed stage=${archive.stage || 'unknown'}`);
       return true;
     }
     const repaired = await runDangerousShellWithRoot(`
@@ -5191,7 +4602,7 @@ KANO_WRITE_CHECK_EOF
       trap - EXIT
       echo CONVERTER_REPAIRED
     `, 45 * 1000, 'repair_local_subscription_converter');
-    await appendTemplateFlowDebug(`local_converter_repair result=${repaired.success ? 'success' : 'failed'}`);
+    appendTemplateFlowDebug(`local_converter_repair result=${repaired.success ? 'success' : 'failed'}`);
     return true;
   };
 
@@ -6340,7 +5751,7 @@ KANO_WRITE_CHECK_EOF
     if (!(await isCorePidAlive(pid))) return false;
     await wait(1500);
     if (!(await isCorePidAlive(pid))) return false;
-    await appendTemplateFlowDebug(`core process ready before api context=${context} pid=${pid}`);
+    appendTemplateFlowDebug(`core process ready before api context=${context} pid=${pid}`);
     createToast(
       `${escapeHtml(context)}\u540e\u6838\u5fc3\u8fdb\u7a0b\u5df2\u542f\u52a8\uff0c\u6b63\u5728\u7ee7\u7eed\u7b49\u5f85\u63a7\u5236 API...`,
       'yellow',
@@ -6396,7 +5807,7 @@ KANO_WRITE_CHECK_EOF
     const geodataState = await inspectGeodataBootstrap();
     if (geodataState.inProgress) {
       createToast('检测到 Mihomo 正在初始化 MMDB/Geo 数据，已延长等待，避免误判启动失败。', 'yellow', 12000);
-      await appendTemplateFlowDebug(`geodata bootstrap grace context=${context} found=${geodataState.found}`);
+      appendTemplateFlowDebug(`geodata bootstrap grace context=${context} found=${geodataState.found}`);
       if (await waitForCoreApi(20, 1000)) {
         createToast('Geo 数据初始化完成，Mihomo API 已恢复。', 'green', 8000);
         return true;
@@ -6494,9 +5905,9 @@ KANO_WRITE_CHECK_EOF
   };
 
   const restartClashWithConfigRollback = async (rollbackPath = null, context = '\u91cd\u542f') => {
-    await appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
+    appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
     const ok = await restartClash({ skipCheck: true });
-    await appendTemplateFlowDebug(`leave restartClashWithConfigRollback ok=${ok ? '1' : '0'} context=${context}`);
+    appendTemplateFlowDebug(`leave restartClashWithConfigRollback ok=${ok ? '1' : '0'} context=${context}`);
     if (ok) return true;
 
     if (rollbackPath === null) {
@@ -6527,7 +5938,7 @@ KANO_WRITE_CHECK_EOF
       return false;
     }
 
-    await appendTemplateFlowDebug(`restart failed, restoring config rollback=${rollbackPath}`);
+    appendTemplateFlowDebug(`restart failed, restoring config rollback=${rollbackPath}`);
     const restored = await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
     if (!restored) {
       createToast(`${escapeHtml(context)}失败，且上一份 config.yaml 回滚失败。`, 'red', 12000);
@@ -6537,7 +5948,7 @@ KANO_WRITE_CHECK_EOF
 
     createToast('新配置启动失败，正在尝试用上一份 config.yaml 恢复核心…', 'yellow', 9000);
     const recoveryOk = await restartClash({ skipCheck: true });
-    await appendTemplateFlowDebug(`rollback recovery restart result=${recoveryOk ? '1' : '0'} context=${context}`);
+    appendTemplateFlowDebug(`rollback recovery restart result=${recoveryOk ? '1' : '0'} context=${context}`);
     if (recoveryOk) {
       createToast(`${escapeHtml(context)}失败；上一份 config.yaml 已恢复，核心已重新启动。`, 'yellow', 12000);
     } else {
@@ -6741,161 +6152,6 @@ KANO_WRITE_CHECK_EOF
       await runShellWithRoot(`
         rm -f ${shellQuote(txBase)} ${shellQuote(txTemplate)} ${shellQuote(`${txBase}.new`)} ${shellQuote(`${txTemplate}.new`)} ${shellQuote(subRollbackPath)} 2>/dev/null || true
       `, 5000);
-    }
-  };
-
-  const showDialog = (message, title = '\u63d0\u793a') => {
-    let timer = null;
-    let fnfn = null;
-    let closed = false;
-    const containerId = 'toast_' + createRandomString(4);
-    const id = 'close_message_btn_' + createRandomString(4);
-    const id_download = 'download_btn_' + createRandomString(4);
-    const id_clear = 'clear_btn_' + createRandomString(4);
-    const id_refresh = 'refresh_btn_' + createRandomString(4);
-    const id_pause = 'pause_btn_' + createRandomString(4);
-    let rawMessage = sanitizeSubscriptionSecrets(message || '');
-    const message1 = textToHtml(rawMessage);
-    const { el, close } = createFixedToast(
-      containerId,
-      `
-        <div style="pointer-events:all;width:80vw;max-width:800px">
-            <div class="title" style="margin:0" data-i18n="system_notice">${escapeHtml(title)}</div>
-            <div class="content_message" style="background: rgba(0, 0, 0, 0.8);color: rgb(0, 255, 0);box-sizing: border-box;font-family: sans-serif;line-height:1.4;margin:10px 0;max-height: 400px;overflow: auto;font-size: .64rem;">${message1}</div>
-            <div class="kano-log-actions">
-                <button style="font-size:.64rem" id="${id_refresh}">\u5237\u65b0</button>
-                <button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${id_pause}">\u6682\u505c\u6eda\u52a8</button>
-                <button style="font-size:.64rem" id="${id_download}">\u4e0b\u8f7d</button>
-                <button style="font-size:.64rem" id="${id_clear}">\u6e05\u7a7a</button>
-            </div>
-            <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;">
-                <button style="font-size:.64rem" id="${id}" data-i18n="close_btn">${t('close_btn')}</button>
-            </div>
-        </div>
-        `,
-    );
-    const btn = el.querySelector(`#${id}`);
-    const download = el.querySelector(`#${id_download}`);
-    const clearBtn = el.querySelector(`#${id_clear}`);
-    const rBtn = el.querySelector(`#${id_refresh}`);
-    const msg_el = el.querySelector(`.content_message`);
-    const safeClose = () => {
-      if (closed) return;
-      closed = true;
-      if (timer) {
-        timer();
-        timer = null;
-      }
-      if (fnfn) {
-        fnfn();
-        fnfn = null;
-      }
-      close();
-    };
-
-    if (!btn) {
-      safeClose();
-      return;
-    }
-
-    let shouldPause = false;
-    fnfn = requestInterval(() => {
-      if (!closed && msg_el && !shouldPause) {
-        msg_el.scrollTo({
-          top: msg_el.scrollHeight + 199,
-          left: 0,
-          behavior: 'smooth',
-        });
-      }
-    }, 500);
-
-    if (download) {
-      download.onclick = async () => {
-        const t = Math.floor(Date.now() + Math.random());
-        const file = new Blob([rawMessage], {
-          type: 'text/plain',
-        });
-        const url = URL.createObjectURL(file);
-        const a = document.createElement('a');
-        a.download = `kano_mm_log_${t}.txt`;
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 15000);
-        a.remove();
-      };
-    }
-
-    if (clearBtn) {
-      clearBtn.onclick = async () => {
-        const confirmed = await askConfirm(
-          `mm_clear_log_confirm_${createRandomString(4)}`,
-          '清空运行日志？',
-          '清空后无法在此页面恢复。',
-          '清空',
-          '取消',
-        );
-        if (!confirmed) return;
-        const res = await runShellWithRoot(
-          `: > ${shellQuote(LOG_FILE)}`,
-        );
-        if (res.success) {
-          createToast('\u65e5\u5fd7\u5df2\u6e05\u7a7a', 'green');
-          safeClose();
-        } else {
-          createToast(`\u6e05\u7a7a\u65e5\u5fd7\u5931\u8d25`, 'red');
-        }
-      };
-    }
-
-    let logRefreshPending = false;
-    const refresh = async (flag = false) => {
-      if (closed || logRefreshPending) return;
-      logRefreshPending = true;
-      try {
-        const msg_el = el.querySelector(`.content_message`);
-        const res = await runShellWithRoot(
-          `if [ -f ${shellQuote(LOG_FILE)} ]; then tail -n 100 ${shellQuote(LOG_FILE)}; fi`,
-        );
-        if (closed || !msg_el) return;
-        if (res.success) {
-          rawMessage = sanitizeSubscriptionSecrets(res.content || '');
-          msg_el.innerHTML = textToHtml(rawMessage);
-          flag && createToast('\u65e5\u5fd7\u5df2\u5237\u65b0');
-        } else {
-          flag && createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
-        }
-      } catch (e) {
-        if (flag && !closed) createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
-      } finally {
-        logRefreshPending = false;
-      }
-    };
-
-    if (rBtn) {
-      rBtn.onclick = async () => {
-        await refresh(true);
-      };
-    }
-
-    if (timer) timer();
-    timer = requestInterval(async () => {
-      await refresh();
-    }, 2500);
-
-    btn.onclick = async () => {
-      safeClose();
-    };
-
-    const pause_btn = el.querySelector(`#${id_pause}`);
-    if (pause_btn) {
-      pause_btn.onclick = () => {
-        shouldPause = !shouldPause;
-        pause_btn.textContent = shouldPause ? '\u7ee7\u7eed\u6eda\u52a8' : '\u6682\u505c\u6eda\u52a8';
-        pause_btn.style.background = shouldPause
-          ? ''
-          : 'var(--dark-btn-color-active)';
-      };
     }
   };
 
@@ -10445,15 +9701,15 @@ KANO_POLICY_TOOLS_EOF
 
     const ensureTemplateProviders = async (sources, options = {}) => {
       const cleanSources = normalizeSubSourceList(sources);
-      await appendTemplateFlowDebug(`enter ensureTemplateProviders sources=${cleanSources.length} forceTemplate=${options && options.forceTemplate ? '1' : '0'}`);
+      appendTemplateFlowDebug(`enter ensureTemplateProviders sources=${cleanSources.length} forceTemplate=${options && options.forceTemplate ? '1' : '0'}`);
       const { forceTemplate = false } = options;
       if (!forceTemplate && !(await hasUserTemplateYaml())) return true;
       if (!(await prepareTemplateFromBase(cleanSources))) {
-        await appendTemplateFlowDebug('ensureTemplateProviders failed at prepareTemplateFromBase');
+        appendTemplateFlowDebug('ensureTemplateProviders failed at prepareTemplateFromBase');
         return false;
       }
       const overrideOk = await applyJsOverrideToTemplate({ showToast: false, restart: false, sources: cleanSources, prepareTemplate: false });
-      await appendTemplateFlowDebug(`ensureTemplateProviders applyJsOverrideToTemplate result=${overrideOk ? '1' : '0'}`);
+      appendTemplateFlowDebug(`ensureTemplateProviders applyJsOverrideToTemplate result=${overrideOk ? '1' : '0'}`);
       return overrideOk;
     };
 
@@ -10462,7 +9718,7 @@ KANO_POLICY_TOOLS_EOF
       { backup = true, convertMode = SUB_CONVERT_MODE_PROVIDER } = {},
     ) => {
       const cleanSources = normalizeSubSourceList(sources);
-      await appendTemplateFlowDebug(`enter writeSubEntrypoint sources=${cleanSources.length}`);
+      appendTemplateFlowDebug(`enter writeSubEntrypoint sources=${cleanSources.length}`);
       if (cleanSources.length == 0) return false;
       const ok = await writeRuntimeConfigFromTemplate(cleanSources, {
         backup,
@@ -10470,7 +9726,7 @@ KANO_POLICY_TOOLS_EOF
         forceTemplate: true,
         localProviderFiles: normalizeSubConvertModeValue(convertMode) == SUB_CONVERT_MODE_LOCAL,
       });
-      await appendTemplateFlowDebug(`leave writeSubEntrypoint ok=${ok ? '1' : '0'}`);
+      appendTemplateFlowDebug(`leave writeSubEntrypoint ok=${ok ? '1' : '0'}`);
       return ok;
     };
 
@@ -10489,13 +9745,13 @@ KANO_POLICY_TOOLS_EOF
       const sources = normalizeSubSourceList(cleanSources);
       if (sources.length == 0) return { ok: false, conversion: buildProviderUpdateResult([]) };
       createToast(`订阅服务器拒绝 HTTP Provider（${escapeHtml(reason)}），正在自动改用设备本地下载/转换...`, 'yellow', 10000);
-      await appendTemplateFlowDebug(`provider_auto_local_fallback enter reason=${reason} sources=${sources.length}`);
+      appendTemplateFlowDebug(`provider_auto_local_fallback enter reason=${reason} sources=${sources.length}`);
 
       const conversion = await convertSubscriptionsLocally(sources);
       if (conversion.failed > 0) {
         const failed = conversion.providers.find((item) => !item.ok);
         createToast(`自动本地转换失败：${escapeHtml(failed && failed.message || '未知错误')}；保持原 HTTP Provider 配置。`, 'red', 10000);
-        await appendTemplateFlowDebug(`provider_auto_local_fallback convert_failed reason=${failed && failed.message || ''}`);
+        appendTemplateFlowDebug(`provider_auto_local_fallback convert_failed reason=${failed && failed.message || ''}`);
         return { ok: false, conversion };
       }
 
@@ -10534,7 +9790,7 @@ KANO_POLICY_TOOLS_EOF
         return { ok: false, conversion };
       }
       const appliedConversion = await reloadLocalSubscriptionProviders(sources, conversion);
-      await appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
+      appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
       createToast(
         appliedConversion.failed == 0
           ? 'HTTP Provider 被上游拒绝；已自动切换为设备本地转换并恢复节点。'
@@ -10640,7 +9896,7 @@ KANO_POLICY_TOOLS_EOF
         if (showToast) createToast('\u65e7\u76f4\u901a\u6a21\u5f0f\u8fc1\u79fb\u5931\u8d25\uff1a\u8ba2\u9605\u94fe\u63a5\u5199\u5165\u5931\u8d25', 'red', 9000);
         return [];
       }
-      await appendTemplateFlowDebug(`legacy subscription migrated sources=${cleanSources.length}`);
+      appendTemplateFlowDebug(`legacy subscription migrated sources=${cleanSources.length}`);
       if (showToast) {
         createToast(`\u5df2\u8fc1\u79fb\u65e7\u76f4\u901a\u6a21\u5f0f\uff1a${cleanSources.length} \u4e2a\u8ba2\u9605\u94fe\u63a5\u5df2\u5199\u5165 subscription_urls.txt`, 'yellow', 8000);
       }
@@ -11079,15 +10335,15 @@ ${expectedProviderChecks}
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const cleanSources = normalizeSubSourceList(sources);
       let localConversion = null;
-      await appendTemplateFlowDebug(`enter updateSubProviders mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
+      appendTemplateFlowDebug(`enter updateSubProviders mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
       const sourceCheck = await inspectConfigNodeSource(cleanSources, { requireSavedSubscription: true });
       if (!sourceCheck.ok) {
-        await appendTemplateFlowDebug(`updateSubProviders sourceCheck failed status=${sourceCheck.status || ''}`);
+        appendTemplateFlowDebug(`updateSubProviders sourceCheck failed status=${sourceCheck.status || ''}`);
         createToast(sourceCheck.message, 'red', 10000);
         return false;
       }
       if (sourceCheck.requiresTemplateRebuild || sourceCheck.source == 'template_embedded') {
-        await appendTemplateFlowDebug('updateSubProviders fallback to template rebuild');
+        appendTemplateFlowDebug('updateSubProviders fallback to template rebuild');
         createToast(sourceCheck.message, 'yellow', 8000);
         const rebuilt = await overwriteConfigByTemplate({ confirm: false });
         return rebuilt;
@@ -11103,7 +10359,7 @@ ${expectedProviderChecks}
       }
       const runtimeCheck = await inspectSubscriptionRuntimeConfig(cleanSources, cleanMode, cleanConvertMode);
       if (runtimeCheck.ok) {
-        await appendTemplateFlowDebug('updateSubProviders fast path: runtime config unchanged');
+        appendTemplateFlowDebug('updateSubProviders fast path: runtime config unchanged');
         if (cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
           createToast('本地转换已完成，正在让 Mihomo 重新加载节点...', 'yellow');
           const appliedConversion = await reloadLocalSubscriptionProviders(cleanSources, localConversion);
@@ -11155,7 +10411,7 @@ ${expectedProviderChecks}
         `);
       if (!source.success) {
         createToast(`\u8bfb\u53d6\u8ba2\u9605\u6e90\u5931\u8d25\uff0c\u672a\u6267\u884c\u65e7\u914d\u7f6e\u8fc1\u79fb\u3002<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
-        await appendTemplateFlowDebug('readCurrentSubSources failed before legacy migration');
+        appendTemplateFlowDebug('readCurrentSubSources failed before legacy migration');
         return [];
       }
       const sourceItems = parseStoredSubSourcesFromText(source.content || '');
@@ -11173,11 +10429,11 @@ ${expectedProviderChecks}
         if (showLegacySuspiciousSubSourcesError(legacySources, 'legacy entrypoint')) return [];
         if (!(await persistSubSourceState(legacySources))) {
           createToast('\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u8fc1\u79fb\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u4f7f\u7528\u672a\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\u3002', 'red', 9000);
-          await appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
+          appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
           return [];
         }
         createToast('\u5df2\u8fc1\u79fb\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u3002', 'yellow', 6500);
-        await appendTemplateFlowDebug(`legacy entrypoint migrated sources=${legacySources.length}`);
+        appendTemplateFlowDebug(`legacy entrypoint migrated sources=${legacySources.length}`);
         return legacySources;
       }
       return await migrateLegacySubscriptionSources({ showToast: true });
@@ -11193,14 +10449,14 @@ ${expectedProviderChecks}
       const cleanMode = normalizeSubRuleModeValue(mode);
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const cleanSources = normalizeSubSourceList(sources);
-      await appendTemplateFlowDebug(`enter writeSubConfigByMode mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
+      appendTemplateFlowDebug(`enter writeSubConfigByMode mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
       if (!(await setSubRuleMode(cleanMode))) return false;
       if (!(await ensureTemplateProviders(cleanSources, { forceTemplate: true }))) {
-        await appendTemplateFlowDebug('writeSubConfigByMode template failed at ensureTemplateProviders');
+        appendTemplateFlowDebug('writeSubConfigByMode template failed at ensureTemplateProviders');
         return false;
       }
       const ok = await writeSubEntrypoint(cleanSources, { backup, convertMode: cleanConvertMode });
-      await appendTemplateFlowDebug(`leave writeSubConfigByMode template ok=${ok ? '1' : '0'}`);
+      appendTemplateFlowDebug(`leave writeSubConfigByMode template ok=${ok ? '1' : '0'}`);
       return ok;
     };
 
@@ -11213,7 +10469,7 @@ ${expectedProviderChecks}
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const storedSources = normalizeStoredSubSourceList(sources);
       const cleanSources = normalizeSubSourceList(storedSources);
-      await appendTemplateFlowDebug(`enter saveSubSources mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length} stored=${storedSources.length}`);
+      appendTemplateFlowDebug(`enter saveSubSources mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length} stored=${storedSources.length}`);
       if (storedSources.length == 0) {
         createToast('\u8bf7\u81f3\u5c11\u8f93\u5165\u4e00\u4e2a\u8ba2\u9605\u94fe\u63a5\uff01', 'red');
         return false;
@@ -11291,12 +10547,12 @@ ${expectedProviderChecks}
         return restoreRes.success;
       };
       if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) {
-        await appendTemplateFlowDebug('saveSubSources persistSubSources failed');
+        appendTemplateFlowDebug('saveSubSources persistSubSources failed');
         await restoreSubscriptionTransaction();
         createToast('\u4fdd\u5b58\u8ba2\u9605\u6e90\u5931\u8d25\uff01', 'red');
         return false;
       }
-      await appendTemplateFlowDebug('saveSubSources persistSubSources ok');
+      appendTemplateFlowDebug('saveSubSources persistSubSources ok');
       if (cleanSources.length == 0) {
         await runShellWithRoot(`rm -rf ${shellQuote(subscriptionTxDir)} 2>/dev/null || true`, 10 * 1000);
         createToast('全部订阅已禁用，禁用状态已保存；当前运行配置保持不变。', 'green', 8000);
@@ -11322,7 +10578,7 @@ ${expectedProviderChecks}
       const writtenOk = await writeSubConfigByMode(cleanSources, cleanMode, {
         convertMode: cleanConvertMode,
       });
-      await appendTemplateFlowDebug(`saveSubSources writeSubConfigByMode result=${writtenOk ? '1' : '0'}`);
+      appendTemplateFlowDebug(`saveSubSources writeSubConfigByMode result=${writtenOk ? '1' : '0'}`);
       if (!writtenOk) {
         await restoreConfigRollbackPoint(rollbackPath, '\u4fdd\u5b58\u8ba2\u9605\u751f\u6210\u8fd0\u884c\u914d\u7f6e');
         await restoreSubscriptionTransaction();
@@ -11330,7 +10586,7 @@ ${expectedProviderChecks}
       }
       createToast('\u8ba2\u9605\u914d\u7f6e\u5df2\u5199\u5165\uff0c\u6b63\u5728\u91cd\u542f\u6838\u5fc3...', 'yellow');
       const restarted = await restartClashWithConfigRollback(rollbackPath, '\u4fdd\u5b58\u8ba2\u9605\u540e\u91cd\u542f');
-      await appendTemplateFlowDebug(`saveSubSources restart result=${restarted ? '1' : '0'}`);
+      appendTemplateFlowDebug(`saveSubSources restart result=${restarted ? '1' : '0'}`);
       if (!restarted) {
         await restoreSubscriptionTransaction();
         return false;
@@ -11353,9 +10609,9 @@ ${expectedProviderChecks}
       const sources = await readCurrentSubSources();
       const currentMode = await readCurrentSubRuleMode();
       const currentConvertMode = await readSavedSubConvertMode();
-      await appendTemplateFlowDebug(`enter overwriteConfigByTemplate mode=${currentMode} convert=${currentConvertMode} sources=${sources.length}`);
+      appendTemplateFlowDebug(`enter overwriteConfigByTemplate mode=${currentMode} convert=${currentConvertMode} sources=${sources.length}`);
       const sourceCheck = await inspectConfigNodeSource(sources);
-      await appendTemplateFlowDebug(`overwriteConfigByTemplate sourceCheck ok=${sourceCheck.ok ? '1' : '0'} source=${sourceCheck.source || ''} status=${sourceCheck.status || ''}`);
+      appendTemplateFlowDebug(`overwriteConfigByTemplate sourceCheck ok=${sourceCheck.ok ? '1' : '0'} source=${sourceCheck.source || ''} status=${sourceCheck.status || ''}`);
       if (!sourceCheck.ok) {
         createToast(sourceCheck.message, 'red', 10000);
         return false;

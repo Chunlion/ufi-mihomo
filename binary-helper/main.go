@@ -24,7 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.3.5"
+const version = "0.3.6"
 
 var commands = []string{"version", "snapshot", "clients", "network-status", "policy-read", "convert-subscription"}
 
@@ -46,6 +46,8 @@ type snapshotResult struct {
 	SecretSet          bool   `json:"secretSet"`
 	Options            string `json:"options"`
 	ConfigExists       bool   `json:"configExists"`
+	ConfigStatus       string `json:"configStatus"`
+	OptionsStatus      string `json:"optionsStatus"`
 	ConfigSize         int64  `json:"configSize"`
 	ProxyCount         int    `json:"proxyCount"`
 	CPUABI             string `json:"cpuAbi,omitempty"`
@@ -119,24 +121,42 @@ func runSnapshot(args []string) {
 		fail(err.Error())
 	}
 
-	out := snapshotResult{OK: true, Version: version, PID: findCorePID()}
+	out := snapshotResult{OK: true, Version: version, PID: findCorePID(), OptionsStatus: "not_requested"}
 	if st, err := os.Stat(*config); err == nil && !st.IsDir() {
+		out.ConfigStatus = "ready"
 		out.ConfigExists = true
 		out.ConfigSize = st.Size()
 		if b, err := readLimited(*config, 8<<20); err == nil {
 			var parseErr error
 			out.ExternalController, out.Secret, out.ProxyCount, parseErr = parseConfigSummary(string(b))
 			if parseErr != nil {
+				out.ConfigStatus = "invalid_yaml"
 				out.OK, out.Error = false, "config summary parsing failed"
 			}
 			out.SecretSet = out.Secret != ""
 		} else {
+			out.ConfigStatus = fileReadStatus(err)
 			out.OK, out.Error = false, "config summary read failed"
+		}
+	} else {
+		out.ConfigStatus = fileReadStatus(err)
+		if err == nil {
+			out.ConfigStatus = "not_file"
+		}
+		if out.ConfigStatus != "missing" {
+			out.OK, out.Error = false, "config: "+out.ConfigStatus
 		}
 	}
 	if *options != "" {
 		if b, err := readLimited(*options, 2<<20); err == nil {
 			out.Options = string(b)
+			out.OptionsStatus = "ready"
+		} else {
+			out.OptionsStatus = fileReadStatus(err)
+			if out.OptionsStatus != "missing" {
+				out.OK = false
+				out.Error = strings.TrimSpace(out.Error + " options: " + out.OptionsStatus)
+			}
 		}
 	}
 	props := commandOutputBatch(1200*time.Millisecond, []commandRequest{
@@ -152,21 +172,46 @@ func runSnapshot(args []string) {
 	writeJSON(out)
 }
 
+type summaryProxyCount int
+
+func (count *summaryProxyCount) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.SequenceNode {
+		return errors.New("proxies must be a sequence")
+	}
+	for _, item := range node.Content {
+		if item.Kind == yaml.AliasNode {
+			item = item.Alias
+		}
+		if item == nil || item.Kind != yaml.MappingNode {
+			return errors.New("proxy must be a mapping")
+		}
+	}
+	*count = summaryProxyCount(len(node.Content))
+	return nil
+}
+
 func parseConfigSummary(text string) (controller, secret string, proxyCount int, err error) {
 	var summary struct {
-		Controller string           `yaml:"external-controller"`
-		Secret     string           `yaml:"secret"`
-		Proxies    []map[string]any `yaml:"proxies"`
+		Controller string            `yaml:"external-controller"`
+		Secret     string            `yaml:"secret"`
+		Proxies    summaryProxyCount `yaml:"proxies"`
 	}
 	decoder := yaml.NewDecoder(strings.NewReader(text))
-	if err = decoder.Decode(&summary); err != nil {
+	var document yaml.Node
+	if err = decoder.Decode(&document); err != nil {
+		return "", "", 0, err
+	}
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return "", "", 0, errors.New("config must be a mapping")
+	}
+	if err = document.Decode(&summary); err != nil {
 		return "", "", 0, err
 	}
 	var extra yaml.Node
 	if err = decoder.Decode(&extra); err != io.EOF {
 		return "", "", 0, errors.New("expected one YAML document")
 	}
-	return summary.Controller, summary.Secret, len(summary.Proxies), nil
+	return summary.Controller, summary.Secret, int(summary.Proxies), nil
 }
 
 func findCorePID() int {
@@ -419,36 +464,52 @@ func runConvertSubscription(args []string) {
 		fail("input and output are required")
 	}
 
-	// Preserve the full 0.2.3 Mihomo-backed converter as a cold sidecar. It is only
-	// launched for subscription conversion; all status/diagnostic hot paths stay lightweight.
-	if sidecar := findConverterSidecar(); sidecar != "" {
+	converted, err := convertSubscription(*input, *output, findConverterSidecar())
+	if err != nil {
+		fail(err.Error())
+	}
+	writeJSON(converted)
+}
+
+func convertSubscription(input, output, sidecar string) (subscriptionResult, error) {
+	b, err := readLimited(input, 16<<20)
+	if err != nil {
+		return subscriptionResult{}, fmt.Errorf("input: %s", fileReadStatus(err))
+	}
+	out, count, format, lightErr := normalizeProviderDocument(b)
+	if lightErr == nil {
+		if err := writeFileAtomic(output, out, 0600); err != nil {
+			return subscriptionResult{}, fmt.Errorf("output: %s", fileReadStatus(err))
+		}
+		return subscriptionResult{OK: true, ProxyCount: count, Format: format}, nil
+	}
+	cause := "unavailable"
+	if sidecar != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		cmd := exec.CommandContext(ctx, sidecar, "convert-subscription", "--input", *input, "--output", *output)
+		cmd := exec.CommandContext(ctx, sidecar, "convert-subscription", "--input", input, "--output", output)
 		cmd.WaitDelay = time.Second
-		data, runErr := cmd.Output()
+		capture := &limitedOutput{limit: 64 << 10}
+		cmd.Stdout, cmd.Stderr = capture, io.Discard
+		runErr := cmd.Run()
+		deadline := ctx.Err()
 		cancel()
 		var converted subscriptionResult
-		if runErr == nil && json.Unmarshal(data, &converted) == nil && converted.OK && converted.ProxyCount > 0 {
-			writeJSON(converted)
-			return
+		switch {
+		case deadline == context.DeadlineExceeded:
+			cause = "timeout"
+		case capture.exceeded:
+			cause = "output_limit"
+		case runErr != nil:
+			cause = "execution_failed"
+		case json.Unmarshal(capture.Bytes(), &converted) != nil:
+			cause = "invalid_response"
+		case !converted.OK || converted.ProxyCount <= 0:
+			cause = "conversion_failed"
+		default:
+			return converted, nil
 		}
 	}
-
-	// Lightweight fallback: many providers already return a Clash/Mihomo YAML or JSON
-	// document. Extract/pass through its top-level proxies collection without pulling the
-	// entire Mihomo dependency graph into this Android helper.
-	b, err := readLimited(*input, 16<<20)
-	if err != nil {
-		fail(err.Error())
-	}
-	out, count, format, err := normalizeProviderDocument(b)
-	if err != nil {
-		fail("converter sidecar unavailable and input is not a Clash provider document: " + err.Error())
-	}
-	if err := writeFileAtomic(*output, out, 0600); err != nil {
-		fail(err.Error())
-	}
-	writeJSON(subscriptionResult{OK: true, ProxyCount: count, Format: format})
+	return subscriptionResult{}, fmt.Errorf("converter=%s; lightweight input unsupported or invalid", cause)
 }
 
 func findConverterSidecar() string {
@@ -698,6 +759,44 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
+var errFileTooLarge = errors.New("file too large")
+var errOutputLimit = errors.New("output limit exceeded")
+
+func fileReadStatus(err error) string {
+	switch {
+	case err == nil:
+		return "ready"
+	case errors.Is(err, os.ErrNotExist):
+		return "missing"
+	case errors.Is(err, os.ErrPermission):
+		return "permission_denied"
+	case errors.Is(err, errFileTooLarge):
+		return "too_large"
+	default:
+		return "io_error"
+	}
+}
+
+type limitedOutput struct {
+	buffer   bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func (w *limitedOutput) Bytes() []byte  { return w.buffer.Bytes() }
+func (w *limitedOutput) String() string { return w.buffer.String() }
+
+func (w *limitedOutput) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := w.limit - w.buffer.Len()
+	if len(p) > remaining {
+		p = p[:remaining]
+		w.exceeded = true
+	}
+	_, _ = w.buffer.Write(p)
+	return n, nil
+}
+
 func readLimited(path string, max int64) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -710,7 +809,7 @@ func readLimited(path string, max int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(b)) > max {
-		return nil, fmt.Errorf("file too large: %s", path)
+		return nil, fmt.Errorf("%w: %s", errFileTooLarge, path)
 	}
 	return b, nil
 }
@@ -724,11 +823,16 @@ func commandOutput(timeout time.Duration, name string, args ...string) (string, 
 func commandOutputContext(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.WaitDelay = time.Second
-	b, err := cmd.CombinedOutput()
+	capture := &limitedOutput{limit: 256 << 10}
+	cmd.Stdout, cmd.Stderr = capture, capture
+	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
-		return string(b), ctx.Err()
+		return capture.String(), ctx.Err()
 	}
-	return string(b), err
+	if capture.exceeded {
+		return capture.String(), errOutputLimit
+	}
+	return capture.String(), err
 }
 
 type commandRequest struct {
@@ -748,6 +852,9 @@ func commandOutputBatch(timeout time.Duration, requests []commandRequest) []stri
 			out, err := commandOutputContext(ctx, item.name, item.args...)
 			if err != nil {
 				status := "execution_failed"
+				if errors.Is(err, errOutputLimit) {
+					status = "output_limit"
+				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					status = "timeout"
 				}

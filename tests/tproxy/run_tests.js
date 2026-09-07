@@ -1076,7 +1076,7 @@ function runFor(label, file) {
           { encoding: 'utf8' },
         );
         chk(
-          helperSource.includes('const version = "0.3.4"')
+          helperSource.includes('const version = "0.3.5"')
             && packageEntries.status === 0
             && !packageEntries.stdout.includes('kano-f50-helper-bundled-armv7'),
           true,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,7 +26,7 @@ func TestSnapshotJSONOmitsOnDemandData(t *testing.T) {
 	}
 }
 
-func TestYAMLScalar(t *testing.T) {
+func TestSummaryScalar(t *testing.T) {
 	tests := map[string]string{
 		"127.0.0.1:7788":                   "127.0.0.1:7788",
 		`"0.0.0.0:7788" # controller`:      "0.0.0.0:7788",
@@ -33,7 +35,8 @@ func TestYAMLScalar(t *testing.T) {
 		"null":                             "",
 	}
 	for input, expected := range tests {
-		if actual := yamlScalar(input); actual != expected {
+		_, actual, _, err := parseConfigSummary("secret: " + input)
+		if err != nil || actual != expected {
 			t.Fatalf("yamlScalar(%q) = %q, want %q", input, actual, expected)
 		}
 	}
@@ -48,9 +51,82 @@ proxies:
     type: vless
 proxy-groups: []
 `
-	controller, secret, count := parseConfigSummary(config)
+	controller, secret, count, err := parseConfigSummary(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if controller != "0.0.0.0:7788" || secret != "abc#123" || count != 2 {
 		t.Fatalf("controller=%q secret=%q count=%d", controller, secret, count)
+	}
+}
+
+func TestSummaryStructures(t *testing.T) {
+	for _, input := range []string{
+		"proxies: [{name: one}, {name: two}]",
+		"proxies:\n- name: one\n  alpn: [h2, http/1.1]\n- name: two\n",
+		"nodes: &nodes [{name: one}, {name: two}]\nproxies: *nodes",
+	} {
+		_, _, count, err := parseConfigSummary(input)
+		if err != nil || count != 2 {
+			t.Fatalf("count=%d err=%v", count, err)
+		}
+	}
+	for _, input := range []string{"proxies: [", "secret: a\nsecret: b", "proxies: wrong", "secret: a\n---\nsecret: b"} {
+		if _, _, _, err := parseConfigSummary(input); err == nil {
+			t.Fatal("accepted malformed summary")
+		}
+	}
+}
+
+func TestCorePIDSelection(t *testing.T) {
+	proc := t.TempDir()
+	for pid, args := range map[string]string{
+		"10": "/data/clash/Proxy/Clash.Core\x00-t\x00-f\x00config.yaml\x00",
+		"11": "/system/bin/sh\x00-c\x00echo mihomo\x00",
+		"12": "/data/clash/Proxy/Clash.Core\x00--test=true\x00",
+	} {
+		if err := os.Mkdir(filepath.Join(proc, pid), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proc, pid, "cmdline"), []byte(args), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if pid := findCorePIDIn(proc); pid != 0 {
+		t.Fatalf("false core PID: %d", pid)
+	}
+	if err := os.Mkdir(filepath.Join(proc, "20"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proc, "20", "cmdline"), []byte("/data/clash/Proxy/Clash.Core\x00-f\x00config.yaml\x00"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if pid := findCorePIDIn(proc); pid != 20 {
+		t.Fatalf("missing core: %d", pid)
+	}
+}
+
+func TestLargeLogTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.log")
+	if err := os.WriteFile(path, []byte(strings.Repeat("old\n", 100000)+"latest1\nlatest2\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []int64{16, 64, 256 << 10} {
+		if got := tailFile(path, 2, limit); got != "latest1\nlatest2" {
+			t.Fatalf("limit=%d tail=%q", limit, got)
+		}
+	}
+}
+
+func TestCommandTimeoutAndMissing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := commandOutputContext(ctx, os.Args[0], "-test.run=^$"); err == nil {
+		t.Fatal("cancelled command succeeded")
+	}
+	result := commandOutputBatch(time.Second, []commandRequest{{name: filepath.Join(t.TempDir(), "missing")}})
+	if !strings.Contains(result[0], "command_missing") {
+		t.Fatalf("missing error: %q", result)
 	}
 }
 

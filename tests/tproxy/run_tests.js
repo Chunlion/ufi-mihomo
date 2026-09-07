@@ -179,7 +179,7 @@ function runFor(label, file) {
   const actionGroupButtonLists = [
     'quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn',
     'subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn',
-    'policyToolsBtn, performanceBtn, rescueBtn, showLogBtn',
+    'policyToolsBtn, rescueBtn, showLogBtn',
     'binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled',
   ];
   const actionGroupButtonCounts = actionGroupButtonLists
@@ -195,8 +195,8 @@ function runFor(label, file) {
   );
   chk(
     actionGroupButtonCounts,
-    [8, 6, 4, 4],
-    '网络与诊断菜单包含性能入口，各组保持成对数量',
+    [8, 6, 3, 4],
+    '网络设置合并重复入口，其余操作组保持成对数量',
   );
   chk(
     panelUiSource.includes('.kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;')
@@ -256,18 +256,13 @@ function runFor(label, file) {
       && panelUiSource.includes("appendActionGroup('\\u8ba2\\u9605\\u4e0e\\u914d\\u7f6e'")
       && panelUiSource.includes("appendActionGroup('\\u7f51\\u7edc\\u4e0e\\u8bca\\u65ad'")
       && panelUiSource.includes("appendActionGroup('\\u7ec4\\u4ef6\\u4e0e\\u7ef4\\u62a4'")
-      && source.includes("performanceBtn.textContent = '性能与兼容';")
-      && source.includes("componentsGroup.addEventListener('toggle'")
-      && source.indexOf("componentsGroup.addEventListener('toggle'")
-        < source.indexOf("refreshBinaryHelperButton().catch((e) => console.error('辅助内核状态探测失败', e));")
-      && source.includes('const CONTROLLER_INFO_CACHE_TTL = 10 * 1000;')
       && source.includes('<div class="kano-dialog-menu-title">规则覆写</div>')
       && source.includes('<div class="kano-dialog-menu-title">配置文件</div>')
       && source.includes('>保存并应用</button>')
       && source.includes('>上传模板</button>')
       && source.includes('>导入配置</button>'),
     true,
-    '主菜单包含性能与兼容入口，组件探测按需执行',
+    '主菜单按任务重新分类，配置二级菜单按规则与文件分区',
   );
 
   const subscriptionDialogSource = source.slice(
@@ -1059,10 +1054,10 @@ function runFor(label, file) {
           'helper performance changes have a deployable version without unused ARMv7 payloads',
         );
         chk(
-          source.includes('const CONTROLLER_INFO_CACHE_TTL = 10 * 1000')
+          source.includes('const CONTROLLER_INFO_CACHE_TTL = 1500')
             && source.includes('const KANO_HELPER_SNAPSHOT_TTL = 1500'),
           true,
-          'controller reads are reused briefly while helper snapshots retain their short cache',
+          'panel status reads use a shared 1.5-second cache',
         );
         chk(
           source.includes('https://gitee.com/womye/123/releases/download/v1/kano-f50-helper-linux-arm64')

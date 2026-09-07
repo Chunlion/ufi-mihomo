@@ -58,7 +58,7 @@
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_RUNTIME_MANAGER_VERSION = '1.0.5';
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.2';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.3';
   const BOOT_MANAGER_PATH = '/data/f50_boot_fix/boot_manager.sh';
   const BOOT_GATE_START = '# F50_BOOT_FIX_BEGIN';
   const BOOT_GATE_END = '# F50_BOOT_FIX_END';
@@ -114,17 +114,36 @@ ${script}`,
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
 
-  const appendTemplateFlowDebug = async (message = '') => {
+  const templateFlowMessages = [];
+  let templateFlowTimer = null;
+  let templateFlowWriting = false;
+  const flushTemplateFlowDebug = async () => {
+    templateFlowTimer = null;
+    if (templateFlowWriting || !templateFlowMessages.length) return;
+    templateFlowWriting = true;
+    const messages = templateFlowMessages.splice(0);
     try {
       await runShellWithRoot(`
-        mkdir -p /data
-        {
-          printf '%s ' "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null || cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-          printf '%s\n' ${shellQuote(sanitizeSubscriptionSecrets(String(message || '')).replace(/[\r\n]+/g, ' '))}
-        } >> ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
+        FLOW=${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
+        if [ -f "$FLOW" ] && [ "$(wc -c < "$FLOW")" -gt 262144 ]; then
+          tail -c 131072 "$FLOW" > "$FLOW.trim.$$" && mv "$FLOW.trim.$$" "$FLOW"
+        fi
+        printf '%s\\n' ${messages.map(shellQuote).join(' ')} >> "$FLOW"
       `, 5000);
     } catch (e) {
       console.error(e);
+    } finally {
+      templateFlowWriting = false;
+      if (templateFlowMessages.length && templateFlowTimer === null) {
+        templateFlowTimer = setTimeout(flushTemplateFlowDebug, 250);
+      }
+    }
+  };
+  const appendTemplateFlowDebug = async (message = '') => {
+    templateFlowMessages.push(`${new Date().toISOString()} ${sanitizeSubscriptionSecrets(String(message || '')).replace(/[\r\n]+/g, ' ').slice(0, 2000)}`);
+    if (templateFlowMessages.length > 100) templateFlowMessages.shift();
+    if (templateFlowTimer === null && !templateFlowWriting) {
+      templateFlowTimer = setTimeout(flushTemplateFlowDebug, 250);
     }
   };
 
@@ -445,9 +464,26 @@ ${script}`,
         (
           set -e
           BOOT_LOCK=/dev/kano_boot_write.lock
-          mkdir "$BOOT_LOCK" || { echo BOOT_WRITE_BUSY; exit 1; }
+          if ! mkdir "$BOOT_LOCK" 2>/dev/null; then
+            mkdir "$BOOT_LOCK/recover" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; }
+            owner=$(cat "$BOOT_LOCK/pid" 2>/dev/null || true)
+            case "$owner" in
+              ''|*[!0-9]*) rmdir "$BOOT_LOCK/recover"; rmdir "$BOOT_LOCK" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; } ;;
+              *)
+                if kill -0 "$owner" 2>/dev/null; then
+                  rmdir "$BOOT_LOCK/recover"
+                  echo BOOT_WRITE_BUSY; exit 1
+                fi
+                rm -f "$BOOT_LOCK/pid"
+                rmdir "$BOOT_LOCK/recover"
+                rmdir "$BOOT_LOCK" || exit 1
+                ;;
+            esac
+            mkdir "$BOOT_LOCK" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; }
+          fi
+          printf '%s\\n' "$$" > "$BOOT_LOCK/pid" || exit 1
           BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano`)}.$$
-          trap 'rm -f "$BOOT_TMP"; rmdir "$BOOT_LOCK"' EXIT
+          trap 'rm -f "$BOOT_TMP" "$BOOT_LOCK/pid"; rmdir "$BOOT_LOCK"' EXIT
           trap 'exit 1' HUP INT TERM
           BOOT_SOURCE=${shellQuote(BOOT_FILE)}
           [ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
@@ -1036,6 +1072,7 @@ if [ "$action" = boot ]; then
   trap 'rmdir "$BOOT_LOCK" 2>/dev/null' EXIT
   trap 'exit 1' HUP INT TERM
   started=$(cut -d. -f1 /proc/uptime)
+  [ ! -f /data/kano_policy_boot.log ] || mv -f /data/kano_policy_boot.log /data/kano_policy_boot.previous.log
   exec >/data/kano_policy_boot.log 2>&1
   boot_result() {
     elapsed=$(( $(cut -d. -f1 /proc/uptime) - started ))
@@ -1281,6 +1318,7 @@ KANO_RUNTIME_MANAGER_EOF
       state,
       enabled: state != 'disabled',
       managerVersion: values.MANAGER_VERSION || '',
+      formatCurrent: values.BOOT_FORMAT_CURRENT == '1',
       message: values.BOOT_MESSAGE || '',
       content: String(result.content || ''),
     };
@@ -1300,6 +1338,7 @@ KANO_RUNTIME_MANAGER_EOF
             sh -n ${shellQuote(CLASH_SERVICE)} && [ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] &&
             [ -r ${shellQuote(`${CLASH_DIR}/Scripts/Clash.Inotify`)} ]; then
           echo "BOOT_STATE=direct"
+          echo "BOOT_FORMAT_CURRENT=1"
           echo "BOOT_MESSAGE=原生后台自启；启动结果见日志 kano_policy_boot.log"
         else
           echo "BOOT_STATE=incomplete"
@@ -1342,6 +1381,7 @@ KANO_RUNTIME_MANAGER_EOF
   const migrateBootPolicyIntegration = async () => {
     const state = await inspectBootIntegration();
     if (!state.enabled) return true;
+    if (state.formatCurrent && state.state == 'direct') return true;
     if (!(await ensurePolicyToolsScript())) return false;
     const migrated = await runShellWithRoot(addPolicyToolsBootLineCmd(), 10 * 1000);
     return !!migrated.success;
@@ -1669,6 +1709,7 @@ EOF_KANO_SERVICE
     const failAndRollback = async (stage, detail = '') => {
       const rollback = await rollbackRepairedInstall(committed.targetBackup, stage);
       runtimePreflightCache = null;
+      runtimePreflightLoadPromise = null;
       createToast(
         `安装自愈在 ${escapeHtml(stage)} 阶段失败<br>${safeTextToHtml(detail)}<br>${rollback.success ? '已恢复修复前安装目录。' : `回滚失败：${safeTextToHtml(rollback.content || '')}`}`,
         'red',
@@ -1687,6 +1728,7 @@ EOF_KANO_SERVICE
       return failAndRollback('post_start', started.content || '未返回健康状态');
     }
     runtimePreflightCache = null;
+    runtimePreflightLoadPromise = null;
     createToast(`安装自愈完成并已启动核心<br>用户数据备份：${escapeHtml(committed.userBackup)}`, 'green', 9000);
     return true;
   };
@@ -5830,14 +5872,24 @@ KANO_WRITE_CHECK_EOF
 
   let runtimePreflightCache = null;
   let runtimePreflightCacheExpiresAt = 0;
+  let runtimePreflightLoadPromise = null;
   const checkInstallState = async ({ fresh = false } = {}) => {
     if (!fresh && runtimePreflightCache && runtimePreflightCacheExpiresAt > Date.now()) {
       return runtimePreflightCache;
     }
-    const state = await runtimePreflight();
-    runtimePreflightCache = state;
-    runtimePreflightCacheExpiresAt = Date.now() + 1500;
-    return state;
+    if (!fresh && runtimePreflightLoadPromise) return runtimePreflightLoadPromise;
+    const loadPromise = runtimePreflight();
+    runtimePreflightLoadPromise = loadPromise;
+    try {
+      const state = await loadPromise;
+      if (runtimePreflightLoadPromise == loadPromise) {
+        runtimePreflightCache = state;
+        runtimePreflightCacheExpiresAt = Date.now() + 1500;
+      }
+      return state;
+    } finally {
+      if (runtimePreflightLoadPromise == loadPromise) runtimePreflightLoadPromise = null;
+    }
   };
 
   //\u76d1\u6d4b\u662f\u5426\u5df2\u7ecf\u5b89\u88c5\u8fc7\u4e86
@@ -5970,6 +6022,7 @@ KANO_WRITE_CHECK_EOF
           ${shellQuote(DOWNLOAD_LOG)} \
           ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
           /data/kano_policy_boot.log \
+          /data/kano_policy_boot.previous.log \
           /data/kano_clash_config_test.log \
           /data/kano_clash_repair_zip_test.out \
           /data/kano_clash_repair_unzip.out \
@@ -6251,6 +6304,7 @@ KANO_WRITE_CHECK_EOF
       exit 0
     `, 90 * 1000);
     runtimePreflightCache = null;
+    runtimePreflightLoadPromise = null;
     return result;
   };
 
@@ -6700,7 +6754,7 @@ KANO_WRITE_CHECK_EOF
     const id_clear = 'clear_btn_' + createRandomString(4);
     const id_refresh = 'refresh_btn_' + createRandomString(4);
     const id_pause = 'pause_btn_' + createRandomString(4);
-    const rawMessage = sanitizeSubscriptionSecrets(message || '');
+    let rawMessage = sanitizeSubscriptionSecrets(message || '');
     const message1 = textToHtml(rawMessage);
     const { el, close } = createFixedToast(
       containerId,
@@ -6794,18 +6848,27 @@ KANO_WRITE_CHECK_EOF
       };
     }
 
+    let logRefreshPending = false;
     const refresh = async (flag = false) => {
-      if (closed) return;
-      const msg_el = el.querySelector(`.content_message`);
-      const res = await runShellWithRoot(
-        `if [ -f ${shellQuote(LOG_FILE)} ]; then timeout 2s awk '{print}' ${shellQuote(LOG_FILE)} | tail -n 100; fi`,
-      );
-      if (closed || !msg_el) return;
-      if (res.success) {
-        msg_el.innerHTML = textToHtml(sanitizeSubscriptionSecrets(res.content || ''));
-        flag && createToast('\u65e5\u5fd7\u5df2\u5237\u65b0');
-      } else {
-        flag && createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
+      if (closed || logRefreshPending) return;
+      logRefreshPending = true;
+      try {
+        const msg_el = el.querySelector(`.content_message`);
+        const res = await runShellWithRoot(
+          `if [ -f ${shellQuote(LOG_FILE)} ]; then tail -n 100 ${shellQuote(LOG_FILE)}; fi`,
+        );
+        if (closed || !msg_el) return;
+        if (res.success) {
+          rawMessage = sanitizeSubscriptionSecrets(res.content || '');
+          msg_el.innerHTML = textToHtml(rawMessage);
+          flag && createToast('\u65e5\u5fd7\u5df2\u5237\u65b0');
+        } else {
+          flag && createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
+        }
+      } catch (e) {
+        if (flag && !closed) createToast('\u83b7\u53d6\u65e5\u5fd7\u5931\u8d25', 'red');
+      } finally {
+        logRefreshPending = false;
       }
     };
 
@@ -10022,13 +10085,18 @@ KANO_POLICY_TOOLS_EOF
       boot_on.title = state && state.message || '';
     };
     boot_on.addEventListener('click', async () => {
-      if (!(await ensureReady())) return;
+      if (!(await ensureReady({ readOnly: true }))) return;
       const operationToken = acquireCriticalOperation('修改开机自启');
       if (!operationToken) return;
       setButtonBusy(boot_on, true, '处理中…');
       try {
         const before = await inspectBootIntegration();
-        const result = await runShellWithRoot(before.enabled ? removeBootLinesCmd() : addBootLinesCmd());
+        const disable = before.enabled && before.state != 'incomplete' && before.state != 'manager_damaged';
+        if (!disable && (!(await ensureServiceWrapper()).success || !(await ensurePolicyToolsScript()))) {
+          createToast('自启组件修复失败，请重试', 'red');
+          return;
+        }
+        const result = await runShellWithRoot(disable ? removeBootLinesCmd() : addBootLinesCmd());
         if (!result.success) {
           createToast(`修改开机自启失败<br>${safeTextToHtml(result.content || '')}`, 'red', 8000);
           return;

@@ -24,7 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.3.4"
+const version = "0.3.5"
 
 var commands = []string{"version", "snapshot", "clients", "network-status", "policy-read", "convert-subscription"}
 
@@ -124,8 +124,14 @@ func runSnapshot(args []string) {
 		out.ConfigExists = true
 		out.ConfigSize = st.Size()
 		if b, err := readLimited(*config, 8<<20); err == nil {
-			out.ExternalController, out.Secret, out.ProxyCount = parseConfigSummary(string(b))
+			var parseErr error
+			out.ExternalController, out.Secret, out.ProxyCount, parseErr = parseConfigSummary(string(b))
+			if parseErr != nil {
+				out.OK, out.Error = false, "config summary parsing failed"
+			}
 			out.SecretSet = out.Secret != ""
+		} else {
+			out.OK, out.Error = false, "config summary read failed"
 		}
 	}
 	if *options != "" {
@@ -133,95 +139,42 @@ func runSnapshot(args []string) {
 			out.Options = string(b)
 		}
 	}
-	out.CPUABI = getProp("ro.product.cpu.abi")
-	out.AndroidSDK = getProp("ro.build.version.sdk")
+	props := commandOutputBatch(1200*time.Millisecond, []commandRequest{
+		{name: "getprop", args: []string{"ro.product.cpu.abi"}},
+		{name: "getprop", args: []string{"ro.build.version.sdk"}},
+	})
+	if !strings.HasPrefix(props[0], "ERROR:") {
+		out.CPUABI = strings.TrimSpace(props[0])
+	}
+	if !strings.HasPrefix(props[1], "ERROR:") {
+		out.AndroidSDK = strings.TrimSpace(props[1])
+	}
 	writeJSON(out)
 }
 
-func parseConfigSummary(text string) (controller, secret string, proxyCount int) {
-	s := bufio.NewScanner(strings.NewReader(text))
-	s.Buffer(make([]byte, 64*1024), 1024*1024)
-	inProxies := false
-	for s.Scan() {
-		raw := strings.TrimRight(s.Text(), "\r")
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
-		if indent == 0 {
-			inProxies = false
-			if k, v, ok := splitYAMLKV(trimmed); ok {
-				switch k {
-				case "external-controller":
-					controller = yamlScalar(v)
-				case "secret":
-					secret = yamlScalar(v)
-				case "proxies":
-					inProxies = true
-					if strings.HasPrefix(strings.TrimSpace(v), "[") && strings.TrimSpace(v) != "[]" {
-						proxyCount++
-					}
-				}
-			}
-			continue
-		}
-		if inProxies && strings.HasPrefix(strings.TrimSpace(raw), "-") {
-			proxyCount++
-		}
+func parseConfigSummary(text string) (controller, secret string, proxyCount int, err error) {
+	var summary struct {
+		Controller string           `yaml:"external-controller"`
+		Secret     string           `yaml:"secret"`
+		Proxies    []map[string]any `yaml:"proxies"`
 	}
-	return
-}
-
-func splitYAMLKV(s string) (string, string, bool) {
-	i := strings.IndexByte(s, ':')
-	if i <= 0 {
-		return "", "", false
+	decoder := yaml.NewDecoder(strings.NewReader(text))
+	if err = decoder.Decode(&summary); err != nil {
+		return "", "", 0, err
 	}
-	return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i+1:]), true
-}
-
-func yamlScalar(v string) string {
-	v = strings.TrimSpace(v)
-	if v == "" || v == "null" || v == "~" {
-		return ""
+	var extra yaml.Node
+	if err = decoder.Decode(&extra); err != io.EOF {
+		return "", "", 0, errors.New("expected one YAML document")
 	}
-	quote := byte(0)
-	escaped := false
-	comment := -1
-	for i := 0; i < len(v); i++ {
-		c := v[i]
-		if quote == 0 {
-			if c == '\'' || c == '"' {
-				quote = c
-				continue
-			}
-			if c == '#' && (i == 0 || v[i-1] == ' ' || v[i-1] == '\t') {
-				comment = i
-				break
-			}
-			continue
-		}
-		if quote == '"' && c == '\\' && !escaped {
-			escaped = true
-			continue
-		}
-		if c == quote && !escaped {
-			quote = 0
-		}
-		escaped = false
-	}
-	if comment >= 0 {
-		v = strings.TrimSpace(v[:comment])
-	}
-	if len(v) >= 2 && ((v[0] == '\'' && v[len(v)-1] == '\'') || (v[0] == '"' && v[len(v)-1] == '"')) {
-		v = v[1 : len(v)-1]
-	}
-	return strings.TrimSpace(v)
+	return summary.Controller, summary.Secret, len(summary.Proxies), nil
 }
 
 func findCorePID() int {
-	ents, err := os.ReadDir("/proc")
+	return findCorePIDIn("/proc")
+}
+
+func findCorePIDIn(proc string) int {
+	ents, err := os.ReadDir(proc)
 	if err != nil {
 		return 0
 	}
@@ -235,21 +188,33 @@ func findCorePID() int {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		comm, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "comm"))
-		cmd, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
-		name := strings.TrimSpace(string(comm))
-		cmdline := strings.ReplaceAll(string(cmd), "\x00", " ")
-		low := strings.ToLower(name + " " + cmdline)
+		cmd, _ := os.ReadFile(filepath.Join(proc, e.Name(), "cmdline"))
+		args := strings.Split(strings.TrimRight(string(cmd), "\x00"), "\x00")
+		if len(args) == 0 || args[0] == "" {
+			continue
+		}
+		testing := false
+		for _, arg := range args[1:] {
+			if arg == "-t" || arg == "--test" || strings.HasPrefix(arg, "--test=") || strings.HasPrefix(arg, "-t=") {
+				testing = true
+			}
+		}
+		if testing {
+			continue
+		}
+		exe, err := os.Readlink(filepath.Join(proc, e.Name(), "exe"))
+		if err != nil {
+			exe = args[0]
+		}
+		exe = strings.TrimSuffix(exe, " (deleted)")
 		score := 0
 		switch {
-		case strings.Contains(low, "/data/clash/proxy/clash.core"):
+		case exe == "/data/clash/Proxy/Clash.Core":
 			score = 100
-		case strings.EqualFold(name, "Clash.Core"):
+		case filepath.Base(exe) == "Clash.Core":
 			score = 90
-		case strings.EqualFold(name, "mihomo"):
+		case filepath.Base(exe) == "mihomo":
 			score = 80
-		case strings.Contains(low, "mihomo"):
-			score = 60
 		}
 		if score > 0 {
 			cands = append(cands, candidate{pid: pid, score: score})
@@ -457,9 +422,14 @@ func runConvertSubscription(args []string) {
 	// Preserve the full 0.2.3 Mihomo-backed converter as a cold sidecar. It is only
 	// launched for subscription conversion; all status/diagnostic hot paths stay lightweight.
 	if sidecar := findConverterSidecar(); sidecar != "" {
-		cmd := exec.Command(sidecar, "convert-subscription", "--input", *input, "--output", *output)
-		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-		if err := cmd.Run(); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		cmd := exec.CommandContext(ctx, sidecar, "convert-subscription", "--input", *input, "--output", *output)
+		cmd.WaitDelay = time.Second
+		data, runErr := cmd.Output()
+		cancel()
+		var converted subscriptionResult
+		if runErr == nil && json.Unmarshal(data, &converted) == nil && converted.OK && converted.ProxyCount > 0 {
+			writeJSON(converted)
 			return
 		}
 	}
@@ -745,11 +715,6 @@ func readLimited(path string, max int64) ([]byte, error) {
 	return b, nil
 }
 
-func getProp(key string) string {
-	out, _ := commandOutput(1200*time.Millisecond, "getprop", key)
-	return strings.TrimSpace(out)
-}
-
 func commandOutput(timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -758,6 +723,7 @@ func commandOutput(timeout time.Duration, name string, args ...string) (string, 
 
 func commandOutputContext(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = time.Second
 	b, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return string(b), ctx.Err()
@@ -779,7 +745,18 @@ func commandOutputBatch(timeout time.Duration, requests []commandRequest) []stri
 		wg.Add(1)
 		go func(index int, item commandRequest) {
 			defer wg.Done()
-			outputs[index], _ = commandOutputContext(ctx, item.name, item.args...)
+			out, err := commandOutputContext(ctx, item.name, item.args...)
+			if err != nil {
+				status := "execution_failed"
+				if errors.Is(err, context.DeadlineExceeded) {
+					status = "timeout"
+				}
+				if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
+					status = "command_missing"
+				}
+				out = fmt.Sprintf("ERROR: %s %s\n%s", item.name, status, out)
+			}
+			outputs[index] = out
 		}(i, request)
 	}
 	wg.Wait()
@@ -802,9 +779,38 @@ func selectExecutable(cands []string) string {
 }
 
 func tailFile(path string, lines int, maxBytes int64) string {
-	b, err := readLimited(path, maxBytes)
+	if lines <= 0 || maxBytes <= 0 {
+		return ""
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return ""
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	offset := st.Size() - maxBytes
+	truncated := offset > 0
+	if offset < 0 {
+		offset = 0
+	}
+	if truncated {
+		offset--
+		maxBytes++
+	}
+	if _, err = f.Seek(offset, io.SeekStart); err != nil {
+		return ""
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxBytes))
+	if err != nil {
+		return ""
+	}
+	if truncated {
+		if i := bytes.IndexByte(b, '\n'); i >= 0 {
+			b = b[i+1:]
+		}
 	}
 	parts := strings.Split(strings.TrimRight(string(b), "\r\n"), "\n")
 	if len(parts) > lines {

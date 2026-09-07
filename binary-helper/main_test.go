@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,6 +24,68 @@ func TestSnapshotJSONOmitsOnDemandData(t *testing.T) {
 		if strings.Contains(string(content), field) {
 			t.Fatalf("snapshot unexpectedly includes on-demand field %q: %s", field, content)
 		}
+	}
+}
+
+func TestBoundedOutput(t *testing.T) {
+	w := &limitedOutput{limit: 16}
+	_, err := io.Copy(w, strings.NewReader(strings.Repeat("x", 1000)))
+	if err != nil || !w.exceeded || len(w.Bytes()) != 16 {
+		t.Fatalf("capture not bounded: %d %v", len(w.Bytes()), err)
+	}
+}
+
+func TestReadStatuses(t *testing.T) {
+	if fileReadStatus(os.ErrPermission) != "permission_denied" || fileReadStatus(os.ErrNotExist) != "missing" {
+		t.Fatal("wrong read status")
+	}
+	path := filepath.Join(t.TempDir(), "large")
+	if err := os.WriteFile(path, []byte("12345"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readLimited(path, 2)
+	if fileReadStatus(err) != "too_large" {
+		t.Fatal("missing size status")
+	}
+}
+
+func TestLightConversionFirst(t *testing.T) {
+	dir := t.TempDir()
+	input, output := filepath.Join(dir, "input"), filepath.Join(dir, "output")
+	for _, data := range []string{
+		"proxies: [{name: test, type: ss, server: example.com, port: 443, cipher: aes-128-gcm, password: test}]",
+		`{"proxies":[{"name":"test","type":"ss","server":"example.com","port":443,"cipher":"aes-128-gcm","password":"test"}]}`,
+	} {
+		if err := os.WriteFile(input, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		result, err := convertSubscription(input, output, filepath.Join(dir, "missing-converter"))
+		if err != nil || !result.OK || result.ProxyCount != 1 {
+			t.Fatalf("light path: %v %v", result, err)
+		}
+		b, err := os.ReadFile(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var before, after map[string]any
+		if err = yaml.Unmarshal([]byte(data), &before); err != nil {
+			t.Fatal(err)
+		}
+		if err = yaml.Unmarshal(b, &after); err != nil {
+			t.Fatal(err)
+		}
+		original, _ := json.Marshal(before["proxies"])
+		converted, _ := json.Marshal(after["proxies"])
+		if string(original) != string(converted) {
+			t.Fatal("proxy fields changed")
+		}
+	}
+	if err := os.WriteFile(input, []byte("vless://unsupported"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := convertSubscription(input, output, filepath.Join(dir, "missing-converter"))
+	if err == nil || !strings.Contains(err.Error(), "converter=execution_failed") {
+		t.Fatalf("lost converter failure: %v", err)
 	}
 }
 

@@ -1,6 +1,529 @@
 //<script>
-// 猫猫TProxy v7.4.4 FINAL - unified Go-first runtime with automatic Shell fallback
+// 猫猫TProxy v7.4.4-kpr.2 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
+  // KPR: dual-stack private routing; disabled until explicitly enabled.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// CIDR arithmetic uses bit strings so IPv6 never passes through a JS Number.
+function createPrivateRouteLogic() {
+  'use strict';
+  const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'];
+  const META = 'x-kano-private-route';
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  function address(bits, family) {
+    if (family === 4) return bits.match(/.{8}/g).map((b) => parseInt(b, 2)).join('.');
+    const groups = bits.match(/.{16}/g).map((b) => parseInt(b, 2).toString(16));
+    let best = -1, length = 1;
+    for (let i = 0; i < 8;) {
+      if (groups[i] !== '0') { i++; continue; }
+      let j = i; while (j < 8 && groups[j] === '0') j++;
+      if (j - i > length) { best = i; length = j - i; }
+      i = j;
+    }
+    return best < 0 ? groups.join(':') : groups.slice(0, best).join(':') + '::' + groups.slice(best + length).join(':');
+  }
+  function cidr(value) {
+    const text = String(value == null ? '' : value).trim();
+    const parts = text.split('/');
+    if (!parts[0] || parts.length > 2 || (parts.length === 2 && !/^(0|[1-9]\d{0,2})$/.test(parts[1]))) throw new Error('Invalid IP/CIDR: ' + text);
+    let raw = parts[0], family = raw.includes(':') ? 6 : 4, bits;
+    if (family === 4) {
+      const octets = raw.split('.');
+      if (octets.length !== 4 || octets.some((s) => !/^(0|[1-9]\d{0,2})$/.test(s) || Number(s) > 255)) throw new Error('Invalid IPv4: ' + text);
+      bits = octets.map((s) => Number(s).toString(2).padStart(8, '0')).join('');
+    } else {
+      if (raw.includes('.')) {
+        const pos = raw.lastIndexOf(':');
+        const v4 = cidr(raw.slice(pos + 1));
+        if (v4.family !== 4) throw new Error('Invalid embedded IPv4');
+        raw = raw.slice(0, pos + 1) + [v4.bits.slice(0, 16), v4.bits.slice(16)].map((b) => parseInt(b, 2).toString(16)).join(':');
+      }
+      if (!/^[0-9a-f:]+$/i.test(raw) || raw.split('::').length > 2) throw new Error('Invalid IPv6: ' + text);
+      const halves = raw.split('::');
+      const left = halves[0] ? halves[0].split(':') : [];
+      const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+      if ([...left, ...right].some((s) => !/^[0-9a-f]{1,4}$/i.test(s)) ||
+          (halves.length === 1 ? left.length !== 8 : left.length + right.length >= 8)) throw new Error('Invalid IPv6: ' + text);
+      bits = [...left, ...Array(8 - left.length - right.length).fill('0'), ...right]
+        .map((s) => parseInt(s, 16).toString(2).padStart(16, '0')).join('');
+    }
+    const width = family === 4 ? 32 : 128;
+    const prefix = parts.length === 2 ? Number(parts[1]) : width;
+    if (prefix > width) throw new Error('Invalid prefix: ' + text);
+    bits = bits.slice(0, prefix).padEnd(width, '0');
+    return { family, prefix, bits, text: address(bits, family) + '/' + prefix };
+  }
+  const contains = (a, b) => a.family === b.family && a.prefix <= b.prefix && a.bits.slice(0, a.prefix) === b.bits.slice(0, a.prefix);
+  const overlaps = (a, b) => contains(a, b) || contains(b, a);
+  function compact(values) {
+    const nets = values.map((v) => typeof v === 'string' ? cidr(v) : v)
+      .sort((a, b) => a.family - b.family || a.prefix - b.prefix || a.bits.localeCompare(b.bits));
+    const result = [];
+    for (const n of nets) if (!result.some((p) => contains(p, n))) result.push(n);
+    return result.sort((a, b) => a.family - b.family || a.bits.localeCompare(b.bits) || a.prefix - b.prefix).map((n) => n.text);
+  }
+  function subtractOne(base, cut) {
+    if (!overlaps(base, cut)) return [base.text];
+    if (contains(cut, base)) return [];
+    return ['0', '1'].flatMap((bit) => {
+      const bits = (base.bits.slice(0, base.prefix) + bit).padEnd(base.bits.length, '0');
+      return subtractOne(cidr(address(bits, base.family) + '/' + (base.prefix + 1)), cut);
+    });
+  }
+  function subtract(bases, exceptions) {
+    let result = compact(bases);
+    for (const target of exceptions.map(cidr)) {
+      result = result.flatMap((base) => subtractOne(cidr(base), target));
+      if (result.length > 4096) throw new Error('CIDR expansion exceeds 4096 entries');
+    }
+    return compact(result);
+  }
+  function normalize(input = {}) {
+    const enabled = input.enabled === true || input.enabled === 'on';
+    const raw = Array.isArray(input.cidrs) ? input.cidrs : String(input.cidrs || '').replace(/#[^\n]*/g, '').split(/[\s,;]+/);
+    const values = raw.map((v) => String(v).trim()).filter(Boolean);
+    if (values.length > 64) throw new Error('\u6700\u591a\u914d\u7f6e 64 \u4e2a\u79c1\u7f51\u7f51\u6bb5');
+    const cidrs = compact(values);
+    for (const n of cidrs) if (!PRIVATE.some((p) => contains(cidr(p), cidr(n)))) {
+      throw new Error('\u4ec5\u652f\u6301 IPv4 RFC1918 \u6216 IPv6 ULA\uff08fc00::/7\uff09\uff1a' + n);
+    }
+    const policy = String(input.policy || '').trim();
+    if (policy.length > 128 || /[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('\u4ee3\u7406\u7ec4\u540d\u542b\u4e0d\u652f\u6301\u7684\u5b57\u7b26');
+    if (enabled && (!cidrs.length || !policy)) throw new Error('\u542f\u7528\u524d\u8bf7\u586b\u5199\u7f51\u6bb5\u5e76\u9009\u62e9\u4ee3\u7406\u51fa\u7ad9');
+    if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('\u4e0d\u80fd\u9009\u62e9\u5185\u7f6e\u7b56\u7565 ' + policy);
+    return { enabled, cidrs, policy };
+  }
+  function fromOptions(o = {}) {
+    return normalize({ enabled: o.private_route_enabled, cidrs: o.private_route_cidrs || '', policy: o.private_route_policy || '' });
+  }
+  function checkConnected(state, connected) {
+    for (const t of state.cidrs.map(cidr)) for (const item of connected) {
+      const local = cidr(typeof item === 'string' ? item : item.cidr);
+      if (overlaps(t, local)) throw new Error('\u8fdc\u7aef\u7f51\u6bb5 ' + t.text + ' \u4e0e F50 \u76f4\u8fde\u7f51\u6bb5 ' + local.text + ' \u91cd\u53e0');
+    }
+  }
+  function strip(config) {
+    const out = clone(config), meta = out[META];
+    if (!meta || ![1, 2].includes(meta.version)) return out;
+    const rules = Array.isArray(out.rules) ? out.rules.slice() : [];
+    const inserted = Array.isArray(meta.rules) ? meta.rules : [];
+    if (inserted.every((r, i) => rules[i] === r)) rules.splice(0, inserted.length);
+    else for (const r of inserted) { const i = rules.indexOf(r); if (i >= 0) rules.splice(i, 1); }
+    if (rules.length || meta.rulesPresent !== false) out.rules = rules; else delete out.rules;
+    for (const [key, saved] of Object.entries(meta.tun || {})) {
+      if (!out.tun || !equal(out.tun[key], saved.applied)) continue;
+      if (saved.present) out.tun[key] = clone(saved.before); else delete out.tun[key];
+    }
+    if (out.tun && !Object.keys(out.tun).length && meta.tunPresent === false) delete out.tun;
+    delete out[META];
+    return out;
+  }
+  function list(tun, key) {
+    if (tun[key] == null) return [];
+    if (!Array.isArray(tun[key]) || tun[key].some((v) => typeof v !== 'string')) throw new Error('tun.' + key + ' must be a string array');
+    return tun[key];
+  }
+  function transform(config, input, mode = 'tproxy', connected = []) {
+    const state = normalize(input);
+    if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
+    const out = strip(config);
+    if (!state.enabled || mode === 'off') return out;
+    checkConnected(state, connected);
+    if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('\u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u9700\u8981 Mihomo \u89c4\u5219\u6a21\u5f0f');
+    if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('\u8fdc\u7aef\u7f51\u6bb5\u5305\u542b IPv6\uff0c\u8bf7\u5148\u52fe\u9009 IPv6 \u63a5\u7ba1');
+    const groups = out['proxy-groups'] || [], proxies = out.proxies || [];
+    if (!Array.isArray(groups) || !Array.isArray(proxies)) throw new Error('Invalid proxy definitions');
+    const target = [...groups, ...proxies].find((p) => p && p.name === state.policy);
+    if (!target) throw new Error('\u914d\u7f6e\u4e2d\u4e0d\u5b58\u5728\u51fa\u7ad9\uff1a' + state.policy);
+    if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('\u6240\u9009\u51fa\u7ad9\u4e0d\u662f\u4ee3\u7406');
+    if (own(out, 'rules') && !Array.isArray(out.rules)) throw new Error('rules must be an array');
+    const meta = { version: 2, mode, cidrs: state.cidrs, policy: state.policy, rules: [], tun: {}, rulesPresent: own(out, 'rules'), tunPresent: own(out, 'tun') };
+    const rule = (n, policy) => (cidr(n).family === 4 ? 'IP-CIDR,' : 'IP-CIDR6,') + n + ',' + policy + ',no-resolve';
+    meta.rules = [...state.cidrs.map((n) => rule(n, state.policy)), ...PRIVATE.map((n) => rule(n, 'DIRECT'))];
+    out.rules = [...meta.rules, ...(out.rules || [])];
+    if (mode === 'tun') {
+      if (out.tun != null && (typeof out.tun !== 'object' || Array.isArray(out.tun))) throw new Error('tun must be an object');
+      const tun = out.tun || (out.tun = {});
+      const set = (key, value) => {
+        meta.tun[key] = { present: own(tun, key), ...(own(tun, key) ? { before: clone(tun[key]) } : {}), applied: clone(value) };
+        tun[key] = value;
+      };
+      const migrated = [];
+      for (const entry of list(tun, 'route-exclude-address-set')) {
+        try { migrated.push(cidr(entry).text); continue; } catch (_) {}
+        const provider = (out['rule-providers'] || {})[entry];
+        if (!provider || provider.type !== 'inline' || provider.behavior !== 'ipcidr' || !Array.isArray(provider.payload)) throw new Error('\u65e0\u6cd5\u5b89\u5168\u62c6\u5206\u6392\u9664\u89c4\u5219\u96c6 ' + entry + '\uff0c\u8bf7\u6539\u7528 route-exclude-address \u6216 TProxy');
+        migrated.push(...provider.payload.map((n) => cidr(n).text));
+      }
+      if (list(tun, 'route-address-set').length) throw new Error('\u8bf7\u5c06 TUN route-address-set \u6539\u4e3a\u663e\u5f0f route-address');
+      const excluded = [...PRIVATE, ...migrated, ...list(tun, 'route-exclude-address'), ...list(tun, 'inet4-route-exclude-address'), ...list(tun, 'inet6-route-exclude-address')];
+      set('route-exclude-address', subtract(excluded, state.cidrs));
+      for (const key of ['route-exclude-address-set', 'inet4-route-exclude-address', 'inet6-route-exclude-address']) if (own(tun, key)) set(key, []);
+      const included = [...list(tun, 'route-address'), ...list(tun, 'inet4-route-address'), ...list(tun, 'inet6-route-address')];
+      if (included.length) {
+        set('route-address', compact([...included, ...state.cidrs]));
+        for (const key of ['inet4-route-address', 'inet6-route-address']) if (own(tun, key)) set(key, []);
+      }
+      set('dns-hijack', []);
+    }
+    out[META] = meta;
+    return out;
+  }
+  function runtime(config, options = {}, connected = []) {
+    let out = strip(config);
+    const mode = options.traffic_mode || 'tproxy';
+    const ipv6 = options.ipv6 === 'on';
+    const port = Number(options.dns_port || 1053);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('\u65e0\u6548 DNS \u7aef\u53e3');
+    out.ipv6 = ipv6;
+    if (!out.dns || typeof out.dns !== 'object' || Array.isArray(out.dns)) out.dns = {};
+    out.dns.enable = true; out.dns.ipv6 = ipv6;
+    out.dns.listen = (ipv6 ? '[::]:' : '0.0.0.0:') + port;
+    if (!out.tun || typeof out.tun !== 'object' || Array.isArray(out.tun)) out.tun = {};
+    out.tun.enable = mode === 'tun';
+    if (mode === 'tun') {
+      const device = String(out.tun.device || 'KanoTun');
+      if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device) || device === 'lo') throw new Error('Invalid TUN interface name');
+      Object.assign(out.tun, { device, stack: out.tun.stack || 'mixed', 'auto-route': true, 'auto-redirect': false, 'auto-detect-interface': true, 'strict-route': false });
+      // DNS interception is destination-aware in PolicyTools, not global in TUN.
+      out.tun['dns-hijack'] = [];
+      if (ipv6 && (out.tun['inet6-address'] == null || (Array.isArray(out.tun['inet6-address']) && !out.tun['inet6-address'].length))) out.tun['inet6-address'] = ['fdfe:dcba:9876::1/126'];
+    }
+    const feature = fromOptions(options);
+    return transform(out, feature, mode, connected);
+  }
+  function resolveSelection(proxies, name) {
+    const visited = new Set();
+    let current = name;
+    for (let i = 0; i < 32; i++) {
+      if (visited.has(current)) throw new Error('Proxy group cycle: ' + current);
+      visited.add(current);
+      if (['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(String(current).toUpperCase())) throw new Error('\u4ee3\u7406\u7ec4\u5f53\u524d\u6307\u5411 ' + current);
+      const value = proxies[current];
+      if (!value) throw new Error('\u6838\u5fc3\u672a\u52a0\u8f7d\u51fa\u7ad9 ' + current);
+      if (value.now) { current = value.now; continue; }
+      if (['direct', 'reject', 'reject-drop', 'pass', 'compatible'].includes(String(value.type || '').toLowerCase())) throw new Error('\u6240\u9009\u51fa\u7ad9\u4e3a\u76f4\u8fde\u6216\u62d2\u7edd');
+      if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('\u8bf7\u9009\u62e9\u56fa\u5b9a\u8282\u70b9\u6216\u80fd\u786e\u8ba4\u5f53\u524d\u51fa\u7ad9\u7684\u624b\u52a8\u9009\u62e9\u7ec4');
+      return current;
+    }
+    throw new Error('Proxy group nesting exceeds 32');
+  }
+  return { PRIVATE, META, cidr, address, compact, contains, overlaps, subtract, normalize, fromOptions, checkConnected, strip, transform, runtime, resolveSelection };
+}
+// SPDX-License-Identifier: AGPL-3.0-or-later
+function augmentPrivatePolicyShell(source, extension) {
+  'use strict';
+  function once(text, before, after, label) {
+    const index = text.indexOf(before);
+    if (index < 0 || text.indexOf(before, index + before.length) >= 0) throw new Error('Shell anchor mismatch: ' + label);
+    return text.slice(0, index) + after + text.slice(index + before.length);
+  }
+  function body(name, edit) {
+    const marker = name + '() {';
+    const start = source.indexOf(marker), end = source.indexOf('\n}', start) + 2;
+    if (start < 0 || end < start || source.indexOf(marker, start + marker.length) >= 0) throw new Error('Missing shell function: ' + name);
+    source = source.slice(0, start) + edit(source.slice(start, end)) + source.slice(end);
+  }
+  body('norm_mac', () => `norm_mac() {
+  echo "$1" | awk '
+    {s=toupper($0);valid=0;
+     if(s ~ /^[0-9A-F]+$/ && length(s)==12)valid=1;
+     if(index(s,":")||index(s,"-")){sep=index(s,":")?":":"-";n=split(s,a,sep);if(n==6){valid=1;for(i=1;i<=6;i++)if(length(a[i])!=2||a[i]!~/^[0-9A-F]+$/)valid=0}}
+     if(index(s,".")){n=split(s,a,".");if(n==3){valid=1;for(i=1;i<=3;i++)if(length(a[i])!=4||a[i]!~/^[0-9A-F]+$/)valid=0}}
+     if(!valid)exit 1;gsub(/[:.-]/,"",s);for(i=1;i<=12;i+=2)printf "%s%s",substr(s,i,2),i==11?"\\n":":";
+    }'
+}`);
+  body('is_ipv6', () => 'is_ipv6() {\n  [ "$(kpr_net "$1")" = 6 ]\n}');
+  body('is_cidr6', () => 'is_cidr6() {\n  case "$1" in */*) [ "$(kpr_net "$1")" = 6 ] ;; *) return 1 ;; esac\n}');
+  body('is_port_listening', () => `is_port_listening() {
+  PORT="$1"; FAMILY="$2"; HEX="$(printf '%04X' "$PORT")"
+  case "$PORT" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || return 1
+  for proto in udp tcp; do
+    found=0; suffix="";[ "$FAMILY" != 6 ] || suffix=6
+    if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$proto$suffix" 2>/dev/null;then found=1;fi
+    if [ "$found:$FAMILY" = 0:4 ] && [ "$(cat /proc/sys/net/ipv6/bindv6only 2>/dev/null)" = 0 ];then
+      if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(a[1]~/^0+$/&&toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$\u007bproto\u007d6" 2>/dev/null;then found=1;fi
+    fi
+    [ "$found" = 1 ] || return 1
+  done
+}`);
+  body('apply_policy', (part) => {
+    const add = part.split('\n').find((line) => line.includes('add_source_accepts "$IPT" mangle "$NEXT"'));
+    part = once(part, add + '\n', '', 'source accepts old position');
+    return once(part, '  if [ "$transparent" = "off" ]; then', add + '\n  kpr_add_capture "$IPT" "$NEXT" "$FAMILY" || return 1\n  if [ "$transparent" = "off" ]; then', 'capture after source bypass');
+  });
+  body('apply_dns', (part) => {
+    const add = part.split('\n').find((line) => line.includes('add_source_accepts "$IPT" nat "$NEXT"'));
+    part = once(part, add, add + '\n  kpr_add_dns_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1', 'DNS targets');
+    part = part.replace(/^  if ! is_port_listening .*$/m, '  is_port_listening "$dns_port" "$FAMILY" || { echo "DNS_LISTENER_MISSING IPv$FAMILY port=$dns_port"; return 1; }');
+    return part.replace(/^  if ! "\$IPT" -t nat -L .*$/m, '  "$IPT" -t nat -L >/dev/null 2>&1 || { echo "DNS_NAT_UNAVAILABLE IPv$FAMILY"; return 1; }');
+  });
+  body('apply_quic', (part) => {
+    const add = part.split('\n').find((line) => line.includes('add_source_returns "$IPT" filter "$NEXT"'));
+    return once(part, add, add + '\n  kpr_add_quic_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1', 'QUIC targets');
+  });
+  body('verify_family', (part) => part.replace('if [ "$dns_hijack" = "on" ] && is_port_listening "$dns_port" "$FAMILY" && "$IPT" -t nat -L >/dev/null 2>&1; then', 'if [ "$dns_hijack" = "on" ]; then\n    is_port_listening "$dns_port" "$FAMILY" || return 1\n    "$IPT" -t nat -L >/dev/null 2>&1 || return 1'));
+  body('verify_all', (part) => once(part, '  echo "POLICY_RULES_VERIFIED"', '  kpr_verify || return 1\n  echo "POLICY_RULES_VERIFIED"', 'private verify'));
+  body('policy_order_stable', (part) => once(part, '  policy_is_first "$IPT" || return 1', '  policy_is_first "$IPT" || return 1\n  verify_all >/dev/null 2>&1 || return 1', 'boot full verification'));
+  body('status_all', (part) => once(part, 'status_all() {', 'status_all() {\n  kpr_status', 'status'));
+  body('apply_all', () => `apply_all() {
+  LOCK=/dev/kano_policy_apply.lock
+  if ! mkdir "$LOCK" 2>/dev/null;then
+    owner="$(cat "$LOCK/pid" 2>/dev/null)"
+    case "$owner" in ''|*[!0-9]*) echo POLICY_APPLY_LOCK_INVALID;exit 1 ;; esac
+    if kill -0 "$owner" 2>/dev/null;then echo POLICY_APPLY_BUSY;exit 1;fi
+    rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null || exit 1
+  fi
+  echo "$$" > "$LOCK/pid" || { rmdir "$LOCK";exit 1; }
+  changed=0
+  finish_apply() {
+    rc=$?;trap - EXIT
+    if [ "$rc" -ne 0 ] && [ "$changed" = 1 ];then
+      recovery=0
+      rollback_family_hooks "$IPT" "$P4_OLD_POLICY" "$P4_OLD_DNS" "$P4_OLD_QUIC" || recovery=1
+      kpr_forward_restore "$IPT" "$P4_OLD_FORWARD" || recovery=1
+      if [ -n "$IP6T" ];then
+        rollback_family_hooks "$IP6T" "$P6_OLD_POLICY" "$P6_OLD_DNS" "$P6_OLD_QUIC" || recovery=1
+        kpr_forward_restore "$IP6T" "$P6_OLD_FORWARD" || recovery=1
+      fi
+      kpr_routes_rollback || recovery=1
+      [ "$recovery" = 0 ] && echo POLICY_APPLY_ROLLED_BACK || echo POLICY_ROLLBACK_INCOMPLETE
+    fi
+    rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null
+    exit "$rc"
+  }
+  trap finish_apply EXIT
+  trap 'exit 1' HUP INT TERM
+  IPT="$(get_ipt iptables)";IP6T="$(get_ipt ip6tables)";ipv6="$(get_opt ipv6 off)"
+  [ -n "$IPT" ] || { echo POLICY_NO_IPV4_BACKEND;exit 1; }
+  [ "$ipv6" != on ] || [ -n "$IP6T" ] || { echo POLICY_NO_IPV6_BACKEND;exit 1; }
+  kpr_read || exit 1
+  P4_OLD_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"
+  P4_OLD_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
+  P4_OLD_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"
+  P4_OLD_FORWARD="$(managed_hook_target "$IPT" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
+  P6_OLD_POLICY="";P6_OLD_DNS="";P6_OLD_QUIC="";P6_OLD_FORWARD=""
+  if [ -n "$IP6T" ];then
+    P6_OLD_POLICY="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"
+    P6_OLD_DNS="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
+    P6_OLD_QUIC="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"
+    P6_OLD_FORWARD="$(managed_hook_target "$IP6T" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
+  fi
+  changed=1
+  kpr_routes_begin || exit 1
+  apply_policy "$IPT" 4 && apply_dns "$IPT" 4 && apply_quic "$IPT" 4 && kpr_forward_switch "$IPT" 4 || exit 1
+  if [ "$ipv6" = on ];then
+    apply_policy "$IP6T" 6 && apply_dns "$IP6T" 6 && apply_quic "$IP6T" 6 && kpr_forward_switch "$IP6T" 6 || exit 1
+  elif [ -n "$IP6T" ];then
+    remove_managed_hooks "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"
+    remove_managed_hooks "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"
+    remove_managed_hooks "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"
+    remove_managed_hooks "$IP6T" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B"
+  fi
+  verify_all || exit 1
+  kpr_routes_commit || exit 1
+  changed=0
+  cleanup_family_chains "$IPT"
+  [ -z "$IP6T" ] || cleanup_family_chains "$IP6T"
+  for ipt in "$IPT" "$IP6T";do
+    [ -n "$ipt" ] || continue
+    active="$(managed_hook_target "$ipt" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
+    cleanup_unused_chains "$ipt" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B" "$active"
+  done
+  echo POLICY_APPLY_OK
+}`);
+  // Original helpers use globals such as IPT and FAMILY. Isolate calls so IPv6
+  // verification cannot redirect subsequent IPv4 cleanup to the IPv6 backend.
+  source = source.replace(/^(\w+)\(\) \{\n([\s\S]*?)^\}/gm, (_, name, content) => name + '() (\n' + content + ')');
+  source = once(source, 'flush_all() (', 'flush_all() (\n  kpr_cleanup || exit 1', 'flush private routes');
+  source = source.replace(/\^\[0-9\]\{2,5\}\$/g, '^[0-9]{1,5}$');
+  source = source.replace('flush) flush_all; echo', 'flush) flush_all && echo');
+  source = once(source, 'case "$1" in\n  apply)', extension + '\ncase "$1" in\n  private-cleanup) kpr_cleanup ;;\n  private-status) kpr_status ;;\n  apply)', 'dispatch');
+  return source;
+}
+const KPR_SHELL = "# KPR dual-stack routing. Only downstream TCP/UDP targets are captured.\nKPR_CONFIG=/data/clash/Proxy/config.yaml\nKPR_YQ=/data/clash/Tools/yq_linux_arm64\nKPR_TABLE=17666\nKPR_RETURN_TABLE=17667\nKPR_PREF=1777\nKPR_RETURN_PREF=1776\nKPR_MARK=0x10000000/0x10000000\nKPR_PROTO=242\nKPR_FORWARD=KANO_PR_FWD\nKPR_FORWARD_A=KANO_PR_FWD_A\nKPR_FORWARD_B=KANO_PR_FWD_B\nKPR_PLAN=\"$POLICY_DIR/private_route.plan\"\nKPR_OWNER=\"$POLICY_DIR/private_route.owner\"\nKPR_PENDING=\"$POLICY_DIR/private_route.pending\"\nKPR_OLD=\"$POLICY_DIR/private_route.previous\"\nKPR_NEXT=\"$POLICY_DIR/private_route.next\"\nKPR_ACTIVE=0\n\nkpr_error() { echo \"PRIVATE_ROUTE_ERROR=$*\" >&2; return 1; }\nkpr_iface_ok() ( case \"$1\" in ''|*[!A-Za-z0-9_.-]*|lo) exit 1 ;; esac; [ \"${#1}\" -le 15 ]; )\n# Parse IPv4/IPv6 into bit strings in awk; never round a 128-bit address.\nkpr_net() (\n  awk -v input=\"$1\" -v compare=\"$2\" -v op=\"${3:-valid}\" '\n  function digit(c) { return index(\"0123456789abcdef\",tolower(c))-1 }\n  function bits(v,w, s,i) { s=\"\"; for(i=0;i<w;i++){s=(v%2) s;v=int(v/2)} return s }\n  function parse(x, a,n,p,ip,b,k,l,r,j,t,z,c,h,v,width,q) {\n    n=split(x,a,\"/\"); if(n>2||a[1]==\"\") return \"\"; ip=a[1];p=a[2];\n    if(index(ip,\":\")) {\n      width=128;if(ip!~/^[0-9a-fA-F:]+$/)return \"\";\n      q=index(ip,\"::\");if(q){l=substr(ip,1,q-1);r=substr(ip,q+2);if(index(r,\"::\"))return \"\"}\n      else {l=ip;r=\"\"}\n      n=0;b=\"\";\n      if(l!=\"\"){k=split(l,t,\":\");for(j=1;j<=k;j++){h=t[j];if(length(h)<1||length(h)>4)return \"\";v=0;for(z=1;z<=length(h);z++)v=v*16+digit(substr(h,z,1));b=b bits(v,16);n++}}\n      c=\"\";if(r!=\"\"){k=split(r,t,\":\");for(j=1;j<=k;j++){h=t[j];if(length(h)<1||length(h)>4)return \"\";v=0;for(z=1;z<=length(h);z++)v=v*16+digit(substr(h,z,1));c=c bits(v,16);n++}}\n      if(q){if(n>=8)return \"\";for(j=n;j<8;j++)b=b bits(0,16);b=b c} else if(n!=8)return \"\";\n    } else {\n      width=32;k=split(ip,t,\".\");if(k!=4)return \"\";b=\"\";\n      for(j=1;j<=4;j++){if(t[j]!~/^[0-9]+$/||length(t[j])>3||t[j]>255||(length(t[j])>1&&substr(t[j],1,1)==\"0\"))return \"\";b=b bits(t[j]+0,8)}\n    }\n    if(p==\"\"){if(index(x,\"/\"))return \"\";p=width}\n    if(p!~/^[0-9]+$/||p>width||length(p)>3)return \"\";\n    return width \":\" p \":\" b\n  }\n  BEGIN {\n    x=parse(input);if(x==\"\")exit 1;split(x,a,\":\");\n    if(op==\"valid\"){print(a[1]==32?4:6);exit 0}\n    if(op==\"network\") {\n      b=a[3];p=a[2]+0;step=a[1]==32?8:16;out=\"\";\n      for(i=1;i<=a[1];i+=step){v=0;for(j=0;j<step;j++)v=v*2+(i+j<=p?substr(b,i+j,1):0);out=out (i==1?\"\":(step==8?\".\":\":\")) (step==8?sprintf(\"%d\",v):sprintf(\"%x\",v))}\n      print out \"/\" p;exit 0\n    }\n    if(op==\"private\") {\n      b=a[3];p=a[2]+0;\n      if(a[1]==128)exit !(p>=7&&substr(b,1,7)==\"1111110\");\n      exit !((p>=8&&substr(b,1,8)==\"00001010\")||(p>=12&&substr(b,1,12)==\"101011000001\")||(p>=16&&substr(b,1,16)==\"1100000010101000\"))\n    }\n    y=parse(compare);if(y==\"\")exit 2;split(y,c,\":\");if(a[1]!=c[1])exit 1;\n    p=a[2]<c[2]?a[2]:c[2];exit !(substr(a[3],1,p)==substr(c[3],1,p))\n  }'\n)\nkpr_read() {\n  KPR_ACTIVE=0; KPR_TARGETS=\"\"; KPR_LINKS=\"\"; KPR_DOWN=\"\"; KPR_TUN=\"\"; KPR_PORT=\"\"\n  KPR_MODE=\"$(get_opt traffic_mode tproxy)\"\n  [ \"$(get_opt private_route_enabled off)\" = on ] && [ \"$KPR_MODE\" != off ] || return 0\n  case \"$KPR_MODE\" in tun|tproxy) ;; *) kpr_error invalid_mode; return 1 ;; esac\n  KPR_TARGETS=\"$(get_opt private_route_cidrs '')\"\n  [ -n \"$KPR_TARGETS\" ] || { kpr_error empty_targets; return 1; }\n  count=0\n  for net in $KPR_TARGETS; do\n    count=$((count+1));[ \"$count\" -le 64 ] || return 1\n    kpr_net \"$net\" '' private || { kpr_error \"invalid_private_cidr:$net\"; return 1; }\n    fam=\"$(kpr_net \"$net\")\" || return 1\n    [ \"$fam\" != 6 ] || [ \"$(get_opt ipv6 off)\" = on ] || { kpr_error ipv6_disabled; return 1; }\n  done\n  [ -x \"$KPR_YQ\" ] || { kpr_error yq_missing; return 1; }\n  meta=\"$($KPR_YQ e -r '.\"x-kano-private-route\".version // 0' \"$KPR_CONFIG\" 2>/dev/null)\" || return 1\n  [ \"$meta\" = 2 ] || { kpr_error yaml_not_prepared; return 1; }\n  [ \"$($KPR_YQ e -r '.\"x-kano-private-route\".mode' \"$KPR_CONFIG\")\" = \"$KPR_MODE\" ] || { kpr_error yaml_mode_mismatch; return 1; }\n  wanted=\"$(printf '%s\\n' $KPR_TARGETS | sort)\"\n  loaded=\"$($KPR_YQ e -r '.\"x-kano-private-route\".cidrs[]' \"$KPR_CONFIG\" | sort)\"\n  [ \"$wanted\" = \"$loaded\" ] || { kpr_error yaml_targets_mismatch; return 1; }\n  KPR_POLICY=\"$(get_opt private_route_policy '')\"\n  [ \"$($KPR_YQ e -r '.\"x-kano-private-route\".policy' \"$KPR_CONFIG\")\" = \"$KPR_POLICY\" ] || { kpr_error yaml_policy_mismatch; return 1; }\n  [ \"$($KPR_YQ e -r '.mode // \"rule\"' \"$KPR_CONFIG\")\" = rule ] || { kpr_error requires_rule_mode; return 1; }\n  expected=\"\"\n  for net in $KPR_TARGETS; do\n    fam=\"$(kpr_net \"$net\")\"; tag=IP-CIDR;[ \"$fam\" != 6 ] || tag=IP-CIDR6\n    expected=\"${expected}${tag},${net},${KPR_POLICY},no-resolve\n\"\n  done\n  actual=\"$($KPR_YQ e -r '.rules[]' \"$KPR_CONFIG\" | head -n \"$count\")\"\n  [ \"$actual\" = \"$(printf '%s' \"$expected\")\" ] || { kpr_error yaml_rule_order_mismatch; return 1; }\n  KPR_PORT=\"$($KPR_YQ e -r '.\"tproxy-port\" // 7895' \"$KPR_CONFIG\")\"\n  case \"$KPR_PORT\" in ''|*[!0-9]*) return 1 ;; esac\n  [ \"$KPR_PORT\" -ge 1 ] && [ \"$KPR_PORT\" -le 65535 ] || return 1\n  if [ \"$KPR_MODE\" = tun ]; then\n    [ \"$($KPR_YQ e -r '.tun.enable' \"$KPR_CONFIG\")\" = true ] || { kpr_error tun_disabled; return 1; }\n    KPR_TUN=\"$($KPR_YQ e -r '.tun.device' \"$KPR_CONFIG\")\"\n    kpr_iface_ok \"$KPR_TUN\" || { kpr_error tun_name; return 1; }\n    [ -e \"/sys/class/net/$KPR_TUN/tun_flags\" ] || { kpr_error tun_interface_missing; return 1; }\n    ip link show dev \"$KPR_TUN\" >/dev/null 2>&1 || return 1\n    for scope in all \"$KPR_TUN\"; do\n      [ \"$(cat \"/proc/sys/net/ipv4/conf/$scope/rp_filter\" 2>/dev/null)\" != 1 ] || { kpr_error \"strict_rp_filter:$scope\"; return 1; }\n    done\n    [ -z \"$(normalize_sources)\" ] || { kpr_error tun_source_bypass_unsupported; return 1; }\n  else\n    [ \"$($KPR_YQ e -r '.tun.enable // false' \"$KPR_CONFIG\")\" != true ] || { kpr_error tun_still_enabled; return 1; }\n  fi\n  lines=\"$(ip -o -4 addr show)\" || { kpr_error read_ipv4_interfaces; return 1; }\n  KPR_LINKS=\"$(printf '%s\\n' \"$lines\" | awk '$3==\"inet\" {sub(/@.*/,\"\",$2);print 4,$4,$2}')\"\n  if [ \"$(get_opt ipv6 off)\" = on ]; then\n    lines=\"$(ip -o -6 addr show)\" || { kpr_error read_ipv6_interfaces; return 1; }\n    KPR_LINKS=\"$KPR_LINKS\n$(printf '%s\\n' \"$lines\" | awk '$3==\"inet6\" {sub(/@.*/,\"\",$2);print 6,$4,$2}')\"\n  fi\n  # Protect all local networks; only known downstream interfaces are captured.\n  while read fam local iface; do\n    [ -n \"$iface\" ] && [ \"$iface\" != \"$KPR_TUN\" ] || continue\n    kpr_iface_ok \"$iface\" || continue\n    for net in $KPR_TARGETS; do\n      if kpr_net \"$net\" \"$local\" overlap; then kpr_error \"overlap:$net:$local:$iface\"; return 1; fi\n    done\n  done <<KPR_LINKS_EOF\n$KPR_LINKS\nKPR_LINKS_EOF\n  KPR_DOWN=\"$(printf '%s\\n' \"$KPR_LINKS\" | awk -v tun=\"$KPR_TUN\" '$3!=tun && $3~/^(br|wlan|ap|usb|rndis|ncm|ecm|eth|lan)/ {print}' | sort -u)\"\n  [ -n \"$KPR_DOWN\" ] || { kpr_error no_downstream_interfaces; return 1; }\n  for net in $KPR_TARGETS; do\n    fam=\"$(kpr_net \"$net\")\"\n    printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {ok=1} END{exit !ok}' || { kpr_error \"no_downstream_ipv$fam\"; return 1; }\n    if [ \"$KPR_MODE\" = tproxy ]; then\n      is_port_listening \"$KPR_PORT\" \"$fam\" || { kpr_error \"tproxy_listener_ipv$fam\"; return 1; }\n    elif [ \"$fam\" = 6 ]; then\n      ip -o -6 addr show dev \"$KPR_TUN\" | grep -q inet6 || { kpr_error tun_ipv6_address_missing; return 1; }\n    fi\n  done\n  KPR_ACTIVE=1\n}\nkpr_plan_make() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for fam in 4 6; do\n    found=0;for net in $KPR_TARGETS; do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n    [ \"$found\" = 1 ] || continue\n    if [ \"$KPR_MODE\" = tun ]; then echo \"C $fam tun $KPR_TUN\";else echo \"C $fam tproxy lo\";fi\n    echo \"M $fam\"\n    [ \"$KPR_MODE\" = tun ] || continue\n    printf '%s\\n' \"$KPR_DOWN\" | while read f net dev; do [ \"$f\" != \"$fam\" ] || echo \"R $f $(kpr_net \"$net\" '' network) $dev\"; done\n    for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || echo \"B $fam $net $KPR_TUN\";done\n  done\n)\nkpr_plan_check() (\n  [ -f \"$1\" ] || exit 0\n  while read kind fam arg dev extra; do\n    [ -n \"$kind\" ] || continue\n    [ -z \"$extra\" ] || exit 1\n    case \"$fam\" in 4|6) ;; *) exit 1 ;; esac\n    case \"$kind\" in\n      C) case \"$arg:$dev\" in tproxy:lo) ;; tun:*) kpr_iface_ok \"$dev\" || exit 1 ;; *) exit 1 ;; esac ;;\n      M) [ -z \"$arg$dev\" ] || exit 1 ;;\n      R|B) [ \"$(kpr_net \"$arg\")\" = \"$fam\" ] && kpr_iface_ok \"$dev\" || exit 1 ;;\n      *) exit 1 ;;\n    esac\n  done < \"$1\"\n)\nkpr_plan_remove() (\n  [ -f \"$1\" ] || exit 0\n  kpr_plan_check \"$1\" || exit 1\n  rc=0\n  while read kind fam arg dev; do\n    case \"$kind\" in\n      M) while ip -\"$fam\" rule del pref \"$KPR_PREF\" fwmark \"$KPR_MARK\" lookup \"$KPR_TABLE\" 2>/dev/null; do :;done ;;\n      B) while ip -\"$fam\" rule del pref \"$KPR_RETURN_PREF\" from \"$arg\" iif \"$dev\" lookup \"$KPR_RETURN_TABLE\" 2>/dev/null;do :;done ;;\n    esac\n  done < \"$1\"\n  for fam in 4 6;do\n    for tab in \"$KPR_TABLE\" \"$KPR_RETURN_TABLE\";do\n      entries=\"$(ip -\"$fam\" route show table \"$tab\" proto \"$KPR_PROTO\" 2>/dev/null)\"\n      if [ -n \"$entries\" ];then ip -\"$fam\" route flush table \"$tab\" proto \"$KPR_PROTO\" || rc=1;fi\n    done\n  done\n  exit \"$rc\"\n)\nkpr_plan_install() (\n  [ -f \"$1\" ] || exit 0\n  kpr_plan_check \"$1\" || exit 1\n  # Routes must exist before their rules become visible.\n  while read kind fam arg dev;do\n    case \"$kind:$arg\" in\n      C:tproxy) ip -\"$fam\" route replace local default dev lo table \"$KPR_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n      C:tun) ip -\"$fam\" route replace default dev \"$dev\" table \"$KPR_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n      R:*) ip -\"$fam\" route replace \"$arg\" dev \"$dev\" table \"$KPR_RETURN_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n    esac\n  done < \"$1\"\n  while read kind fam arg dev;do\n    case \"$kind\" in\n      M) ip -\"$fam\" rule add pref \"$KPR_PREF\" fwmark \"$KPR_MARK\" lookup \"$KPR_TABLE\" || exit 1 ;;\n      B) ip -\"$fam\" rule add pref \"$KPR_RETURN_PREF\" from \"$arg\" iif \"$dev\" lookup \"$KPR_RETURN_TABLE\" || exit 1 ;;\n    esac\n  done < \"$1\"\n)\nkpr_routes_begin() {\n  mkdir -p \"$POLICY_DIR\" || return 1\n  if [ -f \"$KPR_PENDING\" ];then\n    kpr_routes_rollback || { kpr_error pending_recovery_failed;return 1; }\n  fi\n  if [ \"$KPR_ACTIVE\" != 1 ] && [ ! -f \"$KPR_OWNER\" ];then return 0;fi\n  if [ ! -f \"$KPR_OWNER\" ];then\n    for fam in 4 6;do\n      for tab in \"$KPR_TABLE\" \"$KPR_RETURN_TABLE\";do\n        [ -z \"$(ip -\"$fam\" route show table \"$tab\" 2>/dev/null)\" ] || { kpr_error \"foreign_table:$tab\";return 1; }\n      done\n      if ip -\"$fam\" rule show | grep -Eq \"^($KPR_PREF|$KPR_RETURN_PREF):\";then kpr_error foreign_rule_priority;return 1;fi\n    done\n  fi\n  if [ -f \"$KPR_PLAN\" ];then cp \"$KPR_PLAN\" \"$KPR_OLD\" || return 1;else : > \"$KPR_OLD\" || return 1;fi\n  kpr_plan_make > \"$KPR_NEXT\" || return 1\n  chmod 600 \"$KPR_OLD\" \"$KPR_NEXT\" || return 1\n  printf 'KPR2\\n' > \"$KPR_OWNER\" || return 1\n  touch \"$KPR_PENDING\" || return 1\n  kpr_plan_remove \"$KPR_OLD\" && kpr_plan_install \"$KPR_NEXT\"\n}\nkpr_routes_commit() {\n  [ -f \"$KPR_PENDING\" ] || return 0\n  mv -f \"$KPR_NEXT\" \"$KPR_PLAN\" || return 1\n  rm -f \"$KPR_PENDING\" \"$KPR_OLD\" || return 1\n}\nkpr_routes_rollback() (\n  [ -f \"$KPR_PENDING\" ] || exit 0\n  kpr_plan_remove \"$KPR_NEXT\" || exit 1\n  kpr_plan_remove \"$KPR_PLAN\" || exit 1\n  kpr_plan_install \"$KPR_OLD\" || exit 1\n  cp \"$KPR_OLD\" \"$KPR_PLAN\" || exit 1\n  rm -f \"$KPR_PENDING\" \"$KPR_OLD\" \"$KPR_NEXT\"\n)\nkpr_add_capture() (\n  ipt=\"$1\";chain=\"$2\";fam=\"$3\";op=\"${4:--A}\"\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do\n    [ \"$(kpr_net \"$net\")\" = \"$fam\" ] || continue\n    for dev in $(printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {print $3}' | sort -u);do\n      for proto in tcp udp;do\n        if [ \"$KPR_MODE\" = tproxy ];then\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j TPROXY --on-port \"$KPR_PORT\" --tproxy-mark \"$KPR_MARK\" || exit 1\n        else\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j MARK --set-xmark \"$KPR_MARK\" || exit 1\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j ACCEPT || exit 1\n        fi\n      done\n    done\n  done\n)\nkpr_add_dns_exceptions() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$3\" ] || \"$1\" -t nat \"${4:--A}\" \"$2\" -d \"$net\" -j ACCEPT || exit 1;done\n)\nkpr_add_quic_exceptions() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$3\" ] || \"$1\" -t filter \"${4:--A}\" \"$2\" -d \"$net\" -j RETURN || exit 1;done\n)\nkpr_forward_rules() (\n  ipt=\"$1\";chain=\"$2\";fam=\"$3\";op=\"${4:--A}\"\n  [ \"$KPR_ACTIVE:$KPR_MODE\" = 1:tun ] || exit 0\n  for net in $KPR_TARGETS;do\n    [ \"$(kpr_net \"$net\")\" = \"$fam\" ] || continue\n    for dev in $(printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {print $3}' | sort -u);do\n      for proto in tcp udp;do\n        \"$ipt\" -t filter \"$op\" \"$chain\" -i \"$dev\" -o \"$KPR_TUN\" -d \"$net\" -p \"$proto\" -j ACCEPT || exit 1\n        \"$ipt\" -t filter \"$op\" \"$chain\" -i \"$KPR_TUN\" -o \"$dev\" -s \"$net\" -p \"$proto\" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || exit 1\n      done\n    done\n  done\n)\nkpr_forward_switch() (\n  ipt=\"$1\";fam=\"$2\"\n  found=0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n  if [ \"$KPR_ACTIVE:$KPR_MODE:$found\" != 1:tun:1 ];then\n    remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n    exit 0\n  fi\n  active=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\"\n  next=\"$(prepare_inactive_chain \"$ipt\" filter \"$active\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\" || exit 1\n  kpr_forward_rules \"$ipt\" \"$next\" \"$fam\" || exit 1\n  \"$ipt\" -t filter -A \"$next\" -j RETURN || exit 1\n  remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n  pos=1\n  quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\"\n  [ -z \"$quic\" ] || pos=2\n  \"$ipt\" -t filter -I FORWARD \"$pos\" -j \"$next\"\n)\nkpr_forward_restore() (\n  ipt=\"$1\";old=\"$2\"\n  remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n  if [ -n \"$old\" ];then\n    pos=1;quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\";[ -z \"$quic\" ] || pos=2\n    \"$ipt\" -t filter -I FORWARD \"$pos\" -j \"$old\" || exit 1\n  fi\n  cleanup_unused_chains \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\" \"$old\"\n)\nkpr_verify() (\n  kpr_read || exit 1\n  plan=\"$KPR_PLAN\";[ ! -f \"$KPR_PENDING\" ] || plan=\"$KPR_NEXT\"\n  wanted=\"$(kpr_plan_make)\" || exit 1\n  [ \"$wanted\" = \"$(cat \"$plan\" 2>/dev/null)\" ] || { kpr_error route_plan_mismatch;exit 1; }\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for fam in 4 6;do\n    name=iptables;[ \"$fam\" != 6 ] || name=ip6tables\n    [ \"$fam\" != 6 ] || [ \"$(get_opt ipv6 off)\" = on ] || continue\n    ipt=\"$(get_ipt \"$name\")\";[ -n \"$ipt\" ] || exit 1\n    chain=\"$(managed_hook_target \"$ipt\" mangle PREROUTING \"$POLICY_CHAIN\" \"$POLICY_CHAIN_A\" \"$POLICY_CHAIN_B\")\"\n    kpr_add_capture \"$ipt\" \"$chain\" \"$fam\" -C || exit 1\n    if [ \"$(get_opt dns_hijack off)\" = on ];then\n      dns=\"$(managed_hook_target \"$ipt\" nat PREROUTING \"$DNS_CHAIN\" \"$DNS_CHAIN_A\" \"$DNS_CHAIN_B\")\"\n      kpr_add_dns_exceptions \"$ipt\" \"$dns\" \"$fam\" -C || exit 1\n    fi\n    if [ \"$(get_opt quic_block off)\" = on ];then\n      quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\"\n      kpr_add_quic_exceptions \"$ipt\" \"$quic\" \"$fam\" -C || exit 1\n    fi\n    found=0;for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n    if [ \"$KPR_MODE:$found\" = tun:1 ];then\n      forward=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\"\n      [ -n \"$forward\" ] || exit 1\n      kpr_forward_rules \"$ipt\" \"$forward\" \"$fam\" -C || exit 1\n    fi\n  done\n  while read kind fam arg dev;do\n    case \"$kind\" in\n      C) ip -\"$fam\" route show table \"$KPR_TABLE\" proto \"$KPR_PROTO\" | grep -q \"dev $dev\" || { kpr_error capture_route_missing;exit 1; } ;;\n      M) ip -\"$fam\" rule show | grep \"^$KPR_PREF:\" | grep -q \"lookup $KPR_TABLE\" || { kpr_error mark_rule_missing;exit 1; } ;;\n      B) ip -\"$fam\" rule show | grep \"^$KPR_RETURN_PREF:\" | grep \"iif $dev\" | grep -q \"lookup $KPR_RETURN_TABLE\" || { kpr_error return_rule_missing;exit 1; } ;;\n      R) ip -\"$fam\" route show table \"$KPR_RETURN_TABLE\" proto \"$KPR_PROTO\" | grep -q \"dev $dev\" || { kpr_error downstream_route_missing;exit 1; } ;;\n    esac\n  done < \"$plan\"\n)\nkpr_cleanup() (\n  if [ -f \"$KPR_OWNER\" ];then\n    kpr_routes_rollback || exit 1\n    kpr_plan_remove \"$KPR_PLAN\" || exit 1\n    rm -f \"$KPR_PLAN\" \"$KPR_OWNER\" \"$KPR_NEXT\" \"$KPR_OLD\" \"$KPR_PENDING\" || exit 1\n  fi\n  for name in iptables ip6tables;do\n    for ipt in $(list_ipt_candidates \"$name\");do\n      for chain in \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\";do flush_chain \"$ipt\" filter FORWARD \"$chain\";done\n    done\n  done\n)\nkpr_status() (\n  echo '[Private-route: configured]'\n  echo \"enabled=$(get_opt private_route_enabled off) mode=$(get_opt traffic_mode tproxy) ipv6=$(get_opt ipv6 off)\"\n  echo \"targets=$(get_opt private_route_cidrs '')\"\n  echo '[Private-route: installed plan]'\n  cat \"$KPR_PLAN\" 2>/dev/null || true\n  for fam in 4 6;do\n    echo \"[IPv$fam rules]\"\n    ip -\"$fam\" rule show 2>/dev/null | grep -E \"^($KPR_PREF|$KPR_RETURN_PREF):\" || true\n    ip -\"$fam\" route show table \"$KPR_TABLE\" 2>/dev/null || true\n    ip -\"$fam\" route show table \"$KPR_RETURN_TABLE\" 2>/dev/null || true\n  done\n  if kpr_verify;then echo 'PRIVATE_ROUTE_VERIFY=ok';else echo 'PRIVATE_ROUTE_VERIFY=failed';exit 1;fi\n  echo 'TCP/UDP rules checked; remote service reachability is not tested.'\n)\n";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Embedded inside the original plugin closure; no new runtime dependency.
+const KPR = createPrivateRouteLogic();
+let kprStrictOperation = 0;
+
+async function kprReadOptions() {
+  const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + '; fi', 10000);
+  if (!result.success) throw new Error('无法读取网络设置，未修改配置');
+  return parsePolicyOptionsText(String(result.content || ''));
+}
+
+async function kprReadConnected(config = {}, options = {}) {
+  const v6 = options.ipv6 === 'on';
+  const result = await runShellWithRoot('ip -o -4 addr show' + (v6 ? ' && ip -o -6 addr show' : ''), 10000);
+  if (!result.success) throw new Error('\u65e0\u6cd5\u68c0\u67e5 F50 \u76f4\u8fde\u7f51\u6bb5');
+  const tun = String(config.tun && config.tun.device || 'KanoTun');
+  const addresses = String(result.content || '').split('\n').map((line) => {
+    const match = line.match(/^\s*\d+:\s+(\S+)\s+inet6?\s+(\S+)/);
+    return match ? { iface: match[1].split('@')[0], cidr: match[2] } : null;
+  }).filter((item) => item && item.iface !== tun && !/^(Mihomo|Meta|utun\d*|tun\d*)$/i.test(item.iface));
+  if (!addresses.length) throw new Error('\u6ca1\u6709\u8bfb\u5230\u7f51\u7edc\u63a5\u53e3');
+  return addresses;
+}
+
+async function kprShapeRuntimeConfig(value) {
+  const options = await kprReadOptions();
+  const feature = KPR.fromOptions(options);
+  const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
+  return KPR.runtime(value, options, connected);
+}
+
+async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {
+  try {
+    const value = yamlPath === CLASH_CONFIG ? await kprShapeRuntimeConfig(objectValue) : objectValue;
+    return await kprBaseWriteYamlObjectAtomic(yamlPath, value, options);
+  } catch (error) {
+    return { ok: false, content: String(error && error.message || error), shell: null };
+  }
+}
+
+async function savePolicyState(state, options = {}) {
+  try {
+    const previous = options.replaceOptions ? {} : await kprReadOptions();
+    const next = { ...state, options: { ...previous, ...state.options } };
+    const feature = KPR.fromOptions(next.options);
+    next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
+    next.options.private_route_cidrs = feature.cidrs.join(' ');
+    next.options.private_route_policy = feature.policy;
+    if (feature.enabled && next.options.traffic_mode !== 'off') {
+      const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+      if (!config.ok) throw new Error(config.message || 'Cannot read config.yaml');
+      KPR.checkConnected(feature, await kprReadConnected(config.value, next.options));
+      if (next.options.traffic_mode === 'tun' && String(next.deviceBypass || '').replace(/#[^\n]*/g, '').trim()) {
+        throw new Error('原插件的 TUN 设备绕过不完整。请使用 TProxy，或先清空“直连设备”再开启 TUN 私网定向代理');
+      }
+    }
+    return await kprBaseSavePolicyState(next, options);
+  } catch (error) {
+    createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
+    return false;
+  }
+}
+
+async function kprRequiresStrictConfig() {
+  const options = await kprReadOptions();
+  if (kprStrictOperation > 0 || options.traffic_mode === 'tun' || options.ipv6 === 'on' || KPR.fromOptions(options).enabled) return true;
+  const marker = await runShellWithRoot("if grep -q '^x-kano-private-route:' " + shellQuote(CLASH_CONFIG) + "; then echo 1; else echo 0; fi", 5000);
+  return !marker.success || String(marker.content || '').trim() === '1';
+}
+
+async function kprVerifySelection(options) {
+  const feature = KPR.fromOptions(options);
+  if (!feature.enabled || options.traffic_mode === 'off') return '';
+  const response = await callMihomoApi('/proxies', 'GET', null, null, 8);
+  if (!response.success) throw new Error('无法确认代理组的实际出站');
+  const payload = JSON.parse(response.responseText || '{}');
+  return KPR.resolveSelection(payload.proxies || {}, feature.policy);
+}
+
+async function ensureRuntimeTrafficMode(trafficMode) {
+  try {
+    const want = trafficMode === 'tun';
+    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!read.ok) throw new Error(read.message || '运行配置读取失败');
+    const desired = read.value.tun && typeof read.value.tun === 'object' ? read.value.tun : {};
+    if (!!desired.enable !== want) throw new Error('模式设置与 config.yaml 不一致');
+    const info = await buildControllerInfo({ fresh: true });
+    const corePid = await getCorePid();
+    const inspect = async () => {
+      const result = await callMihomoApi('/configs', 'GET', null, info, 5, { corePid });
+      if (!result.success) throw new Error('无法读取核心 TUN 状态');
+      return JSON.parse(result.responseText || '{}').tun || {};
+    };
+    let live = await inspect();
+    const exposedMismatch = want && ['device', 'auto-route', 'auto-redirect'].some((key) =>
+      Object.prototype.hasOwnProperty.call(live, key) && Object.prototype.hasOwnProperty.call(desired, key) && live[key] !== desired[key]);
+    if (!!live.enable !== want || exposedMismatch) {
+      const patched = await callMihomoApi('/configs', 'PATCH', JSON.stringify({ tun: want ? desired : { enable: false } }), info, 10, { corePid });
+      if (!patched.success) throw new Error('核心拒绝更新 TUN 配置');
+      live = await inspect();
+    }
+    if (!!live.enable !== want) throw new Error('核心 TUN 开关未生效');
+    if (want) {
+      const device = String(desired.device || live.device || 'Mihomo');
+      if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device)) throw new Error('TUN 接口名称无效');
+      const check = await runShellWithRoot('test -e ' + shellQuote('/sys/class/net/' + device + '/tun_flags') + ' && ip link show dev ' + shellQuote(device), 10000);
+      if (!check.success) throw new Error('核心声明 TUN 已开启，但内核接口不存在：' + device);
+      if (read.value.ipv6 === true) {
+        const ipv6 = await runShellWithRoot('ip -o -6 addr show dev ' + shellQuote(device) + " | grep -q inet6", 10000);
+        if (!ipv6.success) throw new Error('TUN IPv6 address missing');
+      }
+    }
+    return true;
+  } catch (error) {
+    createToast('流量模式校验失败：' + safeTextToHtml(error.message || String(error)), 'red', 10000);
+    return false;
+  }
+}
+
+async function kprSaveNetworkState(previous, next) {
+  let backup = '', saved = false, restartAttempted = false;
+  kprStrictOperation++;
+  try {
+    const feature = KPR.fromOptions(next.options);
+    const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!source.ok) throw new Error(source.message || '无法读取运行配置');
+    KPR.runtime(source.value, next.options, feature.enabled ? await kprReadConnected(source.value, next.options) : []);
+    if (await getCorePid()) await kprVerifySelection(next.options);
+    if (next.options.traffic_mode === 'tun') {
+      const tun = await runShellWithRoot('test -c /dev/net/tun || test -c /dev/tun', 10000);
+      if (!tun.success) throw new Error('设备没有可用 TUN 节点，保留原模式');
+    }
+    backup = await createConfigRollbackPoint('private_route_network');
+    if (!backup) throw new Error('无法创建 config.yaml 回滚点');
+    if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
+    saved = true;
+    next.options = await kprReadOptions();
+    restartAttempted = true;
+    if (!(await restartClash({ skipCheck: true }))) throw new Error('新模式或接管规则未通过检查');
+    const leaf = await kprVerifySelection(next.options);
+    Object.assign(previous, JSON.parse(JSON.stringify(next)));
+    createToast(feature.enabled && next.options.traffic_mode !== 'off'
+      ? '私网定向代理已应用；出站：' + escapeHtml(leaf) + '。尚未验证家中服务是否可达。'
+      : '网络设置已应用', 'green', 10000);
+    return true;
+  } catch (error) {
+    let recovered = !saved;
+    if (saved) {
+      const restoredSettings = await savePolicyState(previous, { apply: false, replaceOptions: true });
+      const restoredConfig = backup ? await restoreConfigRollbackPoint(backup, '网络设置', { showToast: false }) : false;
+      recovered = restoredSettings && restoredConfig;
+      if (recovered && restartAttempted) {
+        try { recovered = await restartClash({ skipCheck: true }); }
+        catch (_) { recovered = false; }
+      }
+      if (!recovered) {
+        await networkRescue({ stopService: true, showOutput: false, reason: '私网定向代理回滚未完成' });
+      }
+    }
+    createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
+      (recovered ? (saved ? '已恢复原设置和配置。' : '未应用新设置。') : '恢复未完整完成，已尝试停止核心并清理规则。'), recovered ? 'yellow' : 'red', 14000);
+    return false;
+  } finally {
+    kprStrictOperation--;
+  }
+}
+
+function buildPolicyToolsScript() {
+  return augmentPrivatePolicyShell(kprBaseBuildPolicyToolsScript(), KPR_SHELL);
+}
+
+function flushGeneratedRulesCmd() {
+  const original = kprBaseFlushGeneratedRulesCmd();
+  const policy = buildPolicyToolsScript();
+  return original + '\nkpr_original_flush_rc=$?\n(\nset -- private-cleanup\n' + policy + '\n)\nkpr_extra_flush_rc=$?\n[ "$kpr_original_flush_rc" -eq 0 ] && [ "$kpr_extra_flush_rc" -eq 0 ]\n';
+}
+function verifyGeneratedRulesFlushedCmd() {
+  return kprBaseVerifyGeneratedRulesFlushedCmd() + '\n[ ! -f /data/clash/Policy/private_route.owner ] && [ ! -f /data/clash/Policy/private_route.pending ]\n';
+}
+
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
   const CLASH_SERVICE = `${CLASH_DIR}/Scripts/Clash.Service`;
@@ -57,7 +580,7 @@
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.3';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.3-kpr2';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
@@ -81,7 +604,7 @@
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.6';
+  const POLICY_SCRIPT_VERSION = '6.6-kpr-dualstack-2';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -579,6 +1102,13 @@ if [ "$action" = boot ]; then
 fi
 case "$action" in start|restart) validate_config || exit $? ;; esac
 
+case "$action" in
+  stop|restart)
+    if [ -x ${CLASH_POLICY_SCRIPT} ]; then
+      ${CLASH_POLICY_SCRIPT} flush || { echo "SERVICE_POLICY_FLUSH_FAILED"; exit 1; }
+    fi
+    ;;
+esac
 "$binary" "$@"
 controller_rc=$?
 [ "$controller_rc" -eq 0 ] || exit "$controller_rc"
@@ -2641,7 +3171,7 @@ EOF_KANO_SERVICE
     };
   };
 
-  const writeYamlObjectAtomic = async (yamlPath, objectValue, {
+  const kprBaseWriteYamlObjectAtomic = async (yamlPath, objectValue, {
     label = 'YAML',
     marker = '',
     backup = true,
@@ -4109,63 +4639,6 @@ KANO_WRITE_CHECK_EOF
       controllerInfo,
     );
 
-  const tunRuntimePayload = (enable) => (enable
-    ? {
-      enable: true,
-      stack: 'mixed',
-      'auto-route': true,
-      'auto-redirect': true,
-      'auto-detect-interface': true,
-      'strict-route': false,
-      'dns-hijack': ['any:53', 'tcp://any:53'],
-    }
-    : { enable: false });
-
-  const readCoreTunEnabled = async (controllerInfo = null, corePid = null) => {
-    try {
-      const res = await callMihomoApi('/configs', 'GET', null, controllerInfo, 5, { corePid });
-      if (!res.success) return null;
-      const config = JSON.parse(res.responseText || '{}');
-      return !!(config && config.tun && config.tun.enable);
-    } catch (e) {
-      console.error('read core tun state failed', e);
-      return null;
-    }
-  };
-
-  const ensureRuntimeTrafficMode = async (trafficMode) => {
-    const want = trafficMode == 'tun';
-    try {
-      const [info, corePid] = await Promise.all([
-        buildControllerInfo({ fresh: true }),
-        getCorePid(),
-      ]);
-      const current = await readCoreTunEnabled(info, corePid);
-      if (current === null) return false;
-      if (current === want) return true;
-      const patched = await callMihomoApi(
-        '/configs',
-        'PATCH',
-        JSON.stringify({ tun: tunRuntimePayload(want) }),
-        info,
-        10,
-        { corePid },
-      );
-      if (!patched.success) {
-        return false;
-      }
-      const verified = await readCoreTunEnabled(info, corePid);
-      if (verified !== want) {
-        return false;
-      }
-      appendTemplateFlowDebug(`runtime tun converged want=${want ? '1' : '0'}`);
-      return true;
-    } catch (e) {
-      console.error('ensure runtime traffic mode failed', e);
-      return false;
-    }
-  };
-
   const parseProviderNamesFromYamlText = (content = '') => {
     const proxyProviders = [];
     const ruleProviders = [];
@@ -5348,7 +5821,7 @@ KANO_WRITE_CHECK_EOF
   const ensureReady = async (options = {}) =>
     (await ensureAdvanced()) && (await ensureInstalled(options));
 
-  const flushGeneratedRulesCmd = () => `
+  const kprBaseFlushGeneratedRulesCmd = () => `
         list_cleanup_ipt() {
           NAME="$1"
           {
@@ -5381,7 +5854,7 @@ KANO_WRITE_CHECK_EOF
         done
         `;
 
-  const verifyGeneratedRulesFlushedCmd = () => `
+  const kprBaseVerifyGeneratedRulesFlushedCmd = () => `
         cleanup_bin_count=0
         cleanup_failed=0
         for BIN_NAME in iptables ip6tables; do
@@ -7177,13 +7650,9 @@ EOF_KANO_SERVICE
 
 
   const normalizeMac = (value = '') => {
-    const hex = String(value || '')
-      .replace(/#.*$/g, '')
-      .trim()
-      .replace(/[^0-9a-fA-F]/g, '')
-      .toUpperCase();
-    if (!/^[0-9A-F]{12}$/.test(hex)) return '';
-    return hex.match(/.{2}/g).join(':');
+    const text = String(value || '').replace(/#.*$/g, '').trim();
+    if (!/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2}|(?:[0-9a-f]{4}\.){2}[0-9a-f]{4})$/i.test(text)) return '';
+    return text.replace(/[:.-]/g, '').toUpperCase().match(/.{2}/g).join(':');
   };
 
 
@@ -7260,7 +7729,7 @@ EOF_KANO_SERVICE
 
 
 
-  const buildPolicyToolsScript = () => [
+  const kprBaseBuildPolicyToolsScript = () => [
     '#!/system/bin/sh',
     `# KANO_POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}`,
     `POLICY_DIR=${shellQuote(CLASH_POLICY_DIR)}`,
@@ -7813,7 +8282,7 @@ KANO_POLICY_TOOLS_EOF
       dns_port: '1053',
       proxy_group: 'Proxy',
     };
-    String(text || '').split('\n').forEach((line) => {
+    String(text || '').split(/\r?\n/).forEach((line) => {
       const m = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
       if (m) options[m[1]] = m[2];
     });
@@ -7843,6 +8312,7 @@ KANO_POLICY_TOOLS_EOF
       };
     }
     const res = await runShellWithRoot(`
+        set -e
         emit_policy_file() {
           name="$1"
           path="$2"
@@ -7856,6 +8326,7 @@ KANO_POLICY_TOOLS_EOF
         emit_policy_file proxyDomain ${shellQuote(CLASH_PROXY_DOMAIN_FILE)}
         emit_policy_file rejectDomain ${shellQuote(CLASH_REJECT_DOMAIN_FILE)}
         `);
+    if (!res.success) throw new Error('无法读取网络设置，未修改配置');
     const sections = {
       options: [],
       deviceBypass: [],
@@ -7903,28 +8374,20 @@ KANO_POLICY_TOOLS_EOF
 
   const normalizeIpLike = (value = '') => {
     const item = String(value || '').trim();
-    const match = item.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/);
-    if (!match) return '';
-    const octets = match[1].split('.').map((part) => Number(part));
-    if (octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return '';
-    if (match[2] != null) {
-      const cidr = Number(match[2]);
-      if (!Number.isInteger(cidr) || cidr < 0 || cidr > 32) return '';
-    }
-    return item;
+    try {
+      const parsed = KPR.cidr(item);
+      if (parsed.family !== 4) return '';
+      return item.includes('/') ? parsed.text : parsed.text.split('/')[0];
+    } catch (_) { return ''; }
   };
 
   const normalizeIpv6Like = (value = '') => {
     const item = String(value || '').trim();
-    const match = item.match(/^([0-9A-Fa-f:]+)(?:\/(\d{1,3}))?$/);
-    if (!match || !match[1].includes(':') || match[1].split('::').length > 2) return '';
-    const parts = match[1].split('::');
-    const left = parts[0] ? parts[0].split(':') : [];
-    const right = parts.length == 2 && parts[1] ? parts[1].split(':') : [];
-    if ([...left, ...right].some((part) => !/^[0-9A-Fa-f]{1,4}$/.test(part))) return '';
-    if (parts.length == 1 ? left.length != 8 : left.length + right.length >= 8) return '';
-    if (match[2] != null && Number(match[2]) > 128) return '';
-    return item.toLowerCase();
+    try {
+      const parsed = KPR.cidr(item);
+      if (parsed.family !== 6) return '';
+      return item.includes('/') ? parsed.text : parsed.text.split('/')[0];
+    } catch (_) { return ''; }
   };
 
   const normalizeDeviceBypassText = (value = '') => {
@@ -7996,7 +8459,7 @@ KANO_POLICY_TOOLS_EOF
     return rows.join('\n') + (rows.length ? '\n' : '');
   };
 
-  const savePolicyState = async (state, { apply = true } = {}) => {
+  const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
     const normalizedDevice = normalizeDeviceBypassText(state.deviceBypass || '');
     if (normalizedDevice.invalid.length > 0) {
       createToast(`\u8bbe\u5907\u7ed5\u8fc7\u5217\u8868\u6709\u683c\u5f0f\u9519\u8bef\uff1a<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
@@ -8013,7 +8476,7 @@ KANO_POLICY_TOOLS_EOF
     const transparent = trafficMode == 'tproxy' ? 'on' : 'off';
     const ipv6 = state.options.ipv6 == 'on' ? 'on' : 'off';
     const quicBlock = state.options.quic_block == 'on' ? 'on' : 'off';
-    const dnsHijack = trafficMode == 'tproxy' && state.options.dns_hijack == 'on' ? 'on' : 'off';
+    const dnsHijack = ['tproxy', 'tun'].includes(trafficMode) && state.options.dns_hijack == 'on' ? 'on' : 'off';
     const requestedDnsPort = Number(state.options.dns_port);
     const dnsPort = Number.isInteger(requestedDnsPort) && requestedDnsPort >= 1 && requestedDnsPort <= 65535
       ? String(requestedDnsPort)
@@ -8027,6 +8490,9 @@ KANO_POLICY_TOOLS_EOF
       `dns_hijack=${dnsHijack}`,
       `dns_port=${dnsPort}`,
       `proxy_group=${proxyGroup}`,
+      `private_route_enabled=${state.options.private_route_enabled || "off"}`,
+      `private_route_cidrs=${state.options.private_route_cidrs || ""}`,
+      `private_route_policy=${state.options.private_route_policy || ""}`,
       '',
     ].join('\n');
     const directDomain = normalizeDomainRuleText(state.directDomain || '');
@@ -8228,7 +8694,13 @@ KANO_POLICY_TOOLS_EOF
   };
 
   const showPolicyToolsDialog = async ({ initialTab = 'network' } = {}) => {
-    const state = await readPolicyState();
+    let state;
+    try {
+      state = await readPolicyState();
+    } catch (error) {
+      createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
+      return;
+    }
     const { el, close } = createFixedToast(
       'mm_policy_tools_toast',
       `
@@ -8283,6 +8755,7 @@ KANO_POLICY_TOOLS_EOF
             <div class="kp-nav">
               <button type="button" class="kp-tab" data-policy-tab="network">\u6d41\u91cf\u6a21\u5f0f</button>
               <button type="button" class="kp-tab" data-policy-tab="device">\u76f4\u8fde\u8bbe\u5907</button>
+              <button type="button" class="kp-tab" data-policy-tab="private">私网定向代理</button>
               <button type="button" class="kp-tab" data-policy-tab="maintain">\u68c0\u67e5\u4fee\u590d</button>
             </div>
 
@@ -8322,6 +8795,8 @@ KANO_POLICY_TOOLS_EOF
                   <div id="mm_policy_clients" class="kp-mini" aria-live="polite"></div>
                 </div>
               </section>
+
+              <section class="kp-panel" data-policy-panel="private"></section>
 
               <section class="kp-panel" data-policy-panel="maintain">
                 <div class="kp-card">
@@ -8368,7 +8843,7 @@ KANO_POLICY_TOOLS_EOF
     Array.from(el.querySelectorAll('[data-policy-tab]')).forEach((btn) => {
       btn.onclick = () => activatePolicyTab(btn.dataset.policyTab || 'network');
     });
-    activatePolicyTab(['network', 'device', 'maintain'].includes(initialTab) ? initialTab : 'network');
+    activatePolicyTab(['network', 'device', 'private', 'maintain'].includes(initialTab) ? initialTab : 'network');
 
     get('#mm_policy_traffic_mode').value = state.options.traffic_mode || 'tproxy';
     get('#mm_policy_ipv6').checked = state.options.ipv6 == 'on';
@@ -8390,22 +8865,6 @@ KANO_POLICY_TOOLS_EOF
     };
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
     updateDeviceBypassScope();
-
-    const collectState = () => ({
-      options: {
-        traffic_mode: get('#mm_policy_traffic_mode').value,
-        ipv6: get('#mm_policy_ipv6').checked ? 'on' : 'off',
-        quic_block: get('#mm_policy_quic').checked ? 'on' : 'off',
-        dns_hijack: get('#mm_policy_dns').checked ? 'on' : 'off',
-        dns_port: get('#mm_policy_dns_port').value,
-        proxy_group: state.options.proxy_group || 'Proxy',
-      },
-      deviceBypass: get('#mm_policy_device').value,
-      directDomain: state.directDomain,
-      directIp: state.directIp,
-      proxyDomain: state.proxyDomain,
-      rejectDomain: state.rejectDomain,
-    });
 
     get('#mm_policy_close').onclick = close;
     const appendDeviceBypassValue = (value = '') => {
@@ -8464,83 +8923,6 @@ KANO_POLICY_TOOLS_EOF
       }
     };
 
-    get('#mm_policy_save_apply').onclick = async () => {
-      const btn = get('#mm_policy_save_apply');
-      const operationToken = acquireCriticalOperation('保存网络与设备设置');
-      if (!operationToken) return;
-      setButtonBusy(btn, true, '\u4fdd\u5b58\u4e2d\u2026');
-      try {
-        const nextState = collectState();
-        const modeSelectionChanged = nextState.options.traffic_mode != state.options.traffic_mode ||
-          nextState.options.ipv6 != state.options.ipv6;
-        const coreTunEnabled = await readCoreTunEnabled();
-        const coreOutOfSync = coreTunEnabled !== null &&
-          coreTunEnabled !== (nextState.options.traffic_mode == 'tun');
-        const coreModeChanged = modeSelectionChanged || coreOutOfSync;
-        if (modeSelectionChanged && nextState.options.traffic_mode == 'tun') {
-          const confirmed = await askConfirm(
-            'mm_tun_mode_confirm',
-            '\u5207\u6362\u5230 TUN \u6a21\u5f0f\uff1f',
-            '\u4f1a\u5173\u95ed F50 \u4fa7 TProxy \u63a5\u7ba1\uff0c\u5199\u5165 Mihomo TUN \u914d\u7f6e\u5e76\u91cd\u542f\u6838\u5fc3\u3002Android \u4e0b TUN \u5bf9\u70ed\u70b9/\u4e2d\u7ee7\u7684\u4e0b\u6e38\u6d41\u91cf\u53ef\u80fd\u65e0\u6cd5\u5b8c\u6574\u63a5\u7ba1\u3002',
-            '\u5207\u6362\u5e76\u91cd\u542f',
-            '\u53d6\u6d88',
-          );
-          if (!confirmed) return;
-        }
-        const modeRollbackPath = coreModeChanged ? await createConfigRollbackPoint('traffic_mode_switch') : '';
-        if (coreModeChanged && !modeRollbackPath) {
-          createToast('无法创建流量模式回滚点，已取消切换。', 'red', 8000);
-          return;
-        }
-        if (!(await savePolicyState(nextState, { apply: !coreModeChanged }))) return;
-        if (coreModeChanged) {
-          createToast('\u6d41\u91cf\u6a21\u5f0f\u5df2\u4fdd\u5b58\uff0c\u6b63\u5728\u91cd\u542f\u6838\u5fc3...', 'yellow');
-          if (await restartClash({ skipCheck: true })) {
-            state.options = { ...nextState.options };
-          } else {
-            const modeRestored = await savePolicyState({
-              ...nextState,
-              options: {
-                ...nextState.options,
-                traffic_mode: state.options.traffic_mode,
-                ipv6: state.options.ipv6,
-              },
-            }, { apply: false });
-            const configRestored = await restoreConfigRollbackPoint(
-              modeRollbackPath,
-              '切换流量模式',
-              { showToast: false },
-            );
-            get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
-            get('#mm_policy_ipv6').checked = state.options.ipv6 == 'on';
-            const recoveryOk = configRestored && await restartClash({ skipCheck: true });
-            const rollbackComplete = modeRestored && configRestored;
-            createToast(
-              rollbackComplete && recoveryOk
-                ? '切换失败，旧模式、旧配置和核心已恢复。'
-                : rollbackComplete
-                  ? '切换失败，旧模式和旧配置已恢复；核心仍未启动，已清理网络规则。'
-                  : '切换失败，且旧模式或旧配置未能完整恢复。',
-              rollbackComplete && recoveryOk ? 'yellow' : 'red',
-              10000,
-            );
-          }
-        } else {
-          state.options = { ...nextState.options };
-        }
-      } catch (e) {
-        console.error(e);
-        createToast(
-          `保存流量模式时中断：${escapeHtml(e && e.message ? e.message : String(e || ''))}<br>已保留原模式，请重新打开面板确认状态。`,
-          'red',
-          10000,
-        );
-        await savePolicyState({ ...state, options: { ...state.options } }, { apply: false });
-      } finally {
-        setButtonBusy(btn, false);
-        releaseCriticalOperation(operationToken);
-      }
-    };
     get('#mm_policy_fix_runtime_config').onclick = async () => {
       const btn = get('#mm_policy_fix_runtime_config');
       const operationToken = acquireCriticalOperation('修复代理配置');
@@ -8573,6 +8955,69 @@ KANO_POLICY_TOOLS_EOF
         await showPolicyStatus();
       } finally {
         setButtonBusy(btn, false);
+      }
+    };
+    const panel = el.querySelector('[data-policy-panel="private"]');
+    if (!panel) return;
+    const card = document.createElement('div');
+    card.className = 'kp-card';
+    card.innerHTML = '<div class="kp-card-title">私网定向代理</div>' +
+      '<div class="kp-desc">仅将指定的目标私网交给所选代理组，其他私网仍保持直连。支持下游设备访问远端 IPv4/IPv6 TCP、UDP 服务；ping 不经过代理，不能用于验证。</div>' +
+      '<div class="kp-row"><label class="kp-label" for="kpr_enabled">定向代理</label><label><input id="kpr_enabled" type="checkbox"> 代理以下网段</label></div>' +
+      '<div class="kp-row"><label class="kp-label" for="kpr_cidrs">目标私网</label><textarea id="kpr_cidrs" spellcheck="false" placeholder="192.168.11.0/24&#10;fd11:22:33::/64" style="min-height:78px"></textarea></div>' +
+      '<div class="kp-row"><label class="kp-label" for="kpr_policy">代理组</label><select id="kpr_policy"></select></div>' +
+      '<div class="kp-mini">每行填写一个 IPv4 私网或 IPv6 ULA 网段（fc00::/7）。IPv6 网段需先启用上方的 IPv6 接管。目标网段不能与本地局域网重叠；例如，填写 192.168.11.0/24 不会代理 192.168.10.0/24。请将所选代理组切换到能够访问目标私网的节点。</div>' +
+      '<div class="kp-mini">TUN 模式下，目标私网的 DNS/53 流量保持原目标，不使用 Mihomo 全局 dns-hijack。普通 DNS 接管请启用上方的“DNS 劫持”。TUN 模式仍不支持“直连设备”绕过。</div>' +
+      '<div class="kp-actions" style="margin-top:10px"><button id="kpr_status" type="button">检查定向规则</button></div>';
+    panel.appendChild(card);
+    const feature = KPR.fromOptions(state.options);
+    get('#kpr_enabled').checked = feature.enabled;
+    get('#kpr_cidrs').value = feature.cidrs.join('\n') || '192.168.11.0/24';
+    const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    const names = config.ok ? [...(config.value['proxy-groups'] || []), ...(config.value.proxies || [])]
+      .filter((p) => p && p.name && !['direct', 'reject'].includes(String(p.type || '').toLowerCase())).map((p) => p.name) : [];
+    const available = [...new Set(['', ...names, ...(feature.policy ? [feature.policy] : [])])];
+    for (const name of available) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name || '请选择代理组';
+      get('#kpr_policy').appendChild(option);
+    }
+    get('#kpr_policy').value = feature.policy || (names.includes('家宽') ? '家宽' : '');
+    get('#kpr_status').onclick = async () => {
+      const response = await runShellWithRoot('if [ -x ' + shellQuote(CLASH_POLICY_SCRIPT) + ' ]; then ' + shellQuote(CLASH_POLICY_SCRIPT) + ' private-status; else echo PRIVATE_ROUTE_SCRIPT_MISSING; fi', 15000);
+      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(response.content || '无输出') + '</pre><p>规则存在不等于家中服务可达。请从下游浏览器访问实际服务端口，并查看 Mihomo 连接列表。</p>');
+    };
+    get('#mm_policy_save_apply').onclick = async () => {
+      const token = acquireCriticalOperation('保存网络与私网设置');
+      if (!token) return;
+      const button = get('#mm_policy_save_apply');
+      setButtonBusy(button, true, '应用中…');
+      try {
+        const selected = KPR.normalize({ enabled: get('#kpr_enabled').checked, cidrs: get('#kpr_cidrs').value, policy: get('#kpr_policy').value });
+        const next = { ...state, options: { ...state.options,
+          traffic_mode: get('#mm_policy_traffic_mode').value,
+          ipv6: get('#mm_policy_ipv6').checked ? 'on' : 'off',
+          quic_block: get('#mm_policy_quic').checked ? 'on' : 'off',
+          dns_hijack: get('#mm_policy_dns').checked ? 'on' : 'off',
+          dns_port: get('#mm_policy_dns_port').value,
+          private_route_enabled: selected.enabled ? 'on' : 'off',
+          private_route_cidrs: selected.cidrs.join(' '),
+          private_route_policy: selected.policy,
+        }, deviceBypass: get('#mm_policy_device').value };
+        if (!(await kprSaveNetworkState(state, next))) {
+          get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
+          get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
+          get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
+          get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
+          get('#kpr_policy').value = state.options.private_route_policy || '';
+          get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
+        }
+      } catch (error) {
+        createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
+      } finally {
+        setButtonBusy(button, false);
+        releaseCriticalOperation(token);
       }
     };
   };
@@ -8621,6 +9066,10 @@ KANO_POLICY_TOOLS_EOF
       'yellow',
     );
     const sanitized = await sanitizeConfigForTProxy({ showToast: false });
+    if (!sanitized && await kprRequiresStrictConfig()) {
+      createToast("配置校验失败，已取消重启，未使用旧 YAML 冒充新模式。", "red", 10000);
+      return false;
+    }
     if (!sanitized) createToast('配置增强整理未完成，已按现有 config.yaml 继续启动核心。', 'yellow', 8000);
     const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
     if (!res.success) {
@@ -11569,7 +12018,7 @@ ${expectedProviderChecks}
     policyToolsBtn.textContent = '网络设置';
     policyToolsBtn.onclick = async () => {
       if (!(await ensureReady({ readOnly: true }))) return;
-      showPolicyToolsDialog({ initialTab: 'network' });
+      await showPolicyToolsDialog({ initialTab: 'network' });
     };
 
     const quickRunBtn = document.createElement('button');
@@ -11668,3 +12117,669 @@ ${expectedProviderChecks}
   })();
 })(runShellWithRoot);
 //</script >
+
+/*
+License for this source distribution:
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU Affero General Public License is a free, copyleft license for
+software and other kinds of works, specifically designed to ensure
+cooperation with the community in the case of network server software.
+
+  The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works.  By contrast,
+our General Public Licenses are intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains free
+software for all its users.
+
+  When we speak of free software, we are referring to freedom, not
+price.  Our General Public Licenses are designed to make sure that you
+have the freedom to distribute copies of free software (and charge for
+them if you wish), that you receive source code or can get it if you
+want it, that you can change the software or use pieces of it in new
+free programs, and that you know you can do these things.
+
+  Developers that use our General Public Licenses protect your rights
+with two steps: (1) assert copyright on the software, and (2) offer
+you this License which gives you legal permission to copy, distribute
+and/or modify the software.
+
+  A secondary benefit of defending all users' freedom is that
+improvements made in alternate versions of the program, if they
+receive widespread use, become available for other developers to
+incorporate.  Many developers of free software are heartened and
+encouraged by the resulting cooperation.  However, in the case of
+software used on network servers, this result may fail to come about.
+The GNU General Public License permits making a modified version and
+letting the public access it on a server without ever releasing its
+source code to the public.
+
+  The GNU Affero General Public License is designed specifically to
+ensure that, in such cases, the modified source code becomes available
+to the community.  It requires the operator of a network server to
+provide the source code of the modified version running there to the
+users of that server.  Therefore, public use of a modified version, on
+a publicly accessible server, gives the public access to the source
+code of the modified version.
+
+  An older license, called the Affero General Public License and
+published by Affero, was designed to accomplish similar goals.  This is
+a different license, not a version of the Affero GPL, but Affero has
+released a new version of the Affero GPL which permits relicensing under
+this license.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.
+
+                       TERMS AND CONDITIONS
+
+  0. Definitions.
+
+  "This License" refers to version 3 of the GNU Affero General Public License.
+
+  "Copyright" also means copyright-like laws that apply to other kinds of
+works, such as semiconductor masks.
+
+  "The Program" refers to any copyrightable work licensed under this
+License.  Each licensee is addressed as "you".  "Licensees" and
+"recipients" may be individuals or organizations.
+
+  To "modify" a work means to copy from or adapt all or part of the work
+in a fashion requiring copyright permission, other than the making of an
+exact copy.  The resulting work is called a "modified version" of the
+earlier work or a work "based on" the earlier work.
+
+  A "covered work" means either the unmodified Program or a work based
+on the Program.
+
+  To "propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy.  Propagation includes copying,
+distribution (with or without modification), making available to the
+public, and in some countries other activities as well.
+
+  To "convey" a work means any kind of propagation that enables other
+parties to make or receive copies.  Mere interaction with a user through
+a computer network, with no transfer of a copy, is not conveying.
+
+  An interactive user interface displays "Appropriate Legal Notices"
+to the extent that it includes a convenient and prominently visible
+feature that (1) displays an appropriate copyright notice, and (2)
+tells the user that there is no warranty for the work (except to the
+extent that warranties are provided), that licensees may convey the
+work under this License, and how to view a copy of this License.  If
+the interface presents a list of user commands or options, such as a
+menu, a prominent item in the list meets this criterion.
+
+  1. Source Code.
+
+  The "source code" for a work means the preferred form of the work
+for making modifications to it.  "Object code" means any non-source
+form of a work.
+
+  A "Standard Interface" means an interface that either is an official
+standard defined by a recognized standards body, or, in the case of
+interfaces specified for a particular programming language, one that
+is widely used among developers working in that language.
+
+  The "System Libraries" of an executable work include anything, other
+than the work as a whole, that (a) is included in the normal form of
+packaging a Major Component, but which is not part of that Major
+Component, and (b) serves only to enable use of the work with that
+Major Component, or to implement a Standard Interface for which an
+implementation is available to the public in source code form.  A
+"Major Component", in this context, means a major essential component
+(kernel, window system, and so on) of the specific operating system
+(if any) on which the executable work runs, or a compiler used to
+produce the work, or an object code interpreter used to run it.
+
+  The "Corresponding Source" for a work in object code form means all
+the source code needed to generate, install, and (for an executable
+work) run the object code and to modify the work, including scripts to
+control those activities.  However, it does not include the work's
+System Libraries, or general-purpose tools or generally available free
+programs which are used unmodified in performing those activities but
+which are not part of the work.  For example, Corresponding Source
+includes interface definition files associated with source files for
+the work, and the source code for shared libraries and dynamically
+linked subprograms that the work is specifically designed to require,
+such as by intimate data communication or control flow between those
+subprograms and other parts of the work.
+
+  The Corresponding Source need not include anything that users
+can regenerate automatically from other parts of the Corresponding
+Source.
+
+  The Corresponding Source for a work in source code form is that
+same work.
+
+  2. Basic Permissions.
+
+  All rights granted under this License are granted for the term of
+copyright on the Program, and are irrevocable provided the stated
+conditions are met.  This License explicitly affirms your unlimited
+permission to run the unmodified Program.  The output from running a
+covered work is covered by this License only if the output, given its
+content, constitutes a covered work.  This License acknowledges your
+rights of fair use or other equivalent, as provided by copyright law.
+
+  You may make, run and propagate covered works that you do not
+convey, without conditions so long as your license otherwise remains
+in force.  You may convey covered works to others for the sole purpose
+of having them make modifications exclusively for you, or provide you
+with facilities for running those works, provided that you comply with
+the terms of this License in conveying all material for which you do
+not control copyright.  Those thus making or running the covered works
+for you must do so exclusively on your behalf, under your direction
+and control, on terms that prohibit them from making any copies of
+your copyrighted material outside their relationship with you.
+
+  Conveying under any other circumstances is permitted solely under
+the conditions stated below.  Sublicensing is not allowed; section 10
+makes it unnecessary.
+
+  3. Protecting Users' Legal Rights From Anti-Circumvention Law.
+
+  No covered work shall be deemed part of an effective technological
+measure under any applicable law fulfilling obligations under article
+11 of the WIPO copyright treaty adopted on 20 December 1996, or
+similar laws prohibiting or restricting circumvention of such
+measures.
+
+  When you convey a covered work, you waive any legal power to forbid
+circumvention of technological measures to the extent such circumvention
+is effected by exercising rights under this License with respect to
+the covered work, and you disclaim any intention to limit operation or
+modification of the work as a means of enforcing, against the work's
+users, your or third parties' legal rights to forbid circumvention of
+technological measures.
+
+  4. Conveying Verbatim Copies.
+
+  You may convey verbatim copies of the Program's source code as you
+receive it, in any medium, provided that you conspicuously and
+appropriately publish on each copy an appropriate copyright notice;
+keep intact all notices stating that this License and any
+non-permissive terms added in accord with section 7 apply to the code;
+keep intact all notices of the absence of any warranty; and give all
+recipients a copy of this License along with the Program.
+
+  You may charge any price or no price for each copy that you convey,
+and you may offer support or warranty protection for a fee.
+
+  5. Conveying Modified Source Versions.
+
+  You may convey a work based on the Program, or the modifications to
+produce it from the Program, in the form of source code under the
+terms of section 4, provided that you also meet all of these conditions:
+
+    a) The work must carry prominent notices stating that you modified
+    it, and giving a relevant date.
+
+    b) The work must carry prominent notices stating that it is
+    released under this License and any conditions added under section
+    7.  This requirement modifies the requirement in section 4 to
+    "keep intact all notices".
+
+    c) You must license the entire work, as a whole, under this
+    License to anyone who comes into possession of a copy.  This
+    License will therefore apply, along with any applicable section 7
+    additional terms, to the whole of the work, and all its parts,
+    regardless of how they are packaged.  This License gives no
+    permission to license the work in any other way, but it does not
+    invalidate such permission if you have separately received it.
+
+    d) If the work has interactive user interfaces, each must display
+    Appropriate Legal Notices; however, if the Program has interactive
+    interfaces that do not display Appropriate Legal Notices, your
+    work need not make them do so.
+
+  A compilation of a covered work with other separate and independent
+works, which are not by their nature extensions of the covered work,
+and which are not combined with it such as to form a larger program,
+in or on a volume of a storage or distribution medium, is called an
+"aggregate" if the compilation and its resulting copyright are not
+used to limit the access or legal rights of the compilation's users
+beyond what the individual works permit.  Inclusion of a covered work
+in an aggregate does not cause this License to apply to the other
+parts of the aggregate.
+
+  6. Conveying Non-Source Forms.
+
+  You may convey a covered work in object code form under the terms
+of sections 4 and 5, provided that you also convey the
+machine-readable Corresponding Source under the terms of this License,
+in one of these ways:
+
+    a) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by the
+    Corresponding Source fixed on a durable physical medium
+    customarily used for software interchange.
+
+    b) Convey the object code in, or embodied in, a physical product
+    (including a physical distribution medium), accompanied by a
+    written offer, valid for at least three years and valid for as
+    long as you offer spare parts or customer support for that product
+    model, to give anyone who possesses the object code either (1) a
+    copy of the Corresponding Source for all the software in the
+    product that is covered by this License, on a durable physical
+    medium customarily used for software interchange, for a price no
+    more than your reasonable cost of physically performing this
+    conveying of source, or (2) access to copy the
+    Corresponding Source from a network server at no charge.
+
+    c) Convey individual copies of the object code with a copy of the
+    written offer to provide the Corresponding Source.  This
+    alternative is allowed only occasionally and noncommercially, and
+    only if you received the object code with such an offer, in accord
+    with subsection 6b.
+
+    d) Convey the object code by offering access from a designated
+    place (gratis or for a charge), and offer equivalent access to the
+    Corresponding Source in the same way through the same place at no
+    further charge.  You need not require recipients to copy the
+    Corresponding Source along with the object code.  If the place to
+    copy the object code is a network server, the Corresponding Source
+    may be on a different server (operated by you or a third party)
+    that supports equivalent copying facilities, provided you maintain
+    clear directions next to the object code saying where to find the
+    Corresponding Source.  Regardless of what server hosts the
+    Corresponding Source, you remain obligated to ensure that it is
+    available for as long as needed to satisfy these requirements.
+
+    e) Convey the object code using peer-to-peer transmission, provided
+    you inform other peers where the object code and Corresponding
+    Source of the work are being offered to the general public at no
+    charge under subsection 6d.
+
+  A separable portion of the object code, whose source code is excluded
+from the Corresponding Source as a System Library, need not be
+included in conveying the object code work.
+
+  A "User Product" is either (1) a "consumer product", which means any
+tangible personal property which is normally used for personal, family,
+or household purposes, or (2) anything designed or sold for incorporation
+into a dwelling.  In determining whether a product is a consumer product,
+doubtful cases shall be resolved in favor of coverage.  For a particular
+product received by a particular user, "normally used" refers to a
+typical or common use of that class of product, regardless of the status
+of the particular user or of the way in which the particular user
+actually uses, or expects or is expected to use, the product.  A product
+is a consumer product regardless of whether the product has substantial
+commercial, industrial or non-consumer uses, unless such uses represent
+the only significant mode of use of the product.
+
+  "Installation Information" for a User Product means any methods,
+procedures, authorization keys, or other information required to install
+and execute modified versions of a covered work in that User Product from
+a modified version of its Corresponding Source.  The information must
+suffice to ensure that the continued functioning of the modified object
+code is in no case prevented or interfered with solely because
+modification has been made.
+
+  If you convey an object code work under this section in, or with, or
+specifically for use in, a User Product, and the conveying occurs as
+part of a transaction in which the right of possession and use of the
+User Product is transferred to the recipient in perpetuity or for a
+fixed term (regardless of how the transaction is characterized), the
+Corresponding Source conveyed under this section must be accompanied
+by the Installation Information.  But this requirement does not apply
+if neither you nor any third party retains the ability to install
+modified object code on the User Product (for example, the work has
+been installed in ROM).
+
+  The requirement to provide Installation Information does not include a
+requirement to continue to provide support service, warranty, or updates
+for a work that has been modified or installed by the recipient, or for
+the User Product in which it has been modified or installed.  Access to a
+network may be denied when the modification itself materially and
+adversely affects the operation of the network or violates the rules and
+protocols for communication across the network.
+
+  Corresponding Source conveyed, and Installation Information provided,
+in accord with this section must be in a format that is publicly
+documented (and with an implementation available to the public in
+source code form), and must require no special password or key for
+unpacking, reading or copying.
+
+  7. Additional Terms.
+
+  "Additional permissions" are terms that supplement the terms of this
+License by making exceptions from one or more of its conditions.
+Additional permissions that are applicable to the entire Program shall
+be treated as though they were included in this License, to the extent
+that they are valid under applicable law.  If additional permissions
+apply only to part of the Program, that part may be used separately
+under those permissions, but the entire Program remains governed by
+this License without regard to the additional permissions.
+
+  When you convey a copy of a covered work, you may at your option
+remove any additional permissions from that copy, or from any part of
+it.  (Additional permissions may be written to require their own
+removal in certain cases when you modify the work.)  You may place
+additional permissions on material, added by you to a covered work,
+for which you have or can give appropriate copyright permission.
+
+  Notwithstanding any other provision of this License, for material you
+add to a covered work, you may (if authorized by the copyright holders of
+that material) supplement the terms of this License with terms:
+
+    a) Disclaiming warranty or limiting liability differently from the
+    terms of sections 15 and 16 of this License; or
+
+    b) Requiring preservation of specified reasonable legal notices or
+    author attributions in that material or in the Appropriate Legal
+    Notices displayed by works containing it; or
+
+    c) Prohibiting misrepresentation of the origin of that material, or
+    requiring that modified versions of such material be marked in
+    reasonable ways as different from the original version; or
+
+    d) Limiting the use for publicity purposes of names of licensors or
+    authors of the material; or
+
+    e) Declining to grant rights under trademark law for use of some
+    trade names, trademarks, or service marks; or
+
+    f) Requiring indemnification of licensors and authors of that
+    material by anyone who conveys the material (or modified versions of
+    it) with contractual assumptions of liability to the recipient, for
+    any liability that these contractual assumptions directly impose on
+    those licensors and authors.
+
+  All other non-permissive additional terms are considered "further
+restrictions" within the meaning of section 10.  If the Program as you
+received it, or any part of it, contains a notice stating that it is
+governed by this License along with a term that is a further
+restriction, you may remove that term.  If a license document contains
+a further restriction but permits relicensing or conveying under this
+License, you may add to a covered work material governed by the terms
+of that license document, provided that the further restriction does
+not survive such relicensing or conveying.
+
+  If you add terms to a covered work in accord with this section, you
+must place, in the relevant source files, a statement of the
+additional terms that apply to those files, or a notice indicating
+where to find the applicable terms.
+
+  Additional terms, permissive or non-permissive, may be stated in the
+form of a separately written license, or stated as exceptions;
+the above requirements apply either way.
+
+  8. Termination.
+
+  You may not propagate or modify a covered work except as expressly
+provided under this License.  Any attempt otherwise to propagate or
+modify it is void, and will automatically terminate your rights under
+this License (including any patent licenses granted under the third
+paragraph of section 11).
+
+  However, if you cease all violation of this License, then your
+license from a particular copyright holder is reinstated (a)
+provisionally, unless and until the copyright holder explicitly and
+finally terminates your license, and (b) permanently, if the copyright
+holder fails to notify you of the violation by some reasonable means
+prior to 60 days after the cessation.
+
+  Moreover, your license from a particular copyright holder is
+reinstated permanently if the copyright holder notifies you of the
+violation by some reasonable means, this is the first time you have
+received notice of violation of this License (for any work) from that
+copyright holder, and you cure the violation prior to 30 days after
+your receipt of the notice.
+
+  Termination of your rights under this section does not terminate the
+licenses of parties who have received copies or rights from you under
+this License.  If your rights have been terminated and not permanently
+reinstated, you do not qualify to receive new licenses for the same
+material under section 10.
+
+  9. Acceptance Not Required for Having Copies.
+
+  You are not required to accept this License in order to receive or
+run a copy of the Program.  Ancillary propagation of a covered work
+occurring solely as a consequence of using peer-to-peer transmission
+to receive a copy likewise does not require acceptance.  However,
+nothing other than this License grants you permission to propagate or
+modify any covered work.  These actions infringe copyright if you do
+not accept this License.  Therefore, by modifying or propagating a
+covered work, you indicate your acceptance of this License to do so.
+
+  10. Automatic Licensing of Downstream Recipients.
+
+  Each time you convey a covered work, the recipient automatically
+receives a license from the original licensors, to run, modify and
+propagate that work, subject to this License.  You are not responsible
+for enforcing compliance by third parties with this License.
+
+  An "entity transaction" is a transaction transferring control of an
+organization, or substantially all assets of one, or subdividing an
+organization, or merging organizations.  If propagation of a covered
+work results from an entity transaction, each party to that
+transaction who receives a copy of the work also receives whatever
+licenses to the work the party's predecessor in interest had or could
+give under the previous paragraph, plus a right to possession of the
+Corresponding Source of the work from the predecessor in interest, if
+the predecessor has it or can get it with reasonable efforts.
+
+  You may not impose any further restrictions on the exercise of the
+rights granted or affirmed under this License.  For example, you may
+not impose a license fee, royalty, or other charge for exercise of
+rights granted under this License, and you may not initiate litigation
+(including a cross-claim or counterclaim in a lawsuit) alleging that
+any patent claim is infringed by making, using, selling, offering for
+sale, or importing the Program or any portion of it.
+
+  11. Patents.
+
+  A "contributor" is a copyright holder who authorizes use under this
+License of the Program or a work on which the Program is based.  The
+work thus licensed is called the contributor's "contributor version".
+
+  A contributor's "essential patent claims" are all patent claims
+owned or controlled by the contributor, whether already acquired or
+hereafter acquired, that would be infringed by some manner, permitted
+by this License, of making, using, or selling its contributor version,
+but do not include claims that would be infringed only as a
+consequence of further modification of the contributor version.  For
+purposes of this definition, "control" includes the right to grant
+patent sublicenses in a manner consistent with the requirements of
+this License.
+
+  Each contributor grants you a non-exclusive, worldwide, royalty-free
+patent license under the contributor's essential patent claims, to
+make, use, sell, offer for sale, import and otherwise run, modify and
+propagate the contents of its contributor version.
+
+  In the following three paragraphs, a "patent license" is any express
+agreement or commitment, however denominated, not to enforce a patent
+(such as an express permission to practice a patent or covenant not to
+sue for patent infringement).  To "grant" such a patent license to a
+party means to make such an agreement or commitment not to enforce a
+patent against the party.
+
+  If you convey a covered work, knowingly relying on a patent license,
+and the Corresponding Source of the work is not available for anyone
+to copy, free of charge and under the terms of this License, through a
+publicly available network server or other readily accessible means,
+then you must either (1) cause the Corresponding Source to be so
+available, or (2) arrange to deprive yourself of the benefit of the
+patent license for this particular work, or (3) arrange, in a manner
+consistent with the requirements of this License, to extend the patent
+license to downstream recipients.  "Knowingly relying" means you have
+actual knowledge that, but for the patent license, your conveying the
+covered work in a country, or your recipient's use of the covered work
+in a country, would infringe one or more identifiable patents in that
+country that you have reason to believe are valid.
+
+  If, pursuant to or in connection with a single transaction or
+arrangement, you convey, or propagate by procuring conveyance of, a
+covered work, and grant a patent license to some of the parties
+receiving the covered work authorizing them to use, propagate, modify
+or convey a specific copy of the covered work, then the patent license
+you grant is automatically extended to all recipients of the covered
+work and works based on it.
+
+  A patent license is "discriminatory" if it does not include within
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
+
+  Nothing in this License shall be construed as excluding or limiting
+any implied license or other defenses to infringement that may
+otherwise be available to you under applicable patent law.
+
+  12. No Surrender of Others' Freedom.
+
+  If conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot convey a
+covered work so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you may
+not convey it at all.  For example, if you agree to terms that obligate you
+to collect a royalty for further conveying from those to whom you convey
+the Program, the only way you could satisfy both those terms and this
+License would be to refrain entirely from conveying the Program.
+
+  13. Remote Network Interaction; Use with the GNU General Public License.
+
+  Notwithstanding any other provision of this License, if you modify the
+Program, your modified version must prominently offer all users
+interacting with it remotely through a computer network (if your version
+supports such interaction) an opportunity to receive the Corresponding
+Source of your version by providing access to the Corresponding Source
+from a network server at no charge, through some standard or customary
+means of facilitating copying of software.  This Corresponding Source
+shall include the Corresponding Source for any work covered by version 3
+of the GNU General Public License that is incorporated pursuant to the
+following paragraph.
+
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the work with which it is combined will remain governed by version
+3 of the GNU General Public License.
+
+  14. Revised Versions of this License.
+
+  The Free Software Foundation may publish revised and/or new versions of
+the GNU Affero General Public License from time to time.  Such new versions
+will be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
+
+  Each version is given a distinguishing version number.  If the
+Program specifies that a certain numbered version of the GNU Affero General
+Public License "or any later version" applies to it, you have the
+option of following the terms and conditions either of that numbered
+version or of any later version published by the Free Software
+Foundation.  If the Program does not specify a version number of the
+GNU Affero General Public License, you may choose any version ever published
+by the Free Software Foundation.
+
+  If the Program specifies that a proxy can decide which future
+versions of the GNU Affero General Public License can be used, that proxy's
+public statement of acceptance of a version permanently authorizes you
+to choose that version for the Program.
+
+  Later license versions may give you additional or different
+permissions.  However, no additional obligations are imposed on any
+author or copyright holder as a result of your choosing to follow a
+later version.
+
+  15. Disclaimer of Warranty.
+
+  THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
+APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
+HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
+OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. Limitation of Liability.
+
+  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+  17. Interpretation of Sections 15 and 16.
+
+  If the disclaimer of warranty and limitation of liability provided
+above cannot be given local legal effect according to their terms,
+reviewing courts shall apply local law that most closely approximates
+an absolute waiver of all civil liability in connection with the
+Program, unless a warranty or assumption of liability accompanies a
+copy of the Program in return for a fee.
+
+                     END OF TERMS AND CONDITIONS
+
+            How to Apply These Terms to Your New Programs
+
+  If you develop a new program, and you want it to be of the greatest
+possible use to the public, the best way to achieve this is to make it
+free software which everyone can redistribute and change under these terms.
+
+  To do so, attach the following notices to the program.  It is safest
+to attach them to the start of each source file to most effectively
+state the exclusion of warranty; and each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the program's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Also add information on how to contact you by electronic and paper mail.
+
+  If your software can interact with users remotely through a computer
+network, you should also make sure that it provides a way for users to
+get its source.  For example, if your program is a web application, its
+interface could display a "Source" link that leads users to an archive
+of the code.  There are many ways you could offer source, and different
+solutions will be better for different programs; see section 13 for the
+specific requirements.
+
+  You should also get your employer (if you work as a programmer) or school,
+if any, to sign a "copyright disclaimer" for the program, if necessary.
+For more information on this, and how to apply and follow the GNU AGPL, see
+<https://www.gnu.org/licenses/>.
+
+*/

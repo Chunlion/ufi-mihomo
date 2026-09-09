@@ -11725,7 +11725,7 @@ ${expectedProviderChecks}
         .map((type) => `<option value="${type}">${type}</option>`)
         .join('');
       const policyOptionsHtml = policyOptions
-        .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+        .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
         .join('');
       const { el, close } = createFixedToast(
         'mm_rule_override_toast',
@@ -11741,8 +11741,7 @@ ${expectedProviderChecks}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;align-items:center;">
               <select id="mm_rule_override_type" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">${typeOptionsHtml}</select>
               <input id="mm_rule_override_content" type="text" autocomplete="off" placeholder="规则内容，如 apple.com / CN / 443" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;" />
-              <input id="mm_rule_override_policy" type="text" autocomplete="off" list="mm_rule_override_policy_list" value="DIRECT" placeholder="DIRECT / REJECT / 策略组" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;" />
-              <datalist id="mm_rule_override_policy_list">${policyOptionsHtml}</datalist>
+              <select id="mm_rule_override_policy" aria-label="规则策略" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">${policyOptionsHtml}</select>
               <select id="mm_rule_override_position" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">
                 <option value="prepend">前置</option>
                 <option value="append">后置</option>

@@ -1648,10 +1648,67 @@ function runFor(label, file) {
   })();
 }
 
+async function runPrivateRoutingRegression(file) {
+  const { api } = loadPlugin(file, async () => ({ success: true, content: '' }),
+    ['KPR', 'ensureRuntimeTrafficMode', 'kprSaveNetworkState']);
+  const desired = { enable: true, device: 'KanoTun', 'auto-route': true, 'auto-redirect': false };
+  let live, acceptPatch, patches;
+  const runtime = {
+    CLASH_CONFIG: '/config.yaml',
+    readYamlObject: async () => ({ ok: true, value: { tun: desired } }),
+    buildControllerInfo: async () => ({}), getCorePid: async () => 123,
+    callMihomoApi: async (_, method) => {
+      if (method === 'PATCH') {
+        patches++;
+        if (acceptPatch) live = { ...desired };
+      }
+      return { success: true, responseText: JSON.stringify({ tun: live }) };
+    },
+    runShellWithRoot: async () => ({ success: true }),
+    shellQuote: String, safeTextToHtml: String, createToast() {},
+  };
+  const ensure = vm.runInNewContext(`(${api.ensureRuntimeTrafficMode.toString()})`, runtime);
+  for (const key of ['device', 'auto-route', 'auto-redirect']) {
+    live = { ...desired, [key]: key === 'device' ? 'OtherTun' : !desired[key] };
+    patches = 0; acceptPatch = false;
+    chk(await ensure('tun'), false, `TUN rejects ignored ${key} updates`);
+    chk(patches, 1, `TUN attempts one ${key} update`);
+  }
+  live = { ...desired, 'auto-route': false }; patches = 0; acceptPatch = true;
+  chk(await ensure('tun'), true, 'TUN accepts a verified routing update');
+  live = { enable: true }; patches = 0;
+  chk(await ensure('tun'), true, 'TUN supports cores that omit optional config fields');
+  chk(patches, 0, 'omitted optional fields do not trigger repeated TUN updates');
+
+  const options = { traffic_mode: 'off', private_route_enabled: 'on',
+    private_route_cidrs: '192.168.11.0/24', private_route_policy: 'LAN' };
+  let interfaceReads = 0, saves = 0;
+  const network = {
+    KPR: api.KPR, kprStrictOperation: 0, CLASH_CONFIG: '/config.yaml',
+    readYamlObject: async () => ({ ok: true, value: { mode: 'rule' } }),
+    kprReadConnected: async () => { interfaceReads++; throw new Error('interfaces unavailable'); },
+    getCorePid: async () => 0, kprVerifySelection: async () => '',
+    createConfigRollbackPoint: async () => '/config.backup',
+    savePolicyState: async () => { saves++; return true; },
+    kprReadOptions: async () => ({ ...options }), restartClash: async () => true,
+    safeTextToHtml: String, createToast() {},
+  };
+  const save = vm.runInNewContext(`(${api.kprSaveNetworkState.toString()})`, network);
+  chk(await save({}, { options }), true, 'traffic capture can be disabled while interfaces are unavailable');
+  chk(interfaceReads, 0, 'disabling capture skips private-route interface inspection');
+  chk(saves, 1, 'disabled traffic mode is saved');
+  chk(await save({}, { options: { ...options, traffic_mode: 'tproxy' } }), false,
+    'enabling capture still rejects unreadable interfaces');
+  chk(interfaceReads, 1, 'enabling capture checks private-route interfaces');
+  chk(saves, 1, 'failed interface inspection does not save new settings');
+  chk(network.kprStrictOperation, 0, 'network preflight releases strict-operation state after failure');
+}
+
 (async () => {
   chk(fs.existsSync(FILES.plugin), true, 'repository contains the unified plugin file');
   chk(fs.existsSync(path.join(ROOT, '猫猫TProxy_Go.js')), false, 'legacy _Go plugin filename has been removed');
   await runFor('统一版', FILES.plugin);
+  await runPrivateRoutingRegression(FILES.plugin);
   console.log(`\n================ 结果: ${pass} 通过 / ${fail} 失败 ================`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e.message); process.exit(2); });

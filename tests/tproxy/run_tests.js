@@ -322,12 +322,12 @@ function runFor(label, file) {
     'cache flush requests share one controller and core PID snapshot',
   );
   const trafficModeSource = source.slice(
-    source.indexOf('const readCoreTunEnabled = async'),
-    source.indexOf('const parseProviderNamesFromYamlText ='),
+    source.indexOf('async function ensureRuntimeTrafficMode'),
+    source.indexOf('async function kprSaveNetworkState'),
   );
   chk(
-    trafficModeSource.includes('const readCoreTunEnabled = async (controllerInfo = null, corePid = null)')
-      && trafficModeSource.includes('const [info, corePid] = await Promise.all([')
+    trafficModeSource.includes('const info = await buildControllerInfo({ fresh: true })')
+      && trafficModeSource.includes('const corePid = await getCorePid()')
       && (trafficModeSource.match(/\{ corePid \}/g) || []).length >= 2
       && source.includes("checked.info, 8, { corePid: reloadRes.corePid }"),
     true,
@@ -572,8 +572,8 @@ function runFor(label, file) {
       'policy updates build inactive chains, switch one hook, and retain rollback targets',
     );
     const policyValidators = policyTools.slice(
-      policyTools.indexOf('is_ipv4() {'),
-      policyTools.indexOf('is_port_listening() {'),
+      policyTools.indexOf('is_ipv4() ('),
+      policyTools.indexOf('is_port_listening() ('),
     );
     const policyValidatorRun = spawnSync('sh', [], {
       input: `${policyValidators}\n` + [
@@ -1145,7 +1145,7 @@ function runFor(label, file) {
       );
 
       const savePolicyStateSource = source.slice(
-        source.indexOf('const savePolicyState = async'),
+        source.indexOf('const kprBaseSavePolicyState = async'),
         source.indexOf('const applyPolicyToolsRules = async'),
       );
       chk(

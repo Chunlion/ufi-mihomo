@@ -438,14 +438,15 @@ async function ensureRuntimeTrafficMode(trafficMode) {
       return JSON.parse(result.responseText || '{}').tun || {};
     };
     let live = await inspect();
-    const exposedMismatch = want && ['device', 'auto-route', 'auto-redirect'].some((key) =>
+    const exposedMismatch = () => want && ['device', 'auto-route', 'auto-redirect'].some((key) =>
       Object.prototype.hasOwnProperty.call(live, key) && Object.prototype.hasOwnProperty.call(desired, key) && live[key] !== desired[key]);
-    if (!!live.enable !== want || exposedMismatch) {
+    if (!!live.enable !== want || exposedMismatch()) {
       const patched = await callMihomoApi('/configs', 'PATCH', JSON.stringify({ tun: want ? desired : { enable: false } }), info, 10, { corePid });
       if (!patched.success) throw new Error('核心拒绝更新 TUN 配置');
       live = await inspect();
     }
     if (!!live.enable !== want) throw new Error('核心 TUN 开关未生效');
+    if (exposedMismatch()) throw new Error('核心 TUN 路由配置未生效');
     if (want) {
       const device = String(desired.device || live.device || 'Mihomo');
       if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device)) throw new Error('TUN 接口名称无效');
@@ -470,7 +471,7 @@ async function kprSaveNetworkState(previous, next) {
     const feature = KPR.fromOptions(next.options);
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!source.ok) throw new Error(source.message || '无法读取运行配置');
-    KPR.runtime(source.value, next.options, feature.enabled ? await kprReadConnected(source.value, next.options) : []);
+    KPR.runtime(source.value, next.options, feature.enabled && next.options.traffic_mode !== 'off' ? await kprReadConnected(source.value, next.options) : []);
     if (await getCorePid()) await kprVerifySelection(next.options);
     if (next.options.traffic_mode === 'tun') {
       const tun = await runShellWithRoot('test -c /dev/net/tun || test -c /dev/tun', 10000);

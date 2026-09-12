@@ -599,6 +599,7 @@ function verifyGeneratedRulesFlushedCmd() {
     `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} boot-apply >/data/kano_policy_boot.log 2>&1 || true`;
   const LEGACY_BOOT_MAC_BYPASS_LINE = `sleep 10; ${CLASH_MAC_BYPASS_SCRIPT}`;
   const SUB_RULE_MODE_TEMPLATE = 'template';
+  const SUB_RULE_MODE_ORIGINAL = 'original';
   const SUB_CONVERT_MODE_PROVIDER = 'provider';
   const SUB_CONVERT_MODE_LOCAL = 'local';
   const SUB_DISABLED_MARKER = '# KANO_SUB_DISABLED ';
@@ -976,8 +977,9 @@ KANO_YQ_SMOKE_EOF
           max_keep="$2"
           count=0
           for stale in $(ls -1t "\${base}".before_* 2>/dev/null); do
+            case "$stale" in *.source|*.source.absent) continue ;; esac
             count=$((count + 1))
-            [ "$count" -le "$max_keep" ] || rm -f "$stale" 2>/dev/null || true
+            [ "$count" -le "$max_keep" ] || rm -f "$stale" "$stale.source" "$stale.source.absent" 2>/dev/null || true
           done
         }
         prune_kano_backup_series ${shellQuote(CLASH_CONFIG)} ${shellQuote(String(keep))}
@@ -2295,7 +2297,23 @@ EOF_KANO_SERVICE
   };
 
 
-  const normalizeSubRuleModeValue = (value = '') => SUB_RULE_MODE_TEMPLATE;
+  const normalizeSubRuleModeValue = (value = '') =>
+    String(value || '').trim().toLowerCase() == SUB_RULE_MODE_ORIGINAL
+      ? SUB_RULE_MODE_ORIGINAL : SUB_RULE_MODE_TEMPLATE;
+  const parseSubRuleModeFromText = (content = '') => {
+    const match = String(content || '').match(/^# KANO_SUB_RULE_MODE=(\S+)\s*$/m);
+    return normalizeSubRuleModeValue(match ? match[1] : '');
+  };
+
+  const readConfigSource = async () => {
+    const res = await runShellWithRoot(`
+      if [ -f ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} ]; then
+        sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} | head -n 1
+      fi
+    `, 10 * 1000);
+    if (!res.success) throw new Error('读取配置来源失败，未修改配置');
+    return String(res.content || '').trim();
+  };
   const normalizeSubConvertModeValue = (value = '') =>
     String(value || '').trim().toLowerCase() == SUB_CONVERT_MODE_LOCAL
       ? SUB_CONVERT_MODE_LOCAL
@@ -3683,6 +3701,48 @@ EOF_KANO_SERVICE
         ok: false,
         message: sanitizeSubscriptionSecrets(e && e.message ? e.message : String(e || `${label} 结构无效`)),
       };
+    }
+  };
+
+  const validateOriginalSubscriptionConfig = (config) => {
+    validateConfigObjectStructure(config, '订阅原配置');
+    if (!Array.isArray(config.rules) || config.rules.length == 0
+      || !Array.isArray(config['proxy-groups']) || config['proxy-groups'].length == 0
+      || (!(Array.isArray(config.proxies) && config.proxies.length > 0)
+        && Object.keys(config['proxy-providers'] || {}).length == 0)) {
+      throw new Error('订阅需返回带规则、策略组和节点来源的完整 Mihomo YAML/JSON；仅节点订阅请使用模板模式');
+    }
+    return true;
+  };
+
+  const writeOriginalSubscriptionConfig = async (sources, { backup = true } = {}) => {
+    const cleanSources = normalizeSubSourceList(sources);
+    if (cleanSources.length != 1) {
+      createToast('使用订阅原配置时，只能启用一个完整配置订阅', 'red', 8000);
+      return false;
+    }
+    const stagePath = `${CLASH_CONFIG}.kano_original_${Date.now()}_${createRandomString(6)}`;
+    try {
+      const fetched = await convertSubscriptionsLocally(cleanSources, { rawConfigPath: stagePath });
+      if (!fetched.ok) throw new Error(fetched.message || '原配置下载失败，未修改运行配置');
+      const read = await readYamlObject(stagePath, '订阅原配置');
+      if (!read.ok) throw new Error('订阅不是有效的 YAML/JSON 完整配置，请检查返回格式');
+      validateOriginalSubscriptionConfig(read.value);
+      const written = await commitStagedYaml({
+        targetPath: CLASH_CONFIG, stagePath, label: '订阅原配置', backup, backupTag: 'subscription_original',
+      });
+      if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
+      const marked = await runShellWithRoot(`
+        ${setConfigSourceCmd('subscription_original')}
+        grep -qx 'KANO_CONFIG_SOURCE=subscription_original' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
+      `, 10 * 1000);
+      if (!marked.success) throw new Error('保存原配置来源失败');
+      return true;
+    } catch (error) {
+      createToast(safeTextToHtml(sanitizeSubscriptionSecrets(error.message || String(error))), 'red', 10000);
+      return false;
+    } finally {
+      await runShellWithRoot(`rm -f ${shellQuote(stagePath)}`, 10 * 1000);
     }
   };
 
@@ -5080,7 +5140,7 @@ KANO_WRITE_CHECK_EOF
     return true;
   };
 
-  const convertSubscriptionsLocally = async (sources = []) => {
+  const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
     const cleanSources = normalizeSubSourceList(sources);
     if (cleanSources.length == 0) return buildProviderUpdateResult([]);
     const sourceChecks = cleanSources.map((source) => validateLocalSubscriptionUrl(source.url));
@@ -5102,7 +5162,7 @@ KANO_WRITE_CHECK_EOF
       })), { via: 'local', committed: false });
     }
     await loadProviderUserAgent();
-    if (!(await ensureLocalSubscriptionConverter())) {
+    if (!rawConfigPath && !(await ensureLocalSubscriptionConverter())) {
       const cacheProbe = await runShellWithRoot(cleanSources.map((source) => `
         [ -s ${shellQuote(`${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`)} ] && echo ${shellQuote(source.name)} || true
       `).join('\n'), 10 * 1000);
@@ -5137,7 +5197,8 @@ KANO_WRITE_CHECK_EOF
       'Shadowrocket',
       'clash.meta',
     ].map((value) => String(value || '').trim()).filter(Boolean))];
-    const localFetchUserAgentShell = localFetchUserAgents.map((value) => shellQuote(value)).join(' ');
+    const localFetchUserAgentShell = (rawConfigPath ? [currentProviderUserAgent] : localFetchUserAgents)
+      .map((value) => shellQuote(value)).join(' ');
     const txName = `.kano_local_subscription_${Date.now()}_${createRandomString(6)}`;
     const txDir = `${CLASH_PROXY_DIR}/proxies/${txName}`;
     const cacheProbeCommands = cleanSources.map((source) => {
@@ -5224,6 +5285,11 @@ KANO_WRITE_CHECK_EOF
                   break
                 fi
                 last_kind="$(classify_candidate "$raw_tmp")"
+                ${rawConfigPath ? `
+                mv -f "$raw_tmp" "${outputPath}"
+                candidate_ok=1
+                break
+                ` : ''}
                 last_stage=convert
                 if CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"; then
                   convert_rc=0
@@ -5438,6 +5504,11 @@ KANO_WRITE_CHECK_EOF
         ${cacheProbeCommands}
         ${getCurlBinCmd()}
         ${parallelDownloadCommands.join('\n')}
+        ${rawConfigPath ? `
+        mv -f "$TX/${cleanSources[0].name}.yaml" ${shellQuote(rawConfigPath)}
+        echo ORIGINAL_CONFIG_FETCHED=1
+        exit 0
+        ` : ''}
         ${totalQuotaCommands}
         ${snapshotCommands}
         committing=1
@@ -5446,6 +5517,12 @@ KANO_WRITE_CHECK_EOF
         echo "LOCAL_CONVERT_COMMITTED=${cleanSources.length}"
       `, Math.max(120, cleanSources.length * 100) * 1000, 'convert_subscriptions_locally');
 
+    if (rawConfigPath) {
+      return {
+        ok: !!res.success && /(^|\n)ORIGINAL_CONFIG_FETCHED=1(\n|$)/.test(res.content || ''),
+        message: sanitizeSubscriptionSecrets(String(res.content || '下载失败')),
+      };
+    }
     const lines = String(res.content || '').split('\n').map((line) => line.trim()).filter(Boolean);
     const converted = new Map();
     const existingCache = new Map();
@@ -5559,7 +5636,8 @@ KANO_WRITE_CHECK_EOF
         WRITE_CHECK=${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
-        mode=${shellQuote(SUB_RULE_MODE_TEMPLATE)}
+        mode="$(sed -n 's/^# KANO_SUB_RULE_MODE=//p' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null | head -n 1 | tr -d '\\r')"
+        case "$mode" in original) ;; *) mode=template ;; esac
         config_source="$(grep -m 1 '^KANO_CONFIG_SOURCE=' "$SOURCE_FILE" 2>/dev/null | sed 's/^KANO_CONFIG_SOURCE=//' | tr -d '\r')"
         [ -n "$config_source" ] || config_source="unknown"
         config_source_time="$(grep -m 1 '^KANO_CONFIG_SOURCE_TIME=' "$SOURCE_FILE" 2>/dev/null | sed 's/^KANO_CONFIG_SOURCE_TIME=//' | tr -d '\r')"
@@ -5666,7 +5744,7 @@ KANO_WRITE_CHECK_EOF
         ? '\u8fd0\u884c\u914d\u7f6e\u89e3\u6790\u5931\u8d25'
         : '\u8fd0\u884c\u914d\u7f6e\u5df2\u52a0\u8f7d';
     const parts = [
-      '模板规则',
+      status.configSource == 'uploaded_config' ? '自定义配置' : status.mode == SUB_RULE_MODE_ORIGINAL ? '订阅原配置' : '模板规则',
       configLabel,
       status.rulesCount != null ? `\u89c4\u5219 ${status.rulesCount}` : '',
       status.proxyGroupsCount != null ? `\u7b56\u7565\u7ec4 ${status.proxyGroupsCount}` : '',
@@ -6331,6 +6409,12 @@ KANO_WRITE_CHECK_EOF
         backup="$CONFIG.before_${safeLabel}_$stamp"
         if [ -f "$CONFIG" ]; then
           cp "$CONFIG" "$backup" || exit 1
+          rm -f "$backup.source" "$backup.source.absent" || exit 1
+          if [ -f ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} ]; then
+            cp ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} "$backup.source" || exit 1
+          else
+            touch "$backup.source.absent" || exit 1
+          fi
           chmod 644 "$backup" 2>/dev/null || true
           echo "CONFIG_ROLLBACK=$backup"
         else
@@ -6363,6 +6447,11 @@ KANO_WRITE_CHECK_EOF
         cp "$BACKUP" "$RESTORE_NEW" || exit 1
         chmod 644 "$RESTORE_NEW" 2>/dev/null || true
         mv -f "$RESTORE_NEW" "$CONFIG" || exit 1
+        if [ -f "$BACKUP.source" ]; then
+          cp "$BACKUP.source" ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} || exit 1
+        elif [ -f "$BACKUP.source.absent" ]; then
+          rm -f ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} || exit 1
+        fi
         sync 2>/dev/null || true
         echo "CONFIG_ROLLBACK_RESTORED: $BACKUP"
         `);
@@ -6941,6 +7030,7 @@ KANO_WRITE_CHECK_EOF
         echo "ipv6_mode=$ipv6_mode"
         echo "tproxy_port=$port"
         echo "tun_device=$tun_device"
+        echo "config_source=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)"
         `, 15 * 1000);
     if (!runtimeRes.success) {
       if (errorToast) createToast(`配置自检环境读取失败<br>${safeTextToHtml(runtimeRes.content || '')}`, 'red', 9000);
@@ -7000,7 +7090,9 @@ KANO_WRITE_CHECK_EOF
       if (Object.prototype.hasOwnProperty.call(config, 'rules') && !Array.isArray(config.rules)) {
         throw new Error('rules 必须是数组');
       }
-      if (Array.isArray(config.rules)) config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
+      if (values.config_source != 'subscription_original' && Array.isArray(config.rules)) {
+        config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
+      }
       if (Object.prototype.hasOwnProperty.call(config, 'proxy-providers') && !isPlainYamlObject(config['proxy-providers'])) {
         throw new Error('proxy-providers 必须是映射对象');
       }
@@ -7012,9 +7104,11 @@ KANO_WRITE_CHECK_EOF
           kano_direct_ip: CLASH_SAFE_DIRECT_IP_FILE,
           kano_proxy_domain: CLASH_SAFE_PROXY_DOMAIN_FILE,
         };
-        Object.entries(managedPaths).forEach(([name, path]) => {
-          if (isPlainYamlObject(config['rule-providers'][name])) config['rule-providers'][name].path = path;
-        });
+        if (values.config_source != 'subscription_original') {
+          Object.entries(managedPaths).forEach(([name, path]) => {
+            if (isPlainYamlObject(config['rule-providers'][name])) config['rule-providers'][name].path = path;
+          });
+        }
       }
       const names = new Set();
       (config['proxy-groups'] || []).forEach((group, index) => {
@@ -9344,7 +9438,6 @@ KANO_POLICY_TOOLS_EOF
         ${restoreCommitFilesCmd}
         COMMIT_DONE=1
         sync 2>/dev/null || true
-        ${setConfigSourceCmd('config_package_restore')}
         ${pruneKanoBackupsCmd()}
         rm -f /data/kano_config_package_archive_test.out /data/kano_config_package_archive_list.out /data/kano_config_package_yaml_test.out 2>/dev/null || true
         echo "RESTORE_ROLLBACK_DIR=$ROLLBACK_DIR"
@@ -10133,15 +10226,15 @@ KANO_POLICY_TOOLS_EOF
     const clearSubSourceFile = async () => {
       const saved = await persistSubSourceState(
         [],
-        SUB_RULE_MODE_TEMPLATE,
-        SUB_CONVERT_MODE_PROVIDER,
+        await readCurrentSubRuleMode(),
+        await readSavedSubConvertMode(),
         { allowEmpty: true },
       );
       if (saved) {
         await runShellWithRoot(`
           rm -f ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} 2>/dev/null || true
           `);
-        createToast('\u5df2\u6e05\u7a7a\u8ba2\u9605\u6e90\u5217\u8868\uff0c\u5e76\u6062\u590d\u4e3a template \u89c4\u5219\u6a21\u5f0f', 'green');
+        createToast('订阅源已清空，当前运行配置保持不变', 'green');
         await refreshRuleModeStatus();
       } else {
         createToast('\u6e05\u7a7a\u8ba2\u9605\u6e90\u5931\u8d25', 'red');
@@ -10410,6 +10503,27 @@ KANO_POLICY_TOOLS_EOF
       const cleanSources = normalizeSubSourceList(sources);
       const cleanMode = normalizeSubRuleModeValue(mode);
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
+        const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+        const configSource = await readConfigSource();
+        const modeLineOk = await readCurrentSubRuleMode() == cleanMode;
+        const issues = [];
+        try {
+          if (!read.ok) throw new Error('运行配置读取失败');
+          validateOriginalSubscriptionConfig(read.value);
+          if (configSource != 'subscription_original') throw new Error('当前运行配置不是订阅原配置');
+          if (!modeLineOk) throw new Error('已保存的订阅模式不是原配置模式');
+        } catch (error) { issues.push(error.message || String(error)); }
+        const config = read.ok ? read.value : {};
+        return {
+          ok: issues.length == 0, status: issues.length ? 'invalid' : 'ok', issues,
+          configSource, rulesCount: (config.rules || []).length,
+          proxyGroupsCount: (config['proxy-groups'] || []).length,
+          providerCount: Object.keys(config['proxy-providers'] || {}).length,
+          providerUrlCount: Object.values(config['proxy-providers'] || {}).filter((p) => p && p.url).length,
+          modeLineOk, convertModeOk: true, missingUrls: 0, providerShapeErrors: 0, content: '',
+        };
+      }
       await loadProviderUserAgent();
       const expectedProviderChecks = cleanSources.map((source) => `
           provider_type="$("$YQ" e -r ${shellQuote(`."proxy-providers".${source.name}.type // ""`)} "$CONFIG" 2>/dev/null)"
@@ -10709,7 +10823,9 @@ ${expectedProviderChecks}
         ? Promise.resolve(configCheckResult)
         : inspectSubscriptionRuntimeConfig(sources, cleanMode, cleanConvertMode);
       const [controllerCheck, configCheck] = await Promise.all([controllerCheckPromise, configCheckPromise]);
-      const configSummary = `当前规则来源：template 规则\n订阅转换：${cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? '设备本地转换' : 'Mihomo HTTP Provider'}\n当前 config 来源：${configCheck.configSource || 'unknown'}\nproxy-providers 数量：${configCheck.providerCount}\n有效订阅 URL 数量：${configCheck.providerUrlCount}\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n模式标记：${configCheck.modeLineOk && configCheck.convertModeOk ? '正确' : '错误'}`;
+      const configSummary = cleanMode == SUB_RULE_MODE_ORIGINAL
+        ? `当前规则来源：订阅原配置\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n保留订阅策略，仅适配 F50 网络接管设置。`
+        : `当前规则来源：template 规则\n订阅转换：${cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? '设备本地转换' : 'Mihomo HTTP Provider'}\n当前 config 来源：${configCheck.configSource || 'unknown'}\nproxy-providers 数量：${configCheck.providerCount}\n有效订阅 URL 数量：${configCheck.providerUrlCount}\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n模式标记：${configCheck.modeLineOk && configCheck.convertModeOk ? '正确' : '错误'}`;
       const controllerOk = !!controllerCheck.success;
       const issues = (configCheck.issues || []).slice();
       const issueText = issues.join('\n');
@@ -10732,7 +10848,7 @@ ${expectedProviderChecks}
       };
       const expectedSourceCount = normalizeSubSourceList(sources).length;
       const expectedProviderUrlCount = cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? 0 : expectedSourceCount;
-      const repairable = !configCheck.ok && configCheck.status == 'ok' && (
+      const repairable = cleanMode == SUB_RULE_MODE_TEMPLATE && !configCheck.ok && configCheck.status == 'ok' && (
         configCheck.missingUrls > 0 ||
         configCheck.providerCount != expectedSourceCount ||
         configCheck.providerUrlCount != expectedProviderUrlCount ||
@@ -10762,6 +10878,14 @@ ${expectedProviderChecks}
       const sources = await readCurrentSubSources();
       const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
+      const configSource = await readConfigSource();
+      if (configSource == 'uploaded_config' || mode == SUB_RULE_MODE_ORIGINAL) {
+        const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
+        if (configSource == 'subscription_original') {
+          await showSubscriptionUpdateSelfCheck(sources, mode, providerUpdate);
+        }
+        return;
+      }
       let providerUpdate;
       if (convertMode == SUB_CONVERT_MODE_LOCAL) {
         const conversion = await convertSubscriptionsLocally(sources);
@@ -10786,6 +10910,33 @@ ${expectedProviderChecks}
       const cleanSources = normalizeSubSourceList(sources);
       let localConversion = null;
       appendTemplateFlowDebug(`enter updateSubProviders mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
+      const configSource = await readConfigSource();
+      if (configSource == 'uploaded_config') {
+        const result = await forceUpdateProvidersFromConfig({ showToast: false });
+        createToast(result.failed == 0 ? '自定义配置已保留，已刷新配置内的节点来源' : '自定义配置已保留，部分节点来源刷新失败', result.failed == 0 ? 'green' : 'yellow', 8000);
+        return result.failed == 0;
+      }
+      if (configSource == 'subscription_original' && cleanMode != SUB_RULE_MODE_ORIGINAL) {
+        createToast('当前是订阅原配置，请在订阅设置中选择配置来源后应用', 'yellow', 8000);
+        return false;
+      }
+      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
+        const rollbackPath = await createConfigRollbackPoint('subscription_original');
+        if (rollbackPath === null) {
+          createToast('无法创建配置回滚点，未更新订阅原配置', 'red', 8000);
+          return false;
+        }
+        if (!(await writeOriginalSubscriptionConfig(cleanSources))) {
+          await restoreConfigRollbackPoint(rollbackPath, '更新订阅原配置');
+          return false;
+        }
+        const restarted = await restartClashWithConfigRollback(rollbackPath, '更新订阅原配置');
+        if (restarted) {
+          const result = await forceUpdateProvidersFromConfig({ showToast: false });
+          await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, result);
+        }
+        return restarted;
+      }
       const sourceCheck = await inspectConfigNodeSource(cleanSources, { requireSavedSubscription: true });
       if (!sourceCheck.ok) {
         appendTemplateFlowDebug(`updateSubProviders sourceCheck failed status=${sourceCheck.status || ''}`);
@@ -10869,6 +11020,7 @@ ${expectedProviderChecks}
         if (showLegacySuspiciousSubSourcesError(sourceItems, '\u5386\u53f2 subscription_urls.txt')) return [];
         return includeDisabled ? sourceItems : normalizeSubSourceList(sourceItems);
       }
+      if (['subscription_original', 'uploaded_config'].includes(await readConfigSource())) return [];
 
       const res = await runShellWithRoot(`
         if [ -f ${shellQuote(CLASH_CONFIG)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_CONFIG)}; fi
@@ -10889,7 +11041,15 @@ ${expectedProviderChecks}
       return await migrateLegacySubscriptionSources({ showToast: true });
     };
 
-    const readCurrentSubRuleMode = () => SUB_RULE_MODE_TEMPLATE;
+    const readCurrentSubRuleMode = async () => {
+      const res = await runShellWithRoot(`
+        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
+          sed -n '/^# KANO_SUB_RULE_MODE=/p' ${shellQuote(CLASH_SUB_URLS)} | head -n 1
+        fi
+      `, 10 * 1000);
+      if (!res.success) throw new Error('读取订阅模式失败，未修改配置');
+      return parseSubRuleModeFromText(res.content || '');
+    };
 
     const writeSubConfigByMode = async (
       sources,
@@ -10900,6 +11060,9 @@ ${expectedProviderChecks}
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const cleanSources = normalizeSubSourceList(sources);
       appendTemplateFlowDebug(`enter writeSubConfigByMode mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
+      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
+        return await writeOriginalSubscriptionConfig(cleanSources, { backup });
+      }
       if (!(await setSubRuleMode(cleanMode))) return false;
       if (!(await ensureTemplateProviders(cleanSources, { forceTemplate: true }))) {
         appendTemplateFlowDebug('writeSubConfigByMode template failed at ensureTemplateProviders');
@@ -10914,6 +11077,7 @@ ${expectedProviderChecks}
       sources,
       mode = SUB_RULE_MODE_TEMPLATE,
       convertMode = SUB_CONVERT_MODE_PROVIDER,
+      { applyToCustom = false } = {},
     ) => {
       const cleanMode = normalizeSubRuleModeValue(mode);
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
@@ -10930,12 +11094,24 @@ ${expectedProviderChecks}
         return false;
       }
       if (showSuspiciousSubSourcesError(storedSources)) return false;
+      if (cleanMode == SUB_RULE_MODE_ORIGINAL && cleanSources.length > 1) {
+        createToast('使用订阅原配置时，只能启用一个完整配置订阅', 'red', 8000);
+        return false;
+      }
+      if (!applyToCustom && await readConfigSource() == 'uploaded_config') {
+        const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
+        if (saved) createToast('订阅设置已保存，当前自定义配置保持不变', 'green', 8000);
+        return saved;
+      }
       const subscriptionTxDir = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
       const transactionFiles = [
         { name: 'subscription_urls.txt', path: CLASH_SUB_URLS },
+        { name: 'sub_rule_mode.conf', path: CLASH_SUB_RULE_MODE_FILE },
+        { name: 'policy_options.conf', path: CLASH_POLICY_OPTIONS_FILE },
+        { name: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE },
         { name: 'template.yaml', path: CLASH_TEMPLATE },
         { name: 'template.base.yaml', path: CLASH_TEMPLATE_BASE },
-        ...(cleanConvertMode == SUB_CONVERT_MODE_LOCAL
+        ...(cleanMode == SUB_RULE_MODE_TEMPLATE && cleanConvertMode == SUB_CONVERT_MODE_LOCAL
           ? cleanSources.map((source) => ({
             name: `provider_${source.name}.yaml`,
             path: `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`,
@@ -11009,7 +11185,7 @@ ${expectedProviderChecks}
         return true;
       }
       let localConversion = null;
-      if (cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
+      if (cleanMode == SUB_RULE_MODE_TEMPLATE && cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
         createToast('正在设备本地下载并转换订阅...', 'yellow');
         localConversion = await convertSubscriptionsLocally(cleanSources);
         if (localConversion.failed > 0) {
@@ -11042,6 +11218,11 @@ ${expectedProviderChecks}
         return false;
       }
       await runShellWithRoot(`rm -rf ${shellQuote(subscriptionTxDir)} 2>/dev/null || true`, 10 * 1000);
+      if (restarted && cleanMode == SUB_RULE_MODE_ORIGINAL) {
+        const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
+        await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, providerUpdate);
+        return true;
+      }
       if (restarted) {
         const providerUpdate = cleanConvertMode == SUB_CONVERT_MODE_LOCAL
           ? await reloadLocalSubscriptionProviders(cleanSources, localConversion)
@@ -11059,6 +11240,15 @@ ${expectedProviderChecks}
       const sources = await readCurrentSubSources();
       const currentMode = await readCurrentSubRuleMode();
       const currentConvertMode = await readSavedSubConvertMode();
+      if (currentMode == SUB_RULE_MODE_ORIGINAL) {
+        if (!confirm) {
+          createToast('当前使用订阅原配置；请先切换为模板模式再应用模板覆写', 'yellow', 8000);
+          return false;
+        }
+        const accepted = await askConfirm('mm_original_to_template', '切换为模板模式？', '当前订阅自带的规则和策略组将被模板配置替换。', '切换并应用', '取消');
+        if (!accepted) return false;
+        return await saveSubSources(sources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true });
+      }
       appendTemplateFlowDebug(`enter overwriteConfigByTemplate mode=${currentMode} convert=${currentConvertMode} sources=${sources.length}`);
       const sourceCheck = await inspectConfigNodeSource(sources);
       appendTemplateFlowDebug(`overwriteConfigByTemplate sourceCheck ok=${sourceCheck.ok ? '1' : '0'} source=${sourceCheck.source || ''} status=${sourceCheck.status || ''}`);
@@ -11389,7 +11579,7 @@ ${expectedProviderChecks}
         if (sources.length == 0 && !content.trim()) return await clearSubSourceFile();
         return await saveSubSources(
           sources,
-          SUB_RULE_MODE_TEMPLATE,
+          parseSubRuleModeFromText(content),
           parseSubConvertModeFromText(content),
         );
       }
@@ -11503,9 +11693,11 @@ ${expectedProviderChecks}
 
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
     const importSub = async () => {
-      const [currentSources, currentConvertMode] = await Promise.all([
+      const [currentSources, currentConvertMode, currentRuleMode, configSource] = await Promise.all([
         readCurrentSubSources({ includeDisabled: true }),
         readSavedSubConvertMode(),
+        readCurrentSubRuleMode(),
+        readConfigSource(),
       ]);
       const { el, close } = createFixedToast(
         'mm_sub_input_toast',
@@ -11519,7 +11711,16 @@ ${expectedProviderChecks}
                       <button style="font-size:.64rem" id="mm_sub_clear_btn">\u6e05\u7a7a\u8ba2\u9605</button>
                     </div>
                     <label style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
-                      <span>处理方式</span>
+                      <span>配置来源</span>
+                      <select id="mm_sub_rule_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
+                        <option value="${SUB_RULE_MODE_TEMPLATE}">使用本地模板</option>
+                        <option value="${SUB_RULE_MODE_ORIGINAL}">使用订阅原配置</option>
+                      </select>
+                    </label>
+                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">原配置需一个启用的完整 Mihomo YAML/JSON 订阅，保留规则、策略组和节点来源；DNS、IPv6 和流量接管仍按 F50 设置适配。</div>
+                    ${configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
+                    <label id="mm_sub_convert_label" style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
+                      <span>节点处理</span>
                       <select id="mm_sub_convert_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
                         <option value="${SUB_CONVERT_MODE_PROVIDER}">HTTP Provider（默认，失败时自动本地转换）</option>
                         <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（支持分享链接）</option>
@@ -11542,6 +11743,13 @@ ${expectedProviderChecks}
       const submitBtn = el.querySelector('#mm_sub_submit_btn');
       const convertModeSelect = el.querySelector('#mm_sub_convert_mode');
       convertModeSelect.value = currentConvertMode;
+      const ruleModeSelect = el.querySelector('#mm_sub_rule_mode');
+      ruleModeSelect.value = currentRuleMode;
+      const syncRuleMode = () => {
+        el.querySelector('#mm_sub_convert_label').style.display = ruleModeSelect.value == SUB_RULE_MODE_ORIGINAL ? 'none' : 'flex';
+      };
+      ruleModeSelect.onchange = syncRuleMode;
+      syncRuleMode();
 
       const addSubRow = (source = {}, index = rowsEl.children.length) => {
         const row = document.createElement('div');
@@ -11647,8 +11855,9 @@ ${expectedProviderChecks}
           createToast('\u6b63\u5728\u5904\u7406\u8ba2\u9605...', 'yellow');
           const success = await saveSubSources(
             sources,
-            SUB_RULE_MODE_TEMPLATE,
+            ruleModeSelect.value,
             convertModeSelect.value,
+            { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked },
           );
 
           if (success) {

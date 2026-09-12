@@ -172,6 +172,27 @@ function createPrivateRouteLogic() {
   }
   function runtime(config, options = {}, connected = []) {
     let out = strip(config);
+    const tunMetaKey = 'x-kano-tun';
+    const tunMeta = out[tunMetaKey];
+    const isMap = (value) => value && typeof value === 'object' && !Array.isArray(value);
+    if (tunMeta != null) {
+      if (tunMeta.version !== 1 || (tunMeta.before !== null && !isMap(tunMeta.before)) ||
+          (tunMeta.applied !== null && !isMap(tunMeta.applied))) throw new Error('Invalid saved TUN configuration');
+      if (tunMeta.applied === null) {
+        if (!own(out, 'tun') && tunMeta.before !== null) out.tun = clone(tunMeta.before);
+      } else if (isMap(out.tun)) {
+        for (const key of Object.keys(tunMeta.applied)) {
+          // Only undo our last value; keep changes made in the config editor.
+          if (!own(out.tun, key) || !equal(out.tun[key], tunMeta.applied[key])) continue;
+          if (tunMeta.before && own(tunMeta.before, key)) out.tun[key] = clone(tunMeta.before[key]);
+          else delete out.tun[key];
+        }
+        if (!Object.keys(out.tun).length && tunMeta.before === null) delete out.tun;
+      }
+      delete out[tunMetaKey];
+    }
+    if (own(out, 'tun') && !isMap(out.tun)) throw new Error('tun must be an object');
+    const originalTun = own(out, 'tun') ? clone(out.tun) : null;
     const mode = options.traffic_mode || 'tproxy';
     const ipv6 = options.ipv6 === 'on';
     const port = Number(options.dns_port || 1053);
@@ -180,15 +201,20 @@ function createPrivateRouteLogic() {
     if (!out.dns || typeof out.dns !== 'object' || Array.isArray(out.dns)) out.dns = {};
     out.dns.enable = true; out.dns.ipv6 = ipv6;
     out.dns.listen = (ipv6 ? '[::]:' : '0.0.0.0:') + port;
-    if (!out.tun || typeof out.tun !== 'object' || Array.isArray(out.tun)) out.tun = {};
-    out.tun.enable = mode === 'tun';
     if (mode === 'tun') {
+      if (!out.tun) out.tun = {};
+      out.tun.enable = true;
       const device = String(out.tun.device || 'KanoTun');
       if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device) || device === 'lo') throw new Error('Invalid TUN interface name');
       Object.assign(out.tun, { device, stack: out.tun.stack || 'mixed', 'auto-route': true, 'auto-redirect': false, 'auto-detect-interface': true, 'strict-route': false });
       // DNS interception is destination-aware in PolicyTools, not global in TUN.
       out.tun['dns-hijack'] = [];
       if (ipv6 && (out.tun['inet6-address'] == null || (Array.isArray(out.tun['inet6-address']) && !out.tun['inet6-address'].length))) out.tun['inet6-address'] = ['fdfe:dcba:9876::1/126'];
+    } else {
+      delete out.tun;
+    }
+    if (originalTun !== null || mode === 'tun') {
+      out[tunMetaKey] = { version: 1, before: originalTun, applied: out.tun ? clone(out.tun) : null };
     }
     const feature = fromOptions(options);
     return transform(out, feature, mode, connected);
@@ -6530,6 +6556,7 @@ KANO_WRITE_CHECK_EOF
     let subRollbackPath = '';
     let subSourcesPersisted = false;
     try {
+      const preserveSubscription = ['uploaded_config', 'subscription_original'].includes(await readConfigSource());
       const uploadedPath = await uploadFileToDevice(file);
       const foundFile = await runShellWithRoot(`
                         [ -s ${shellQuote(uploadedPath)} ] && echo 1 || echo 0
@@ -6580,7 +6607,9 @@ KANO_WRITE_CHECK_EOF
         throw `\u6a21\u677f proxy-providers \u5305\u542b\u7591\u4f3c\u975e\u8282\u70b9\u8ba2\u9605\u94fe\u63a5\uff1a${providerCheck.suspiciousSources[0].url}\n\u8bf7\u4e0d\u8981\u628a DNS\u3001\u89c4\u5219\u96c6\u3001GeoIP/GeoSite/MMDB/ASN \u6216\u56fe\u6807\u94fe\u63a5\u653e\u5728 proxy-providers.url`;
       }
       const templateSources = providerCheck.sources;
-      if (templateSources.length > 0) {
+      if (preserveSubscription) {
+        savedSources = templateSources;
+      } else if (templateSources.length > 0) {
         const savedKey = normalizeSubSourceList(savedSources).map((source) => source.url).join('\n');
         const templateKey = normalizeSubSourceList(templateSources).map((source) => source.url).join('\n');
         if (savedSources.length == 0) {
@@ -7071,18 +7100,6 @@ KANO_WRITE_CHECK_EOF
         dnsListen: ipv6Enabled ? '[::]:1053' : '0.0.0.0:1053',
         forceRedirHost: true,
       });
-      const tun = ensureObjectField(config, 'tun');
-      if (trafficMode == 'tun') {
-        tun.enable = true;
-        tun.stack = 'mixed';
-        tun['auto-route'] = true;
-        tun['auto-redirect'] = true;
-        tun['auto-detect-interface'] = true;
-        tun['strict-route'] = false;
-        tun['dns-hijack'] = ['any:53', 'tcp://any:53'];
-      } else {
-        tun.enable = false;
-      }
 
       if (Object.prototype.hasOwnProperty.call(config, 'proxy-groups') && !Array.isArray(config['proxy-groups'])) {
         throw new Error('proxy-groups 必须是数组');
@@ -7090,7 +7107,8 @@ KANO_WRITE_CHECK_EOF
       if (Object.prototype.hasOwnProperty.call(config, 'rules') && !Array.isArray(config.rules)) {
         throw new Error('rules 必须是数组');
       }
-      if (values.config_source != 'subscription_original' && Array.isArray(config.rules)) {
+      const preserveUserRules = ['subscription_original', 'uploaded_config'].includes(values.config_source);
+      if (!preserveUserRules && Array.isArray(config.rules)) {
         config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
       }
       if (Object.prototype.hasOwnProperty.call(config, 'proxy-providers') && !isPlainYamlObject(config['proxy-providers'])) {
@@ -7104,7 +7122,7 @@ KANO_WRITE_CHECK_EOF
           kano_direct_ip: CLASH_SAFE_DIRECT_IP_FILE,
           kano_proxy_domain: CLASH_SAFE_PROXY_DOMAIN_FILE,
         };
-        if (values.config_source != 'subscription_original') {
+        if (!preserveUserRules) {
           Object.entries(managedPaths).forEach(([name, path]) => {
             if (isPlainYamlObject(config['rule-providers'][name])) config['rule-providers'][name].path = path;
           });
@@ -10879,10 +10897,10 @@ ${expectedProviderChecks}
       const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
       const configSource = await readConfigSource();
-      if (configSource == 'uploaded_config' || mode == SUB_RULE_MODE_ORIGINAL) {
+      if (['uploaded_config', 'subscription_original'].includes(configSource) || mode == SUB_RULE_MODE_ORIGINAL) {
         const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
         if (configSource == 'subscription_original') {
-          await showSubscriptionUpdateSelfCheck(sources, mode, providerUpdate);
+          await showSubscriptionUpdateSelfCheck(sources, SUB_RULE_MODE_ORIGINAL, providerUpdate);
         }
         return;
       }
@@ -10918,6 +10936,10 @@ ${expectedProviderChecks}
       }
       if (configSource == 'subscription_original' && cleanMode != SUB_RULE_MODE_ORIGINAL) {
         createToast('当前是订阅原配置，请在订阅设置中选择配置来源后应用', 'yellow', 8000);
+        return false;
+      }
+      if (configSource == 'template.yaml' && cleanMode == SUB_RULE_MODE_ORIGINAL) {
+        createToast('当前仍是模板配置，请在订阅设置中应用订阅原配置后再更新', 'yellow', 8000);
         return false;
       }
       if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
@@ -11237,17 +11259,23 @@ ${expectedProviderChecks}
     };
 
     const overwriteConfigByTemplate = async ({ confirm = true } = {}) => {
-      const sources = await readCurrentSubSources();
+      const configSource = await readConfigSource();
+      if (!confirm && ['uploaded_config', 'subscription_original'].includes(configSource)) {
+        createToast('当前配置已保留；要使用模板替换，请手动点击“应用模板与覆写”', 'yellow', 8000);
+        return false;
+      }
+      const storedSources = await readCurrentSubSources({ includeDisabled: true });
+      const sources = normalizeSubSourceList(storedSources);
       const currentMode = await readCurrentSubRuleMode();
       const currentConvertMode = await readSavedSubConvertMode();
-      if (currentMode == SUB_RULE_MODE_ORIGINAL) {
+      if (sources.length > 0 && (currentMode == SUB_RULE_MODE_ORIGINAL || configSource == 'subscription_original')) {
         if (!confirm) {
           createToast('当前使用订阅原配置；请先切换为模板模式再应用模板覆写', 'yellow', 8000);
           return false;
         }
-        const accepted = await askConfirm('mm_original_to_template', '切换为模板模式？', '当前订阅自带的规则和策略组将被模板配置替换。', '切换并应用', '取消');
+        const accepted = await askConfirm('mm_original_to_template', '切换为模板模式？', '当前配置的规则和策略组将被模板配置替换。', '切换并应用', '取消');
         if (!accepted) return false;
-        return await saveSubSources(sources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true });
+        return await saveSubSources(storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true });
       }
       appendTemplateFlowDebug(`enter overwriteConfigByTemplate mode=${currentMode} convert=${currentConvertMode} sources=${sources.length}`);
       const sourceCheck = await inspectConfigNodeSource(sources);
@@ -11381,6 +11409,7 @@ ${expectedProviderChecks}
         `, 30 * 1000);
       if (!res.success) {
         createToast(`\u6a21\u677f\u8986\u5199\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+        await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
         return false;
       }
       createToast('模板已写入，正在检查并重启核心...', 'yellow', 6500);
@@ -11395,10 +11424,17 @@ ${expectedProviderChecks}
       }
       const restarted = await restartClashWithConfigRollback(rollbackPath, '\u6a21\u677f\u8986\u5199\u540e\u91cd\u542f');
       if (restarted) {
+        if (currentMode != SUB_RULE_MODE_TEMPLATE && !(await persistSubSourceState(
+          storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { allowEmpty: true },
+        ))) {
+          const restored = await restoreConfigRollbackPoint(rollbackPath, '保存模板模式');
+          if (restored) await restartClashWithConfigRollback(rollbackPath, '恢复原配置');
+          return false;
+        }
         const providerUpdate = currentConvertMode == SUB_CONVERT_MODE_LOCAL
           ? buildProviderUpdateResult([])
           : await forceUpdateProvidersFromConfig({ showToast: false });
-        await showSubscriptionUpdateSelfCheck([], currentMode, providerUpdate, null, currentConvertMode);
+        await showSubscriptionUpdateSelfCheck([], SUB_RULE_MODE_TEMPLATE, providerUpdate, null, currentConvertMode);
       }
       return restarted;
     };
@@ -11890,6 +11926,10 @@ ${expectedProviderChecks}
       if (!operationToken) return;
       setButtonBusy(updateSubBtn, true, '\u66f4\u65b0\u4e2d\u2026');
       try {
+        if (await readConfigSource() == 'uploaded_config') {
+          await updateSubProviders([]);
+          return;
+        }
         const storedSources = await readCurrentSubSources({ includeDisabled: true });
         const sources = normalizeSubSourceList(storedSources);
         const ruleMode = await readCurrentSubRuleMode();

@@ -193,14 +193,67 @@ function createPrivateRouteLogic() {
     }
     if (own(out, 'tun') && !isMap(out.tun)) throw new Error('tun must be an object');
     const originalTun = own(out, 'tun') ? clone(out.tun) : null;
+    const networkMetaKey = 'x-kano-network';
+    const networkPaths = ['ipv6', 'allow-lan', 'bind-address', 'tproxy-port', 'dns.enable', 'dns.listen', 'dns.ipv6'];
+    if (own(out, 'dns') && !isMap(out.dns)) throw new Error('dns must be an object');
+    const previousNetwork = out[networkMetaKey];
+    if (previousNetwork != null) {
+      if (previousNetwork.version !== 1 || !isMap(previousNetwork.fields) || typeof previousNetwork.dnsPresent !== 'boolean') {
+        throw new Error('Invalid saved network configuration');
+      }
+      for (const [path, saved] of Object.entries(previousNetwork.fields)) {
+        if (!networkPaths.includes(path) || !isMap(saved) || typeof saved.present !== 'boolean' ||
+            !own(saved, 'applied') || (saved.present && !own(saved, 'before'))) throw new Error('Invalid saved network field');
+        const parts = path.split('.'), key = parts.pop(), parent = parts.length ? out[parts[0]] : out;
+        if (!parent || !own(parent, key) || !equal(parent[key], saved.applied)) continue;
+        if (saved.present) parent[key] = clone(saved.before); else delete parent[key];
+      }
+      if (!previousNetwork.dnsPresent && out.dns && !Object.keys(out.dns).length) delete out.dns;
+    }
+    delete out[networkMetaKey];
+    const networkMeta = { version: 1, dnsPresent: own(out, 'dns'), fields: {} };
+    const setNetwork = (path, value) => {
+      const parts = path.split('.'), key = parts.pop();
+      const parent = parts.length ? (out[parts[0]] || (out[parts[0]] = {})) : out;
+      if (own(parent, key) && equal(parent[key], value)) return;
+      networkMeta.fields[path] = { present: own(parent, key), ...(own(parent, key) ? { before: clone(parent[key]) } : {}), applied: clone(value) };
+      parent[key] = value;
+    };
     const mode = options.traffic_mode || 'tproxy';
     const ipv6 = options.ipv6 === 'on';
-    const port = Number(options.dns_port || 1053);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('\u65e0\u6548 DNS \u7aef\u53e3');
-    out.ipv6 = ipv6;
-    if (!out.dns || typeof out.dns !== 'object' || Array.isArray(out.dns)) out.dns = {};
-    out.dns.enable = true; out.dns.ipv6 = ipv6;
-    out.dns.listen = (ipv6 ? '[::]:' : '0.0.0.0:') + port;
+    const dnsManaged = mode !== 'off' && options.dns_hijack === 'on';
+    const checkPort = (value, label) => {
+      const port = Number(value);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(label + ' 端口无效');
+      return port;
+    };
+    if (mode !== 'off') {
+      setNetwork('ipv6', ipv6);
+    }
+    if (mode === 'tproxy') {
+      setNetwork('allow-lan', true);
+      setNetwork('bind-address', '*');
+      setNetwork('tproxy-port', checkPort(options.tproxy_port ?? 7895, 'TProxy'));
+    }
+    if (dnsManaged) {
+      setNetwork('dns.enable', true);
+      setNetwork('dns.listen', (ipv6 ? '[::]:' : '0.0.0.0:') + checkPort(options.dns_port ?? 1053, 'DNS'));
+      setNetwork('dns.ipv6', ipv6);
+    }
+    const activePorts = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port']
+      .filter((key) => Number(out[key]) > 0).map((key) => [key, Number(out[key])]);
+    const controllerPort = String(out['external-controller'] || '').match(/:(\d+)$/);
+    if (controllerPort) activePorts.push(['external-controller', Number(controllerPort[1])]);
+    if (out.dns && out.dns.enable !== false) {
+      const dnsPort = String(out.dns.listen || '').match(/:(\d+)$/);
+      if (dnsPort) activePorts.push(['dns.listen', Number(dnsPort[1])]);
+    }
+    for (const name of [...(mode === 'tproxy' ? ['tproxy-port'] : []), ...(dnsManaged ? ['dns.listen'] : [])]) {
+      const port = activePorts.find(([key]) => key === name)[1];
+      const conflict = activePorts.find(([key, value]) => key !== name && value === port);
+      if (conflict) throw new Error(name + ' 与 ' + conflict[0] + ' 端口冲突：' + port);
+    }
+    if (Object.keys(networkMeta.fields).length) out[networkMetaKey] = networkMeta;
     if (mode === 'tun') {
       if (!out.tun) out.tun = {};
       out.tun.enable = true;
@@ -238,6 +291,21 @@ function createPrivateRouteLogic() {
   return { PRIVATE, META, cidr, address, compact, contains, overlaps, subtract, normalize, fromOptions, checkConnected, strip, transform, runtime, resolveSelection };
 }
 // SPDX-License-Identifier: AGPL-3.0-or-later
+function buildPortListenerFunction() {
+  return `is_port_listening() {
+  PORT="$1"; FAMILY="$2"; HEX="$(printf '%04X' "$PORT")"
+  case "$PORT" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || return 1
+  for proto in udp tcp; do
+    found=0; suffix="";[ "$FAMILY" != 6 ] || suffix=6
+    if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$proto$suffix" 2>/dev/null;then found=1;fi
+    if [ "$found:$FAMILY" = 0:4 ] && [ "$(cat /proc/sys/net/ipv6/bindv6only 2>/dev/null)" = 0 ];then
+      if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(a[1]~/^0+$/&&toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$\u007bproto\u007d6" 2>/dev/null;then found=1;fi
+    fi
+    [ "$found" = 1 ] || return 1
+  done
+}`;
+}
 function augmentPrivatePolicyShell(source, extension) {
   'use strict';
   function once(text, before, after, label) {
@@ -262,19 +330,7 @@ function augmentPrivatePolicyShell(source, extension) {
 }`);
   body('is_ipv6', () => 'is_ipv6() {\n  [ "$(kpr_net "$1")" = 6 ]\n}');
   body('is_cidr6', () => 'is_cidr6() {\n  case "$1" in */*) [ "$(kpr_net "$1")" = 6 ] ;; *) return 1 ;; esac\n}');
-  body('is_port_listening', () => `is_port_listening() {
-  PORT="$1"; FAMILY="$2"; HEX="$(printf '%04X' "$PORT")"
-  case "$PORT" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || return 1
-  for proto in udp tcp; do
-    found=0; suffix="";[ "$FAMILY" != 6 ] || suffix=6
-    if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$proto$suffix" 2>/dev/null;then found=1;fi
-    if [ "$found:$FAMILY" = 0:4 ] && [ "$(cat /proc/sys/net/ipv6/bindv6only 2>/dev/null)" = 0 ];then
-      if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(a[1]~/^0+$/&&toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$\u007bproto\u007d6" 2>/dev/null;then found=1;fi
-    fi
-    [ "$found" = 1 ] || return 1
-  done
-}`);
+  body('is_port_listening', buildPortListenerFunction);
   body('apply_policy', (part) => {
     const add = part.split('\n').find((line) => line.includes('add_source_accepts "$IPT" mangle "$NEXT"'));
     part = once(part, add + '\n', '', 'source accepts old position');
@@ -373,10 +429,15 @@ const KPR_SHELL = "# KPR dual-stack routing. Only downstream TCP/UDP targets are
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Embedded inside the original plugin closure; no new runtime dependency.
 const KPR = createPrivateRouteLogic();
-let kprStrictOperation = 0;
+
+function readF50TproxyPortCmd() {
+  return `port="$(grep -Ei 'TPROXY|tproxy|on-port|789[0-9]' ${shellQuote(CLASH_SERVICE)} 2>/dev/null | grep -Eo '[0-9]{3,5}' | grep -E '^789[0-9]$' | tail -n 1)"
+  [ -n "$port" ] || port=7895
+  printf '\\ntproxy_port=%s\\n' "$port"`;
+}
 
 async function kprReadOptions() {
-  const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + '; fi', 10000);
+  const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' || exit 1; fi\n' + readF50TproxyPortCmd(), 10000);
   if (!result.success) throw new Error('无法读取网络设置，未修改配置');
   return parsePolicyOptionsText(String(result.content || ''));
 }
@@ -433,13 +494,6 @@ async function savePolicyState(state, options = {}) {
   }
 }
 
-async function kprRequiresStrictConfig() {
-  const options = await kprReadOptions();
-  if (kprStrictOperation > 0 || options.traffic_mode === 'tun' || options.ipv6 === 'on' || KPR.fromOptions(options).enabled) return true;
-  const marker = await runShellWithRoot("if grep -q '^x-kano-private-route:' " + shellQuote(CLASH_CONFIG) + "; then echo 1; else echo 0; fi", 5000);
-  return !marker.success || String(marker.content || '').trim() === '1';
-}
-
 async function kprVerifySelection(options) {
   const feature = KPR.fromOptions(options);
   if (!feature.enabled || options.traffic_mode === 'off') return '';
@@ -473,6 +527,13 @@ async function ensureRuntimeTrafficMode(trafficMode) {
     }
     if (!!live.enable !== want) throw new Error('核心 TUN 开关未生效');
     if (exposedMismatch()) throw new Error('核心 TUN 路由配置未生效');
+    if (trafficMode === 'tproxy') {
+      const port = Number(read.value['tproxy-port']);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('TProxy 端口无效');
+      const check = await runShellWithRoot(buildPortListenerFunction() + '\nis_port_listening ' + port + ' 4' +
+        (read.value.ipv6 === true ? ' && is_port_listening ' + port + ' 6' : ''), 10000);
+      if (!check.success) throw new Error('TProxy TCP/UDP 端口未按所选 IPv4/IPv6 模式监听：' + port);
+    }
     if (want) {
       const device = String(desired.device || live.device || 'Mihomo');
       if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device)) throw new Error('TUN 接口名称无效');
@@ -492,7 +553,6 @@ async function ensureRuntimeTrafficMode(trafficMode) {
 
 async function kprSaveNetworkState(previous, next) {
   let backup = '', saved = false, restartAttempted = false;
-  kprStrictOperation++;
   try {
     const feature = KPR.fromOptions(next.options);
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
@@ -533,8 +593,6 @@ async function kprSaveNetworkState(previous, next) {
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
       (recovered ? (saved ? '已恢复原设置和配置。' : '未应用新设置。') : '恢复未完整完成，已尝试停止核心并清理规则。'), recovered ? 'yellow' : 'red', 14000);
     return false;
-  } finally {
-    kprStrictOperation--;
   }
 }
 
@@ -3371,55 +3429,24 @@ EOF_KANO_SERVICE
   };
 
   const applyRequiredF50Fields = (config, {
-    tproxyPort = 7895,
-    ipv6 = false,
-    dnsListen = null,
-    forceRedirHost = true,
+    managedDashboard = false,
+    preservedSecret = '',
   } = {}) => {
     assertYamlRootMap(config, '配置');
-    config['allow-lan'] = true;
-    config['bind-address'] = '*';
-    config['tproxy-port'] = getPositivePort(tproxyPort, 7895);
+    validateConfigObjectStructure(config);
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
       config['external-controller'] = '0.0.0.0:7788';
     }
-    applyManagedDashboardFields(config);
-    if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = createRandomSecret(20);
-    config.ipv6 = !!ipv6;
-    if (!Array.isArray(config.proxies)) config.proxies = [];
-    const profile = ensureObjectField(config, 'profile');
-    profile['store-fake-ip'] = false;
-    const dns = ensureObjectField(config, 'dns');
-    dns.enable = true;
-    dns.listen = dnsListen || (ipv6 ? '[::]:1053' : '0.0.0.0:1053');
-    dns.ipv6 = !!ipv6;
-    if (forceRedirHost || typeof dns['enhanced-mode'] != 'string' || !dns['enhanced-mode'].trim()) {
-      dns['enhanced-mode'] = 'redir-host';
+    if (managedDashboard) {
+      applyManagedDashboardFields(config);
     }
-    delete dns['fake-ip-range'];
-    delete dns['fake-ip-filter'];
+    if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = preservedSecret || createRandomSecret(20);
+    if (!Object.prototype.hasOwnProperty.call(config, 'proxies')) config.proxies = [];
     return config;
   };
 
   const applyOverrideSafetyFields = (config, preservedSecret = '') => {
-    assertYamlRootMap(config, '覆写结果');
-    config['allow-lan'] = true;
-    config['bind-address'] = '*';
-    if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
-      config['external-controller'] = '0.0.0.0:7788';
-    }
-    if (typeof config.secret != 'string' || !config.secret.trim()) {
-      config.secret = String(preservedSecret || createRandomSecret(20));
-    }
-    config.ipv6 = false;
-    const dns = ensureObjectField(config, 'dns');
-    dns.enable = true;
-    dns.listen = '0.0.0.0:1053';
-    dns.ipv6 = false;
-    if (typeof dns['enhanced-mode'] != 'string' || !dns['enhanced-mode'].trim()) {
-      dns['enhanced-mode'] = 'redir-host';
-    }
-    return config;
+    return applyRequiredF50Fields(config, { preservedSecret });
   };
 
   const normalizeManagedProxyGroups = (config, providerNames = []) => {
@@ -3616,11 +3643,10 @@ EOF_KANO_SERVICE
     generated = false,
     emptyProviderUrls = true,
     localProviderFiles = false,
-    tproxyPort = 7895,
   } = {}) => {
     const config = cloneJsonValue(assertYamlRootMap(rawConfig, 'template.yaml'));
     const providerNames = providerNamesForTemplate(sources);
-    applyRequiredF50Fields(config, { tproxyPort, ipv6: false, dnsListen: '0.0.0.0:1053', forceRedirHost: true });
+    applyRequiredF50Fields(config, { managedDashboard: generated });
     delete config['Proxy-Providers'];
     delete config['proxy-Providers'];
     delete config['Proxy-providers'];
@@ -7040,7 +7066,6 @@ KANO_WRITE_CHECK_EOF
   const sanitizeConfigForTProxy = async ({ showToast = false, errorToast = true } = {}) => {
     const runtimeRes = await runShellWithRoot(`
         OPTIONS=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
-        SERVICE=${shellQuote(CLASH_SERVICE)}
         traffic_mode="$(grep -E '^traffic_mode=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
         if [ -z "$traffic_mode" ]; then
           legacy_transparent="$(grep -E '^transparent=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
@@ -7049,15 +7074,10 @@ KANO_WRITE_CHECK_EOF
         case "$traffic_mode" in tproxy|tun|off) ;; *) traffic_mode=tproxy ;; esac
         ipv6_mode="$(grep -E '^ipv6=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
         [ "$ipv6_mode" = 'on' ] || ipv6_mode=off
-        port=""
-        if [ -f "$SERVICE" ]; then
-          port="$(grep -Ei 'TPROXY|tproxy|on-port|789[0-9]' "$SERVICE" 2>/dev/null | grep -Eo '[0-9]{3,5}' | grep -E '^789[0-9]$' | tail -n 1)"
-        fi
-        [ -n "$port" ] || port=7895
         if [ -c /dev/net/tun ] || [ -c /dev/tun ]; then tun_device=1; else tun_device=0; fi
         echo "traffic_mode=$traffic_mode"
         echo "ipv6_mode=$ipv6_mode"
-        echo "tproxy_port=$port"
+        ${readF50TproxyPortCmd()}
         echo "tun_device=$tun_device"
         echo "config_source=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)"
         `, 15 * 1000);
@@ -7094,12 +7114,7 @@ KANO_WRITE_CHECK_EOF
     let config;
     try {
       config = cloneJsonValue(read.value);
-      applyRequiredF50Fields(config, {
-        tproxyPort,
-        ipv6: ipv6Enabled,
-        dnsListen: ipv6Enabled ? '[::]:1053' : '0.0.0.0:1053',
-        forceRedirHost: true,
-      });
+      applyRequiredF50Fields(config);
 
       if (Object.prototype.hasOwnProperty.call(config, 'proxy-groups') && !Array.isArray(config['proxy-groups'])) {
         throw new Error('proxy-groups 必须是数组');
@@ -7624,7 +7639,7 @@ EOF_KANO_SERVICE
       const installYqReady = await ensureYqRuntime({ quiet: true });
       if (installYqReady) {
         const sanitized = await sanitizeConfigForTProxy({ showToast: false });
-        if (!sanitized) createToast('基础代理文件已安装；配置增强整理未完成，将按现有 config.yaml 尝试启动。', 'yellow', 9000);
+        if (!sanitized) return await failInstalledPackage('配置适配失败，未启动新配置');
       } else {
         createToast('基础代理已安装；YAML 高级组件暂未就绪，将在首次使用订阅/模板/规则功能时自动修复。', 'yellow', 9000);
       }
@@ -7641,16 +7656,10 @@ EOF_KANO_SERVICE
         return await failInstalledPackage('首次启动健康检查失败');
       }
       const trafficModeReadyAfterInstall = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+      if (!trafficModeReadyAfterInstall) return await failInstalledPackage('首次启动流量模式检查失败');
       const policyAppliedAfterInstall = !policyReadyAfterInstall
         || await reapplyPolicyRulesSilent({ ensureScript: false });
-      const installRuntimeReady = trafficModeReadyAfterInstall && policyAppliedAfterInstall;
-      if (!installRuntimeReady) {
-        const failedParts = [
-          trafficModeReadyAfterInstall ? '' : '流量模式同步',
-          policyAppliedAfterInstall ? '' : '网络策略应用',
-        ].filter(Boolean).join('、');
-        createToast(`核心 API 已启动，但${failedParts}失败`, 'red', 10000);
-      }
+      if (!policyAppliedAfterInstall) return await failInstalledPackage('首次启动网络策略应用失败');
       const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
       scheduleBinaryHelperButtonRefresh();
       if (!helperReadyAfterInstall) {
@@ -7674,9 +7683,9 @@ EOF_KANO_SERVICE
 
       showInfoDialog(
         'mm_installed_confirm_1',
-        installRuntimeReady ? '\u6838\u5fc3\u5df2\u542f\u52a8' : '核心已启动，网络接管未完整生效',
+        '\u6838\u5fc3\u5df2\u542f\u52a8',
         `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。${installRuntimeReady ? '' : '<br />请在“网络设置”中重新应用后再使用代理。'}`,
+        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。`,
       );
     } finally {
       disabled_btn_enabled = false;
@@ -9179,11 +9188,10 @@ KANO_POLICY_TOOLS_EOF
       'yellow',
     );
     const sanitized = await sanitizeConfigForTProxy({ showToast: false });
-    if (!sanitized && await kprRequiresStrictConfig()) {
+    if (!sanitized) {
       createToast("配置校验失败，已取消重启，未使用旧 YAML 冒充新模式。", "red", 10000);
       return false;
     }
-    if (!sanitized) createToast('配置增强整理未完成，已按现有 config.yaml 继续启动核心。', 'yellow', 8000);
     const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
     if (!res.success) {
       const startState = parseKeyValueOutput(res.content || '').START_STATE || '';
@@ -9198,12 +9206,13 @@ KANO_POLICY_TOOLS_EOF
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
     const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-    const rulesOk = await reapplyPolicyRulesSilent();
+    const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent();
     if (!trafficModeOk || !rulesOk) {
       const failedParts = [
         trafficModeOk ? '' : '流量模式同步',
-        rulesOk ? '' : '网络策略应用',
+        trafficModeOk && !rulesOk ? '网络策略应用' : '',
       ].filter(Boolean).join('、');
+      await networkRescue({ stopService: true, showOutput: false, reason: failedParts + '失败' });
       createToast(`核心 API 已启动，但${failedParts}失败`, 'red', 10000);
       await isMMRunning();
       return false;

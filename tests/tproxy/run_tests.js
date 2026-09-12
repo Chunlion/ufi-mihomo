@@ -108,12 +108,12 @@ function loadPlugin(file, shellHandler, exportNames, { lexicalHostOnly = false }
 // ---- 用例 ---------------------------------------------------------------
 const EXPORTS = [
   'removeLegacyManagedRulePrefix', 'applyManagedRules', 'validateManagedConfigObject',
-  'validateConfigObjectStructure', 'applyManagedDashboardFields', 'applyRequiredF50Fields',
+  'validateConfigObjectStructure', 'applyManagedDashboardFields', 'applyRequiredF50Fields', 'applyOverrideSafetyFields',
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
   'buildManagedRuleProviders', 'isPlainYamlObject',
   'sanitizeSubscriptionSecrets',
   'validateOriginalSubscriptionConfig', 'normalizeSubRuleModeValue', 'parseSubRuleModeFromText',
-  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl', 'KPR',
+  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl', 'KPR', 'normalizeManagedTemplateObject', 'kprShapeRuntimeConfig', 'readF50TproxyPortCmd',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
@@ -188,6 +188,25 @@ function runFor(label, file) {
     });
   };
   const subscriptionModePromise = (async () => {
+    const installCheckStart = source.indexOf('      const trafficModeReadyAfterInstall = ');
+    const installCheckEnd = source.indexOf('      const helperReadyAfterInstall = ', installCheckStart);
+    const installCalls = [];
+    const checkInstall = vm.runInNewContext(`async () => { ${source.slice(installCheckStart, installCheckEnd)}; return true; }`, {
+      lastSanitizedTrafficMode: 'tproxy', policyReadyAfterInstall: true,
+      ensureRuntimeTrafficMode: async () => false,
+      reapplyPolicyRulesSilent: async () => { installCalls.push('policy'); return true; },
+      failInstalledPackage: async () => { installCalls.push('rollback'); return false; },
+    });
+    chk(await checkInstall(), false, '首次安装监听检查失败时返回失败');
+    chk(installCalls, ['rollback'], '首次安装监听失败直接回滚，不继续应用策略');
+    let optionsCommand = '';
+    const shapeApi = loadPlugin(file, async (command) => {
+      optionsCommand = command;
+      return { success: true, content: 'traffic_mode=tproxy\ntproxy_port=7897\ndns_hijack=off\n' };
+    }, ['kprShapeRuntimeConfig']).api;
+    const shaped = await shapeApi.kprShapeRuntimeConfig({ 'tproxy-port': 8999 });
+    chk(shaped['tproxy-port'], 7897, '所有运行配置写入均使用实际 Service 端口');
+    chk(spawnSync('sh', ['-n'], { input: optionsCommand, encoding: 'utf8' }).status, 0, '网络选项和 Service 端口读取 shell 语法通过');
     chk(source.includes("{ label: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE }")
       && !source.includes("setConfigSourceCmd('config_package_restore')"), true, '配置包携带语义来源，恢复后不以操作名称覆盖它');
     const calls = [];
@@ -248,13 +267,14 @@ function runFor(label, file) {
       CLASH_CONFIG: '/config.yaml', CLASH_POLICY_OPTIONS_FILE: '/options', CLASH_SERVICE: '/service',
       CLASH_CONFIG_SOURCE_FILE: '/source', CLASH_SAFE_REJECT_DOMAIN_FILE: '/managed/reject',
       shellQuote: shellQuoteForTest,
+      readF50TproxyPortCmd: api.readF50TproxyPortCmd,
       CLASH_SAFE_DIRECT_DOMAIN_FILE: '/managed/direct', CLASH_SAFE_DIRECT_IP_FILE: '/managed/ip', CLASH_SAFE_PROXY_DOMAIN_FILE: '/managed/proxy',
       runShellWithRoot: async () => ({ success: true, content: `traffic_mode=tproxy\nipv6_mode=off\ntproxy_port=7895\nconfig_source=${configSource}\n` }),
       ensurePolicyStorage: async () => ({ ok: true }), readYamlObject: async () => ({ ok: true, value: savedConfig }),
       cloneJsonValue: (v) => JSON.parse(JSON.stringify(v)), getPositivePort: (v) => Number(v),
       applyRequiredF50Fields: api.applyRequiredF50Fields, isPlainYamlObject: api.isPlainYamlObject,
       ensureObjectField: (v, k) => v[k] || (v[k] = {}),
-      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = api.KPR.runtime(config, { traffic_mode: 'tproxy' }); return { ok: true }; },
+      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = api.KPR.runtime(config, { traffic_mode: 'tproxy', dns_hijack: 'on' }); return { ok: true }; },
       createToast() {}, lastSanitizedTrafficMode: '',
     });
     chk(await sanitize(), true, '原配置重启适配成功');
@@ -565,7 +585,7 @@ function runFor(label, file) {
     'external-ui-name': 'zashboard',
     'external-ui-url': 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-no-fonts.zip',
   };
-  api.applyRequiredF50Fields(packagedDashboard);
+  api.applyRequiredF50Fields(packagedDashboard, { managedDashboard: true });
   chk(packagedDashboard['external-ui'], 'WebUI/zashboard', 'packaged UI path is normalized before config commit');
   chk(packagedDashboard['external-ui-url'].endsWith('/dist-no-fonts.zip'), true,
     'an existing Zashboard release variant is preserved');
@@ -579,6 +599,66 @@ function runFor(label, file) {
   };
   chk(api.applyManagedDashboardFields(customDashboard), false, 'custom dashboard configuration is not rewritten');
   chk(customDashboard['external-ui-name'], 'custom-ui', 'custom dashboard name is preserved');
+  const freeConfig = {
+    ...originalConfig, ipv6: true, 'allow-lan': false, 'bind-address': '127.0.0.1', 'tproxy-port': 8999,
+    'mixed-port': 8899, 'external-controller': '127.0.0.1:7788', secret: 'test-only',
+    'external-ui': 'ui', 'external-ui-name': 'zashboard',
+    dns: { enable: false, listen: '127.0.0.1:5353', ipv6: true, 'enhanced-mode': 'fake-ip',
+      'fake-ip-range': '198.18.0.1/16', 'fake-ip-filter': ['+.lan'], nameserver: ['1.1.1.1'], 'nameserver-policy': { '+.example.test': '8.8.8.8' } },
+    profile: { 'store-selected': false, 'store-fake-ip': true },
+    hosts: { 'example.test': '192.0.2.1' }, sniffer: { enable: true, 'force-dns-mapping': false },
+    'geodata-mode': true, 'geox-url': { geoip: 'https://example.test/geoip.dat' },
+  };
+  const copyFree = () => JSON.parse(JSON.stringify(freeConfig));
+  const defaultsOnly = copyFree();
+  api.applyRequiredF50Fields(defaultsOnly);
+  chk(defaultsOnly, freeConfig, '运行默认补充保留用户网络、Fake-IP、缓存、嗅探、hosts 和面板设置');
+  const jsResult = copyFree();
+  api.applyOverrideSafetyFields(jsResult);
+  chk(jsResult, freeConfig, 'JS 安全检查不再重写网络和面板偏好');
+  const userTemplate = api.normalizeManagedTemplateObject(freeConfig, [{ url: 'https://example.test/sub' }]).config;
+  chk([userTemplate.dns, userTemplate.profile, userTemplate.ipv6, userTemplate['allow-lan'], userTemplate['tproxy-port'], userTemplate['external-ui']],
+    [freeConfig.dns, freeConfig.profile, true, false, 8999, 'ui'], '模板节点处理保留用户 DNS、缓存、IPv6、端口和面板');
+  const missingControl = {};
+  api.applyRequiredF50Fields(missingControl);
+  chk([!!missingControl['external-controller'], !!missingControl.secret, missingControl['external-ui'], missingControl.dns],
+    [true, true, undefined, undefined], '缺少控制 API 时补全默认，未配置的可选模块不主动插入');
+  let invalidDnsRejected = false;
+  try { api.applyRequiredF50Fields({ dns: 'invalid' }); } catch (_) { invalidDnsRejected = true; }
+  chk(invalidDnsRejected, true, 'DNS 类型错误明确拒绝，不丢弃用户内容');
+  const captureOptions = { traffic_mode: 'tproxy', ipv6: 'off', dns_hijack: 'on', dns_port: '1053', tproxy_port: 7897 };
+  const captured = api.KPR.runtime(freeConfig, captureOptions);
+  chk([captured.ipv6, captured['allow-lan'], captured['bind-address'], captured['tproxy-port'], captured.dns.enable, captured.dns.listen, captured.dns.ipv6],
+    [false, true, '*', 7897, true, '0.0.0.0:1053', false], '接管时只适配设备 IPv6、TProxy 和所选 DNS 监听');
+  chk([captured.dns['enhanced-mode'], captured.dns['fake-ip-filter'], captured.profile, captured.sniffer, captured.hosts, captured['mixed-port']],
+    ['fake-ip', ['+.lan'], freeConfig.profile, freeConfig.sniffer, freeConfig.hosts, 8899], '接管过程中保留 Fake-IP、缓存和其他模块');
+  chk(api.KPR.runtime(captured, captureOptions), captured, '重复网络适配保持幂等');
+  chk(api.KPR.runtime(captured, { traffic_mode: 'off' }), freeConfig, '关闭接管精确恢复原 IPv6、LAN、端口与 DNS');
+  const dnsReleased = api.KPR.runtime(captured, { ...captureOptions, dns_hijack: 'off' });
+  chk(dnsReleased.dns, freeConfig.dns, '仅关闭 DNS 劫持即可恢复整个用户 DNS 模块');
+  const switchedTun = api.KPR.runtime(captured, { traffic_mode: 'tun', ipv6: 'on', dns_hijack: 'off' });
+  chk([switchedTun['allow-lan'], switchedTun['bind-address'], switchedTun['tproxy-port'], switchedTun.dns],
+    [false, '127.0.0.1', 8999, freeConfig.dns], '切换 TUN 恢复用户 LAN、TProxy 端口和未托管的 DNS');
+  const editedCapture = JSON.parse(JSON.stringify(captured));
+  editedCapture.dns.listen = '127.0.0.1:5454';
+  editedCapture['bind-address'] = '192.0.2.1';
+  delete editedCapture.dns['fake-ip-filter'];
+  const editedReleased = api.KPR.runtime(editedCapture, { traffic_mode: 'off' });
+  chk([editedReleased.dns.listen, editedReleased['bind-address'], editedReleased.dns['fake-ip-filter']],
+    ['127.0.0.1:5454', '192.0.2.1', undefined], '手动修改和删除不被旧网络记录覆盖');
+  const generatedDns = api.KPR.runtime({}, { traffic_mode: 'tun', dns_hijack: 'on' });
+  const removedDns = api.KPR.runtime(generatedDns, { traffic_mode: 'off' });
+  chk(removedDns, {}, '原本没有的 DNS/IPv6/TUN 模块关闭接管后完整移除');
+  generatedDns.dns.nameserver = ['1.1.1.1'];
+  chk(api.KPR.runtime(generatedDns, { traffic_mode: 'off' }).dns, { nameserver: ['1.1.1.1'] }, '自动 DNS 段中新加的用户字段仍保留');
+  for (const conflict of [{ 'mixed-port': 7897 }, { 'external-controller': ':1053' }]) {
+    let rejected = false;
+    try { api.KPR.runtime({ ...copyFree(), ...conflict }, captureOptions); } catch (_) { rejected = true; }
+    chk(rejected, true, '接管端口与现有监听冲突时拒绝写入');
+  }
+  let invalidNetworkRejected = false;
+  try { api.KPR.runtime({ 'x-kano-network': { version: 1, dnsPresent: false, fields: { 'dns.nameserver': { present: false, applied: [] } } } }, { traffic_mode: 'off' }); } catch (_) { invalidNetworkRejected = true; }
+  chk(invalidNetworkRejected, true, '网络恢复记录不能修改未托管字段');
   if (hasBinaryHelper) {
     const controllerReaderSource = source.slice(
       source.indexOf('const readControllerInfo = async ({ fresh = false } = {}) => {'),
@@ -834,7 +914,7 @@ function runFor(label, file) {
       startVerificationSource.includes('return await waitForCoreApi(12, 1000)')
         && !startVerificationSource.includes('acceptRunningCoreWithSlowApi')
         && restartSource.includes('const trafficModeOk = await ensureRuntimeTrafficMode')
-        && restartSource.includes('const rulesOk = await reapplyPolicyRulesSilent()')
+        && restartSource.includes('const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent()')
         && restartSource.includes('return false;'),
       true,
       'runtime success requires API readiness, traffic-mode convergence, and policy application',
@@ -1871,7 +1951,7 @@ function runFor(label, file) {
 
 async function runPrivateRoutingRegression(file) {
   const { api } = loadPlugin(file, async () => ({ success: true, content: '' }),
-    ['KPR', 'ensureRuntimeTrafficMode', 'kprSaveNetworkState']);
+    ['KPR', 'ensureRuntimeTrafficMode', 'kprSaveNetworkState', 'buildPortListenerFunction', 'restartClash']);
   const userTun = { enable: false, device: 'UserTun', stack: 'gvisor', mtu: 1400,
     'auto-route': false, 'auto-redirect': true, 'strict-route': true, 'dns-hijack': ['tcp://any:53'],
     'route-exclude-address': ['192.168.0.0/16'] };
@@ -1929,11 +2009,25 @@ async function runPrivateRoutingRegression(file) {
   chk(await ensure('tun'), true, 'TUN supports cores that omit optional config fields');
   chk(patches, 0, 'omitted optional fields do not trigger repeated TUN updates');
 
+  let listenerOk = false, listenerCommand = '';
+  const tproxyRuntime = {
+    ...runtime, buildPortListenerFunction: api.buildPortListenerFunction,
+    readYamlObject: async () => ({ ok: true, value: { 'tproxy-port': 7897, ipv6: true } }),
+    callMihomoApi: async () => ({ success: true, responseText: '{"tun":{"enable":false}}' }),
+    runShellWithRoot: async (command) => { listenerCommand = command; return { success: listenerOk }; },
+  };
+  const ensureTproxy = vm.runInNewContext(`(${api.ensureRuntimeTrafficMode.toString()})`, tproxyRuntime);
+  chk(await ensureTproxy('tproxy'), false, 'TProxy listener failure rejects an otherwise healthy core API');
+  chk(listenerCommand.includes('is_port_listening 7897 4 && is_port_listening 7897 6'), true, 'TProxy verifies both address families on the configured port');
+  listenerOk = true;
+  chk(await ensureTproxy('tproxy'), true, 'TProxy accepts verified TCP/UDP listeners');
+  chk(spawnSync('sh', ['-n'], { input: listenerCommand, encoding: 'utf8' }).status, 0, 'shared TProxy listener shell passes sh -n');
+
   const options = { traffic_mode: 'off', private_route_enabled: 'on',
     private_route_cidrs: '192.168.11.0/24', private_route_policy: 'LAN' };
   let interfaceReads = 0, saves = 0;
   const network = {
-    KPR: api.KPR, kprStrictOperation: 0, CLASH_CONFIG: '/config.yaml',
+    KPR: api.KPR, CLASH_CONFIG: '/config.yaml',
     readYamlObject: async () => ({ ok: true, value: { mode: 'rule' } }),
     kprReadConnected: async () => { interfaceReads++; throw new Error('interfaces unavailable'); },
     getCorePid: async () => 0, kprVerifySelection: async () => '',
@@ -1950,7 +2044,24 @@ async function runPrivateRoutingRegression(file) {
     'enabling capture still rejects unreadable interfaces');
   chk(interfaceReads, 1, 'enabling capture checks private-route interfaces');
   chk(saves, 1, 'failed interface inspection does not save new settings');
-  chk(network.kprStrictOperation, 0, 'network preflight releases strict-operation state after failure');
+  let starts = 0;
+  const restart = vm.runInNewContext(`(${api.restartClash.toString()})`, {
+    createToast() {}, sanitizeConfigForTProxy: async () => false,
+    startClashServiceClean: async () => { starts++; return { success: true }; },
+  });
+  chk(await restart({ skipCheck: true }), false, 'every traffic mode rejects failed config adaptation');
+  chk(starts, 0, 'failed config adaptation does not stop or restart the existing service');
+  const restartCalls = [];
+  const checkedRestart = vm.runInNewContext(`(${api.restartClash.toString()})`, {
+    createToast() {}, sanitizeConfigForTProxy: async () => true,
+    startClashServiceClean: async () => ({ success: true }), verifyStartOrRollback: async () => true,
+    ensureRuntimeTrafficMode: async () => false, lastSanitizedTrafficMode: 'tproxy',
+    reapplyPolicyRulesSilent: async () => { restartCalls.push('policy'); return true; },
+    networkRescue: async (options) => { restartCalls.push(options.stopService ? 'stop and rescue' : 'rescue'); },
+    isMMRunning: async () => {},
+  });
+  chk(await checkedRestart({ skipCheck: true }), false, 'restart reports a missing TProxy listener as failure');
+  chk(restartCalls, ['stop and rescue'], 'restart listener failure stops capture and skips policy application');
 }
 
 (async () => {

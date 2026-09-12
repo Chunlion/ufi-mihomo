@@ -112,6 +112,8 @@ const EXPORTS = [
   'yamlHasGeneratedMarker', 'createConfigRollbackPoint', 'buildManagedFallbackRules',
   'buildManagedRuleProviders', 'isPlainYamlObject',
   'sanitizeSubscriptionSecrets',
+  'validateOriginalSubscriptionConfig', 'normalizeSubRuleModeValue', 'parseSubRuleModeFromText',
+  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
@@ -151,6 +153,134 @@ function runFor(label, file) {
   const missing = exportNames.filter((n) => typeof api[n] === 'undefined');
   chk(missing, [], `全部待测函数均已导出 (${exportNames.length} 个)`);
   if (missing.length) return;
+
+  chk(api.parseSubRuleModeFromText('# KANO_SUB_RULE_MODE=original\r\nhttps://example.test/config'), 'original', '原配置模式支持持久化读取和 CRLF');
+  chk(api.normalizeSubRuleModeValue('legacy'), 'template', '旧订阅继续使用模板模式');
+  const originalConfig = {
+    proxies: [{ name: '节点 A', type: 'ss', server: 'example.test', port: 443 }],
+    'proxy-groups': [{ name: '自选', type: 'select', proxies: ['节点 A', 'DIRECT'] }],
+    rules: ['DOMAIN,example.test,自选', 'MATCH,DIRECT'],
+    dns: { 'enhanced-mode': 'fake-ip' },
+  };
+  const originalSnapshot = JSON.stringify(originalConfig);
+  chk(api.validateOriginalSubscriptionConfig(originalConfig), true, '完整订阅接受自定义组名和规则');
+  chk(JSON.stringify(originalConfig), originalSnapshot, '原配置校验不改写节点、策略组、规则和 DNS');
+  const providerConfig = { ...originalConfig, proxies: [], 'proxy-providers': { Airport: { type: 'http', url: 'https://example.test/nodes', path: './airport.yaml' } } };
+  chk(api.validateOriginalSubscriptionConfig(providerConfig), true, '完整订阅接受自带命名的 Provider');
+  let nodesOnlyRejected = false;
+  try { api.validateOriginalSubscriptionConfig({ proxies: originalConfig.proxies }); } catch { nodesOnlyRejected = true; }
+  chk(nodesOnlyRejected, true, '只有节点的订阅不能冒充完整配置');
+
+  const loadSubscriptionFunction = (name, nextName, overrides = {}) => {
+    const start = source.indexOf(`    const ${name} = async (`);
+    const end = source.indexOf(`    const ${nextName} = async (`, start);
+    if (start < 0 || end < 0) throw new Error(`Missing subscription function: ${name}`);
+    return vm.runInNewContext(`${source.slice(start, end)}; ${name}`, {
+      SUB_RULE_MODE_TEMPLATE: 'template', SUB_RULE_MODE_ORIGINAL: 'original',
+      SUB_CONVERT_MODE_PROVIDER: 'provider', SUB_CONVERT_MODE_LOCAL: 'local',
+      normalizeSubRuleModeValue: api.normalizeSubRuleModeValue,
+      normalizeSubConvertModeValue: (value) => value == 'local' ? 'local' : 'provider',
+      normalizeSubSourceList: api.normalizeSubSourceList,
+      normalizeStoredSubSourceList: api.normalizeStoredSubSourceList,
+      appendTemplateFlowDebug() {}, createToast() {}, isHttpUrl: api.isHttpUrl,
+      showSuspiciousSubSourcesError: () => false,
+      ...overrides,
+    });
+  };
+  const subscriptionModePromise = (async () => {
+    chk(source.includes("{ label: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE }")
+      && !source.includes("setConfigSourceCmd('config_package_restore')"), true, '配置包携带语义来源，恢复后不以操作名称覆盖它');
+    const calls = [];
+    const write = loadSubscriptionFunction('writeSubConfigByMode', 'saveSubSources', {
+      writeOriginalSubscriptionConfig: async () => { calls.push('original'); return true; },
+      setSubRuleMode: async () => { calls.push('mode'); return true; },
+      ensureTemplateProviders: async () => { calls.push('template'); return true; },
+      writeSubEntrypoint: async () => { calls.push('entrypoint'); return true; },
+    });
+    await write([{ url: 'https://example.test/config' }], 'original', { convertMode: 'local' });
+    chk(calls, ['original'], '原配置写入不进入模板和节点转换流程');
+    calls.length = 0;
+    await write([{ url: 'https://example.test/config' }], 'template');
+    chk(calls, ['mode', 'template', 'entrypoint'], '模板模式继续原有生成流程');
+
+    const update = loadSubscriptionFunction('updateSubProviders', 'readCurrentSubSources', {
+      readConfigSource: async () => 'subscription_original',
+      createConfigRollbackPoint: async () => 'backup',
+      writeOriginalSubscriptionConfig: async () => { calls.push('download'); return true; },
+      restartClashWithConfigRollback: async () => { calls.push('restart'); return true; },
+      forceUpdateProvidersFromConfig: async () => { calls.push('providers'); return { failed: 0 }; },
+      showSubscriptionUpdateSelfCheck: async () => { calls.push('check'); },
+    });
+    calls.length = 0;
+    await update([{ url: 'https://example.test/config' }], 'original', 'local');
+    chk(calls, ['download', 'restart', 'providers', 'check'], '原模式更新完整配置并重启，不触发本地节点转换或模板修复');
+    const failedUpdate = loadSubscriptionFunction('updateSubProviders', 'readCurrentSubSources', {
+      readConfigSource: async () => 'subscription_original',
+      createConfigRollbackPoint: async () => 'backup',
+      writeOriginalSubscriptionConfig: async () => false,
+      restoreConfigRollbackPoint: async () => { calls.push('rollback'); },
+    });
+    calls.length = 0;
+    chk(await failedUpdate([{ url: 'https://example.test/config' }], 'original'), false, '原配置下载失败返回失败');
+    chk(calls, ['rollback'], '原配置失败执行回滚，不重启或回退模板');
+    const updateCustom = loadSubscriptionFunction('updateSubProviders', 'readCurrentSubSources', {
+      readConfigSource: async () => 'uploaded_config',
+      forceUpdateProvidersFromConfig: async () => { calls.push('custom providers'); return { failed: 0 }; },
+    });
+    calls.length = 0;
+    await updateCustom([{ url: 'https://example.test/config' }], 'original');
+    chk(calls, ['custom providers'], '手动配置只更新其自身 Provider，不重新下载订阅覆盖它');
+    const saveCustom = loadSubscriptionFunction('saveSubSources', 'overwriteConfigByTemplate', {
+      readConfigSource: async () => 'uploaded_config',
+      persistSubSourceState: async (_sources, mode) => { calls.push(mode); return true; },
+    });
+    calls.length = 0;
+    await saveCustom([{ url: 'https://example.test/config' }], 'original');
+    chk(calls, ['original'], '自定义配置下保存订阅只保存设置，未授权替换时不生成配置');
+
+    const savedConfig = { ...originalConfig, rules: ['GEOIP,private,DIRECT', ...originalConfig.rules],
+      'rule-providers': { kano_direct_domain: { type: 'file', behavior: 'domain', path: './user-rules.yaml' } } };
+    let sanitizedConfig;
+    const sanitizeStart = source.indexOf('  const sanitizeConfigForTProxy = async (');
+    const sanitizeEnd = source.indexOf('  const buildBootstrapConfig = ', sanitizeStart);
+    const sanitize = vm.runInNewContext(`${source.slice(sanitizeStart, sanitizeEnd)}; sanitizeConfigForTProxy`, {
+      CLASH_CONFIG: '/config.yaml', CLASH_POLICY_OPTIONS_FILE: '/options', CLASH_SERVICE: '/service',
+      CLASH_CONFIG_SOURCE_FILE: '/source', CLASH_SAFE_REJECT_DOMAIN_FILE: '/managed/reject',
+      shellQuote: shellQuoteForTest,
+      CLASH_SAFE_DIRECT_DOMAIN_FILE: '/managed/direct', CLASH_SAFE_DIRECT_IP_FILE: '/managed/ip', CLASH_SAFE_PROXY_DOMAIN_FILE: '/managed/proxy',
+      runShellWithRoot: async () => ({ success: true, content: 'traffic_mode=tproxy\nipv6_mode=off\ntproxy_port=7895\nconfig_source=subscription_original\n' }),
+      ensurePolicyStorage: async () => ({ ok: true }), readYamlObject: async () => ({ ok: true, value: savedConfig }),
+      cloneJsonValue: (v) => JSON.parse(JSON.stringify(v)), getPositivePort: (v) => Number(v),
+      applyRequiredF50Fields: api.applyRequiredF50Fields, isPlainYamlObject: api.isPlainYamlObject,
+      ensureObjectField: (v, k) => v[k] || (v[k] = {}),
+      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = config; return { ok: true }; },
+      createToast() {}, lastSanitizedTrafficMode: '',
+    });
+    chk(await sanitize(), true, '原配置重启适配成功');
+    chk([sanitizedConfig.rules, sanitizedConfig['proxy-groups'], sanitizedConfig['rule-providers']],
+      [savedConfig.rules, savedConfig['proxy-groups'], savedConfig['rule-providers']], '重启保留原订阅规则、策略组和自带规则集路径');
+    chk([sanitizedConfig['tproxy-port'], sanitizedConfig.dns.listen, sanitizedConfig.tun.enable], [7895, '0.0.0.0:1053', false], '原配置仍遵守 F50 流量接管设置');
+
+    const saveCalls = [];
+    let restartOk = true;
+    const save = loadSubscriptionFunction('saveSubSources', 'overwriteConfigByTemplate', {
+      readConfigSource: async () => 'template.yaml', createRandomString: () => 'test',
+      shellQuote: shellQuoteForTest, CLASH_SUB_URLS: '/subscription_urls.txt',
+      CLASH_SUB_RULE_MODE_FILE: '/sub_rule_mode.conf', CLASH_POLICY_OPTIONS_FILE: '/policy_options.conf',
+      CLASH_CONFIG_SOURCE_FILE: '/config_source.conf', CLASH_TEMPLATE: '/template.yaml', CLASH_TEMPLATE_BASE: '/template.base.yaml', CLASH_PROXY_DIR: '/proxy',
+      runShellWithRoot: async (cmd) => { saveCalls.push(cmd.includes('SUBSCRIPTION_TRANSACTION_RESTORED') ? 'restore settings' : 'shell'); return { success: true, content: 'SUBSCRIPTION_TRANSACTION_READY' }; },
+      persistSubSourceState: async () => true, createConfigRollbackPoint: async () => 'backup',
+      writeSubConfigByMode: async (_sources, mode) => { saveCalls.push(mode); return true; },
+      restartClashWithConfigRollback: async () => restartOk,
+      forceUpdateProvidersFromConfig: async () => ({ failed: 0 }), showSubscriptionUpdateSelfCheck: async () => {},
+    });
+    chk(await save([{ url: 'https://example.test/config' }], 'original', 'local'), true, '原配置保存忽略之前的本地转换设置');
+    chk(saveCalls.includes('original'), true, '原配置保存使用原配置生成分支');
+    restartOk = false;
+    saveCalls.length = 0;
+    chk(await save([{ url: 'https://example.test/config' }], 'original'), false, '启动失败的保存返回失败');
+    chk(saveCalls.includes('restore settings'), true, '启动失败时恢复订阅设置事务');
+  })();
 
   const controllerSettingsSource = source.slice(
     source.indexOf('const showControllerSettingsDialog = async'),
@@ -991,6 +1121,12 @@ function runFor(label, file) {
           0,
           `generated local-conversion shell passes sh -n: ${localConversionSyntax.stderr.trim()}`,
         );
+        shellReply = { success: true, content: 'ORIGINAL_CONFIG_FETCHED=1\n' };
+        const fetchedOriginal = await api.convertSubscriptionsLocally([{ url: 'https://example.test/config' }], { rawConfigPath: '/data/clash/config.yaml.original_test' });
+        chk(fetchedOriginal.ok, true, '原配置下载可以不依赖节点转换器完成');
+        const originalFetchSyntax = spawnSync('sh', ['-n'], { input: lastShellCommand, encoding: 'utf8' });
+        chk(originalFetchSyntax.status, 0, `原配置下载 Shell 语法正确: ${originalFetchSyntax.stderr.trim()}`);
+        chk(lastShellCommand.includes('--resolve "$resolve_spec"') && lastShellCommand.includes('--max-redirs 0') && lastShellCommand.includes('ORIGINAL_CONFIG_FETCHED=1\n        exit 0'), true, '原配置共用公网地址固定和禁止重定向，下载后退出不提交节点缓存');
         const mainInstallSource = source.slice(
           source.indexOf('btn_enabled.onclick = async () => {'),
           source.indexOf('btn_disabled.onclick = async () => {'),
@@ -1330,6 +1466,7 @@ function runFor(label, file) {
   console.log('--- #18 yamlHasGeneratedMarker 三态 ---');
   return (async () => {
     await goBehaviorPromise;
+    await subscriptionModePromise;
     const upload = loadPlugin(file, handler, ['uploadFileToDevice', 'installBinaryHelperFromFile']);
     upload.ctx.KANO_baseURL = 'http://192.168.0.1:2333';
     upload.ctx.common_headers = {};

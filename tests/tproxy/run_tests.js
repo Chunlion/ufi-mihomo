@@ -113,7 +113,7 @@ const EXPORTS = [
   'buildManagedRuleProviders', 'isPlainYamlObject',
   'sanitizeSubscriptionSecrets',
   'validateOriginalSubscriptionConfig', 'normalizeSubRuleModeValue', 'parseSubRuleModeFromText',
-  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl',
+  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl', 'KPR',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
@@ -238,9 +238,10 @@ function runFor(label, file) {
     await saveCustom([{ url: 'https://example.test/config' }], 'original');
     chk(calls, ['original'], '自定义配置下保存订阅只保存设置，未授权替换时不生成配置');
 
-    const savedConfig = { ...originalConfig, rules: ['GEOIP,private,DIRECT', ...originalConfig.rules],
+    const savedConfig = { ...originalConfig, tun: { stack: 'gvisor', mtu: 1400 }, rules: ['GEOIP,private,DIRECT', ...originalConfig.rules],
       'rule-providers': { kano_direct_domain: { type: 'file', behavior: 'domain', path: './user-rules.yaml' } } };
     let sanitizedConfig;
+    let configSource = 'subscription_original';
     const sanitizeStart = source.indexOf('  const sanitizeConfigForTProxy = async (');
     const sanitizeEnd = source.indexOf('  const buildBootstrapConfig = ', sanitizeStart);
     const sanitize = vm.runInNewContext(`${source.slice(sanitizeStart, sanitizeEnd)}; sanitizeConfigForTProxy`, {
@@ -248,18 +249,101 @@ function runFor(label, file) {
       CLASH_CONFIG_SOURCE_FILE: '/source', CLASH_SAFE_REJECT_DOMAIN_FILE: '/managed/reject',
       shellQuote: shellQuoteForTest,
       CLASH_SAFE_DIRECT_DOMAIN_FILE: '/managed/direct', CLASH_SAFE_DIRECT_IP_FILE: '/managed/ip', CLASH_SAFE_PROXY_DOMAIN_FILE: '/managed/proxy',
-      runShellWithRoot: async () => ({ success: true, content: 'traffic_mode=tproxy\nipv6_mode=off\ntproxy_port=7895\nconfig_source=subscription_original\n' }),
+      runShellWithRoot: async () => ({ success: true, content: `traffic_mode=tproxy\nipv6_mode=off\ntproxy_port=7895\nconfig_source=${configSource}\n` }),
       ensurePolicyStorage: async () => ({ ok: true }), readYamlObject: async () => ({ ok: true, value: savedConfig }),
       cloneJsonValue: (v) => JSON.parse(JSON.stringify(v)), getPositivePort: (v) => Number(v),
       applyRequiredF50Fields: api.applyRequiredF50Fields, isPlainYamlObject: api.isPlainYamlObject,
       ensureObjectField: (v, k) => v[k] || (v[k] = {}),
-      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = config; return { ok: true }; },
+      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = api.KPR.runtime(config, { traffic_mode: 'tproxy' }); return { ok: true }; },
       createToast() {}, lastSanitizedTrafficMode: '',
     });
     chk(await sanitize(), true, '原配置重启适配成功');
     chk([sanitizedConfig.rules, sanitizedConfig['proxy-groups'], sanitizedConfig['rule-providers']],
       [savedConfig.rules, savedConfig['proxy-groups'], savedConfig['rule-providers']], '重启保留原订阅规则、策略组和自带规则集路径');
-    chk([sanitizedConfig['tproxy-port'], sanitizedConfig.dns.listen, sanitizedConfig.tun.enable], [7895, '0.0.0.0:1053', false], '原配置仍遵守 F50 流量接管设置');
+    chk([sanitizedConfig['tproxy-port'], sanitizedConfig.dns.listen, sanitizedConfig.tun], [7895, '0.0.0.0:1053', undefined], 'TProxy 适配端口和 DNS，移除运行中的 TUN');
+    chk(sanitizedConfig['x-kano-tun'].before, savedConfig.tun, '停用的用户 TUN 参数随配置保存');
+    configSource = 'uploaded_config';
+    chk(await sanitize(), true, '自定义配置适配成功');
+    chk([sanitizedConfig.rules, sanitizedConfig['rule-providers']], [savedConfig.rules, savedConfig['rule-providers']], '自定义规则和规则集路径不再被自动清理或改写');
+
+    for (const sourceName of ['uploaded_config', 'subscription_original']) {
+      const overwrite = loadSubscriptionFunction('overwriteConfigByTemplate', 'readEditableLocalFile', {
+        readConfigSource: async () => sourceName,
+      });
+      chk(await overwrite({ confirm: false }), false, `${sourceName} 拒绝图形规则等隐式模板重建`);
+    }
+    let confirmed = false;
+    const explicitOverwrite = loadSubscriptionFunction('overwriteConfigByTemplate', 'readEditableLocalFile', {
+      readConfigSource: async () => 'subscription_original', readCurrentSubSources: async () => [{ url: 'https://example.test/config' }],
+      readCurrentSubRuleMode: async () => 'template', readSavedSubConvertMode: async () => 'provider',
+      askConfirm: async () => confirmed,
+      saveSubSources: async (_sources, mode, _convert, options) => mode === 'template' && options.applyToCustom,
+    });
+    chk(await explicitOverwrite(), false, '来源与模式不一致时，取消切换仍保留原配置');
+    confirmed = true;
+    chk(await explicitOverwrite(), true, '原配置显式确认后仍可切换模板');
+    let embeddedSource = 'uploaded_config';
+    let embeddedRestartOk = true;
+    let embeddedPersistOk = true;
+    let embeddedRestored = false;
+    const embeddedCalls = [];
+    const disabledSources = [{ url: 'https://example.test/disabled', enabled: false }];
+    const embeddedOverwrite = loadSubscriptionFunction('overwriteConfigByTemplate', 'readEditableLocalFile', {
+      readConfigSource: async () => embeddedSource, readCurrentSubSources: async () => disabledSources,
+      readCurrentSubRuleMode: async () => 'original', readSavedSubConvertMode: async () => 'provider',
+      inspectConfigNodeSource: async () => ({ ok: true, source: 'template_embedded' }), hasUserTemplateYaml: async () => true,
+      askConfirm: async () => true, applyJsOverrideToTemplate: async () => true,
+      createConfigRollbackPoint: async () => 'backup', runShellWithRoot: async () => ({ success: true }),
+      sanitizeConfigForTProxy: async () => true, restartClashWithConfigRollback: async () => embeddedRestartOk,
+      persistSubSourceState: async (sources, mode, convert, options) => { embeddedCalls.push({ sources, mode, allowEmpty: options.allowEmpty }); return embeddedPersistOk; },
+      restoreConfigRollbackPoint: async () => { embeddedRestored = true; return true; },
+      forceUpdateProvidersFromConfig: async () => ({ failed: 0 }), showSubscriptionUpdateSelfCheck: async () => {},
+      shellQuote: shellQuoteForTest, setConfigSourceCmd: () => '', pruneKanoBackupsCmd: () => '',
+      CLASH_CONFIG: '/config.yaml', CLASH_TEMPLATE: '/template.yaml', CLASH_PROXY_DIR: '/proxy',
+      KANO_TEMPLATE_WRITE_CHECK: '/write-check', KANO_TEMPLATE_FLOW_DEBUG: '/flow',
+    });
+    for (const sourceName of ['uploaded_config', 'subscription_original']) {
+      embeddedSource = sourceName;
+      embeddedCalls.length = 0;
+      chk(await embeddedOverwrite({ confirm: false }), false, `${sourceName} 无启用订阅时也不允许隐式模板替换`);
+      chk(await embeddedOverwrite(), true, `${sourceName} 无启用订阅时可显式应用内嵌节点模板`);
+      chk(embeddedCalls, [{ sources: disabledSources, mode: 'template', allowEmpty: true }], '模板成功后更新模式并保留禁用订阅');
+    }
+    embeddedRestartOk = false;
+    embeddedCalls.length = 0;
+    chk(await embeddedOverwrite(), false, '内嵌模板启动失败返回失败');
+    chk(embeddedCalls, [], '内嵌模板启动失败不修改原模式偏好');
+    embeddedRestartOk = true;
+    embeddedPersistOk = false;
+    chk(await embeddedOverwrite(), false, '内嵌模板模式保存失败返回失败');
+    chk(embeddedRestored, true, '模式保存失败恢复旧配置和来源');
+    const mismatchedUpdate = loadSubscriptionFunction('updateSubProviders', 'readCurrentSubSources', {
+      readConfigSource: async () => 'template.yaml',
+    });
+    chk(await mismatchedUpdate([{ url: 'https://example.test/config' }], 'original'), false, '更新订阅不按未应用的偏好切换当前模板配置');
+    const refreshStart = source.indexOf('    refreshSubscriptionAfterRestore = async () =>');
+    const refreshEnd = source.indexOf('    const updateSubProviders = async (', refreshStart);
+    let checkedMode;
+    const refresh = vm.runInNewContext(`let refreshSubscriptionAfterRestore; ${source.slice(refreshStart, refreshEnd)}; refreshSubscriptionAfterRestore`, {
+      readCurrentSubSources: async () => [], readCurrentSubRuleMode: async () => 'template',
+      readSavedSubConvertMode: async () => 'local', readConfigSource: async () => 'subscription_original',
+      SUB_RULE_MODE_ORIGINAL: 'original', forceUpdateProvidersFromConfig: async () => ({ failed: 0 }),
+      showSubscriptionUpdateSelfCheck: async (_sources, mode) => { checkedMode = mode; },
+    });
+    await refresh();
+    chk(checkedMode, 'original', '恢复后模式不一致仍按原配置自检，不触发模板修复或本地转换');
+    const updateButtonStart = source.indexOf('    updateSubBtn.onclick = async () =>');
+    const updateButtonEnd = source.indexOf('    const applySavedOverrides = async () =>', updateButtonStart);
+    const updateButton = { onclick: null };
+    const buttonCalls = [];
+    vm.runInNewContext(source.slice(updateButtonStart, updateButtonEnd), {
+      updateSubBtn: updateButton, ensureReady: async () => true, acquireCriticalOperation: () => 'update',
+      setButtonBusy() {}, readConfigSource: async () => 'uploaded_config',
+      updateSubProviders: async () => { buttonCalls.push('providers'); },
+      releaseCriticalOperation: () => { buttonCalls.push('release'); },
+    });
+    await updateButton.onclick();
+    chk(buttonCalls, ['providers', 'release'], '更新按钮在自定义配置下不受订阅列表为空或全部禁用影响');
 
     const saveCalls = [];
     let restartOk = true;
@@ -1788,6 +1872,34 @@ function runFor(label, file) {
 async function runPrivateRoutingRegression(file) {
   const { api } = loadPlugin(file, async () => ({ success: true, content: '' }),
     ['KPR', 'ensureRuntimeTrafficMode', 'kprSaveNetworkState']);
+  const userTun = { enable: false, device: 'UserTun', stack: 'gvisor', mtu: 1400,
+    'auto-route': false, 'auto-redirect': true, 'strict-route': true, 'dns-hijack': ['tcp://any:53'],
+    'route-exclude-address': ['192.168.0.0/16'] };
+  const base = { mode: 'rule', tun: userTun, 'proxy-groups': [{ name: 'LAN', type: 'select', proxies: ['node'] }], rules: ['MATCH,LAN'] };
+  const idle = api.KPR.runtime(base, { traffic_mode: 'tproxy' });
+  chk(idle.tun, undefined, 'TProxy removes the active TUN section');
+  chk(idle['x-kano-tun'].before, userTun, 'TProxy retains all original TUN settings');
+  chk(base.tun, userTun, 'mode adaptation leaves the input config untouched');
+  const active = api.KPR.runtime(idle, { traffic_mode: 'tun', ipv6: 'on' });
+  chk([active.tun.stack, active.tun.mtu, active.tun.device], ['gvisor', 1400, 'UserTun'], 'TUN restores custom stack, MTU and device');
+  chk([active.tun.enable, active.tun['auto-route'], active.tun['auto-redirect'], active.tun['dns-hijack']], [true, true, false, []], 'TUN retains required F50 routing and DNS interception');
+  const stopped = api.KPR.runtime(active, { traffic_mode: 'off' });
+  chk([stopped.tun, stopped['x-kano-tun'].before], [undefined, userTun], 'disabling capture restores and stores the original TUN settings');
+  chk(api.KPR.runtime(stopped, { traffic_mode: 'tun', ipv6: 'on' }), active, 'repeated mode switches do not accumulate changes');
+  active.tun.mtu = 1300;
+  active.tun['strict-route'] = true;
+  delete active.tun.stack;
+  const edited = api.KPR.runtime(active, { traffic_mode: 'tproxy' });
+  chk([edited['x-kano-tun'].before.mtu, edited['x-kano-tun'].before.stack, edited['x-kano-tun'].before['strict-route']], [1300, undefined, true], 'manual edits and deletions survive mode switches');
+  const privateOptions = { traffic_mode: 'tun', private_route_enabled: 'on', private_route_cidrs: '192.168.11.0/24', private_route_policy: 'LAN' };
+  const routed = api.KPR.runtime(base, privateOptions);
+  const unrouted = api.KPR.runtime(routed, { traffic_mode: 'tproxy' });
+  chk([unrouted.rules, unrouted['x-kano-tun'].before], [base.rules, userTun], 'private-route overlays unwind before TUN restoration');
+  const empty = api.KPR.runtime(api.KPR.runtime({ rules: ['MATCH,DIRECT'] }, { traffic_mode: 'tun' }), { traffic_mode: 'off' });
+  chk([empty.tun, empty['x-kano-tun']], [undefined, undefined], 'generated TUN settings disappear when the original had no TUN');
+  let invalidTunRejected = false;
+  try { api.KPR.runtime({ tun: 'invalid' }, { traffic_mode: 'tproxy' }); } catch (_) { invalidTunRejected = true; }
+  chk(invalidTunRejected, true, 'invalid TUN input is rejected instead of silently discarded');
   const desired = { enable: true, device: 'KanoTun', 'auto-route': true, 'auto-redirect': false };
   let live, acceptPatch, patches;
   const runtime = {

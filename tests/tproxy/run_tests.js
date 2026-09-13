@@ -12,6 +12,7 @@ const toShellPath = (value) => String(value).replace(/\\/g, '/').replace(/^([A-Z
 const shellQuoteForTest = (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`;
 const FILES = {
   plugin: path.join(ROOT, '猫猫TProxy.js'),
+  rc3: path.join(ROOT, 'MaomaoTProxy_v7.4.5-rc3.js'),
   helper: path.join(ROOT, 'dist', 'kano-f50-helper-linux-arm64'),
   package: path.join(ROOT, 'tproxy-yq.zip'),
 };
@@ -23,6 +24,57 @@ const chk = (actual, expected, msg) => {
   ok ? pass++ : fail++;
   console.log(`  ${ok ? '✅' : '❌'} ${msg}${ok ? '' : `  got=${JSON.stringify(actual)} want=${JSON.stringify(expected)}`}`);
 };
+
+function runRc3Regression(file) {
+  const source = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const slice = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
+  const snapshot = slice('async function readStatusSnapshot', 'function validateSubscriptionMode');
+  const status = slice('const refreshRuleModeStatus', 'const waitForLanHost');
+  const openWindow = slice("open.textContent = '打开新窗口'", "const controllerSettingsBtn");
+  const startup = slice('const startClashServiceClean', 'const waitForCoreApi');
+  const subscriptionRestart = slice('const restartClashWithConfigRollback', 'const saveTemplate');
+  const saveSubscriptions = slice('const saveSubSources', 'const overwriteConfigByTemplate');
+  const restart = slice('const restartClash = async', 'const btn_restart');
+  const trafficMode = source.slice(source.indexOf('async function ensureRuntimeTrafficMode'), source.indexOf('async function kprSaveNetworkState'));
+  const providerUpdate = slice('const forceUpdateProvidersFromConfig', 'const ensureLocalSubscriptionConverter');
+  const panelInit = slice("const coreGroup = appendActionGroup", 'let colTimer = null');
+  const backgroundInit = slice('collapseGen(\'#collapse_mm_btn\'', '})(runShellWithRoot);');
+  const scalarDecoder = vm.runInNewContext(`(${slice('function decodeYamlRootScalar', 'async function readStatusSnapshot').trim()})`);
+
+  chk(/rulesCount|groupsCount|providersCount/.test(snapshot), false, 'rc3 status snapshot skips full configuration counts');
+  chk(/规则 \$\{|策略组 \$\{|节点源 \$\{/.test(status), false, 'rc3 title status omits rule, group, and provider counts');
+  chk(openWindow.indexOf("window.open('about:blank'") < openWindow.indexOf('await buildPanelUrl()'), true,
+    'rc3 opens the panel window before asynchronous controller discovery');
+  chk(/startState == 'started_verified_process'/.test(startup), true,
+    'rc3 treats config validation and service failures as immediate start failures');
+  chk(/preferReload:\s*true/.test(subscriptionRestart), false,
+    'rc3 subscription and template commits use a brief validated service restart');
+  chk(/preferReload:\s*true/.test(saveSubscriptions), false,
+    'rc3 subscription transactions and rollback recovery avoid hot reload');
+  chk(/ensureRuntimeTrafficMode\(lastSanitizedTrafficMode, null, prepared\.value\)/.test(restart), true,
+    'rc3 validated service restarts verify the loaded snapshot without a second hot reload');
+  chk(/attempt < 4/.test(trafficMode), true,
+    'rc3 retries the post-start configs API during core warm-up');
+  chk(/let live = want \? await inspect\(\) : \{\}/.test(trafficMode), true,
+    'rc3 reads TUN runtime state only when the selected mode is TUN');
+  chk(/const selectedOptions = await kprReadOptions\(\)/.test(trafficMode), true,
+    'rc3 uses the saved menu selection as the runtime mode source');
+  chk(/模式设置与 config\.yaml 不一致/.test(trafficMode), false,
+    'rc3 does not infer or reject the selected mode from config.yaml');
+  chk(/Number\(selectedOptions\.tproxy_port\)/.test(trafficMode), true,
+    'rc3 verifies the TProxy port selected by the menu');
+  chk(/readbackAttempt < 6/.test(providerUpdate), true,
+    'rc3 waits for the asynchronous provider node snapshot before deciding update failure');
+  chk(/const coreGroup = appendActionGroup/.test(panelInit), true, 'rc3 keeps core status checks scoped to the core action group');
+  chk(/coreGroup\.addEventListener\('toggle'/.test(panelInit), true, 'rc3 loads boot state only when the core group opens');
+  chk(/setTimeout\(\(\) => \{\s*isMMRunning\(\)/.test(backgroundInit), true,
+    'rc3 defers the initial runtime probe until after first paint');
+  const escapedSecret = 'quote" slash\\ apostrophe\'';
+  chk(scalarDecoder(JSON.stringify(escapedSecret)), escapedSecret,
+    'rc3 decodes the JSON-quoted YAML scalar written for custom controller secrets');
+  chk(scalarDecoder("'it''s-private'"), "it's-private",
+    'rc3 decodes escaped apostrophes in single-quoted YAML scalars');
+}
 
 // ---- 最小 DOM / 宿主打桩 ------------------------------------------------
 function makeElement(tag = 'div') {
@@ -2202,9 +2254,11 @@ async function runPrivateRoutingRegression(file) {
 
 (async () => {
   chk(fs.existsSync(FILES.plugin), true, 'repository contains the unified plugin file');
+  chk(fs.existsSync(FILES.rc3), true, 'repository contains the v7.4.5-rc3 plugin file');
   chk(fs.existsSync(path.join(ROOT, '猫猫TProxy_Go.js')), false, 'legacy _Go plugin filename has been removed');
   await runFor('统一版', FILES.plugin);
   await runPrivateRoutingRegression(FILES.plugin);
+  runRc3Regression(FILES.rc3);
   console.log(`\n================ 结果: ${pass} 通过 / ${fail} 失败 ================`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e.message); process.exit(2); });

@@ -118,7 +118,7 @@ const EXPORTS = [
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
   'parseBootIntegrationResult', 'buildApiCurl', 'callMihomoApi',
-  'buildServiceWrapperScript', 'buildPolicyToolsScript', 'flushGeneratedRulesCmd',
+  'buildServiceWrapperScript', 'buildPolicyToolsScript', 'ensurePolicyToolsScript', 'flushGeneratedRulesCmd',
   'verifyGeneratedRulesFlushedCmd', 'verifyCoreStoppedCmd', 'removePluginOwnedArtifactsCmd', 'fileTransactionHelpersCmd',
   'persistSubSourceState', 'savePolicyState',
   'deriveSubscriptionUpdateOutcome', 'addBootLinesCmd', 'removeBootLinesCmd', 'checkAdvanceFunc',
@@ -134,6 +134,9 @@ function runFor(label, file) {
   const handler = async (command) => {
     shellCallCount++;
     lastShellCommand = String(command || '');
+    if (lastShellCommand.includes('VERSION_MARKER=') && !lastShellCommand.includes('POLICY_SCRIPT_SYNTAX_FAILED')) {
+      return { success: true, content: 'POLICY_SCRIPT_UNCHANGED=1' };
+    }
     if (lastShellCommand.includes('BOOT_STATE=') && lastShellCommand.includes('BOOT_MESSAGE=')) {
       return { success: true, content: 'BOOT_STATE=disabled\n' };
     }
@@ -853,6 +856,35 @@ function runFor(label, file) {
     });
     chk(policySyntax.status, 0,
       `generated policy convergence script passes sh -n${policySyntax.stderr ? `: ${policySyntax.stderr.trim()}` : ''}`);
+    const installCalls = [];
+    let installed = false, uploadOk = true, installOk = true;
+    const installPolicy = vm.runInNewContext(`(${api.ensurePolicyToolsScript.toString()})`, {
+      CLASH_POLICY_SCRIPT: '/data/clash/Scripts/Clash.PolicyTools', CLASH_DIR: '/data/clash', CLASH_POLICY_DIR: '/data/clash/Policy',
+      POLICY_SCRIPT_VERSION: 'test', shellQuote: shellQuoteForTest, safeTextToHtml: String, createToast() {},
+      buildPolicyToolsScript: () => policyTools,
+      runShellWithRoot: async (command) => {
+        if (Buffer.byteLength(command) > 8192) throw new Error('host command too long');
+        if (command.includes('VERSION_MARKER=')) return { success: true, content: installed ? 'POLICY_SCRIPT_UNCHANGED=1' : '' };
+        installCalls.push('commit');
+        return { success: installOk, content: installOk ? '' : 'POLICY_SCRIPT_SYNTAX_FAILED' };
+      },
+      stageTextBesideTarget: async (_path, text) => { installCalls.push(text === policyTools ? 'upload complete script' : 'wrong upload'); return { ok: uploadOk, stagePath: '/data/clash/Scripts/staged' }; },
+      syncUnifiedDeviceBypassStorage: async () => { installCalls.push('sync'); return true; },
+    });
+    const policyInstallPromise = (async () => {
+      chk(await installPolicy(), true, 'large policy script installs through upload and short shell commands');
+      chk(installCalls, ['upload complete script', 'commit', 'sync'], 'policy installation uploads exact generated content before committing');
+      installCalls.length = 0; installed = true;
+      chk(await installPolicy({ syncStorage: false }), true, 'matching policy version needs only a short probe');
+      chk(installCalls, [], 'unchanged policy skips upload, rewrite, and unnecessary storage sync');
+      installed = false; uploadOk = false;
+      chk(await installPolicy(), false, 'failed policy upload prevents installation');
+      chk(installCalls, ['upload complete script'], 'failed upload never commits or syncs policy');
+      installCalls.length = 0; uploadOk = true; installOk = false;
+      chk(await installPolicy(), false, 'device syntax failure is reported instead of applying policy');
+      chk(installCalls, ['upload complete script', 'commit'], 'failed policy validation prevents follow-up application');
+    })();
+    goBehaviorPromise = Promise.all([goBehaviorPromise, policyInstallPromise]);
     chk(
       policyTools.includes('boot-apply) boot_apply')
         && policyTools.includes('BOOT_POLICY_STABLE=1')
@@ -947,7 +979,7 @@ function runFor(label, file) {
       startVerificationSource.includes('return await waitForCoreApi(12, 1000)')
         && !startVerificationSource.includes('acceptRunningCoreWithSlowApi')
         && restartSource.includes('const trafficModeOk = await ensureRuntimeTrafficMode')
-        && restartSource.includes('const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent()')
+        && restartSource.includes('const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent({ ensureScript: !policyReady })')
         && restartSource.includes('return false;'),
       true,
       'runtime success requires API readiness, traffic-mode convergence, and policy application',
@@ -1413,6 +1445,18 @@ function runFor(label, file) {
       });
       chk(rescueCleanupSyntax.status, 0,
         `network rescue cleanup verification passes sh -n${rescueCleanupSyntax.stderr ? `: ${rescueCleanupSyntax.stderr.trim()}` : ''}`);
+      const stoppedCoreProbe = spawnSync('sh', ['-c', `
+        pidof() { return 1; }
+        pgrep() { echo 12453; }
+        ${api.verifyCoreStoppedCmd('TEST')}
+      `], { encoding: 'utf8' });
+      chk(stoppedCoreProbe.status, 0, 'stopped-core verification ignores shell commands containing core paths');
+      const runningCoreProbe = spawnSync('sh', ['-c', `
+        pidof() { echo 12453; }
+        ${api.verifyCoreStoppedCmd('TEST')}
+      `], { encoding: 'utf8' });
+      chk(runningCoreProbe.status !== 0 && runningCoreProbe.stdout.includes('TEST_CORE_STILL_RUNNING:12453'),
+        true, 'stopped-core verification still blocks cleanup when the core is running');
       const transactionTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'kano-transaction-test-'));
       try {
         const transactionRoot = toShellPath(transactionTemp);
@@ -2044,6 +2088,21 @@ async function runPrivateRoutingRegression(file) {
   live = { enable: true }; patches = 0;
   chk(await ensure('tun'), true, 'TUN supports cores that omit optional config fields');
   chk(patches, 0, 'omitted optional fields do not trigger repeated TUN updates');
+  let diskConfig = { tun: { enable: false }, 'external-controller': 'old', dns: { 'enhanced-mode': 'redir-host' } };
+  const expectedConfig = { tun: desired, 'external-controller': 'user', dns: { 'enhanced-mode': 'fake-ip' } };
+  const startupCalls = [];
+  const verifyStartup = vm.runInNewContext(`(${api.ensureRuntimeTrafficMode.toString()})`, {
+    ...runtime,
+    readYamlObject: async () => ({ ok: true, value: diskConfig }),
+    buildControllerInfo: async () => ({ address: diskConfig['external-controller'] }),
+    kprBaseWriteYamlObjectAtomic: async (_path, value) => { startupCalls.push('restore'); diskConfig = value; return { ok: true }; },
+    reloadConfigHot: async (info) => { startupCalls.push('reload ' + info.address); live = { ...desired }; return { success: true }; },
+  });
+  chk(await verifyStartup('tun', expectedConfig), true, 'legacy startup rewrites are restored before verifying TUN');
+  chk([diskConfig, startupCalls], [expectedConfig, ['restore', 'reload old']], 'startup restores all user fields using the controller that is actually listening');
+  startupCalls.length = 0;
+  chk(await verifyStartup('tun', expectedConfig), true, 'unchanged startup config passes without rewriting');
+  chk(startupCalls, [], 'unchanged startup skips extra writes and reloads');
 
   let listenerOk = false, listenerCommand = '';
   const tproxyRuntime = {
@@ -2090,6 +2149,7 @@ async function runPrivateRoutingRegression(file) {
   const restartCalls = [];
   const checkedRestart = vm.runInNewContext(`(${api.restartClash.toString()})`, {
     createToast() {}, sanitizeConfigForTProxy: async () => true,
+    CLASH_CONFIG: '/config.yaml', readYamlObject: async () => ({ ok: true, value: {} }),
     startClashServiceClean: async () => ({ success: true }), verifyStartOrRollback: async () => true,
     ensureRuntimeTrafficMode: async () => false, lastSanitizedTrafficMode: 'tproxy',
     reapplyPolicyRulesSilent: async () => { restartCalls.push('policy'); return true; },
@@ -2098,6 +2158,21 @@ async function runPrivateRoutingRegression(file) {
   });
   chk(await checkedRestart({ skipCheck: true }), false, 'restart reports a missing TProxy listener as failure');
   chk(restartCalls, ['stop and rescue'], 'restart listener failure stops capture and skips policy application');
+  const hotCalls = [];
+  let hotModeOk = true;
+  const hotRestart = vm.runInNewContext(`(${api.restartClash.toString()})`, {
+    createToast() {}, sanitizeConfigForTProxy: async () => true,
+    getCorePid: async () => 123, buildControllerInfo: async () => ({}),
+    reloadConfigHot: async () => { hotCalls.push('reload'); return { success: true }; },
+    ensureRuntimeTrafficMode: async () => { hotCalls.push('verify'); return hotModeOk; }, lastSanitizedTrafficMode: 'tun',
+    reapplyPolicyRulesSilent: async ({ ensureScript }) => { hotCalls.push(ensureScript ? 'install and apply' : 'apply'); return true; },
+    networkRescue: async () => { hotCalls.push('rescue'); },
+  });
+  chk(await hotRestart({ skipCheck: true, preferReload: true, policyReady: true }), true, 'running core switches mode without a service restart');
+  chk(hotCalls, ['reload', 'verify', 'apply'], 'fast switching still verifies mode and policy without reinstalling the script');
+  hotCalls.length = 0; hotModeOk = false;
+  chk(await hotRestart({ skipCheck: true, preferReload: true, policyReady: true }), false, 'fast switching rejects failed runtime checks');
+  chk(hotCalls, ['reload', 'verify', 'rescue'], 'failed hot switching never applies mismatched policy');
   const pluginSource = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   const uploadStart = pluginSource.indexOf('      const reloadRes = await reloadConfigHot(controllerInfo);', pluginSource.indexOf('const commitUploadedConfigWithValidation ='));
   const uploadEnd = pluginSource.indexOf("      createToast('热加载失败", uploadStart);

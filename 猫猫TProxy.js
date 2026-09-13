@@ -503,11 +503,19 @@ async function kprVerifySelection(options) {
   return KPR.resolveSelection(payload.proxies || {}, feature.policy);
 }
 
-async function ensureRuntimeTrafficMode(trafficMode) {
+async function ensureRuntimeTrafficMode(trafficMode, expectedConfig = null) {
   try {
     const want = trafficMode === 'tun';
-    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    let read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) throw new Error(read.message || '运行配置读取失败');
+    if (expectedConfig && JSON.stringify(read.value) !== JSON.stringify(expectedConfig)) {
+      const startupController = await buildControllerInfo({ fresh: true });
+      const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, expectedConfig, { label: 'config.yaml', backupTag: 'startup_rewrite' });
+      if (!written.ok) throw new Error(written.content || '无法恢复启动前配置');
+      const reloaded = await reloadConfigHot(startupController);
+      if (!reloaded.success) throw new Error('启动程序改写配置后，恢复配置未能加载');
+      read = { ok: true, value: expectedConfig };
+    }
     const desired = read.value.tun && typeof read.value.tun === 'object' ? read.value.tun : {};
     if (!!desired.enable !== want) throw new Error('模式设置与 config.yaml 不一致');
     const info = await buildControllerInfo({ fresh: true });
@@ -569,7 +577,7 @@ async function kprSaveNetworkState(previous, next) {
     saved = true;
     next.options = await kprReadOptions();
     restartAttempted = true;
-    if (!(await restartClash({ skipCheck: true }))) throw new Error('新模式或接管规则未通过检查');
+    if (!(await restartClash({ skipCheck: true, preferReload: true, policyReady: true }))) throw new Error('新模式或接管规则未通过检查');
     const leaf = await kprVerifySelection(next.options);
     Object.assign(previous, JSON.parse(JSON.stringify(next)));
     createToast(feature.enabled && next.options.traffic_mode !== 'off'
@@ -583,7 +591,7 @@ async function kprSaveNetworkState(previous, next) {
       const restoredConfig = backup ? await restoreConfigRollbackPoint(backup, '网络设置', { showToast: false }) : false;
       recovered = restoredSettings && restoredConfig;
       if (recovered && restartAttempted) {
-        try { recovered = await restartClash({ skipCheck: true }); }
+        try { recovered = await restartClash({ skipCheck: true, preferReload: true, policyReady: true }); }
         catch (_) { recovered = false; }
       }
       if (!recovered) {
@@ -6020,7 +6028,7 @@ KANO_WRITE_CHECK_EOF
         `;
 
   const verifyCoreStoppedCmd = (marker = 'KANO') => `
-        core_pid="$(pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || pgrep -f '/data/[c]lash|[C]lash.Core|[m]ihomo' 2>/dev/null || true)"
+        core_pid="$(pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || true)"
         if [ -n "$core_pid" ]; then
           echo "${marker}_CORE_STILL_RUNNING:$core_pid"
           echo "KANO_ERROR_STAGE=service_stop"
@@ -6139,7 +6147,7 @@ KANO_WRITE_CHECK_EOF
         IPT="$(get_diag_ipt iptables)"
         IP6T="$(get_diag_ipt ip6tables)"
         echo "[process]"
-        (pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || pgrep -f '/data/[c]lash|[C]lash.Core|[m]ihomo' 2>/dev/null || true) | awk 'NF{print "pid=" $0}'
+        (pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || true) | awk 'NF{print "pid=" $0}'
         echo
         echo "[listen ports]"
         (ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true) | grep -E '(:7788|:7890|:7891|:7892|:7893|:7895|:1053)' || true
@@ -8345,8 +8353,7 @@ EOF_KANO_SERVICE
   ].join('\n');
 
   const ensurePolicyToolsScript = async ({ syncStorage = true } = {}) => {
-    const script = buildPolicyToolsScript();
-    const res = await runShellWithRoot(`
+    let res = await runShellWithRoot(`
         set -e
         TARGET=${shellQuote(CLASH_POLICY_SCRIPT)}
         VERSION_MARKER=${shellQuote(`# KANO_POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}`)}
@@ -8355,7 +8362,18 @@ EOF_KANO_SERVICE
           echo "POLICY_SCRIPT_UNCHANGED=1"
           exit 0
         fi
-        STAGE="$TARGET.kano_new.$$"
+        mkdir -p ${shellQuote(`${CLASH_DIR}/Scripts`)} ${shellQuote(CLASH_POLICY_DIR)}
+        `, 10000);
+    if (res.success && !String(res.content || '').includes('POLICY_SCRIPT_UNCHANGED=1')) {
+      const staged = await stageTextBesideTarget(CLASH_POLICY_SCRIPT, buildPolicyToolsScript(), '策略脚本');
+      if (!staged.ok) {
+        createToast(`策略脚本暂存失败<br>${safeTextToHtml(staged.message || '')}`, 'red', 8000);
+        return false;
+      }
+      res = await runShellWithRoot(`
+        set -e
+        TARGET=${shellQuote(CLASH_POLICY_SCRIPT)}
+        STAGE=${shellQuote(staged.stagePath)}
         CHECK_OUT=/data/kano_policy_script_check.out
         cleanup_policy_script() {
           rc=$?
@@ -8364,10 +8382,7 @@ EOF_KANO_SERVICE
           exit "$rc"
         }
         trap cleanup_policy_script EXIT
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Scripts`)} ${shellQuote(CLASH_POLICY_DIR)}
-        cat > "$STAGE" <<'KANO_POLICY_TOOLS_EOF'
-${script}
-KANO_POLICY_TOOLS_EOF
+        [ -s "$STAGE" ] || { echo POLICY_SCRIPT_STAGE_MISSING; exit 1; }
         chmod 755 "$STAGE"
         if [ -x /system/bin/sh ] && /system/bin/sh -n /dev/null >/dev/null 2>&1; then
           /system/bin/sh -n "$STAGE" >"$CHECK_OUT" 2>&1 || {
@@ -8383,7 +8398,8 @@ KANO_POLICY_TOOLS_EOF
         trap - EXIT
         rm -f "$CHECK_OUT" 2>/dev/null || true
         echo "POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}"
-        `);
+        `, 20000);
+    }
     if (!res.success) {
       createToast(`\u5199\u5165\u7b56\u7565\u5de5\u5177\u811a\u672c\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
@@ -9182,15 +9198,30 @@ KANO_POLICY_TOOLS_EOF
     return true;
   };
 
-  const restartClash = async ({ skipCheck = false } = {}) => {
+  const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false } = {}) => {
     if (!skipCheck && !(await ensureReady())) return false;
     createToast(
-      '\u6b63\u5728\u91cd\u542f\u6838\u5fc3...',
+      preferReload ? '正在应用网络设置…' : '\u6b63\u5728\u91cd\u542f\u6838\u5fc3...',
       'yellow',
     );
     const sanitized = await sanitizeConfigForTProxy({ showToast: false });
     if (!sanitized) {
       createToast("配置校验失败，已取消重启，未使用旧 YAML 冒充新模式。", "red", 10000);
+      return false;
+    }
+    if (preferReload && await getCorePid()) {
+      const reloaded = await reloadConfigHot(await buildControllerInfo({ fresh: true }));
+      if (reloaded.success) {
+        const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
+        const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent({ ensureScript: !policyReady });
+        if (trafficModeOk && rulesOk) return true;
+        await networkRescue({ stopService: true, showOutput: false, reason: '网络设置热加载检查失败' });
+        return false;
+      }
+    }
+    const prepared = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!prepared.ok) {
+      createToast(safeTextToHtml(prepared.message || '无法保存启动前配置'), 'red', 9000);
       return false;
     }
     const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
@@ -9206,8 +9237,8 @@ KANO_POLICY_TOOLS_EOF
       return false;
     }
     if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
-    const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-    const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent();
+    const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode, prepared.value);
+    const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent({ ensureScript: !policyReady });
     if (!trafficModeOk || !rulesOk) {
       const failedParts = [
         trafficModeOk ? '' : '流量模式同步',

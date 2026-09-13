@@ -1577,7 +1577,10 @@ function runFor(label, file) {
         uninstallSource.includes("verifyCoreStoppedCmd('UNINSTALL')")
           && uninstallSource.includes('verifyGeneratedRulesFlushedCmd()')
           && uninstallSource.includes('removePluginOwnedArtifactsCmd()')
+          && uninstallSource.includes('常规停止未完成，正在强制停止核心')
           && source.includes('UNINSTALL_ARTIFACT_REMAINS:')
+          && source.includes('/data/kano_boot_backup_*')
+          && source.includes('/data/media/0/.config/mihomo')
           && !uninstallSource.includes('rm -f /data/kano_*'),
         true,
         'uninstall verifies cleanup and only removes plugin-owned artifact paths',

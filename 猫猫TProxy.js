@@ -455,8 +455,8 @@ async function kprReadConnected(config = {}, options = {}) {
   return addresses;
 }
 
-async function kprShapeRuntimeConfig(value) {
-  const options = await kprReadOptions();
+async function kprShapeRuntimeConfig(value, options = null) {
+  options = options || await kprReadOptions();
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
   return KPR.runtime(value, options, connected);
@@ -464,7 +464,7 @@ async function kprShapeRuntimeConfig(value) {
 
 async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {
   try {
-    const value = yamlPath === CLASH_CONFIG ? await kprShapeRuntimeConfig(objectValue) : objectValue;
+    const value = yamlPath === CLASH_CONFIG ? await kprShapeRuntimeConfig(objectValue, options.runtimeOptions) : objectValue;
     return await kprBaseWriteYamlObjectAtomic(yamlPath, value, options);
   } catch (error) {
     return { ok: false, content: String(error && error.message || error), shell: null };
@@ -665,7 +665,7 @@ function verifyGeneratedRulesFlushedCmd() {
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.3-kpr2';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.4-kpr2';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
@@ -690,7 +690,7 @@ function verifyGeneratedRulesFlushedCmd() {
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.6-kpr-dualstack-2';
+  const POLICY_SCRIPT_VERSION = '6.6-kpr-dualstack-3';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -1189,13 +1189,18 @@ if [ "$action" = boot ]; then
 fi
 case "$action" in start|restart) validate_config || exit $? ;; esac
 
+policy_rc=0
 case "$action" in
   stop|restart)
     if [ -x ${CLASH_POLICY_SCRIPT} ]; then
-      ${CLASH_POLICY_SCRIPT} flush || { echo "SERVICE_POLICY_FLUSH_FAILED"; exit 1; }
+      ${CLASH_POLICY_SCRIPT} flush || { policy_rc=$?; echo "SERVICE_POLICY_FLUSH_FAILED"; }
     fi
     ;;
 esac
+if [ "$policy_rc" -ne 0 ]; then
+  "$binary" stop
+  exit "$policy_rc"
+fi
 "$binary" "$@"
 controller_rc=$?
 [ "$controller_rc" -eq 0 ] || exit "$controller_rc"
@@ -6294,7 +6299,7 @@ KANO_WRITE_CHECK_EOF
       fi
       echo "CONFIG_TEST_STATE=valid"
       if [ ${shellQuote(stopFirst ? '1' : '0')} = "1" ]; then
-        "$SERVICE" stop >/dev/null 2>&1 || true
+        "$SERVICE" stop || { echo "START_STATE=stop_failed"; exit 5; }
         sleep 1
       fi
 
@@ -7064,20 +7069,15 @@ KANO_WRITE_CHECK_EOF
   let lastSanitizedTrafficMode = 'tproxy';
 
   const sanitizeConfigForTProxy = async ({ showToast = false, errorToast = true } = {}) => {
+    let runtimeOptions;
+    try {
+      runtimeOptions = await kprReadOptions();
+    } catch (error) {
+      if (errorToast) createToast(safeTextToHtml(error.message || String(error)), 'red', 9000);
+      return false;
+    }
     const runtimeRes = await runShellWithRoot(`
-        OPTIONS=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
-        traffic_mode="$(grep -E '^traffic_mode=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
-        if [ -z "$traffic_mode" ]; then
-          legacy_transparent="$(grep -E '^transparent=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
-          [ "$legacy_transparent" = 'off' ] && traffic_mode=off || traffic_mode=tproxy
-        fi
-        case "$traffic_mode" in tproxy|tun|off) ;; *) traffic_mode=tproxy ;; esac
-        ipv6_mode="$(grep -E '^ipv6=' "$OPTIONS" 2>/dev/null | tail -n 1 | cut -d= -f2-)"
-        [ "$ipv6_mode" = 'on' ] || ipv6_mode=off
         if [ -c /dev/net/tun ] || [ -c /dev/tun ]; then tun_device=1; else tun_device=0; fi
-        echo "traffic_mode=$traffic_mode"
-        echo "ipv6_mode=$ipv6_mode"
-        ${readF50TproxyPortCmd()}
         echo "tun_device=$tun_device"
         echo "config_source=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)"
         `, 15 * 1000);
@@ -7090,10 +7090,9 @@ KANO_WRITE_CHECK_EOF
       const index = line.indexOf('=');
       if (index > 0) values[line.slice(0, index).trim()] = line.slice(index + 1).trim();
     });
-    const trafficMode = ['tproxy', 'tun', 'off'].includes(values.traffic_mode) ? values.traffic_mode : 'tproxy';
-    lastSanitizedTrafficMode = trafficMode;
-    const ipv6Enabled = values.ipv6_mode == 'on';
-    const tproxyPort = getPositivePort(values.tproxy_port, 7895);
+    const trafficMode = runtimeOptions.traffic_mode;
+    const ipv6Enabled = runtimeOptions.ipv6 == 'on';
+    const tproxyPort = getPositivePort(runtimeOptions.tproxy_port, 7895);
     if (trafficMode == 'tun' && values.tun_device != '1') {
       if (errorToast) createToast('配置自检失败：TUN 模式需要 /dev/net/tun 或 /dev/tun，原配置未改写', 'red', 9000);
       return false;
@@ -7160,11 +7159,13 @@ KANO_WRITE_CHECK_EOF
       label: 'config.yaml',
       backup: true,
       backupTag: 'f50_sanitize',
+      runtimeOptions,
     });
     if (!write.ok) {
       if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
       return false;
     }
+    lastSanitizedTrafficMode = trafficMode;
     if (showToast) {
       createToast(
         `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '开启' : '关闭'} · 端口 ${tproxyPort}`,
@@ -7900,7 +7901,7 @@ EOF_KANO_SERVICE
     '  KEY="$1"',
     '  DEF="$2"',
     '  VAL=""',
-    '  [ -f "$OPTIONS_FILE" ] && VAL="$(grep -E "^${KEY}=" "$OPTIONS_FILE" 2>/dev/null | tail -n 1 | cut -d= -f2-)"',
+    '  [ -f "$OPTIONS_FILE" ] && VAL="$(grep -E "^${KEY}=" "$OPTIONS_FILE" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\\r")"',
     '  [ -n "$VAL" ] && echo "$VAL" || echo "$DEF"',
     '}',
     'norm_mac() {',
@@ -11555,7 +11556,7 @@ ${expectedProviderChecks}
       const reloadRes = await reloadConfigHot(controllerInfo);
       if (reloadRes.success) {
         const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-        const rulesOk = await reapplyPolicyRulesSilent();
+        const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent();
         if (trafficModeOk && rulesOk) {
           createToast('config.yaml 已通过结构检查，运行配置和网络策略已生效', 'green', 7000);
           await isMMRunning();
@@ -11566,6 +11567,9 @@ ${expectedProviderChecks}
         const recoveryOk = recoveryReload.success
           && await ensureRuntimeTrafficMode(lastSanitizedTrafficMode)
           && await reapplyPolicyRulesSilent();
+        if (!recoveryOk) {
+          await networkRescue({ stopService: true, showOutput: false, reason: '上传配置回滚失败' });
+        }
         createToast(
           restored && recoveryOk
             ? '新配置运行态检查失败，已恢复写入前配置和网络策略'

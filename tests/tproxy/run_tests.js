@@ -113,7 +113,7 @@ const EXPORTS = [
   'buildManagedRuleProviders', 'isPlainYamlObject',
   'sanitizeSubscriptionSecrets',
   'validateOriginalSubscriptionConfig', 'normalizeSubRuleModeValue', 'parseSubRuleModeFromText',
-  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl', 'KPR', 'normalizeManagedTemplateObject', 'kprShapeRuntimeConfig', 'readF50TproxyPortCmd',
+  'normalizeSubSourceList', 'normalizeStoredSubSourceList', 'isHttpUrl', 'KPR', 'normalizeManagedTemplateObject', 'kprShapeRuntimeConfig', 'readF50TproxyPortCmd', 'parsePolicyOptionsText',
 ];
 const RUNTIME_EXPORTS = [
   'parseRuntimePreflightResult', 'deriveRuntimeState', 'classifyMihomoApiError',
@@ -260,6 +260,8 @@ function runFor(label, file) {
     const savedConfig = { ...originalConfig, tun: { stack: 'gvisor', mtu: 1400 }, rules: ['GEOIP,private,DIRECT', ...originalConfig.rules],
       'rule-providers': { kano_direct_domain: { type: 'file', behavior: 'domain', path: './user-rules.yaml' } } };
     let sanitizedConfig;
+    let policyText = 'traffic_mode=tproxy\r\nipv6=off\r\ndns_hijack=on\r\n';
+    let optionsReads = 0;
     let configSource = 'subscription_original';
     const sanitizeStart = source.indexOf('  const sanitizeConfigForTProxy = async (');
     const sanitizeEnd = source.indexOf('  const buildBootstrapConfig = ', sanitizeStart);
@@ -268,13 +270,14 @@ function runFor(label, file) {
       CLASH_CONFIG_SOURCE_FILE: '/source', CLASH_SAFE_REJECT_DOMAIN_FILE: '/managed/reject',
       shellQuote: shellQuoteForTest,
       readF50TproxyPortCmd: api.readF50TproxyPortCmd,
+      kprReadOptions: async () => { optionsReads++; return api.parsePolicyOptionsText(policyText); },
       CLASH_SAFE_DIRECT_DOMAIN_FILE: '/managed/direct', CLASH_SAFE_DIRECT_IP_FILE: '/managed/ip', CLASH_SAFE_PROXY_DOMAIN_FILE: '/managed/proxy',
-      runShellWithRoot: async () => ({ success: true, content: `traffic_mode=tproxy\nipv6_mode=off\ntproxy_port=7895\nconfig_source=${configSource}\n` }),
+      runShellWithRoot: async () => ({ success: true, content: `tun_device=1\nconfig_source=${configSource}\n` }),
       ensurePolicyStorage: async () => ({ ok: true }), readYamlObject: async () => ({ ok: true, value: savedConfig }),
       cloneJsonValue: (v) => JSON.parse(JSON.stringify(v)), getPositivePort: (v) => Number(v),
       applyRequiredF50Fields: api.applyRequiredF50Fields, isPlainYamlObject: api.isPlainYamlObject,
       ensureObjectField: (v, k) => v[k] || (v[k] = {}),
-      writeYamlObjectAtomic: async (_path, config) => { sanitizedConfig = api.KPR.runtime(config, { traffic_mode: 'tproxy', dns_hijack: 'on' }); return { ok: true }; },
+      writeYamlObjectAtomic: async (_path, config, options) => { sanitizedConfig = api.KPR.runtime(config, options.runtimeOptions); return { ok: true }; },
       createToast() {}, lastSanitizedTrafficMode: '',
     });
     chk(await sanitize(), true, '原配置重启适配成功');
@@ -285,6 +288,12 @@ function runFor(label, file) {
     configSource = 'uploaded_config';
     chk(await sanitize(), true, '自定义配置适配成功');
     chk([sanitizedConfig.rules, sanitizedConfig['rule-providers']], [savedConfig.rules, savedConfig['rule-providers']], '自定义规则和规则集路径不再被自动清理或改写');
+    policyText = 'traffic_mode=tun\r\nipv6=on\r\ndns_hijack=on\r\n';
+    optionsReads = 0;
+    chk(await sanitize(), true, 'Windows 换行的 TUN 设置通过自检');
+    chk([sanitizedConfig.tun.enable, sanitizedConfig.ipv6, sanitizedConfig.tun.stack], [true, true, 'gvisor'], '同一份设置用于模式校验和配置写入并保留用户协议栈');
+    chk(optionsReads, 1, '一次配置适配只读取一次网络设置');
+    chk(api.parsePolicyOptionsText('transparent=off\r\n').traffic_mode, 'off', '旧版 transparent 设置保持兼容');
 
     for (const sourceName of ['uploaded_config', 'subscription_original']) {
       const overwrite = loadSubscriptionFunction('overwriteConfigByTemplate', 'readEditableLocalFile', {
@@ -814,6 +823,30 @@ function runFor(label, file) {
     chk(serviceWrapperSyntax.status, 0,
       `generated Clash.Service wrapper passes sh -n${serviceWrapperSyntax.stderr ? `: ${serviceWrapperSyntax.stderr.trim()}` : ''}`);
     const policyTools = api.buildPolicyToolsScript();
+    const stopStart = serviceWrapper.indexOf('policy_rc=0\n');
+    const stopEnd = serviceWrapper.indexOf('controller_rc=$?', stopStart);
+    const stopSegment = serviceWrapper.slice(stopStart, stopEnd)
+      .replaceAll('/data/clash/Scripts/Clash.PolicyTools', 'policy_stub')
+      .replace('[ -x policy_stub ]', 'true');
+    for (const action of ['stop', 'restart']) {
+      const stopped = spawnSync('sh', ['-s', '--', action], {
+        input: `policy_stub() { return 9; }\ncontroller_stub() { echo "CONTROLLER=$1"; }\nbinary=controller_stub\naction=$1\n${stopSegment}`,
+        encoding: 'utf8',
+      });
+      chk([stopped.status, stopped.stdout.includes('CONTROLLER=stop'), stopped.stdout.includes('CONTROLLER=restart')], [9, true, false], `${action} still stops the core when policy cleanup fails and reports failure`);
+    }
+    const stopBeforeStart = source.indexOf('      if [ ${shellQuote(stopFirst ?');
+    const stopBeforeEnd = source.indexOf('\n      fi', stopBeforeStart) + '\n      fi'.length;
+    const failedStop = spawnSync('sh', ['-s'], {
+      input: `service_stub() { return 1; }\nSERVICE=service_stub\n${source.slice(stopBeforeStart, stopBeforeEnd).replace("${shellQuote(stopFirst ? '1' : '0')}", "'1'")}\necho START_REACHED\n`, encoding: 'utf8',
+    });
+    chk([failedStop.status, failedStop.stdout.trim()], [5, 'START_STATE=stop_failed'], 'restart aborts before starting a new core when service stop fails');
+    const getOptStart = policyTools.indexOf('\nget_opt() (') + 1;
+    const getOpt = policyTools.slice(getOptStart, policyTools.indexOf('\n)', getOptStart) + 2);
+    const parsedOptions = spawnSync('sh', ['-s'], {
+      input: `OPTIONS_FILE=tests/tproxy/run_tests.js\ngrep() { printf 'traffic_mode=tun\\r\\n'; }\n${getOpt}\nget_opt traffic_mode tproxy\n`, encoding: 'utf8', cwd: ROOT,
+    });
+    chk([parsedOptions.status, parsedOptions.stdout], [0, 'tun\n'], 'policy shell strips Windows carriage returns from mode values');
     const policySyntax = spawnSync('sh', ['-n'], {
       input: policyTools,
       encoding: 'utf8',
@@ -921,7 +954,7 @@ function runFor(label, file) {
     );
     chk(
       serviceStartSource.indexOf('"$CORE" -t -f "$CONFIG"')
-        < serviceStartSource.indexOf('"$SERVICE" stop >/dev/null 2>&1 || true')
+        < serviceStartSource.indexOf('"$SERVICE" stop || { echo "START_STATE=stop_failed"; exit 5; }')
         && serviceStartSource.includes('KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start')
         && restartSource.includes("startState == 'config_invalid'")
         && restartSource.includes('未停止当前正在运行的核心'),
@@ -1962,6 +1995,9 @@ async function runPrivateRoutingRegression(file) {
   chk(base.tun, userTun, 'mode adaptation leaves the input config untouched');
   const active = api.KPR.runtime(idle, { traffic_mode: 'tun', ipv6: 'on' });
   chk([active.tun.stack, active.tun.mtu, active.tun.device], ['gvisor', 1400, 'UserTun'], 'TUN restores custom stack, MTU and device');
+  const liteTun = { ...userTun, 'route-exclude-address-set': ['cn_ip'], 'endpoint-independent-nat': true };
+  const liteActive = api.KPR.runtime(api.KPR.runtime({ ...base, tun: liteTun }, { traffic_mode: 'tproxy' }), { traffic_mode: 'tun' });
+  chk([liteActive.tun['route-exclude-address-set'], liteActive.tun['endpoint-independent-nat']], [['cn_ip'], true], 'TUN preserves uploaded Lite config route sets and NAT options');
   chk([active.tun.enable, active.tun['auto-route'], active.tun['auto-redirect'], active.tun['dns-hijack']], [true, true, false, []], 'TUN retains required F50 routing and DNS interception');
   const stopped = api.KPR.runtime(active, { traffic_mode: 'off' });
   chk([stopped.tun, stopped['x-kano-tun'].before], [undefined, userTun], 'disabling capture restores and stores the original TUN settings');
@@ -2062,6 +2098,28 @@ async function runPrivateRoutingRegression(file) {
   });
   chk(await checkedRestart({ skipCheck: true }), false, 'restart reports a missing TProxy listener as failure');
   chk(restartCalls, ['stop and rescue'], 'restart listener failure stops capture and skips policy application');
+  const pluginSource = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const uploadStart = pluginSource.indexOf('      const reloadRes = await reloadConfigHot(controllerInfo);', pluginSource.indexOf('const commitUploadedConfigWithValidation ='));
+  const uploadEnd = pluginSource.indexOf("      createToast('热加载失败", uploadStart);
+  const uploadCalls = [];
+  let recovered = false;
+  let modeChecks = 0;
+  const checkUpload = vm.runInNewContext(`(async () => { ${pluginSource.slice(uploadStart, uploadEnd)} })`, {
+    controllerInfo: null, lastSanitizedTrafficMode: 'tun',
+    reloadConfigHot: async () => ({ success: true }),
+    ensureRuntimeTrafficMode: async () => ++modeChecks > 1 && recovered,
+    reapplyPolicyRulesSilent: async () => { uploadCalls.push('policy'); return true; },
+    rollbackUploadedConfig: async () => { uploadCalls.push('restore'); return true; },
+    networkRescue: async ({ stopService }) => { uploadCalls.push(stopService ? 'stop and rescue' : 'rescue'); },
+    createToast() {}, isMMRunning: async () => {},
+  });
+  chk(await checkUpload(), false, 'upload fails when runtime mode and restored runtime cannot be verified');
+  chk(uploadCalls, ['restore', 'stop and rescue'], 'failed upload never applies policy to a mismatched core and rescues failed recovery');
+  uploadCalls.length = 0;
+  modeChecks = 0;
+  recovered = true;
+  chk(await checkUpload(), false, 'failed upload remains a failure after successful recovery');
+  chk(uploadCalls, ['restore', 'policy'], 'verified recovery reapplies only the restored policy without stopping the working core');
 }
 
 (async () => {

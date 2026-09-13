@@ -6028,7 +6028,7 @@ KANO_WRITE_CHECK_EOF
         `;
 
   const verifyCoreStoppedCmd = (marker = 'KANO') => `
-        core_pid="$(pidof Clash.Core 2>/dev/null || pidof Clash 2>/dev/null || pidof mihomo 2>/dev/null || true)"
+        core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
         if [ -n "$core_pid" ]; then
           echo "${marker}_CORE_STILL_RUNNING:$core_pid"
           echo "KANO_ERROR_STAGE=service_stop"
@@ -6052,6 +6052,7 @@ KANO_WRITE_CHECK_EOF
           /data/kano_policy_boot.log \
           /data/kano_policy_boot.previous.log \
           /data/kano_clash_config_test.log \
+          /data/kano_clash_start.log \
           /data/kano_clash_repair_zip_test.out \
           /data/kano_clash_repair_unzip.out \
           /data/kano_clash_repair_config.err \
@@ -6081,8 +6082,16 @@ KANO_WRITE_CHECK_EOF
           /data/kano_sub_persist.* \
           /data/kano_template_upload_* \
           /data/kano_subscription_save_* \
-          /data/kano_config_package_restore_*; do
-          [ -d "$artifact_dir" ] && rm -rf "$artifact_dir" 2>/dev/null || true
+          /data/kano_config_package_restore_* \
+          /data/kano_boot_backup_* \
+          /data/kano_helper_backup_* \
+          /data/kano_clash_user_backup.* \
+          /data/kano_policy_test_* \
+          /data/kano_reinstall_backup \
+          /data/kano_diag_runtime \
+          /data/kano_iptables_dns \
+          /data/media/0/.config/mihomo; do
+          [ -e "$artifact_dir" ] && rm -rf "$artifact_dir" 2>/dev/null || true
         done
         rm -rf ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} 2>/dev/null || true
         artifact_cleanup_failed=0
@@ -6097,6 +6106,8 @@ KANO_WRITE_CHECK_EOF
           ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
           ${shellQuote(KANO_YQ_RUNTIME_DIR)} \
           ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} \
+          /data/kano_reinstall_backup \
+          /data/media/0/.config/mihomo \
           ${shellQuote(LOG_FILE)}; do
           if [ -e "$artifact" ]; then
             echo "UNINSTALL_ARTIFACT_REMAINS:$artifact"
@@ -7736,9 +7747,18 @@ EOF_KANO_SERVICE
           uninstall_rc=0
           echo "\u5378\u8f7d\u7b56\u7565: \u4e0d\u5907\u4efd\uff0c\u76f4\u63a5\u5220\u9664\u6240\u6709\u732b\u732b\u6570\u636e"
           if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-            ${shellQuote(CLASH_SERVICE)} stop 2>&1 || uninstall_rc=1
+            ${shellQuote(CLASH_SERVICE)} stop 2>&1 || echo "常规停止返回失败，继续检查核心状态"
           fi
           sleep 1
+          core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
+          if [ -n "$core_pid" ]; then
+            echo "常规停止未完成，正在强制停止核心"
+            for pid in $core_pid; do kill "$pid" 2>/dev/null || true; done
+            sleep 1
+            core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
+            for pid in $core_pid; do kill -9 "$pid" 2>/dev/null || true; done
+            sleep 1
+          fi
           ${verifyCoreStoppedCmd('UNINSTALL')} || uninstall_rc=1
           ${removeBootLinesCmd()}
           ${flushGeneratedRulesCmd()}

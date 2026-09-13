@@ -6106,7 +6106,14 @@ KANO_WRITE_CHECK_EOF
           ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
           ${shellQuote(KANO_YQ_RUNTIME_DIR)} \
           ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} \
+          /data/kano_clash_start.log \
+          /data/kano_boot_backup_* \
+          /data/kano_helper_backup_* \
+          /data/kano_clash_user_backup.* \
+          /data/kano_policy_test_* \
           /data/kano_reinstall_backup \
+          /data/kano_diag_runtime \
+          /data/kano_iptables_dns \
           /data/media/0/.config/mihomo \
           ${shellQuote(LOG_FILE)}; do
           if [ -e "$artifact" ]; then

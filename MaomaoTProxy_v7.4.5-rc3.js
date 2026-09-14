@@ -657,7 +657,7 @@ norm_mac() (
      if(s ~ /^[0-9A-F]+$/ && length(s)==12)valid=1;
      if(index(s,":")||index(s,"-")){sep=index(s,":")?":":"-";n=split(s,a,sep);if(n==6){valid=1;for(i=1;i<=6;i++)if(length(a[i])!=2||a[i]!~/^[0-9A-F]+$/)valid=0}}
      if(index(s,".")){n=split(s,a,".");if(n==3){valid=1;for(i=1;i<=3;i++)if(length(a[i])!=4||a[i]!~/^[0-9A-F]+$/)valid=0}}
-     if(!valid)exit 1;gsub(/[:.-]/,"",s);for(i=1;i<=12;i+=2)printf "%s%s",substr(s,i,2),i==11?"\\n":":";
+     if(!valid)exit 1;gsub(/[:.-]/,"",s);for(i=1;i<=12;i+=2)printf "%s%s",substr(s,i,2),(i==11?"\\n":":");
     }'
 )
 is_ipv4() (
@@ -815,18 +815,22 @@ apply_dns() (
   dns_hijack="$(get_opt dns_hijack off)"
   dns_port="$(get_opt dns_port 1053)"
   echo "$dns_port" | grep -Eq "^[0-9]{1,5}$" || dns_port=1053
-  if [ "$dns_hijack" != "on" ]; then
-    remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"
-    return 0
+  if [ "$dns_hijack" = "on" ]; then
+    is_port_listening "$dns_port" "$FAMILY" || { echo "DNS_LISTENER_MISSING IPv$FAMILY port=$dns_port"; return 1; }
   fi
-  is_port_listening "$dns_port" "$FAMILY" || { echo "DNS_LISTENER_MISSING IPv$FAMILY port=$dns_port"; return 1; }
   "$IPT" -t nat -L >/dev/null 2>&1 || { echo "DNS_NAT_UNAVAILABLE IPv$FAMILY"; return 1; }
   ACTIVE="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
   NEXT="$(prepare_inactive_chain "$IPT" nat "$ACTIVE" "$DNS_CHAIN_A" "$DNS_CHAIN_B")" || { echo "DNS_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }
   add_source_accepts "$IPT" nat "$NEXT" "$FAMILY" || { echo "DNS_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }
-  kpr_add_dns_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1
-  "$IPT" -t nat -A "$NEXT" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_UDP_REDIRECT_FAILED IPv$FAMILY"; return 1; }
-  "$IPT" -t nat -A "$NEXT" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_TCP_REDIRECT_FAILED IPv$FAMILY"; return 1; }
+  if [ "$dns_hijack" = "on" ]; then
+    kpr_add_dns_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1
+    "$IPT" -t nat -A "$NEXT" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_UDP_REDIRECT_FAILED IPv$FAMILY"; return 1; }
+    "$IPT" -t nat -A "$NEXT" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_TCP_REDIRECT_FAILED IPv$FAMILY"; return 1; }
+  else
+    # End NAT processing before the native service's CLASH_DNS hook.
+    "$IPT" -t nat -A "$NEXT" -p udp --dport 53 -j ACCEPT || return 1
+    "$IPT" -t nat -A "$NEXT" -p tcp --dport 53 -j ACCEPT || return 1
+  fi
   "$IPT" -t nat -A "$NEXT" -j RETURN || { echo "DNS_RETURN_FAILED IPv$FAMILY"; return 1; }
   activate_managed_hook "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$NEXT" || { echo "DNS_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }
 )
@@ -870,6 +874,9 @@ verify_family() (
   dns_hijack="$(get_opt dns_hijack off)"
   dns_port="$(get_opt dns_port 1053)"
   echo "$dns_port" | grep -Eq "^[0-9]{1,5}$" || dns_port=1053
+  ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
+  [ -n "$ACTIVE_DNS" ] && hook_is_first "$IPT" nat PREROUTING "$ACTIVE_DNS" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }
+  verify_source_accepts "$IPT" nat "$ACTIVE_DNS" "$FAMILY" || { echo "DNS_BYPASS_VERIFY_FAILED IPv$FAMILY"; return 1; }
   if [ "$dns_hijack" = "on" ]; then
     is_port_listening "$dns_port" "$FAMILY" || return 1
     "$IPT" -t nat -L >/dev/null 2>&1 || return 1
@@ -877,6 +884,9 @@ verify_family() (
     [ -n "$ACTIVE_DNS" ] && hook_is_first "$IPT" nat PREROUTING "$ACTIVE_DNS" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }
     "$IPT" -t nat -C "$ACTIVE_DNS" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }
     "$IPT" -t nat -C "$ACTIVE_DNS" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }
+  else
+    "$IPT" -t nat -C "$ACTIVE_DNS" -p udp --dport 53 -j ACCEPT >/dev/null 2>&1 || { echo "DNS_OFF_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }
+    "$IPT" -t nat -C "$ACTIVE_DNS" -p tcp --dport 53 -j ACCEPT >/dev/null 2>&1 || { echo "DNS_OFF_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }
   fi
   if [ "$(get_opt quic_block off)" = "on" ]; then
     ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"
@@ -1711,11 +1721,12 @@ kano_is_related() (
   PID="$1"
   case "$PID" in ''|*[!0-9]*|1|"$$") exit 1 ;; esac
   [ -r "/proc/$PID/status" ] || exit 1
-  grep -q '^State:.*[ZX]' "/proc/$PID/status" 2>/dev/null && exit 1
   exe="$(readlink "/proc/$PID/exe" 2>/dev/null)"
   case "$exe" in
     ${CLASH_CORE}|'${CLASH_CORE} (deleted)'|${CLASH_DIR}/Tools/kano-f50-helper*|${CLASH_DIR}/Tools/mosdns*|${CLASH_DIR}/Tools/yq_linux_*|${CLASH_DIR}/Scripts/clashctl*) exit 0 ;;
   esac
+  # Only these workers can outlive a cancelled plugin shell request.
+  case "\${exe##*/}" in sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz) ;; *) exit 1 ;; esac
   # The marker is inherited by the plugin's downloads and child processes, not by the host shell.
   task="$(tr '\\0' '\\n' < "/proc/$PID/environ" 2>/dev/null | sed -n 's/^KANO_TPROXY_TASK=mm_/mm_/p' | head -n 1)"
   if [ -n "$task" ] && [ "$task" != "$KANO_TPROXY_TASK" ]; then exit 0; fi
@@ -1730,7 +1741,12 @@ kano_is_related() (
   exit 1
 )
 kano_related_pids() (
-  for p in /proc/[0-9]*; do n="\${p##*/}"; kano_is_related "$n" && printf '%s\\n' "$n"; done
+  for p in /proc/[0-9]*; do
+    # comm is read by the shell; avoid spawning several tools for every Android process.
+    IFS= read -r name < "$p/comm" 2>/dev/null || continue
+    case "$name" in Clash.Core|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|Clash.*) ;; *) continue ;; esac
+    n="\${p##*/}"; kano_is_related "$n" && printf '%s\\n' "$n"
+  done
   exit 0
 )
 kano_verify_related_stopped() (
@@ -1744,11 +1760,8 @@ kano_stop_related() (
     remaining="$(kano_related_pids)"
     [ -n "$remaining" ] || { echo KANO_RELATED_STOPPED; exit 0; }
     for n in $remaining; do kano_is_related "$n" && kill -"$signal" "$n" 2>/dev/null || true; done
-    # A second scan catches a child created just before its parent received TERM.
-    for probe in 1 2 3 4 5 6; do
-      [ -n "$(kano_related_pids)" ] || break
-      sleep 0.2 2>/dev/null || sleep 1
-    done
+    # The next phase rescans once to catch children created before TERM.
+    sleep 0.2 2>/dev/null || sleep 1
   done
   kano_verify_related_stopped
 )
@@ -1849,7 +1862,7 @@ echo TUN_RELEASE_VERIFIED
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.5-rc2';
+  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.5-rc3-dns1';
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
@@ -1874,7 +1887,7 @@ echo TUN_RELEASE_VERIFIED
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '7.4.5-rc2';
+  const POLICY_SCRIPT_VERSION = '7.4.5-rc3-dns1';
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -2421,6 +2434,13 @@ case "$action" in
       if [ -n "$pid" ]; then
         stable=$((stable + 1))
         if [ "$stable" -ge 2 ]; then
+          if [ ! -x ${CLASH_POLICY_SCRIPT} ] || ! ${CLASH_POLICY_SCRIPT} apply; then
+            echo SERVICE_POLICY_APPLY_FAILED
+            "$binary" stop
+            kano_stop_core
+            [ ! -x ${CLASH_POLICY_SCRIPT} ] || ${CLASH_POLICY_SCRIPT} flush
+            exit 8
+          fi
           echo "SERVICE_START_VERIFIED_PID=$pid"
           exit 0
         fi
@@ -7141,6 +7161,8 @@ kano_core_pids() (
   done
   [ "$found" = 0 ] || exit 0
   for p in /proc/[0-9]*; do
+    IFS= read -r name < "$p/comm" 2>/dev/null || continue
+    case "$name" in Clash.Core|mihomo) ;; *) continue ;; esac
     pid="\${p##*/}"
     kano_is_owned_core "$pid" "$1" && printf '%s\\n' "$pid"
   done
@@ -7357,7 +7379,8 @@ const verifyCoreStoppedCmd = (marker = 'KANO') => `(
   try {
     if (stopService) {
       progress.stage('\u7acb\u5373\u7ec8\u6b62\u6838\u5fc3\u3001\u5b88\u62a4\u4e0e\u8f6c\u6362\u8fdb\u7a0b', 0, 3);
-      const stopped = await direct(stopOwnedClashCmd({ stopWatchers: true }), 30000);
+      const stopped = await direct(stopOwnedClashCmd({ stopWatchers: true }), 30000)
+        .catch(error => ({ success: false, content: String(error.message || error) }));
       results.push(stopped.content || 'STOP_NO_OUTPUT');
       if (!stopped.success) {
         success = false;
@@ -7370,7 +7393,7 @@ rc=0
 ${flushGeneratedRulesCmd()} || rc=1
 ${verifyGeneratedRulesFlushedCmd()} || rc=1
 ${verifyNativeTrafficReleasedCmd()} || rc=1
-exit "$rc"`, 45000);
+exit "$rc"`, 45000).catch(error => ({ success: false, content: String(error.message || error) }));
     results.push(flushed.content || 'FLUSH_NO_OUTPUT');
     success = success && !!flushed.success;
     if (stopService) {

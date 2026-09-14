@@ -76,6 +76,78 @@ function runRc3Regression(file) {
     'rc3 decodes escaped apostrophes in single-quoted YAML scalars');
 }
 
+async function runRc3NetworkRegression(file) {
+  const { api } = loadPlugin(file, async () => ({ success: true, content: '' }), ['buildPolicyToolsScript', 'buildServiceWrapperScript']);
+  const policy = api.buildPolicyToolsScript();
+  const functions = policy.slice(0, policy.lastIndexOf('\ncase "$1" in'));
+  const stubs = `
+DNS_TEST_LOG=$(mktemp)
+trap 'rm -f "$DNS_TEST_LOG"' EXIT
+get_opt() { case "$1" in dns_hijack) echo "$DNS_TEST_MODE";; *) echo "$2";; esac; }
+normalize_sources() { echo 'src 192.0.2.8/32'; }
+managed_hook_target() { echo TEST_DNS; }
+prepare_inactive_chain() { echo TEST_DNS; }
+activate_managed_hook() { echo "HOOK $3 $7"; }
+hook_is_first() { return 0; }
+is_port_listening() { echo LISTENER_CHECK >&2; }
+kpr_add_dns_exceptions() { return 0; }
+ipt() { printf '%s\\n' "$*" >> "$DNS_TEST_LOG"; }
+`;
+  for (const mode of ['off', 'on']) {
+    const result = spawnSync('sh', ['-s'], { input: functions + stubs + `\nDNS_TEST_MODE=${mode}\napply_dns ipt 4\nrc=$?; cat "$DNS_TEST_LOG"; exit "$rc"`, encoding: 'utf8' });
+    chk(result.status, 0, `rc3 DNS ${mode} policy builds successfully`);
+    chk(result.stdout.includes('-s 192.0.2.8/32 -j ACCEPT'), true, `rc3 DNS ${mode} exempts bypassed devices before native DNS rules`);
+    chk(result.stdout.includes('HOOK PREROUTING TEST_DNS'), true, `rc3 DNS ${mode} installs its guard before the native service hook`);
+    for (const proto of ['udp', 'tcp']) {
+      const target = mode === 'on' ? 'REDIRECT --to-ports 1053' : 'ACCEPT';
+      chk(result.stdout.includes(`-p ${proto} --dport 53 -j ${target}`), true, `rc3 DNS ${mode} applies menu selection to ${proto}`);
+    }
+    chk(result.stderr.includes('LISTENER_CHECK'), mode === 'on', `rc3 DNS ${mode} checks the Mihomo listener only when needed`);
+  }
+  const missingGuard = spawnSync('sh', ['-s'], {
+    input: functions + stubs + '\nDNS_TEST_MODE=off\nipt() { case "$*" in *"--dport 53 -j ACCEPT") return 1;; esac; return 0; }\nverify_family ipt 4', encoding: 'utf8',
+  });
+  chk(missingGuard.status !== 0 && missingGuard.stdout.includes('DNS_OFF_UDP_VERIFY_FAILED'), true,
+    'rc3 rejects DNS-off verification when native DNS interception is not guarded');
+  const mac = spawnSync('sh', ['-s'], { input: functions + '\nnorm_mac aa-bb-cc-dd-ee-ff', encoding: 'utf8' });
+  chk(mac.stdout.trim(), 'AA:BB:CC:DD:EE:FF', 'rc3 shell MAC normalization preserves bypass entries');
+
+  const service = api.buildServiceWrapperScript();
+  const startPolicy = service.slice(service.lastIndexOf('case "$action" in\n  start|restart)'))
+    .replaceAll('/data/clash/Scripts/Clash.PolicyTools', 'policy_stub')
+    .replaceAll('[ ! -x policy_stub ]', 'false');
+  for (const policyRc of [0, 1]) {
+    const result = spawnSync('sh', ['-s'], {
+      input: `action=start\nbinary=controller_stub\nfind_runtime_pid() { echo 123; }\nsleep() { :; }\ncontroller_stub() { echo "NATIVE=$1"; }\nkano_stop_core() { echo CORE_STOP; }\npolicy_stub() { echo "POLICY=$1"; [ "$1" != apply ] || return ${policyRc}; }\n${startPolicy}`,
+      encoding: 'utf8',
+    });
+    chk([result.status, result.stdout.includes('SERVICE_START_VERIFIED_PID=123')], [policyRc ? 8 : 0, !policyRc],
+      `rc3 startup reports success only after menu policy succeeds (policy rc=${policyRc})`);
+    if (policyRc) chk(['NATIVE=stop', 'CORE_STOP', 'POLICY=flush'].every(marker => result.stdout.includes(marker)), true,
+      'rc3 failed startup policy stops the core and releases native interception');
+  }
+
+  const source = fs.readFileSync(file, 'utf8');
+  const start = source.indexOf('const networkRescue = async');
+  const end = source.indexOf('\n};', start) + 3;
+  const calls = [];
+  const context = {
+    recoveryInProgress: false, activeCriticalOperation: null, KANO_INSTALL_TOOLBOX_BIN: '/test/bin',
+    hostRunShellWithRoot: async (script) => { calls.push(script); if (calls.length === 1) throw new Error('stop request timed out'); return { success: true, content: 'ok' }; },
+    createOperationProgress: () => ({ stage() {}, finish() {} }),
+    stopOwnedClashCmd: () => 'STOP', flushGeneratedRulesCmd: () => 'FLUSH',
+    verifyGeneratedRulesFlushedCmd: () => 'CHECK_RULES', verifyNativeTrafficReleasedCmd: () => 'CHECK_NATIVE',
+    buildRelatedProcessFunctions: () => 'CHECK_PROCESSES',
+    createToast() {}, safeTextToHtml: x => x, showInfoDialog() {}, invalidateStatusSnapshot() {},
+    invalidateBinarySnapshot() {}, syncCriticalOperationStatus() {},
+    runtimePreflightCache: null, runtimePreflightLoadPromise: null,
+  };
+  vm.runInNewContext(source.slice(start, end) + '\nglobalThis.rescue = networkRescue;', context);
+  chk(await context.rescue({ showOutput: false }), false, 'rc3 reports stop timeout as an incomplete recovery');
+  chk(calls.some(x => x.includes('FLUSH')) && calls.some(x => x.includes('CHECK_PROCESSES')), true,
+    'rc3 still releases capture rules and checks remaining processes after a stop request throws');
+}
+
 // ---- 最小 DOM / 宿主打桩 ------------------------------------------------
 function makeElement(tag = 'div') {
   const el = {
@@ -2259,6 +2331,7 @@ async function runPrivateRoutingRegression(file) {
   await runFor('统一版', FILES.plugin);
   await runPrivateRoutingRegression(FILES.plugin);
   runRc3Regression(FILES.rc3);
+  await runRc3NetworkRegression(FILES.rc3);
   console.log(`\n================ 结果: ${pass} 通过 / ${fail} 失败 ================`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('harness error:', e.message); process.exit(2); });

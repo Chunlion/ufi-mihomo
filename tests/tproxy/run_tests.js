@@ -77,7 +77,19 @@ function runRc3Regression(file) {
 }
 
 async function runRc3NetworkRegression(file) {
-  const { api } = loadPlugin(file, async () => ({ success: true, content: '' }), ['buildPolicyToolsScript', 'buildServiceWrapperScript']);
+  const { api } = loadPlugin(file, async () => ({ success: true, content: '' }), ['KPR', 'buildPolicyToolsScript', 'buildServiceWrapperScript']);
+  const original = { sniffer: { enable: true, 'parse-pure-ip': false, 'override-destination': false, 'skip-domain': ['+.apple.com'] } };
+  const options = { traffic_mode: 'tproxy', dns_hijack: 'off' };
+  const adapted = api.KPR.runtime(original, options);
+  chk(adapted.sniffer, { ...original.sniffer, 'parse-pure-ip': true, 'override-destination': true },
+    'rc3 unmanaged DNS recovers domains and destinations for intercepted IP connections');
+  chk(api.KPR.runtime(adapted, options), adapted, 'rc3 DNS-independent sniffing adaptation is idempotent');
+  chk(api.KPR.runtime(adapted, { traffic_mode: 'off' }), original,
+    'rc3 disabling interception restores the original sniffing choices');
+  chk(api.KPR.runtime(adapted, { ...options, dns_hijack: 'on' }).sniffer, original.sniffer,
+    'rc3 managed DNS restores template sniffing choices');
+  chk(api.KPR.runtime({ sniffer: { enable: false } }, options).sniffer, { enable: false },
+    'rc3 preserves explicitly disabled sniffing');
   const policy = api.buildPolicyToolsScript();
   const functions = policy.slice(0, policy.lastIndexOf('\ncase "$1" in'));
   const stubs = `

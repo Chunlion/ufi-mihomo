@@ -197,7 +197,7 @@ function createPrivateRouteLogic() {
     if (own(out, 'tun') && !isMap(out.tun)) delete out.tun;
     const originalTun = own(out, 'tun') ? clone(out.tun) : null;
     const networkMetaKey = 'x-kano-network';
-    const networkPaths = ['ipv6', 'allow-lan', 'bind-address', 'tproxy-port', 'dns.enable', 'dns.listen', 'dns.ipv6'];
+    const networkPaths = ['ipv6', 'allow-lan', 'bind-address', 'tproxy-port', 'dns.enable', 'dns.listen', 'dns.ipv6', 'sniffer.parse-pure-ip', 'sniffer.override-destination'];
     if (own(out, 'dns') && !isMap(out.dns)) throw new Error('dns must be an object');
     const previousNetwork = out[networkMetaKey];
     if (previousNetwork != null) {
@@ -242,6 +242,10 @@ function createPrivateRouteLogic() {
       setNetwork('dns.enable', true);
       setNetwork('dns.listen', (ipv6 ? '[::]:' : '0.0.0.0:') + checkPort(options.dns_port ?? 1053, 'DNS'));
       setNetwork('dns.ipv6', ipv6);
+    }
+    if ((mode === 'tproxy' || mode === 'tun') && !dnsManaged && isMap(out.sniffer) && out.sniffer.enable === true) {
+      setNetwork('sniffer.parse-pure-ip', true);
+      setNetwork('sniffer.override-destination', true);
     }
     // Traffic interception belongs to the selected F50 mode, not an imported template.
     delete out['redir-port'];

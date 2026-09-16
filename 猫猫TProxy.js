@@ -1,6 +1,1018 @@
 //<script>
-// 猫猫TProxy v7.4.4-kpr.2 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
+// 猫猫TProxy v8.0.0-compat.2.3 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
+const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
+const F50_FIXED_PROFILES = {"tproxy4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":7895,"tun":{"enable":false},"secret":"123456"},"tproxy6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":7895,"tun":{"enable":false},"secret":"123456"},"tun4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"mtu":1500,"stack":"mixed","strict-route":false},"secret":"123456"},"tun6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"inet6-address":["fdfe:dcba:9876::1/126"],"mtu":1500,"stack":"mixed","strict-route":false},"secret":"123456"},"off4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"enable":false},"secret":"123456"},"off6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"enable":false},"secret":"123456"}};
+for (const profile of Object.values(F50_FIXED_PROFILES)) {
+  profile['external-ui'] = 'WebUI/zashboard';
+  profile['external-ui-url'] = F50_ZASHBOARD_UI_URL;
+  profile['unified-delay'] = true;
+  delete profile['external-ui-name'];
+}
+const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
+const F50_DEFAULT_SECRET = '123456';
+let f50BackendReady = false;
+async function ensureCompatBackend() {
+  if (f50BackendReady) return true;
+  const r = await runShellWithRoot(`set -e
+[ "$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }
+sh /data/clash/Scripts/Clash.Service version`, 5000);
+  f50BackendReady = !!r.success && String(r.content || '').includes('F50_CONTROLLER=8.0.0-compat.2.3');
+  if (!f50BackendReady) createToast('请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
+  return f50BackendReady;
+}
+
+let lastInstallDiagnostic = null;
+function f50Diagnostic(content, fallback = '操作未完成') {
+  const safe = sanitizeSubscriptionSecrets(String(content || ''))
+    .replace(/(?:https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\/\/[^\s"'<>]+/gi, '[URL_REDACTED]')
+    .split(/\r?\n/).map(line => /["']?(?:password|passwd|secret|token|authorization|access_token)["']?\s*[:=]/i.test(line) ? '[SENSITIVE_ERROR_REDACTED]' : line).join('\n');
+  const lines = safe.split(/\r?\n/);
+  const get = key => { const row = lines.find(s => s.startsWith(key + '=')); return row ? row.slice(key.length + 1).trim() : ''; };
+  const code = get('F50_INSTALL_CODE') || get('F50_START_CODE') || get('F50_CLEAN_ERROR') || get('KANO_INSTALL_ERROR');
+  const backend = get('F50_INSTALL_CAUSE') || get('F50_ERROR');
+  const cleanup = get('F50_CLEAN_ERROR');
+  const cause = backend || cleanup || code;
+  const labels = {
+    zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
+    unzip_missing: '设备缺少解压程序，安装未执行。',
+    archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
+    unsafe_archive_path: '安装包含越界路径，已拒绝解压。',
+    archive_symlink: '安装包含符号链接，未替换现有组件。',
+    unzip_failed: '安装包解压失败或超时，旧组件尚未替换。',
+    missing_controller: '安装包缺少控制器，旧组件尚未替换。',
+    missing_core: '全新安装需要包含 Mihomo 内核的完整组件包。',
+    controller_not_executable: '控制器无法执行，请检查架构和执行权限。',
+    core_not_executable: 'Mihomo 内核无法执行，请检查架构和执行权限。',
+    yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
+    service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
+    service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
+    controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
+    service_protocol_mismatch: '服务脚本与控制器不配套。',
+    panel_candidate_rejected: '组件包中的面板不是有效 Zashboard，已保留原面板。',
+    panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
+    missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
+    invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTPS 订阅地址。',
+    invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
+    configuration_missing: '组件包没有初始配置，原安装保持不变。',
+    old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
+    old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
+    installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
+    preserve_user_data_failed: '保留用户配置失败，已取消安装。',
+    commit_failed: '组件目录替换失败，请查看回滚结果。',
+    network_apply_failed: '\u7f51\u7edc\u63a5\u7ba1\u5e94\u7528\u5931\u8d25\uff0c\u8bf7\u67e5\u770b\u5177\u4f53\u9632\u706b\u5899\u6216\u8def\u7531\u9519\u8bef\u3002',
+    service_failed: '\u670d\u52a1\u811a\u672c\u6267\u884c\u5931\u8d25\u3002',
+    start_timeout: '\u6838\u5fc3\u542f\u52a8\u8d85\u65f6\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
+    activation_unverified: '\u670d\u52a1\u672a\u8fd4\u56de\u542f\u52a8\u786e\u8ba4\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
+    activation_failed: '\u65b0\u7ec4\u4ef6\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u67e5\u770b\u540e\u7aef\u5177\u4f53\u539f\u56e0\u3002',
+    interrupted: '安装被中断，未确认完成。',
+    transaction_interrupted: '安装事务未完整执行，请查看设备状态。',
+    config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
+    process_respawned: '停止后仍检测到猫猫进程，已停止安装。',
+    process_table_unreadable: '无法读取进程表，不能确认旧进程已停止。',
+    journal_restore_incomplete: '网络参数或配置事务恢复未完成，已停止安装。',
+    network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
+    owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
+  };
+  let summary = labels[code] || cause || lines.find(line => line.trim()) || fallback;
+  if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
+  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';
+  if (/subscription URL must be HTTPS without userinfo|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
+  else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过，请检查配置格式和策略引用。';
+  else if (/policy|iptables|ip6tables|route|downstream|network|TUN|listener/i.test(cause) && code === 'activation_failed') summary = '网络接管规则应用失败：' + cause;
+  else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '\u542f\u52a8\u672a\u5b8c\u6210\uff1a' + backend;
+  const serviceRc = (lines.filter(line => line.startsWith('START_SERVICE_RC=')).pop() || '').slice('START_SERVICE_RC='.length).trim();
+  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '\u6838\u5fc3\u542f\u52a8\u8d85\u65f6\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002';
+  const rollback = get('F50_ROLLBACK');
+  if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚未完成：' + rollback;
+  else if (rollback === 'restored') summary += ' 已恢复安装前状态。';
+  const keyLines = lines.filter(line => /^(F50_(?:INSTALL_(?:CODE|CAUSE)|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|START_SERVICE_RC|START_STATE)=/.test(line));
+  const details = safe.length <= 6000 ? safe : keyLines.slice(0, 12).join('\n').slice(0, 2500) + '\n[OUTPUT_TRUNCATED]\n' + safe.slice(-3500);
+  return {code, summary: summary.slice(0, 280), details, serviceRc, rollback, ok: false};
+}
+function f50Error(content) { return f50Diagnostic(content).summary; }
+
+function f50StartResult(response = {}, fallback = '') {
+  const diagnostic = f50Diagnostic(response.content || fallback, '\u670d\u52a1\u672a\u8fd4\u56de\u542f\u52a8\u786e\u8ba4');
+  const text = diagnostic.details;
+  const marked = /^F50_START_OK=1$/m.test(text) && /^START_STATE=started_verified_process$/m.test(text);
+  const ok = marked && !/^F50_ERROR=|^F50_START_OK=0$/m.test(text);
+  const code = (text.match(/^F50_START_CODE=(.+)$/m) || [])[1] || diagnostic.code || (ok ? 'started' : 'start_result_unknown');
+  return {...response, ok, success: ok, code, detail: text, content: text,
+    summary: ok ? '\u6838\u5fc3\u4e0e\u63a5\u7ba1\u89c4\u5219\u5df2\u542f\u52a8' : diagnostic.summary,
+    serviceRc: diagnostic.serviceRc, transportOk: response.success === true};
+}
+function buildF50StartScript(action) {
+  if (!['start', 'restart'].includes(action)) throw new Error('invalid_start_action');
+  return buildF50MaintenanceFunctions() + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
+}
+function f50UninstallVerdict(response = {}) {
+  const detail = f50Diagnostic(response.content || '').details;
+  const remains = detail.split(/\r?\n/).filter(line => line.startsWith('F50_REMAINS='));
+  const unknown = /^F50_CHECK_UNKNOWN=|^F50_UNINSTALL_STATE=unknown$/m.test(detail);
+  const clean = /^F50_UNINSTALL_STATE=clean$/m.test(detail) && /^UNINSTALL_VERIFIED$/m.test(detail);
+  if (remains.length) return {ok:false, code:'residual', detail, remains};
+  if (clean && !unknown) return {ok:true, code:'clean', detail, remains};
+  return {ok:false, code:'unknown', detail, remains};
+}
+async function performF50Uninstall() {
+  const diagnostics = [];
+  const stages = buildUninstallStages();
+  for (let i=0; i<stages.length; i++) {
+    operationStage(stages[i].title, i, stages.length+1);
+    try {
+      const response = await runShellWithRoot(stages[i].script, stages[i].timeout);
+      diagnostics.push({stage:stages[i].title, transportOk:response?.success === true,
+        detail:f50Diagnostic(response?.content || 'F50_STAGE_ERROR=empty_response').details});
+    } catch (error) {
+      if (error?.name === 'OperationCancelled') throw error;
+      diagnostics.push({stage:stages[i].title, transportOk:false,
+        detail:f50Diagnostic(error?.message || String(error)).details});
+    }
+  }
+  operationStage('\u590d\u67e5\u5378\u8f7d\u7ed3\u679c', stages.length, stages.length+1);
+  let finalResponse;
+  try {
+    // Independent read-only proof: no new cancellable worker or plugin directory is created by the wrapper.
+    finalResponse = await hostRunShellWithRoot.call(globalThis, buildF50FinalCheckScript(), 25000);
+  } catch (error) {
+    finalResponse = {success:false, content:'F50_CHECK_UNKNOWN=final_transport\n' + f50Diagnostic(error?.message || String(error)).details};
+  }
+  const verdict = f50UninstallVerdict(finalResponse);
+  const details = diagnostics.map(item => 'STAGE=' + item.stage + '\nTRANSPORT_OK=' + Number(item.transportOk) + '\n' + item.detail).join('\n')
+    + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
+  const summary = verdict.ok ? '\u732b\u732b\u53ca\u5168\u90e8\u7ec4\u4ef6\u6570\u636e\u5df2\u5378\u8f7d'
+    : verdict.code === 'residual' ? '\u6700\u7ec8\u590d\u67e5\u53d1\u73b0\u732b\u732b\u6b8b\u7559\uff0c\u8be6\u7ec6\u9879\u89c1\u201c\u72b6\u6001\u4e0e\u65e5\u5fd7\u201d'
+    : '\u5378\u8f7d\u7ed3\u679c\u672a\u786e\u8ba4\uff1a\u6700\u7ec8\u72b6\u6001\u8bfb\u53d6\u5931\u8d25\uff0c\u4e0d\u7b49\u4e8e\u5b58\u5728\u6b8b\u7559';
+  lastInstallDiagnostic = {...verdict, summary, details, diagnostics};
+  return {...verdict, summary, details};
+}
+
+async function f50Command(action, timeout = 60000) {
+  if (!(await ensureCompatBackend())) return { success: false, content: 'F50_BACKEND_REQUIRED' };
+  return runShellWithRoot("[ \"$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)\" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }\nsh " + shellQuote(CLASH_SERVICE) + ' ' + action, timeout);
+}
+let f50PackageInput = null;
+function buildF50ZashboardValidationFunction() { return `
+f50_validate_zashboard() {
+  ui_dir=$1
+  [ -d "$ui_dir" ] || { echo F50_PANEL_CODE=missing_directory; return 1; }
+  [ -s "$ui_dir/index.html" ] || { echo F50_PANEL_CODE=missing_index; return 1; }
+  [ -s "$ui_dir/manifest.webmanifest" ] || { echo F50_PANEL_CODE=missing_manifest; return 1; }
+  [ -s "$ui_dir/registerSW.js" ] || { echo F50_PANEL_CODE=missing_register_sw; return 1; }
+  [ -d "$ui_dir/assets" ] || { echo F50_PANEL_CODE=missing_assets; return 1; }
+  [ ! -d "$ui_dir/_nuxt" ] || { echo F50_PANEL_CODE=wrong_identity; return 1; }
+  if grep -Eiq '<title>[[:space:]]*metacubexd[[:space:]]*</title>' "$ui_dir/index.html"; then
+    echo F50_PANEL_CODE=wrong_identity; return 1
+  fi
+  grep -Eiq '<title>[[:space:]]*zashboard[[:space:]]*</title>' "$ui_dir/index.html" || { echo F50_PANEL_CODE=wrong_identity; return 1; }
+  manifest_compact=$(tr -d '[:space:]' < "$ui_dir/manifest.webmanifest" 2>/dev/null)
+  case "$manifest_compact" in
+    *'"name":"zashboard"'*'"short_name":"zashboard"'*) ;;
+    *) echo F50_PANEL_CODE=wrong_manifest; return 1 ;;
+  esac
+  main_asset=$(sed -n 's/.*src="\\.\\/\\(assets\\/[^"?]*\\.js\\)[^"]*".*/\\1/p' "$ui_dir/index.html" | head -n 1)
+  [ -n "$main_asset" ] && [ -s "$ui_dir/$main_asset" ] || { echo F50_PANEL_CODE=missing_main_asset; return 1; }
+  grep -qi 'zashboard' "$ui_dir/$main_asset" || { echo F50_PANEL_CODE=wrong_bundle; return 1; }
+  echo F50_PANEL_VALIDATED=1
+  return 0
+}
+`; }
+function buildF50MaintenanceFunctions() { return `# Shared bootstrap maintenance: no installed helper is required.
+F50_ROOT=\${F50_ROOT:-/data/clash}
+F50_PROC=\${F50_PROC:-/proc}
+F50_SYSNET=\${F50_SYSNET:-/sys/class/net}
+F50_DATA=\${F50_ROOT%/*}
+F50_BOOT=\${F50_BOOT:-/sdcard/ufi_tools_boot.sh}
+F50_TASK=\${KANO_TPROXY_TASK:-}
+umask 077
+${buildF50ZashboardValidationFunction()}
+f50_limit() {
+  f50_seconds=$1; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 2 "$f50_seconds" "$@"
+  else
+    "$@" & f50_child=$!
+    ( sleep "$f50_seconds"; kill -TERM "$f50_child" 2>/dev/null; sleep 2; kill -KILL "$f50_child" 2>/dev/null ) & f50_guard=$!
+    wait "$f50_child"; f50_rc=$?
+    kill "$f50_guard" 2>/dev/null; wait "$f50_guard" 2>/dev/null
+    return "$f50_rc"
+  fi
+}
+f50_redact() {
+  awk '{
+    low=tolower($0)
+    if(low ~ /bearer[ \\t]|["\\047]?(secret|password|passwd|token|authorization|access_token)["\\047]?[ \\t]*[:=]/){print "[SENSITIVE_ERROR_REDACTED]";next}
+    gsub(/(https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\\/\\/[^ \\t"<>]+/,"[URL_REDACTED]")
+    print
+  }'
+}
+f50_stat() {
+  F50_STAT_START=; F50_STAT_PARENT=; F50_STAT_STATE=
+  { IFS= read -r ps_stat < "$F50_PROC/$1/stat"; } 2>/dev/null || return 1
+  ps_stat=\${ps_stat##*) }
+  set -f; set -- $ps_stat; set +f
+  [ "$#" -ge 20 ] || return 1
+  F50_STAT_STATE=$1; F50_STAT_PARENT=$2
+  shift 19; F50_STAT_START=$1
+  case "$F50_STAT_START:$F50_STAT_PARENT" in *[!0-9:]*) return 1 ;; esac
+}
+f50_owned_exe() {
+  case "$1" in
+    "$F50_ROOT"/*|"$F50_ROOT".rollback-*/*|"$F50_ROOT".rollback.*/*|"$F50_ROOT".stage-*/*|"$F50_ROOT".stage.*/*|"$F50_ROOT".before_install.*/*|"$F50_ROOT".before_repair.*/*|"$F50_ROOT".failed_repair.*/*|"$F50_DATA"/kano_tproxy_tools/*|"$F50_DATA"/kano_yq_runtime/*) return 0 ;;
+  esac
+  return 1
+}
+f50_scan() {
+  # Only candidate comm values incur readlink/tr. Ancestors and read-only probes are excluded.
+  [ -r "$F50_PROC" ] && [ -x "$F50_PROC" ] || { echo F50_CLEAN_ERROR=process_table_unreadable; return 1; }
+  ps_out=$1; ps_graph="$ps_out.graph"; ps_protected=" 1 $$ "
+  ps_parent=$$
+  while f50_stat "$ps_parent"; do
+    ps_parent=$F50_STAT_PARENT
+    case "$ps_parent" in ''|0|1) break ;; esac
+    case "$ps_protected" in *" $ps_parent "*) break ;; esac
+    ps_protected="$ps_protected$ps_parent "
+  done
+  : > "$ps_graph" || return 1
+  for ps_dir in "$F50_PROC"/[0-9]*; do
+    ps_pid=\${ps_dir##*/}; ps_owned=0; ps_kind=child; ps_excluded=0
+    { IFS= read -r ps_name < "$ps_dir/comm"; } 2>/dev/null || continue
+    f50_stat "$ps_pid" || continue
+    case "$ps_protected" in *" $ps_pid "*) ps_excluded=1 ;; esac
+    case "$F50_STAT_STATE" in Z|X) ps_excluded=1 ;; esac
+    if [ "$ps_excluded" = 0 ]; then
+      case "$ps_name" in
+        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)
+          ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)
+          ps_exe=\${ps_exe% (deleted)}
+          if f50_owned_exe "$ps_exe"; then
+            ps_owned=1; ps_kind=binary
+            case "\${ps_exe##*/}" in Clash.Core|mihomo) ps_kind=core ;; esac
+          fi
+          case "\${ps_exe##*/}" in
+            clashctl*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)
+              ps_args=$(tr '\\000' '\\n' < "$ps_dir/cmdline" 2>/dev/null)
+              ps_index=0; ps_script=0; ps_action=
+              while IFS= read -r ps_arg; do
+                if [ "$ps_index" = 1 ]; then
+                  case "\${ps_exe##*/}" in clashctl*) ps_action=$ps_arg ;; esac
+                fi
+                [ "$ps_script" = 2 ] && { ps_action=$ps_arg; ps_script=3; }
+                case "$ps_arg" in
+                  -c) break ;;
+                  */Scripts/Clash.Service|*/Scripts/Clash.Inotify|*/Scripts/Clash.KanoStart|*/Scripts/Clash.PolicyTools|*/Scripts/Clash.MacBypass)
+                    if f50_owned_exe "$ps_arg"; then ps_owned=1; ps_kind=service; ps_script=2; fi ;;
+                esac
+                ps_index=$((ps_index+1))
+              done <<EOF_F50_ARGS
+$ps_args
+EOF_F50_ARGS
+              case "$ps_action" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped) ps_owned=0; ps_excluded=1 ;; esac
+              ;;
+          esac
+          if [ "$ps_owned:$ps_excluded" = 0:0 ]; then
+            case "\${ps_exe##*/}" in sh|bash|dash|mksh|toybox|busybox|curl|wget|unzip|tar|gzip|xz|timeout)
+              ps_env=$(tr '\\000' '\\n' < "$ps_dir/environ" 2>/dev/null)
+              while IFS= read -r ps_var; do
+                case "$ps_var" in KANO_TPROXY_TASK=mm_*)
+                  ps_tag=\${ps_var#KANO_TPROXY_TASK=}
+                  [ "$ps_tag" = "$F50_TASK" ] || { ps_owned=1; ps_kind=worker; }
+                  break ;;
+                esac
+              done <<EOF_F50_ENV
+$ps_env
+EOF_F50_ENV
+              ;;
+            esac
+          fi
+          ;;
+      esac
+    fi
+    printf '%s %s %s %s %s %s\\n' "$ps_pid" "$F50_STAT_PARENT" "$F50_STAT_START" "$ps_owned" "$ps_excluded" "$ps_kind" >> "$ps_graph"
+  done
+  awk '{par[$1]=$2; start[$1]=$3; own[$1]=$4; skip[$1]=$5; kind[$1]=$6}
+    END{ do {changed=0; for(p in par) if(!skip[p]&&!own[p]&&own[par[p]]&&!skip[par[p]]){own[p]=1;changed=1}}while(changed);
+      for(p in par)if(own[p]&&!skip[p])print p,start[p],kind[p] }' "$ps_graph" > "$ps_out"
+  ps_rc=$?; rm -f "$ps_graph"; return "$ps_rc"
+}
+f50_same_process() {
+  f50_stat "$1" || return 1
+  [ "$F50_STAT_START" = "$2" ] || return 1
+  case "$F50_STAT_STATE" in Z|X) return 1 ;; esac
+}
+f50_stop_recorded() {
+  ps_list=$1
+  [ -s "$ps_list" ] || { echo PROCESSES_STOPPED; return 0; }
+  while read -r ps_pid ps_start ps_kind; do
+    f50_same_process "$ps_pid" "$ps_start" && kill -TERM "$ps_pid" 2>/dev/null
+  done < "$ps_list"
+  sleep 1
+  ps_killed=0
+  while read -r ps_pid ps_start ps_kind; do
+    if f50_same_process "$ps_pid" "$ps_start"; then
+      kill -KILL "$ps_pid" 2>/dev/null; ps_killed=1
+    fi
+  done < "$ps_list"
+  [ "$ps_killed" = 0 ] || sleep 1
+  ps_remaining=0
+  while read -r ps_pid ps_start ps_kind; do
+    if f50_same_process "$ps_pid" "$ps_start"; then
+      printf 'PROCESS_REMAINS=%s\\n' "$ps_pid"; ps_remaining=1
+    fi
+  done < "$ps_list"
+  [ "$ps_remaining" = 0 ] || return 1
+  echo PROCESSES_STOPPED
+}
+f50_table_absent() {
+  case "$1" in *'Table does not exist'*|*'table does not exist'*|*'Address family not supported'*|*'address family not supported'*|*'FIB table does not exist'*) return 0 ;; esac
+  return 1
+}
+f50_save() {
+  fw_ipt=$1; fw_out=$2; fw_save="\${fw_ipt}-save"
+  if command -v "$fw_save" >/dev/null 2>&1; then
+    if f50_limit 5 "$fw_save" > "$fw_out" 2> "$fw_out.err"; then rm -f "$fw_out.err"; return 0; fi
+    fw_err=$(cat "$fw_out.err"); rm -f "$fw_out.err"
+    f50_table_absent "$fw_err" && { : > "$fw_out"; return 0; }
+    printf 'F50_CLEAN_ERROR=%s_snapshot_failed\\n' "$fw_ipt"; return 1
+  fi
+  if ! command -v "$fw_ipt" >/dev/null 2>&1; then
+    if [ "$fw_ipt" = ip6tables ] && [ ! -e "$F50_PROC/net/if_inet6" ]; then : > "$fw_out"; return 0; fi
+    printf 'F50_CLEAN_ERROR=%s_missing\\n' "$fw_ipt"; return 1
+  fi
+  : > "$fw_out"
+  for fw_table in mangle nat filter raw; do
+    fw_text=$(f50_limit 4 "$fw_ipt" -t "$fw_table" -S 2>&1); fw_rc=$?
+    if [ "$fw_rc" != 0 ]; then
+      f50_table_absent "$fw_text" && continue
+      printf 'F50_CLEAN_ERROR=%s_%s_unreadable\\n' "$fw_ipt" "$fw_table"; return 1
+    fi
+    printf '*%s\\n%s\\nCOMMIT\\n' "$fw_table" "$fw_text" >> "$fw_out"
+  done
+}
+f50_firewall_plan() {
+  # Tokenize save/-S output without eval; comments can contain spaces, quotes and fake '-j' text.
+  awk -v bin="$1" '
+  function owned(c){return c ~ /^KANO_F50_[A-Za-z0-9_]+$/ || c ~ /^KANO_(POLICY_PRE|POLICY|DNS_HIJACK|DNS|QUIC_BLOCK|QUIC|MAC_BYPASS|PR_FWD)(_A|_B)?$/}
+  function words(s,a, i,c,q,esc,k,v,started){
+    for(i in a)delete a[i]; k=0;v="";q="";esc=0;started=0;
+    for(i=1;i<=length(s);i++){c=substr(s,i,1);
+      if(esc){v=v c;esc=0;started=1;continue}
+      if(c=="\\\\"&&q!="\\047"){esc=1;started=1;continue}
+      if(q!=""){if(c==q)q="";else v=v c;started=1;continue}
+      if(c=="\\047"||c=="\\042"){q=c;started=1;continue}
+      if(c==" "||c=="\\t"){if(started){a[++k]=v;v="";started=0};continue}
+      v=v c;started=1
+    }
+    if(q!=""||esc)return -1; if(started)a[++k]=v;return k
+  }
+  function arg(s){if(s ~ /[\\r\\n]/){bad=1;return};print "a" s}
+  function begin(){print "@";arg(bin);arg("-t");arg(table)}
+  /^\\*/{table=substr($0,2);if(table !~ /^(mangle|nat|filter|raw|security)$/)bad=1;next}
+  /^:/ {c=substr($1,2);if(owned(c))chains[table SUBSEP c]=1;next}
+  /^-N /{if(owned($2))chains[table SUBSEP $2]=1;next}
+  /^-A /{
+    n=words($0,a);if(n<2){bad=1;next};target="";mark="";port="";
+    for(i=3;i<n;i++){if(a[i]=="--comment"){i++;continue};if(a[i]=="-j"||a[i]=="-g")target=a[i+1];if(a[i]=="--on-port")port=a[i+1];if(a[i]=="--tproxy-mark")mark=a[i+1]}
+    native=(target=="TPROXY"&&port=="7895"&&(mark=="0x10000000/0x10000000"||mark=="268435456/268435456"));
+    if(!owned(a[2])&&(owned(target)||native)){begin();arg("-D");for(i=2;i<=n;i++)arg(a[i]);print "!"}
+  }
+  END{
+    for(c in chains){split(c,p,SUBSEP);table=p[1];begin();arg("-F");arg(p[2]);print "!"}
+    for(c in chains){split(c,p,SUBSEP);table=p[1];begin();arg("-X");arg(p[2]);print "!"}
+    if(bad)exit 2
+  }' "$2" > "$3" || { echo F50_CLEAN_ERROR=firewall_snapshot_parse_failed; return 1; }
+}
+f50_ip_snapshot() {
+  rt_file=$1; shift
+  if f50_limit 4 ip "$@" > "$rt_file" 2> "$rt_file.err"; then rm -f "$rt_file.err"; return 0; fi
+  rt_err=$(cat "$rt_file.err"); rm -f "$rt_file.err"
+  f50_table_absent "$rt_err" && { : > "$rt_file"; return 0; }
+  echo F50_CLEAN_ERROR=route_snapshot_failed; return 1
+}
+f50_routes_plan() {
+  awk -v family="$1" '
+  function val(k, i){for(i=2;i<NF;i++)if($i==k)return $(i+1);return ""}
+  function arg(s){print "a" s}
+  function begin(){print "@";arg("ip");arg(family)}
+  FNR==NR{
+    t=val("lookup");p=$1;sub(/:$/,"",p);m=val("fwmark");d=val("iif");
+    own=(p=="1777"&&t=="17666"&&(m=="0x10000000/0x10000000"||m=="268435456/268435456")) || (p=="1776"&&t=="17667"&&(d=="lo"||d=="KanoTun"));
+    if(own){begin();arg("rule");arg("del");arg("pref");arg(p);for(i=2;i<=NF;i++)arg($i);print "!"}
+    else if(t=="17666"||t=="17667")foreign[t]=1;
+    next
+  }
+  {t=val("table");if((t=="17666"||t=="17667")&&val("proto")=="242")routes[t]=1}
+  END{for(t in routes){if(foreign[t]){bad=1;continue};begin();arg("route");arg("flush");arg("table");arg(t);arg("proto");arg("242");print "!"};if(bad)exit 3}
+  ' "$2" "$3" > "$4" || { echo F50_CLEAN_ERROR=owned_route_table_still_used_by_foreign_rule; return 1; }
+}
+f50_network_snapshot() {
+  nw_dir=$1
+  mkdir -p "$nw_dir" || return 1
+  : > "$nw_dir/plan"
+  for nw_bin in iptables ip6tables; do
+    f50_save "$nw_bin" "$nw_dir/$nw_bin.save" || return 1
+    f50_firewall_plan "$nw_bin" "$nw_dir/$nw_bin.save" "$nw_dir/$nw_bin.plan" || return 1
+    cat "$nw_dir/$nw_bin.plan" >> "$nw_dir/plan" || return 1
+  done
+  for nw_family in 4 6; do
+    f50_ip_snapshot "$nw_dir/rules$nw_family" -"$nw_family" rule show || return 1
+    f50_ip_snapshot "$nw_dir/routes$nw_family" -"$nw_family" route show table all || return 1
+    # A sentinel ensures NR/FNR still distinguishes an empty rule set from the route file.
+    printf '\\n' >> "$nw_dir/rules$nw_family"
+    f50_routes_plan -"$nw_family" "$nw_dir/rules$nw_family" "$nw_dir/routes$nw_family" "$nw_dir/ip$nw_family.plan" || return 1
+    cat "$nw_dir/ip$nw_family.plan" >> "$nw_dir/plan" || return 1
+  done
+  f50_ip_snapshot "$nw_dir/links" -o link show || return 1
+  awk '$2 ~ /^KanoTun(:|@)/{print "@\\naip\\nalink\\nadelete\\naKanoTun\\n!"}' "$nw_dir/links" >> "$nw_dir/plan"
+}
+f50_execute_plan() {
+  plan_file=$1; plan_bad=0; set --
+  while IFS= read -r plan_line; do
+    case "$plan_line" in
+      @) set -- ;;
+      a*) set -- "$@" "\${plan_line#a}" ;;
+      '!')
+        case "$1" in ip|iptables|ip6tables) ;; *) echo F50_CLEAN_ERROR=invalid_cleanup_command; return 1 ;; esac
+        plan_output=$(f50_limit 4 "$@" 2>&1); plan_rc=$?
+        if [ "$plan_rc" != 0 ]; then
+          printf 'F50_CLEAN_ERROR=network_delete_failed:%s:rc=%s\\n' "$1" "$plan_rc"
+          printf '%s\\n' "$plan_output" | f50_redact
+          plan_bad=1
+        fi
+        ;;
+    esac
+  done < "$plan_file"
+  [ "$plan_bad" = 0 ]
+}
+f50_inspect() {
+  f50_scan "$F50_WORK/pids" || return 1
+  f50_network_snapshot "$F50_WORK/net" || return 1
+  F50_OLD_INSTALL=0; F50_OLD_BOOT=0; F50_OLD_RUNNING=0; F50_OLD_FOUND=0
+  for inspect_file in Proxy/Clash.Core Scripts/Clash.Service Scripts/clashctl_arm64 Scripts/clashctl_armv7; do
+    [ ! -s "$F50_ROOT/$inspect_file" ] || F50_OLD_INSTALL=1
+  done
+  while read -r inspect_pid inspect_start inspect_kind; do [ "$inspect_kind" != core ] || F50_OLD_RUNNING=1; done < "$F50_WORK/pids"
+  if [ -f "$F50_BOOT" ] && awk '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}' "$F50_BOOT"; then F50_OLD_BOOT=1; fi
+  if [ "$F50_OLD_INSTALL:$F50_OLD_BOOT" != 0:0 ] || [ -s "$F50_WORK/pids" ] || [ -s "$F50_WORK/net/plan" ]; then F50_OLD_FOUND=1; fi
+  printf 'F50_OLD_FOUND=%s\\nF50_OLD_INSTALL=%s\\nF50_OLD_RUNNING=%s\\nF50_OLD_BOOT=%s\\n' "$F50_OLD_FOUND" "$F50_OLD_INSTALL" "$F50_OLD_RUNNING" "$F50_OLD_BOOT"
+  echo F50_INSPECT_OK=1
+}
+f50_clean_environment() {
+  clean_recover=missing; clean_detail=
+  # Never invoke a missing installation on a clean device: recover itself creates Policy/.
+  if [ -s "$F50_ROOT/Scripts/Clash.Service" ]; then
+    clean_detail=$(CLASH_ROOT="$F50_ROOT" f50_limit 35 sh "$F50_ROOT/Scripts/Clash.Service" recover 2>&1); clean_rc=$?
+    if [ "$clean_rc" = 0 ]; then clean_recover=ok; else clean_recover=failed; fi
+    printf 'F50_RECOVER_RC=%s\\n' "$clean_rc"
+    [ "$clean_recover" = ok ] || printf '%s\\n' "$clean_detail" | f50_redact
+  fi
+  f50_scan "$F50_WORK/pids" || return 1
+  f50_network_snapshot "$F50_WORK/net" || return 1
+  # Native recovery failed or left evidence: only the captured candidates/rules are touched.
+  if [ -s "$F50_WORK/pids" ]; then
+    if [ -s "$F50_ROOT/Scripts/Clash.Service" ] || [ -s "$F50_ROOT/Proxy/Clash.Core" ]; then
+      mkdir -p "$F50_ROOT/Policy" && printf '%s\\n' 'maintenance' > "$F50_ROOT/Policy/stopped" || { echo F50_CLEAN_ERROR=stop_latch_failed; return 1; }
+    fi
+    f50_stop_recorded "$F50_WORK/pids" || return 1
+  fi
+  if [ -s "$F50_WORK/net/plan" ]; then
+    clean_plan_rc=0
+    f50_execute_plan "$F50_WORK/net/plan" || clean_plan_rc=$?
+    f50_network_snapshot "$F50_WORK/check" || return 1
+    [ ! -s "$F50_WORK/check/plan" ] || { echo F50_CLEAN_ERROR=network_rules_remain; return 1; }
+    [ "$clean_plan_rc" = 0 ] || echo F50_CLEAN_WARNING=delete_error_final_network_clean
+  fi
+  # A failed native recovery may include journal/sysctl restoration beyond the firewall.
+  for clean_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+      if [ -s "$F50_ROOT/Policy/$clean_journal" ]; then echo F50_CLEAN_ERROR=journal_restore_incomplete; return 1; fi
+  done
+  [ "$clean_recover" != failed ] || echo F50_CLEAN_WARNING=native_recovery_failed_fallback_verified
+  echo F50_CLEAN_OK=1
+}
+f50_artifact_paths() {
+  # Bounded plugin paths only. Never enumerate or remove the shared UFI uploads folder.
+  for artifact in \\
+    "$F50_ROOT" "$F50_ROOT".rollback-* "$F50_ROOT".rollback.* \\
+    "$F50_ROOT".stage-* "$F50_ROOT".stage.* "$F50_ROOT".before_install.* \\
+    "$F50_ROOT".before_repair.* "$F50_ROOT".failed_repair.* \\
+    "$F50_DATA"/.f50-check.* "$F50_DATA"/.f50-clean.* "$F50_DATA"/.f50-delete.* \\
+    "$F50_DATA"/.f50-verify.* "$F50_DATA"/.f50-install.* \\
+    "$F50_DATA"/clash.install.lock "$F50_DATA"/clash.install.lock.d \\
+    "$F50_DATA"/kano_tproxy_tools "$F50_DATA"/kano_yq_runtime \\
+    "$F50_DATA"/kano_clash.zip "$F50_DATA"/kano_clash.zip.new.* "$F50_DATA"/kano_clash.source \\
+    "$F50_DATA"/kano_mihomo_latest.dlog "$F50_DATA"/kano_mihomo_latest.dlog.verify \\
+    "$F50_DATA"/kano_subscription_config.raw "$F50_DATA"/kano_subscription_config.yaml \\
+    "$F50_DATA"/kano_subscription_mode_check.out "$F50_DATA"/kano_template_write_check.out \\
+    "$F50_DATA"/kano_template_flow_debug.out "$F50_DATA"/kano_policy_boot.log \\
+    "$F50_DATA"/kano_policy_boot.previous.log "$F50_DATA"/kano_clash_config_test.log \\
+    "$F50_DATA"/kano_clash_start.log "$F50_DATA"/kano_clash_repair_zip_test.out \\
+    "$F50_DATA"/kano_clash_repair_unzip.out "$F50_DATA"/kano_clash_repair_config.err \\
+    "$F50_DATA"/kano_yq_expression_smoke.err "$F50_DATA"/kano_yq_repair.zip \\
+    "$F50_DATA"/kano_yq_repair.zip.new.* "$F50_DATA"/kano_template_node_check.err \\
+    "$F50_DATA"/kano_template_upload_check.err "$F50_DATA"/kano_clash_zip_test.out \\
+    "$F50_DATA"/kano_clash_unzip.out "$F50_DATA"/kano_policy_script_check.out \\
+    "$F50_DATA"/kano_config_package_archive_test.out "$F50_DATA"/kano_config_package_archive_list.out \\
+    "$F50_DATA"/kano_config_package_yaml_test.out "$F50_DATA"/kano_runtime_landed_check.err \\
+    "$F50_DATA"/kano_yaml_after_override.yaml "$F50_DATA"/kano_ui_rules_patch.yaml \\
+    "$F50_DATA"/mm_uninstall_backup.err "$F50_DATA"/kano_mihomo_api_*.out \\
+    "$F50_DATA"/kano_mihomo_api_*.err "$F50_DATA"/kano_ui_rules_*.txt \\
+    "$F50_DATA"/kano_helper_bundled_* "$F50_DATA"/kano_helper_gitee_* \\
+    "$F50_DATA"/kano_clash_install.* "$F50_DATA"/kano_clash_repair.* \\
+    "$F50_DATA"/kano_clash_user_backup.* "$F50_DATA"/kano_policy_save.* \\
+    "$F50_DATA"/kano_sub_persist.* "$F50_DATA"/kano_template_upload_* \\
+    "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_subscription_urls_before_template_* \\
+    "$F50_DATA"/kano_config_package_restore_* "$F50_DATA"/kano_compat_*.json \\
+    "$F50_DATA"/kano_compat_bootstrap_* "$F50_DATA"/kano_install_unzip.log \\
+    "$F50_DATA"/kano_uninstall_recover.log "$F50_DATA"/kano_uninstall_boot.log \\
+    "$F50_DATA"/kano_uninstall_artifacts.log "$F50_DATA"/f50_boot_fix/clash_boot.sh; do
+    [ "$artifact" != "$F50_WORK" ] || continue
+    if [ -e "$artifact" ] || [ -L "$artifact" ]; then printf '%s\\n' "$artifact"; fi
+  done
+}
+f50_root_has_data() {
+  [ -d "$F50_ROOT" ] || return 1
+  # A latch left by an old uninstaller is not an installation worth backing up.
+  root_files=$(find "$F50_ROOT" \\( -type f -o -type l \\) ! -path "$F50_ROOT/Policy/stopped" -print 2>/dev/null)
+  [ -n "$root_files" ]
+}
+f50_runtime_guard() {
+  f50_scan "$F50_WORK/guard.pids" || return 1
+  f50_network_snapshot "$F50_WORK/guard.net" || return 1
+  if [ -s "$F50_WORK/guard.pids" ]; then echo F50_DELETE_BLOCKED=owned_process_alive; return 1; fi
+  if [ -s "$F50_WORK/guard.net/plan" ]; then echo F50_DELETE_BLOCKED=owned_network_active; return 1; fi
+}
+f50_remove_artifacts() {
+  delete_failed=0
+  f50_artifact_paths > "$F50_WORK/artifacts" || return 1
+  while IFS= read -r artifact; do
+    rm -rf "$artifact" 2>/dev/null || delete_failed=1
+    if [ -e "$artifact" ] || [ -L "$artifact" ]; then
+      printf 'F50_ARTIFACT_DELETE_FAILED=%s\\n' "$artifact"; delete_failed=1
+    fi
+  done < "$F50_WORK/artifacts"
+  [ "$delete_failed" = 0 ]
+}
+f50_final_probe() {
+  F50_FINAL_REMAINS=0; F50_FINAL_UNKNOWN=0
+  if f50_scan "$F50_WORK/final.pids"; then
+    while read -r final_pid final_start final_kind; do
+      printf 'F50_REMAINS=process:%s:%s\\n' "$final_pid" "$final_kind"; F50_FINAL_REMAINS=1
+    done < "$F50_WORK/final.pids"
+  else
+    echo F50_CHECK_UNKNOWN=processes; F50_FINAL_UNKNOWN=1
+  fi
+  if f50_network_snapshot "$F50_WORK/final.net"; then
+    for final_family in iptables ip6tables ip4 ip6; do
+      if [ -s "$F50_WORK/final.net/$final_family.plan" ]; then
+        printf 'F50_REMAINS=network:%s\\n' "$final_family"; F50_FINAL_REMAINS=1
+      fi
+    done
+    if awk '$2 ~ /^KanoTun(:|@)/{f=1} END{exit !f}' "$F50_WORK/final.net/links"; then
+      echo F50_REMAINS=interface:KanoTun; F50_FINAL_REMAINS=1
+    fi
+  else
+    echo F50_CHECK_UNKNOWN=network; F50_FINAL_UNKNOWN=1
+  fi
+  if [ ! -r "$F50_DATA" ] || [ ! -x "$F50_DATA" ]; then
+    echo F50_CHECK_UNKNOWN=data_directory; F50_FINAL_UNKNOWN=1
+  else
+    f50_artifact_paths > "$F50_WORK/final.artifacts"
+    while IFS= read -r artifact; do
+      printf 'F50_REMAINS=path:%s\\n' "$artifact"; F50_FINAL_REMAINS=1
+    done < "$F50_WORK/final.artifacts"
+  fi
+  if [ -f "$F50_BOOT" ]; then
+    if [ ! -r "$F50_BOOT" ]; then echo F50_CHECK_UNKNOWN=boot_file; F50_FINAL_UNKNOWN=1
+    elif awk '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}' "$F50_BOOT"; then
+      printf 'F50_REMAINS=autostart:%s\\n' "$F50_BOOT"; F50_FINAL_REMAINS=1
+    fi
+  fi
+}
+f50_verify_zashboard_endpoint() {
+  panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1)
+  panel_rc=$?
+  printf '%s\n' "$panel_probe"
+  if [ "$panel_rc" != 0 ]; then
+    echo F50_ERROR=panel_disk_identity_mismatch
+    return 1
+  fi
+  panel_tmp="$F50_DATA/kano_f50_panel_probe.$$"
+  panel_curl=
+  for panel_curl_candidate in ${shellQuote(`${F50_FILES_DIR}/curl`)} ${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)} "$(command -v curl 2>/dev/null)"; do
+    [ -n "$panel_curl_candidate" ] && [ -x "$panel_curl_candidate" ] || continue
+    panel_curl="$panel_curl_candidate"
+    break
+  done
+  [ -n "$panel_curl" ] || { echo F50_ERROR=panel_probe_curl_missing; return 1; }
+  panel_status=$("$panel_curl" -fsS --noproxy '*' --connect-timeout 3 --max-time 6 \
+    -o "$panel_tmp" -w '%{http_code}' "http://127.0.0.1:7788/ui/?_f50=$$" 2>/dev/null)
+  panel_rc=$?
+  if [ "$panel_rc" != 0 ] || [ "$panel_status" != 200 ]; then
+    rm -f "$panel_tmp" 2>/dev/null || true
+    echo "F50_ERROR=panel_http_status_\${panel_status:-unavailable}"
+    return 1
+  fi
+  rm -f "$panel_tmp" 2>/dev/null || true
+  echo F50_PANEL_HTTP_STATUS=200
+  return 0
+}
+f50_start_service() {
+  start_action=$1; start_budget=$2
+  case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
+  start_log="$F50_DATA/kano_clash_start.log"
+  log_before=$(cksum "$start_log" 2>/dev/null)
+  start_raw=$(CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
+  F50_START_RC=$?
+  F50_START_DETAIL=$(printf '%s\\n' "$start_raw" | f50_redact)
+  # Read only a log changed by this invocation; a previous failed install is not current evidence.
+  log_after=$(cksum "$start_log" 2>/dev/null)
+  case "$F50_START_DETAIL" in *F50_ERROR=*) ;; *)
+    if [ -n "$log_after" ] && [ "$log_after" != "$log_before" ]; then
+      log_detail=$(tail -n 80 "$start_log" 2>/dev/null | f50_redact | awk '/^F50_ERROR=|^START_SERVICE_RC=|^START_STATE=|^F50_START_CODE=/{print}')
+      [ -z "$log_detail" ] || F50_START_DETAIL="$F50_START_DETAIL
+$log_detail"
+    fi ;;
+  esac
+  start_cause=$(printf '%s\\n' "$F50_START_DETAIL" | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"");print;exit}')
+  F50_START_CODE=service_failed; F50_START_OK=0
+  case "$start_cause" in
+    *'subscription URL must be HTTPS without userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
+    *CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
+    *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
+    *) case "$F50_START_RC" in 124|137) F50_START_CODE=start_timeout ;; esac ;;
+  esac
+  if [ "$F50_START_RC" = 0 ] && [ -z "$start_cause" ]; then
+    case "$F50_START_DETAIL" in
+      *START_STATE=started_verified_process*) F50_START_OK=1; F50_START_CODE=started ;;
+      *) F50_START_CODE=activation_unverified ;;
+    esac
+  fi
+  if [ "$F50_START_OK" = 1 ] && ! f50_verify_zashboard_endpoint; then
+    F50_START_OK=0
+    F50_START_CODE=panel_http_failed
+  fi
+  printf '%s\\n' "$F50_START_DETAIL"
+  printf 'START_SERVICE_RC=%s\\nF50_START_CODE=%s\\nF50_START_OK=%s\\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
+  [ "$F50_START_OK" = 1 ]
+}
+`; }
+function buildF50InspectScript() {
+  return buildF50MaintenanceFunctions() + `
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-check.XXXXXX") || exit 1
+trap 'rm -rf "$F50_WORK"' EXIT
+f50_inspect
+`;
+}
+function buildF50InstallScript(uploaded) {
+  return buildF50MaintenanceFunctions() + '\nZIP=' + shellQuote(uploaded) + '\n' + `# The transaction owns staging, backup, activation and rollback until a terminal result.
+set +e
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-install.XXXXXX") || { echo F50_INSTALL_CODE=stage_create_failed; exit 1; }
+STAGE="$F50_WORK/unpacked"; PKG=; BACKUP=; HAD_OLD=0; MOVED_OLD=0; COMMITTED=0; SUCCESS=0
+OLD_RUNNING=0; OLD_LATCH=0; CLEAN_ATTEMPTED=0; NEEDS_CONFIG=; HAD_USER_CONFIG=0
+F50_INSTALL_CODE=; F50_INSTALL_DETAIL=; KEEP_WORK=0; LOCKED=0
+LOCK="$F50_DATA/clash.install.lock.d"
+
+f50_install_fail() {
+  F50_INSTALL_CODE=$1; F50_INSTALL_DETAIL=\${2:-}; return 1
+}
+f50_restore_previous() {
+  # Refuse to overwrite a live new runtime. The backup stays available if cleanup fails.
+  if [ "$COMMITTED" = 1 ]; then
+    if ! f50_clean_environment; then echo F50_ROLLBACK=blocked_by_cleanup; KEEP_WORK=1; return 1; fi
+    if ! mv "$F50_ROOT" "$F50_WORK/failed-new"; then echo F50_ROLLBACK=move_new_failed; KEEP_WORK=1; return 1; fi
+    if [ "$HAD_OLD" = 1 ]; then
+      if ! mv "$BACKUP" "$F50_ROOT"; then echo F50_ROLLBACK=restore_directory_failed; KEEP_WORK=1; return 1; fi
+      BACKUP=
+    fi
+    COMMITTED=0; MOVED_OLD=0
+  elif [ "$MOVED_OLD" = 1 ]; then
+    if ! mv "$BACKUP" "$F50_ROOT"; then echo F50_ROLLBACK=restore_directory_failed; KEEP_WORK=1; return 1; fi
+    BACKUP=; MOVED_OLD=0
+  fi
+  if [ "$OLD_RUNNING" = 1 ] && [ "$CLEAN_ATTEMPTED" = 1 ] && [ -s "$F50_ROOT/Scripts/Clash.Service" ]; then
+    case "$F50_INSTALL_CODE" in interrupted|transport_unknown)
+      echo F50_ROLLBACK=restored_stopped; return 0 ;;
+    esac
+    restore_output=$(CLASH_ROOT="$F50_ROOT" f50_limit 55 sh "$F50_ROOT/Scripts/Clash.Service" start 2>&1); restore_rc=$?
+    if [ "$restore_rc" != 0 ]; then
+      printf '%s\\n' "$restore_output" | f50_redact
+      printf 'F50_ROLLBACK=old_start_failed\\nROLLBACK_SERVICE_RC=%s\\n' "$restore_rc"; return 1
+    fi
+    case "$restore_output" in *START_STATE=started_verified_process*) ;; *) echo F50_ROLLBACK=old_start_unverified; return 1 ;; esac
+  elif [ "$OLD_LATCH" = 0 ] && [ "$HAD_OLD" = 1 ] && [ "$CLEAN_ATTEMPTED" = 1 ]; then
+    rm -f "$F50_ROOT/Policy/stopped" || { echo F50_ROLLBACK=restore_latch_failed; return 1; }
+  fi
+  echo F50_ROLLBACK=restored
+}
+f50_install_finish() {
+  finish_rc=$?
+  trap - EXIT HUP INT TERM
+  if [ "$SUCCESS" != 1 ]; then
+    [ -n "$F50_INSTALL_CODE" ] || F50_INSTALL_CODE=transaction_interrupted
+    printf 'F50_INSTALL_CODE=%s\\n' "$F50_INSTALL_CODE"
+    if [ -n "$F50_INSTALL_DETAIL" ]; then
+      printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"F50_INSTALL_CAUSE=");print;exit}'
+      printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact
+    fi
+    if [ "$COMMITTED" = 1 ] || [ "$MOVED_OLD" = 1 ] || [ "$CLEAN_ATTEMPTED" = 1 ]; then
+      f50_restore_previous || finish_rc=1
+    fi
+    [ -z "$BACKUP" ] || printf 'F50_RECOVERY_BACKUP=%s\\n' "$BACKUP"
+    finish_rc=1
+  fi
+  if [ "$KEEP_WORK" = 0 ]; then
+    rm -rf "$F50_WORK" || { echo F50_INSTALL_WARNING=staging_cleanup_failed; finish_rc=1; }
+  else
+    printf 'F50_RECOVERY_WORK=%s\\n' "$F50_WORK"
+  fi
+  if [ "$LOCKED" = 1 ]; then
+    rm -f "$LOCK/pid"
+    rmdir "$LOCK" || { echo F50_INSTALL_WARNING=lock_cleanup_failed; finish_rc=1; }
+  fi
+  if [ "$SUCCESS" = 1 ]; then
+    printf 'F50_INSTALL_STATUS=%s\nF50_CONFIG_STATE=%s\nKANO_INSTALL_OK=1\n' "$status" "$NEEDS_CONFIG"
+    [ -z "$BACKUP" ] || printf 'F50_BACKUP_LEFT=%s\n' "$BACKUP"
+    finish_rc=0
+  fi
+  exit "$finish_rc"
+}
+trap f50_install_finish EXIT
+trap 'F50_INSTALL_CODE=interrupted; exit 130' HUP INT TERM
+if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1; fi
+LOCKED=1
+printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
+[ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
+[ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
+command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
+# No fixed ZIP hash, resource list or template/UI fingerprints.
+names=$(unzip -Z1 "$ZIP" 2>/dev/null); list_rc=$?
+if [ "$list_rc" != 0 ]; then
+  listing=$(unzip -l "$ZIP" 2>/dev/null); list_rc=$?
+  names=$(printf '%s\\n' "$listing" | awk '/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/ {sub(/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/,"");print}')
+fi
+[ "$list_rc" = 0 ] && [ -n "$names" ] || { f50_install_fail archive_list_failed; exit 1; }
+while IFS= read -r member; do
+  case "$member" in /*|../*|*/../*|*/..|..|*\\\\*) f50_install_fail unsafe_archive_path; exit 1 ;; esac
+  # Symlink-bearing archives are checked after staging; no archive scripts are run by unzip.
+done <<EOF_F50_MEMBERS
+$names
+EOF_F50_MEMBERS
+mkdir -p "$STAGE" || { f50_install_fail stage_create_failed; exit 1; }
+unzip_output=$(f50_limit 35 unzip -q "$ZIP" -d "$STAGE" 2>&1); unzip_rc=$?
+[ "$unzip_rc" = 0 ] || { f50_install_fail unzip_failed "$unzip_output"; exit 1; }
+links=$(find "$STAGE" -type l 2>/dev/null)
+[ -z "$links" ] || { f50_install_fail archive_symlink; exit 1; }
+CTL=$(find "$STAGE" -type f -name clashctl_arm64 | head -n 1)
+[ -n "$CTL" ] || { f50_install_fail missing_controller; exit 1; }
+PKG=\${CTL%/Scripts/clashctl_arm64}
+case "$PKG" in "$STAGE"|"$STAGE"/*) ;; *) f50_install_fail invalid_package_root; exit 1 ;; esac
+if [ ! -s "$PKG/Proxy/Clash.Core" ]; then
+  [ -s "$F50_ROOT/Proxy/Clash.Core" ] || { f50_install_fail missing_core; exit 1; }
+  MERGED="$F50_WORK/merged"
+  cp -pR "$F50_ROOT" "$MERGED" && cp -pR "$PKG/." "$MERGED/" || { f50_install_fail patch_merge_failed; exit 1; }
+  PKG=$MERGED
+fi
+mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install_fail package_directory_failed; exit 1; }
+[ -s "$PKG/Scripts/Clash.Service" ] || { f50_install_fail missing_service_wrapper; exit 1; }
+for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
+  [ ! -f "$file" ] || chmod 755 "$file" || { f50_install_fail executable_permission_failed; exit 1; }
+done
+probe=$(CLASH_ROOT="$PKG" f50_limit 5 "$PKG/Scripts/clashctl_arm64" version 2>&1); probe_rc=$?
+[ "$probe_rc" = 0 ] || { f50_install_fail controller_not_executable "$probe"; exit 1; }
+case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
+probe=$(f50_limit 5 "$PKG/Proxy/Clash.Core" -v 2>&1); probe_rc=$?
+[ "$probe_rc" = 0 ] || { f50_install_fail core_not_executable "$probe"; exit 1; }
+sh -n "$PKG/Scripts/Clash.Service" || { f50_install_fail service_script_invalid; exit 1; }
+probe=$(CLASH_ROOT="$PKG" f50_limit 5 sh "$PKG/Scripts/Clash.Service" version 2>&1); probe_rc=$?
+[ "$probe_rc" = 0 ] || { f50_install_fail service_script_failed "$probe"; exit 1; }
+case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail service_protocol_mismatch; exit 1 ;; esac
+panel_probe=$(f50_validate_zashboard "$PKG/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
+printf '%s\\n' "$panel_probe"
+[ "$panel_rc" = 0 ] || { f50_install_fail panel_candidate_rejected "$panel_probe"; exit 1; }
+[ ! -e "$PKG/Proxy/WebUI/metacubexd" ] || { f50_install_fail unexpected_panel_payload metacubexd; exit 1; }
+printf 'F50_BINARY_PROBES=ok\\n'
+
+# Repeat detection after unpacking: an old service may have started while uploading.
+f50_inspect || { f50_install_fail old_environment_inspection_failed; exit 1; }
+OLD_RUNNING=$F50_OLD_RUNNING
+[ ! -e "$F50_ROOT/Policy/stopped" ] || OLD_LATCH=1
+if f50_root_has_data; then HAD_OLD=1; fi
+[ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
+f50_preserve_user_data() {
+# Preserve templates too: they are user-editable, not disposable executable resources.
+for rel in Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+  src="$F50_ROOT/$rel"; dst="$PKG/$rel"
+  [ -e "$src" ] || continue
+  [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
+  mkdir -p "\${dst%/*}" && rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
+done
+# Custom provider/rule files under Proxy are user data, not part of executable/UI replacement.
+for src in "$F50_ROOT"/Proxy/*; do
+  [ -e "$src" ] || continue
+  case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|config.yaml|subscription_urls.txt|cache.db|rules|rule-providers|proxies|mac_bypass.txt|Policy) continue ;; esac
+  [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
+  dst="$PKG/Proxy/\${src##*/}"
+  rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
+done
+}
+f50_preserve_user_data || exit 1
+
+YQ="$PKG/Tools/yq_linux_arm64"
+CFG="$PKG/Proxy/config.yaml"
+[ -s "$CFG" ] || { f50_install_fail configuration_missing; exit 1; }
+probe=$(f50_limit 5 "$YQ" --version 2>&1); probe_rc=$?
+[ "$probe_rc" = 0 ] || { f50_install_fail yaml_parser_not_executable; exit 1; }
+for template_file in "$PKG/Tools/template.yaml" "$PKG/Tools/template.base.yaml"; do
+  [ -s "$template_file" ] || { f50_install_fail template_missing "$(basename "$template_file")"; exit 1; }
+  "$YQ" e -e 'tag == "!!map"' "$template_file" >/dev/null 2>&1 || {
+    f50_install_fail template_not_yaml_map "$(basename "$template_file")"
+    exit 1
+  }
+done
+# Panel fields are repaired by Clash.Service only after clashctl start/restart succeeds.
+f50_preflight_config() {
+  NEEDS_CONFIG=ready
+  f50_limit 5 "$YQ" e -e 'tag == "!!map" and ((.proxies // []) | tag == "!!seq") and ((."proxy-providers" // {}) | tag == "!!map")' "$CFG" >/dev/null 2>&1
+  parse_rc=$?
+  case "$parse_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
+  if [ "$parse_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
+  urls=$(f50_limit 5 "$YQ" e -r '."proxy-providers"[] | select(.type == "http") | (.url // "")' "$CFG" 2>/dev/null); urls_rc=$?
+  case "$urls_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
+  if [ "$urls_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
+  http_count=$(f50_limit 5 "$YQ" e -r '[."proxy-providers"[] | select(.type == "http")] | length' "$CFG" 2>/dev/null); count_rc=$?
+  [ "$count_rc" = 0 ] || { f50_install_fail config_probe_failed; return 1; }
+  case "$http_count" in ''|*[!0-9]*) f50_install_fail config_probe_failed; return 1 ;; esac
+  if [ "$http_count" != 0 ]; then
+    while IFS= read -r url; do
+      case "$url" in
+        https://*) authority=\${url#https://}; authority=\${authority%%[/?#]*}
+          case "$authority" in ''|*@*|*[[:space:]]*) NEEDS_CONFIG=invalid_subscription ;; esac ;;
+        *) NEEDS_CONFIG=invalid_subscription ;;
+      esac
+    done <<EOF_F50_URLS
+$urls
+EOF_F50_URLS
+  fi
+  if [ "$NEEDS_CONFIG" = ready ]; then
+    sources=$(f50_limit 5 "$YQ" e -r '((.proxies // []) | length) + ((."proxy-providers" // {}) | length)' "$CFG" 2>/dev/null); sources_rc=$?
+    [ "$sources_rc" = 0 ] || { f50_install_fail config_probe_failed; return 1; }
+    case "$sources" in ''|*[!0-9]*) f50_install_fail config_probe_failed; return 1 ;; esac
+    [ "$sources" != 0 ] || NEEDS_CONFIG=missing_subscription
+  fi
+}
+f50_preflight_config || exit 1
+# URL syntax is preflighted here; the unchanged Controller remains authoritative (HTTPS + no userinfo).
+case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
+  if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
+esac
+if [ "$F50_OLD_FOUND" = 1 ]; then
+  CLEAN_ATTEMPTED=1
+  f50_clean_environment || { f50_install_fail old_environment_cleanup_failed; exit 1; }
+  # Native recovery may repair both the config and cached providers from a prior transaction.
+  f50_preserve_user_data || exit 1
+  f50_preflight_config || exit 1
+    case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
+    if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
+  esac
+else
+  echo F50_CLEAN_STATE=skipped_no_old_environment
+fi
+printf '%s\\n' 'explicit start required' > "$PKG/Policy/stopped" || { f50_install_fail stopped_latch_failed; exit 1; }
+if [ "$HAD_OLD" = 0 ] && [ -d "$F50_ROOT" ]; then
+  # Remove only the known latch and empty directory scaffold; unexpected new data blocks the transaction.
+  rm -f "$F50_ROOT/Policy/stopped" || { f50_install_fail stale_latch_remove_failed; exit 1; }
+  find "$F50_ROOT" -depth -type d -exec rmdir {} \\; 2>/dev/null
+  [ ! -e "$F50_ROOT" ] || { f50_install_fail target_changed_during_install; exit 1; }
+fi
+if [ "$HAD_OLD" = 1 ]; then
+  BACKUP="$F50_ROOT.rollback.install.\${F50_WORK##*.}"
+  [ ! -e "$BACKUP" ] || { f50_install_fail backup_already_exists; exit 1; }
+  mv "$F50_ROOT" "$BACKUP" || { BACKUP=; f50_install_fail backup_rename_failed; exit 1; }
+  MOVED_OLD=1
+fi
+if ! mv "$PKG" "$F50_ROOT"; then
+  f50_install_fail commit_failed; exit 1
+fi
+COMMITTED=1
+panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
+printf '%s\\n' "$panel_probe"
+[ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
+if f50_start_service start 85; then
+  status=installed_running
+else
+  f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
+  exit 1
+fi
+if [ -n "$BACKUP" ]; then
+  if rm -rf "$BACKUP"; then BACKUP=; else echo F50_INSTALL_WARNING=backup_cleanup_failed; fi
+fi
+SUCCESS=1
+exit 0
+`;
+}
+async function installF50PackageAtDevicePath(uploaded) {
+  lastInstallDiagnostic = null;
+  try {
+    operationStage('检查旧运行环境');
+    const checked = await runShellWithRoot(buildF50InspectScript(), 25000);
+    const text = String(checked?.content || '');
+    if (!checked?.success || !text.includes('F50_INSPECT_OK=1')) {
+      throw new Error(text || 'F50_INSTALL_CODE=old_environment_inspection_failed');
+    }
+    const hasOld = /^F50_OLD_FOUND=1$/m.test(text);
+    operationStage(hasOld ? '安装组件并清理已检测到的旧环境' : '解压、验证并安装组件');
+    const result = await runShellWithRoot(buildF50InstallScript(uploaded), 150000);
+    const output = String(result?.content || '');
+    if (!result?.success || !/^KANO_INSTALL_OK=1$/m.test(output)) {
+      throw new Error(output || 'F50_INSTALL_CODE=transaction_interrupted');
+    }
+    pluginArtifactsRemoved = false; f50BackendReady = false;
+    invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
+    const state = (output.match(/^F50_INSTALL_STATUS=(.+)$/m) || [])[1];
+    const configState = (output.match(/^F50_CONFIG_STATE=(.+)$/m) || [])[1];
+    let message = state === 'installed_running' ? '组件已安装，核心与接管规则已启动'
+      : state === 'installed_stopped' ? '组件已更新，保持原来的停止状态'
+      : configState === 'invalid_subscription' ? '组件已安装；订阅地址无效，请配置无账号信息的 HTTPS 地址'
+      : configState === 'invalid_config' ? '组件已安装；请修正原配置格式后启动'
+      : '组件已安装，请先配置订阅（核心未启动）';
+    const warning = (output.match(/^F50_INSTALL_WARNING=(.+)$/m) || [])[1];
+    const recoveredWithFallback = /^F50_CLEAN_WARNING=/m.test(output);
+    if (recoveredWithFallback) message += '；旧恢复报错后已通过兜底清理复查';
+    if (warning) message += '；临时文件清理警告：' + warning;
+    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
+    operationFinish(true, message);
+    createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
+    return true;
+  } catch (error) {
+    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装未完成');
+    operationFinish(false, lastInstallDiagnostic.summary);
+    if (error?.name !== 'OperationCancelled') createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细信息见“状态与日志”。', 'red', 15000);
+    return false;
+  }
+}
+
+async function installF50PackageFromNetwork() {
+  return runCriticalOperation('安装核心', async () => {
+    operationStage('下载组件包');
+    const archive = await downloadCoreArchive({ allowCached: false });
+    if (!archive.ok) {
+      const detail = archive.content || archive.message || '下载安装包失败';
+      operationFinish(false, '下载安装包失败');
+      createToast('下载安装包失败<br>' + safeTextToHtml(detail), 'red', 15000);
+      return false;
+    }
+    try { return await installF50PackageAtDevicePath(DOWNLOAD_ZIP); }
+    finally {
+      const removed = await runShellWithRoot('rm -f ' + shellQuote(DOWNLOAD_ZIP) + ' ' + shellQuote(DOWNLOAD_LOG) + ' ' + shellQuote(DOWNLOAD_SOURCE_FILE), 5000)
+        .catch(error => ({success:false, content:f50Diagnostic(error?.message || String(error)).details}));
+      if (!removed?.success && lastInstallDiagnostic) lastInstallDiagnostic.details += '\nF50_INSTALL_WARNING=download_cache_cleanup_failed';
+    }
+  });
+}
+
+async function chooseF50Package() {
+  if (!f50PackageInput) {
+    f50PackageInput = document.createElement('input');
+    f50PackageInput.type = 'file';
+    f50PackageInput.accept = '.zip,application/zip';
+    f50PackageInput.hidden = true;
+    document.body.appendChild(f50PackageInput);
+    f50PackageInput.onchange = async () => {
+      const file = f50PackageInput.files && f50PackageInput.files[0];
+    f50PackageInput.value = '';
+    if (!file) return;
+    await runCriticalOperation('安装核心', async () => {
+        let uploaded = '';
+        try {
+          operationStage('上传组件包');
+          uploaded = await uploadFileToDevice(file);
+          return await installF50PackageAtDevicePath(uploaded);
+        } catch (error) {
+          const message = f50Error(error && (error.message || String(error))) || '上传组件包失败';
+          operationFinish(false, message);
+          createToast('安装未完成<br>' + safeTextToHtml(message), 'red', 15000);
+          return false;
+        } finally {
+          if (uploaded) {
+            try {
+              const removed = await runShellWithRoot('rm -f ' + shellQuote(uploaded), 5000);
+              if (!removed?.success) throw new Error('uploaded_package_cleanup_failed');
+            } catch (cleanupError) {
+              if (cleanupError?.name !== 'OperationCancelled') {
+                if (lastInstallDiagnostic) lastInstallDiagnostic.details += '\nF50_INSTALL_WARNING=uploaded_package_cleanup_failed';
+                createToast('上传包临时文件删除失败，未改变安装结果。', 'yellow', 7000);
+              }
+            }
+          }
+        }
+      });
+    };
+  }
+  f50PackageInput.click();
+}
+
+
   // KPR: dual-stack private routing; disabled until explicitly enabled.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // CIDR arithmetic uses bit strings so IPv6 never passes through a JS Number.
@@ -149,17 +1161,9 @@ function createPrivateRouteLogic() {
         meta.tun[key] = { present: own(tun, key), ...(own(tun, key) ? { before: clone(tun[key]) } : {}), applied: clone(value) };
         tun[key] = value;
       };
-      const migrated = [];
-      for (const entry of list(tun, 'route-exclude-address-set')) {
-        try { migrated.push(cidr(entry).text); continue; } catch (_) {}
-        const provider = (out['rule-providers'] || {})[entry];
-        if (!provider || provider.type !== 'inline' || provider.behavior !== 'ipcidr' || !Array.isArray(provider.payload)) throw new Error('\u65e0\u6cd5\u5b89\u5168\u62c6\u5206\u6392\u9664\u89c4\u5219\u96c6 ' + entry + '\uff0c\u8bf7\u6539\u7528 route-exclude-address \u6216 TProxy');
-        migrated.push(...provider.payload.map((n) => cidr(n).text));
-      }
-      if (list(tun, 'route-address-set').length) throw new Error('\u8bf7\u5c06 TUN route-address-set \u6539\u4e3a\u663e\u5f0f route-address');
-      const excluded = [...PRIVATE, ...migrated, ...list(tun, 'route-exclude-address'), ...list(tun, 'inet4-route-exclude-address'), ...list(tun, 'inet6-route-exclude-address')];
+      const excluded = [...PRIVATE, ...list(tun, 'route-exclude-address')];
       set('route-exclude-address', subtract(excluded, state.cidrs));
-      for (const key of ['route-exclude-address-set', 'inet4-route-exclude-address', 'inet6-route-exclude-address']) if (own(tun, key)) set(key, []);
+      for (const key of ['inet4-route-exclude-address', 'inet6-route-exclude-address']) if (own(tun, key)) set(key, []);
       const included = [...list(tun, 'route-address'), ...list(tun, 'inet4-route-address'), ...list(tun, 'inet6-route-address')];
       if (included.length) {
         set('route-address', compact([...included, ...state.cidrs]));
@@ -171,107 +1175,41 @@ function createPrivateRouteLogic() {
     return out;
   }
   function runtime(config, options = {}, connected = []) {
-    let out = strip(config);
-    const tunMetaKey = 'x-kano-tun';
-    const tunMeta = out[tunMetaKey];
-    const isMap = (value) => value && typeof value === 'object' && !Array.isArray(value);
-    if (tunMeta != null) {
-      if (tunMeta.version !== 1 || (tunMeta.before !== null && !isMap(tunMeta.before)) ||
-          (tunMeta.applied !== null && !isMap(tunMeta.applied))) throw new Error('Invalid saved TUN configuration');
-      if (tunMeta.applied === null) {
-        if (!own(out, 'tun') && tunMeta.before !== null) out.tun = clone(tunMeta.before);
-      } else if (isMap(out.tun)) {
-        for (const key of Object.keys(tunMeta.applied)) {
-          // Only undo our last value; keep changes made in the config editor.
-          if (!own(out.tun, key) || !equal(out.tun[key], tunMeta.applied[key])) continue;
-          if (tunMeta.before && own(tunMeta.before, key)) out.tun[key] = clone(tunMeta.before[key]);
-          else delete out.tun[key];
-        }
-        if (!Object.keys(out.tun).length && tunMeta.before === null) delete out.tun;
-      }
-      delete out[tunMetaKey];
-    }
-    if (own(out, 'tun') && !isMap(out.tun)) throw new Error('tun must be an object');
-    const originalTun = own(out, 'tun') ? clone(out.tun) : null;
-    const networkMetaKey = 'x-kano-network';
-    const networkPaths = ['ipv6', 'allow-lan', 'bind-address', 'tproxy-port', 'dns.enable', 'dns.listen', 'dns.ipv6'];
-    if (own(out, 'dns') && !isMap(out.dns)) throw new Error('dns must be an object');
-    const previousNetwork = out[networkMetaKey];
-    if (previousNetwork != null) {
-      if (previousNetwork.version !== 1 || !isMap(previousNetwork.fields) || typeof previousNetwork.dnsPresent !== 'boolean') {
-        throw new Error('Invalid saved network configuration');
-      }
-      for (const [path, saved] of Object.entries(previousNetwork.fields)) {
-        if (!networkPaths.includes(path) || !isMap(saved) || typeof saved.present !== 'boolean' ||
-            !own(saved, 'applied') || (saved.present && !own(saved, 'before'))) throw new Error('Invalid saved network field');
-        const parts = path.split('.'), key = parts.pop(), parent = parts.length ? out[parts[0]] : out;
-        if (!parent || !own(parent, key) || !equal(parent[key], saved.applied)) continue;
-        if (saved.present) parent[key] = clone(saved.before); else delete parent[key];
-      }
-      if (!previousNetwork.dnsPresent && out.dns && !Object.keys(out.dns).length) delete out.dns;
-    }
-    delete out[networkMetaKey];
-    const networkMeta = { version: 1, dnsPresent: own(out, 'dns'), fields: {} };
-    const setNetwork = (path, value) => {
-      const parts = path.split('.'), key = parts.pop();
-      const parent = parts.length ? (out[parts[0]] || (out[parts[0]] = {})) : out;
-      if (own(parent, key) && equal(parent[key], value)) return;
-      networkMeta.fields[path] = { present: own(parent, key), ...(own(parent, key) ? { before: clone(parent[key]) } : {}), applied: clone(value) };
-      parent[key] = value;
-    };
-    const mode = options.traffic_mode || 'tproxy';
-    const ipv6 = options.ipv6 === 'on';
-    const dnsManaged = mode !== 'off' && options.dns_hijack === 'on';
-    const checkPort = (value, label) => {
-      const port = Number(value);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(label + ' 端口无效');
-      return port;
-    };
-    if (mode !== 'off') {
-      setNetwork('ipv6', ipv6);
-    }
-    if (mode === 'tproxy') {
-      setNetwork('allow-lan', true);
-      setNetwork('bind-address', '*');
-      setNetwork('tproxy-port', checkPort(options.tproxy_port ?? 7895, 'TProxy'));
-    }
-    if (dnsManaged) {
-      setNetwork('dns.enable', true);
-      setNetwork('dns.listen', (ipv6 ? '[::]:' : '0.0.0.0:') + checkPort(options.dns_port ?? 1053, 'DNS'));
-      setNetwork('dns.ipv6', ipv6);
-    }
-    const activePorts = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port']
-      .filter((key) => Number(out[key]) > 0).map((key) => [key, Number(out[key])]);
-    const controllerPort = String(out['external-controller'] || '').match(/:(\d+)$/);
-    if (controllerPort) activePorts.push(['external-controller', Number(controllerPort[1])]);
-    if (out.dns && out.dns.enable !== false) {
-      const dnsPort = String(out.dns.listen || '').match(/:(\d+)$/);
-      if (dnsPort) activePorts.push(['dns.listen', Number(dnsPort[1])]);
-    }
-    for (const name of [...(mode === 'tproxy' ? ['tproxy-port'] : []), ...(dnsManaged ? ['dns.listen'] : [])]) {
-      const port = activePorts.find(([key]) => key === name)[1];
-      const conflict = activePorts.find(([key, value]) => key !== name && value === port);
-      if (conflict) throw new Error(name + ' 与 ' + conflict[0] + ' 端口冲突：' + port);
-    }
-    if (Object.keys(networkMeta.fields).length) out[networkMetaKey] = networkMeta;
-    if (mode === 'tun') {
-      if (!out.tun) out.tun = {};
-      out.tun.enable = true;
-      const device = String(out.tun.device || 'KanoTun');
-      if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device) || device === 'lo') throw new Error('Invalid TUN interface name');
-      Object.assign(out.tun, { device, stack: out.tun.stack || 'mixed', 'auto-route': true, 'auto-redirect': false, 'auto-detect-interface': true, 'strict-route': false });
-      // DNS interception is destination-aware in PolicyTools, not global in TUN.
-      out.tun['dns-hijack'] = [];
-      if (ipv6 && (out.tun['inet6-address'] == null || (Array.isArray(out.tun['inet6-address']) && !out.tun['inet6-address'].length))) out.tun['inet6-address'] = ['fdfe:dcba:9876::1/126'];
-    } else {
-      delete out.tun;
-    }
-    if (originalTun !== null || mode === 'tun') {
-      out[tunMetaKey] = { version: 1, before: originalTun, applied: out.tun ? clone(out.tun) : null };
-    }
-    const feature = fromOptions(options);
-    return transform(out, feature, mode, connected);
+  const source = strip(config);
+  const mode = options.traffic_mode || 'tproxy';
+  if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
+  const out = clone(F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')]);
+  for (const key of ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
+    if (own(source, key)) out[key] = clone(source[key]);
   }
+  if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
+  if (!own(out,'proxies')) out.proxies = [];
+  if (own(out,'proxy-groups') && !Array.isArray(out['proxy-groups'])) throw new Error('proxy-groups must be a list');
+  if (!own(out,'proxy-groups')) out['proxy-groups'] = [];
+  if (own(out,'rules') && !Array.isArray(out.rules)) throw new Error('rules must be a list');
+  if (!own(out,'rules')) out.rules = ['MATCH,DIRECT'];
+  for (const key of ['proxies','proxy-groups']) for(const node of out[key] || []) {
+    if(node && typeof node==='object'){delete node['interface-name'];delete node['routing-mark'];}
+  }
+  for(const key of ['proxy-providers','rule-providers']) for(const provider of Object.values(out[key]||{})) {
+    if(provider && typeof provider==='object'){
+      if(provider.override){delete provider.override['interface-name'];delete provider.override['routing-mark'];}
+      if(key==='rule-providers' && provider.type==='http')provider.proxy='DIRECT';
+    }
+  }
+  for (const name of ['cn_domain', 'private_domain', 'add_direct_domain']) {
+    if (out['rule-providers']?.[name]?.behavior === 'domain') {
+      out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
+    }
+  }
+  out['x-f50-profile'] = '8.0.0-compat.2.3';
+  // Only rule content is injected here. All kernel routing belongs to clashctl.
+  const feature = fromOptions(options);
+  if (!feature.enabled || mode === 'off') return out;
+  const transformed = transform(out, feature, 'tproxy', connected);
+  transformed[META].mode = mode;
+  return transformed;
+}
   function resolveSelection(proxies, name) {
     const visited = new Set();
     let current = name;
@@ -298,7 +1236,7 @@ function buildPortListenerFunction() {
   [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || return 1
   for proto in udp tcp; do
     found=0; suffix="";[ "$FAMILY" != 6 ] || suffix=6
-    if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$proto$suffix" 2>/dev/null;then found=1;fi
+    if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(a[1]~/^0+$/&&toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$proto$suffix" 2>/dev/null;then found=1;fi
     if [ "$found:$FAMILY" = 0:4 ] && [ "$(cat /proc/sys/net/ipv6/bindv6only 2>/dev/null)" = 0 ];then
       if awk -v hex="$HEX" -v proto="$proto" 'NR>1 {split($2,a,":");if(a[1]~/^0+$/&&toupper(a[2])==hex&&((proto=="udp"&&$4=="07")||(proto=="tcp"&&$4=="0A")))ok=1} END{exit !ok}' "/proc/net/$\u007bproto\u007d6" 2>/dev/null;then found=1;fi
     fi
@@ -306,135 +1244,13 @@ function buildPortListenerFunction() {
   done
 }`;
 }
-function augmentPrivatePolicyShell(source, extension) {
-  'use strict';
-  function once(text, before, after, label) {
-    const index = text.indexOf(before);
-    if (index < 0 || text.indexOf(before, index + before.length) >= 0) throw new Error('Shell anchor mismatch: ' + label);
-    return text.slice(0, index) + after + text.slice(index + before.length);
-  }
-  function body(name, edit) {
-    const marker = name + '() {';
-    const start = source.indexOf(marker), end = source.indexOf('\n}', start) + 2;
-    if (start < 0 || end < start || source.indexOf(marker, start + marker.length) >= 0) throw new Error('Missing shell function: ' + name);
-    source = source.slice(0, start) + edit(source.slice(start, end)) + source.slice(end);
-  }
-  body('norm_mac', () => `norm_mac() {
-  echo "$1" | awk '
-    {s=toupper($0);valid=0;
-     if(s ~ /^[0-9A-F]+$/ && length(s)==12)valid=1;
-     if(index(s,":")||index(s,"-")){sep=index(s,":")?":":"-";n=split(s,a,sep);if(n==6){valid=1;for(i=1;i<=6;i++)if(length(a[i])!=2||a[i]!~/^[0-9A-F]+$/)valid=0}}
-     if(index(s,".")){n=split(s,a,".");if(n==3){valid=1;for(i=1;i<=3;i++)if(length(a[i])!=4||a[i]!~/^[0-9A-F]+$/)valid=0}}
-     if(!valid)exit 1;gsub(/[:.-]/,"",s);for(i=1;i<=12;i+=2)printf "%s%s",substr(s,i,2),i==11?"\\n":":";
-    }'
-}`);
-  body('is_ipv6', () => 'is_ipv6() {\n  [ "$(kpr_net "$1")" = 6 ]\n}');
-  body('is_cidr6', () => 'is_cidr6() {\n  case "$1" in */*) [ "$(kpr_net "$1")" = 6 ] ;; *) return 1 ;; esac\n}');
-  body('is_port_listening', buildPortListenerFunction);
-  body('apply_policy', (part) => {
-    const add = part.split('\n').find((line) => line.includes('add_source_accepts "$IPT" mangle "$NEXT"'));
-    part = once(part, add + '\n', '', 'source accepts old position');
-    return once(part, '  if [ "$transparent" = "off" ]; then', add + '\n  kpr_add_capture "$IPT" "$NEXT" "$FAMILY" || return 1\n  if [ "$transparent" = "off" ]; then', 'capture after source bypass');
-  });
-  body('apply_dns', (part) => {
-    const add = part.split('\n').find((line) => line.includes('add_source_accepts "$IPT" nat "$NEXT"'));
-    part = once(part, add, add + '\n  kpr_add_dns_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1', 'DNS targets');
-    part = part.replace(/^  if ! is_port_listening .*$/m, '  is_port_listening "$dns_port" "$FAMILY" || { echo "DNS_LISTENER_MISSING IPv$FAMILY port=$dns_port"; return 1; }');
-    return part.replace(/^  if ! "\$IPT" -t nat -L .*$/m, '  "$IPT" -t nat -L >/dev/null 2>&1 || { echo "DNS_NAT_UNAVAILABLE IPv$FAMILY"; return 1; }');
-  });
-  body('apply_quic', (part) => {
-    const add = part.split('\n').find((line) => line.includes('add_source_returns "$IPT" filter "$NEXT"'));
-    return once(part, add, add + '\n  kpr_add_quic_exceptions "$IPT" "$NEXT" "$FAMILY" || return 1', 'QUIC targets');
-  });
-  body('verify_family', (part) => part.replace('if [ "$dns_hijack" = "on" ] && is_port_listening "$dns_port" "$FAMILY" && "$IPT" -t nat -L >/dev/null 2>&1; then', 'if [ "$dns_hijack" = "on" ]; then\n    is_port_listening "$dns_port" "$FAMILY" || return 1\n    "$IPT" -t nat -L >/dev/null 2>&1 || return 1'));
-  body('verify_all', (part) => once(part, '  echo "POLICY_RULES_VERIFIED"', '  kpr_verify || return 1\n  echo "POLICY_RULES_VERIFIED"', 'private verify'));
-  body('policy_order_stable', (part) => once(part, '  policy_is_first "$IPT" || return 1', '  policy_is_first "$IPT" || return 1\n  verify_all >/dev/null 2>&1 || return 1', 'boot full verification'));
-  body('status_all', (part) => once(part, 'status_all() {', 'status_all() {\n  kpr_status', 'status'));
-  body('apply_all', () => `apply_all() {
-  LOCK=/dev/kano_policy_apply.lock
-  if ! mkdir "$LOCK" 2>/dev/null;then
-    owner="$(cat "$LOCK/pid" 2>/dev/null)"
-    case "$owner" in ''|*[!0-9]*) echo POLICY_APPLY_LOCK_INVALID;exit 1 ;; esac
-    if kill -0 "$owner" 2>/dev/null;then echo POLICY_APPLY_BUSY;exit 1;fi
-    rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null || exit 1
-  fi
-  echo "$$" > "$LOCK/pid" || { rmdir "$LOCK";exit 1; }
-  changed=0
-  finish_apply() {
-    rc=$?;trap - EXIT
-    if [ "$rc" -ne 0 ] && [ "$changed" = 1 ];then
-      recovery=0
-      rollback_family_hooks "$IPT" "$P4_OLD_POLICY" "$P4_OLD_DNS" "$P4_OLD_QUIC" || recovery=1
-      kpr_forward_restore "$IPT" "$P4_OLD_FORWARD" || recovery=1
-      if [ -n "$IP6T" ];then
-        rollback_family_hooks "$IP6T" "$P6_OLD_POLICY" "$P6_OLD_DNS" "$P6_OLD_QUIC" || recovery=1
-        kpr_forward_restore "$IP6T" "$P6_OLD_FORWARD" || recovery=1
-      fi
-      kpr_routes_rollback || recovery=1
-      [ "$recovery" = 0 ] && echo POLICY_APPLY_ROLLED_BACK || echo POLICY_ROLLBACK_INCOMPLETE
-    fi
-    rm -f "$LOCK/pid";rmdir "$LOCK" 2>/dev/null
-    exit "$rc"
-  }
-  trap finish_apply EXIT
-  trap 'exit 1' HUP INT TERM
-  IPT="$(get_ipt iptables)";IP6T="$(get_ipt ip6tables)";ipv6="$(get_opt ipv6 off)"
-  [ -n "$IPT" ] || { echo POLICY_NO_IPV4_BACKEND;exit 1; }
-  [ "$ipv6" != on ] || [ -n "$IP6T" ] || { echo POLICY_NO_IPV6_BACKEND;exit 1; }
-  kpr_read || exit 1
-  P4_OLD_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"
-  P4_OLD_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
-  P4_OLD_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"
-  P4_OLD_FORWARD="$(managed_hook_target "$IPT" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
-  P6_OLD_POLICY="";P6_OLD_DNS="";P6_OLD_QUIC="";P6_OLD_FORWARD=""
-  if [ -n "$IP6T" ];then
-    P6_OLD_POLICY="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"
-    P6_OLD_DNS="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"
-    P6_OLD_QUIC="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"
-    P6_OLD_FORWARD="$(managed_hook_target "$IP6T" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
-  fi
-  changed=1
-  kpr_routes_begin || exit 1
-  apply_policy "$IPT" 4 && apply_dns "$IPT" 4 && apply_quic "$IPT" 4 && kpr_forward_switch "$IPT" 4 || exit 1
-  if [ "$ipv6" = on ];then
-    apply_policy "$IP6T" 6 && apply_dns "$IP6T" 6 && apply_quic "$IP6T" 6 && kpr_forward_switch "$IP6T" 6 || exit 1
-  elif [ -n "$IP6T" ];then
-    remove_managed_hooks "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"
-    remove_managed_hooks "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"
-    remove_managed_hooks "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"
-    remove_managed_hooks "$IP6T" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B"
-  fi
-  verify_all || exit 1
-  kpr_routes_commit || exit 1
-  changed=0
-  cleanup_family_chains "$IPT"
-  [ -z "$IP6T" ] || cleanup_family_chains "$IP6T"
-  for ipt in "$IPT" "$IP6T";do
-    [ -n "$ipt" ] || continue
-    active="$(managed_hook_target "$ipt" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B")"
-    cleanup_unused_chains "$ipt" filter FORWARD "$KPR_FORWARD" "$KPR_FORWARD_A" "$KPR_FORWARD_B" "$active"
-  done
-  echo POLICY_APPLY_OK
-}`);
-  // Original helpers use globals such as IPT and FAMILY. Isolate calls so IPv6
-  // verification cannot redirect subsequent IPv4 cleanup to the IPv6 backend.
-  source = source.replace(/^(\w+)\(\) \{\n([\s\S]*?)^\}/gm, (_, name, content) => name + '() (\n' + content + ')');
-  source = once(source, 'flush_all() (', 'flush_all() (\n  kpr_cleanup || exit 1', 'flush private routes');
-  source = source.replace(/\^\[0-9\]\{2,5\}\$/g, '^[0-9]{1,5}$');
-  source = source.replace('flush) flush_all; echo', 'flush) flush_all && echo');
-  source = once(source, 'case "$1" in\n  apply)', extension + '\ncase "$1" in\n  private-cleanup) kpr_cleanup ;;\n  private-status) kpr_status ;;\n  apply)', 'dispatch');
-  return source;
-}
-const KPR_SHELL = "# KPR dual-stack routing. Only downstream TCP/UDP targets are captured.\nKPR_CONFIG=/data/clash/Proxy/config.yaml\nKPR_YQ=/data/clash/Tools/yq_linux_arm64\nKPR_TABLE=17666\nKPR_RETURN_TABLE=17667\nKPR_PREF=1777\nKPR_RETURN_PREF=1776\nKPR_MARK=0x10000000/0x10000000\nKPR_PROTO=242\nKPR_FORWARD=KANO_PR_FWD\nKPR_FORWARD_A=KANO_PR_FWD_A\nKPR_FORWARD_B=KANO_PR_FWD_B\nKPR_PLAN=\"$POLICY_DIR/private_route.plan\"\nKPR_OWNER=\"$POLICY_DIR/private_route.owner\"\nKPR_PENDING=\"$POLICY_DIR/private_route.pending\"\nKPR_OLD=\"$POLICY_DIR/private_route.previous\"\nKPR_NEXT=\"$POLICY_DIR/private_route.next\"\nKPR_ACTIVE=0\n\nkpr_error() { echo \"PRIVATE_ROUTE_ERROR=$*\" >&2; return 1; }\nkpr_iface_ok() ( case \"$1\" in ''|*[!A-Za-z0-9_.-]*|lo) exit 1 ;; esac; [ \"${#1}\" -le 15 ]; )\n# Parse IPv4/IPv6 into bit strings in awk; never round a 128-bit address.\nkpr_net() (\n  awk -v input=\"$1\" -v compare=\"$2\" -v op=\"${3:-valid}\" '\n  function digit(c) { return index(\"0123456789abcdef\",tolower(c))-1 }\n  function bits(v,w, s,i) { s=\"\"; for(i=0;i<w;i++){s=(v%2) s;v=int(v/2)} return s }\n  function parse(x, a,n,p,ip,b,k,l,r,j,t,z,c,h,v,width,q) {\n    n=split(x,a,\"/\"); if(n>2||a[1]==\"\") return \"\"; ip=a[1];p=a[2];\n    if(index(ip,\":\")) {\n      width=128;if(ip!~/^[0-9a-fA-F:]+$/)return \"\";\n      q=index(ip,\"::\");if(q){l=substr(ip,1,q-1);r=substr(ip,q+2);if(index(r,\"::\"))return \"\"}\n      else {l=ip;r=\"\"}\n      n=0;b=\"\";\n      if(l!=\"\"){k=split(l,t,\":\");for(j=1;j<=k;j++){h=t[j];if(length(h)<1||length(h)>4)return \"\";v=0;for(z=1;z<=length(h);z++)v=v*16+digit(substr(h,z,1));b=b bits(v,16);n++}}\n      c=\"\";if(r!=\"\"){k=split(r,t,\":\");for(j=1;j<=k;j++){h=t[j];if(length(h)<1||length(h)>4)return \"\";v=0;for(z=1;z<=length(h);z++)v=v*16+digit(substr(h,z,1));c=c bits(v,16);n++}}\n      if(q){if(n>=8)return \"\";for(j=n;j<8;j++)b=b bits(0,16);b=b c} else if(n!=8)return \"\";\n    } else {\n      width=32;k=split(ip,t,\".\");if(k!=4)return \"\";b=\"\";\n      for(j=1;j<=4;j++){if(t[j]!~/^[0-9]+$/||length(t[j])>3||t[j]>255||(length(t[j])>1&&substr(t[j],1,1)==\"0\"))return \"\";b=b bits(t[j]+0,8)}\n    }\n    if(p==\"\"){if(index(x,\"/\"))return \"\";p=width}\n    if(p!~/^[0-9]+$/||p>width||length(p)>3)return \"\";\n    return width \":\" p \":\" b\n  }\n  BEGIN {\n    x=parse(input);if(x==\"\")exit 1;split(x,a,\":\");\n    if(op==\"valid\"){print(a[1]==32?4:6);exit 0}\n    if(op==\"network\") {\n      b=a[3];p=a[2]+0;step=a[1]==32?8:16;out=\"\";\n      for(i=1;i<=a[1];i+=step){v=0;for(j=0;j<step;j++)v=v*2+(i+j<=p?substr(b,i+j,1):0);out=out (i==1?\"\":(step==8?\".\":\":\")) (step==8?sprintf(\"%d\",v):sprintf(\"%x\",v))}\n      print out \"/\" p;exit 0\n    }\n    if(op==\"private\") {\n      b=a[3];p=a[2]+0;\n      if(a[1]==128)exit !(p>=7&&substr(b,1,7)==\"1111110\");\n      exit !((p>=8&&substr(b,1,8)==\"00001010\")||(p>=12&&substr(b,1,12)==\"101011000001\")||(p>=16&&substr(b,1,16)==\"1100000010101000\"))\n    }\n    y=parse(compare);if(y==\"\")exit 2;split(y,c,\":\");if(a[1]!=c[1])exit 1;\n    p=a[2]<c[2]?a[2]:c[2];exit !(substr(a[3],1,p)==substr(c[3],1,p))\n  }'\n)\nkpr_read() {\n  KPR_ACTIVE=0; KPR_TARGETS=\"\"; KPR_LINKS=\"\"; KPR_DOWN=\"\"; KPR_TUN=\"\"; KPR_PORT=\"\"\n  KPR_MODE=\"$(get_opt traffic_mode tproxy)\"\n  [ \"$(get_opt private_route_enabled off)\" = on ] && [ \"$KPR_MODE\" != off ] || return 0\n  case \"$KPR_MODE\" in tun|tproxy) ;; *) kpr_error invalid_mode; return 1 ;; esac\n  KPR_TARGETS=\"$(get_opt private_route_cidrs '')\"\n  [ -n \"$KPR_TARGETS\" ] || { kpr_error empty_targets; return 1; }\n  count=0\n  for net in $KPR_TARGETS; do\n    count=$((count+1));[ \"$count\" -le 64 ] || return 1\n    kpr_net \"$net\" '' private || { kpr_error \"invalid_private_cidr:$net\"; return 1; }\n    fam=\"$(kpr_net \"$net\")\" || return 1\n    [ \"$fam\" != 6 ] || [ \"$(get_opt ipv6 off)\" = on ] || { kpr_error ipv6_disabled; return 1; }\n  done\n  [ -x \"$KPR_YQ\" ] || { kpr_error yq_missing; return 1; }\n  meta=\"$($KPR_YQ e -r '.\"x-kano-private-route\".version // 0' \"$KPR_CONFIG\" 2>/dev/null)\" || return 1\n  [ \"$meta\" = 2 ] || { kpr_error yaml_not_prepared; return 1; }\n  [ \"$($KPR_YQ e -r '.\"x-kano-private-route\".mode' \"$KPR_CONFIG\")\" = \"$KPR_MODE\" ] || { kpr_error yaml_mode_mismatch; return 1; }\n  wanted=\"$(printf '%s\\n' $KPR_TARGETS | sort)\"\n  loaded=\"$($KPR_YQ e -r '.\"x-kano-private-route\".cidrs[]' \"$KPR_CONFIG\" | sort)\"\n  [ \"$wanted\" = \"$loaded\" ] || { kpr_error yaml_targets_mismatch; return 1; }\n  KPR_POLICY=\"$(get_opt private_route_policy '')\"\n  [ \"$($KPR_YQ e -r '.\"x-kano-private-route\".policy' \"$KPR_CONFIG\")\" = \"$KPR_POLICY\" ] || { kpr_error yaml_policy_mismatch; return 1; }\n  [ \"$($KPR_YQ e -r '.mode // \"rule\"' \"$KPR_CONFIG\")\" = rule ] || { kpr_error requires_rule_mode; return 1; }\n  expected=\"\"\n  for net in $KPR_TARGETS; do\n    fam=\"$(kpr_net \"$net\")\"; tag=IP-CIDR;[ \"$fam\" != 6 ] || tag=IP-CIDR6\n    expected=\"${expected}${tag},${net},${KPR_POLICY},no-resolve\n\"\n  done\n  actual=\"$($KPR_YQ e -r '.rules[]' \"$KPR_CONFIG\" | head -n \"$count\")\"\n  [ \"$actual\" = \"$(printf '%s' \"$expected\")\" ] || { kpr_error yaml_rule_order_mismatch; return 1; }\n  KPR_PORT=\"$($KPR_YQ e -r '.\"tproxy-port\" // 7895' \"$KPR_CONFIG\")\"\n  case \"$KPR_PORT\" in ''|*[!0-9]*) return 1 ;; esac\n  [ \"$KPR_PORT\" -ge 1 ] && [ \"$KPR_PORT\" -le 65535 ] || return 1\n  if [ \"$KPR_MODE\" = tun ]; then\n    [ \"$($KPR_YQ e -r '.tun.enable' \"$KPR_CONFIG\")\" = true ] || { kpr_error tun_disabled; return 1; }\n    KPR_TUN=\"$($KPR_YQ e -r '.tun.device' \"$KPR_CONFIG\")\"\n    kpr_iface_ok \"$KPR_TUN\" || { kpr_error tun_name; return 1; }\n    [ -e \"/sys/class/net/$KPR_TUN/tun_flags\" ] || { kpr_error tun_interface_missing; return 1; }\n    ip link show dev \"$KPR_TUN\" >/dev/null 2>&1 || return 1\n    for scope in all \"$KPR_TUN\"; do\n      [ \"$(cat \"/proc/sys/net/ipv4/conf/$scope/rp_filter\" 2>/dev/null)\" != 1 ] || { kpr_error \"strict_rp_filter:$scope\"; return 1; }\n    done\n    [ -z \"$(normalize_sources)\" ] || { kpr_error tun_source_bypass_unsupported; return 1; }\n  else\n    [ \"$($KPR_YQ e -r '.tun.enable // false' \"$KPR_CONFIG\")\" != true ] || { kpr_error tun_still_enabled; return 1; }\n  fi\n  lines=\"$(ip -o -4 addr show)\" || { kpr_error read_ipv4_interfaces; return 1; }\n  KPR_LINKS=\"$(printf '%s\\n' \"$lines\" | awk '$3==\"inet\" {sub(/@.*/,\"\",$2);print 4,$4,$2}')\"\n  if [ \"$(get_opt ipv6 off)\" = on ]; then\n    lines=\"$(ip -o -6 addr show)\" || { kpr_error read_ipv6_interfaces; return 1; }\n    KPR_LINKS=\"$KPR_LINKS\n$(printf '%s\\n' \"$lines\" | awk '$3==\"inet6\" {sub(/@.*/,\"\",$2);print 6,$4,$2}')\"\n  fi\n  # Protect all local networks; only known downstream interfaces are captured.\n  while read fam local iface; do\n    [ -n \"$iface\" ] && [ \"$iface\" != \"$KPR_TUN\" ] || continue\n    kpr_iface_ok \"$iface\" || continue\n    for net in $KPR_TARGETS; do\n      if kpr_net \"$net\" \"$local\" overlap; then kpr_error \"overlap:$net:$local:$iface\"; return 1; fi\n    done\n  done <<KPR_LINKS_EOF\n$KPR_LINKS\nKPR_LINKS_EOF\n  KPR_DOWN=\"$(printf '%s\\n' \"$KPR_LINKS\" | awk -v tun=\"$KPR_TUN\" '$3!=tun && $3~/^(br|wlan|ap|usb|rndis|ncm|ecm|eth|lan)/ {print}' | sort -u)\"\n  [ -n \"$KPR_DOWN\" ] || { kpr_error no_downstream_interfaces; return 1; }\n  for net in $KPR_TARGETS; do\n    fam=\"$(kpr_net \"$net\")\"\n    printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {ok=1} END{exit !ok}' || { kpr_error \"no_downstream_ipv$fam\"; return 1; }\n    if [ \"$KPR_MODE\" = tproxy ]; then\n      is_port_listening \"$KPR_PORT\" \"$fam\" || { kpr_error \"tproxy_listener_ipv$fam\"; return 1; }\n    elif [ \"$fam\" = 6 ]; then\n      ip -o -6 addr show dev \"$KPR_TUN\" | grep -q inet6 || { kpr_error tun_ipv6_address_missing; return 1; }\n    fi\n  done\n  KPR_ACTIVE=1\n}\nkpr_plan_make() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for fam in 4 6; do\n    found=0;for net in $KPR_TARGETS; do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n    [ \"$found\" = 1 ] || continue\n    if [ \"$KPR_MODE\" = tun ]; then echo \"C $fam tun $KPR_TUN\";else echo \"C $fam tproxy lo\";fi\n    echo \"M $fam\"\n    [ \"$KPR_MODE\" = tun ] || continue\n    printf '%s\\n' \"$KPR_DOWN\" | while read f net dev; do [ \"$f\" != \"$fam\" ] || echo \"R $f $(kpr_net \"$net\" '' network) $dev\"; done\n    for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || echo \"B $fam $net $KPR_TUN\";done\n  done\n)\nkpr_plan_check() (\n  [ -f \"$1\" ] || exit 0\n  while read kind fam arg dev extra; do\n    [ -n \"$kind\" ] || continue\n    [ -z \"$extra\" ] || exit 1\n    case \"$fam\" in 4|6) ;; *) exit 1 ;; esac\n    case \"$kind\" in\n      C) case \"$arg:$dev\" in tproxy:lo) ;; tun:*) kpr_iface_ok \"$dev\" || exit 1 ;; *) exit 1 ;; esac ;;\n      M) [ -z \"$arg$dev\" ] || exit 1 ;;\n      R|B) [ \"$(kpr_net \"$arg\")\" = \"$fam\" ] && kpr_iface_ok \"$dev\" || exit 1 ;;\n      *) exit 1 ;;\n    esac\n  done < \"$1\"\n)\nkpr_plan_remove() (\n  [ -f \"$1\" ] || exit 0\n  kpr_plan_check \"$1\" || exit 1\n  rc=0\n  while read kind fam arg dev; do\n    case \"$kind\" in\n      M) while ip -\"$fam\" rule del pref \"$KPR_PREF\" fwmark \"$KPR_MARK\" lookup \"$KPR_TABLE\" 2>/dev/null; do :;done ;;\n      B) while ip -\"$fam\" rule del pref \"$KPR_RETURN_PREF\" from \"$arg\" iif \"$dev\" lookup \"$KPR_RETURN_TABLE\" 2>/dev/null;do :;done ;;\n    esac\n  done < \"$1\"\n  for fam in 4 6;do\n    for tab in \"$KPR_TABLE\" \"$KPR_RETURN_TABLE\";do\n      entries=\"$(ip -\"$fam\" route show table \"$tab\" proto \"$KPR_PROTO\" 2>/dev/null)\"\n      if [ -n \"$entries\" ];then ip -\"$fam\" route flush table \"$tab\" proto \"$KPR_PROTO\" || rc=1;fi\n    done\n  done\n  exit \"$rc\"\n)\nkpr_plan_install() (\n  [ -f \"$1\" ] || exit 0\n  kpr_plan_check \"$1\" || exit 1\n  # Routes must exist before their rules become visible.\n  while read kind fam arg dev;do\n    case \"$kind:$arg\" in\n      C:tproxy) ip -\"$fam\" route replace local default dev lo table \"$KPR_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n      C:tun) ip -\"$fam\" route replace default dev \"$dev\" table \"$KPR_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n      R:*) ip -\"$fam\" route replace \"$arg\" dev \"$dev\" table \"$KPR_RETURN_TABLE\" proto \"$KPR_PROTO\" || exit 1 ;;\n    esac\n  done < \"$1\"\n  while read kind fam arg dev;do\n    case \"$kind\" in\n      M) ip -\"$fam\" rule add pref \"$KPR_PREF\" fwmark \"$KPR_MARK\" lookup \"$KPR_TABLE\" || exit 1 ;;\n      B) ip -\"$fam\" rule add pref \"$KPR_RETURN_PREF\" from \"$arg\" iif \"$dev\" lookup \"$KPR_RETURN_TABLE\" || exit 1 ;;\n    esac\n  done < \"$1\"\n)\nkpr_routes_begin() {\n  mkdir -p \"$POLICY_DIR\" || return 1\n  if [ -f \"$KPR_PENDING\" ];then\n    kpr_routes_rollback || { kpr_error pending_recovery_failed;return 1; }\n  fi\n  if [ \"$KPR_ACTIVE\" != 1 ] && [ ! -f \"$KPR_OWNER\" ];then return 0;fi\n  if [ ! -f \"$KPR_OWNER\" ];then\n    for fam in 4 6;do\n      for tab in \"$KPR_TABLE\" \"$KPR_RETURN_TABLE\";do\n        [ -z \"$(ip -\"$fam\" route show table \"$tab\" 2>/dev/null)\" ] || { kpr_error \"foreign_table:$tab\";return 1; }\n      done\n      if ip -\"$fam\" rule show | grep -Eq \"^($KPR_PREF|$KPR_RETURN_PREF):\";then kpr_error foreign_rule_priority;return 1;fi\n    done\n  fi\n  if [ -f \"$KPR_PLAN\" ];then cp \"$KPR_PLAN\" \"$KPR_OLD\" || return 1;else : > \"$KPR_OLD\" || return 1;fi\n  kpr_plan_make > \"$KPR_NEXT\" || return 1\n  chmod 600 \"$KPR_OLD\" \"$KPR_NEXT\" || return 1\n  printf 'KPR2\\n' > \"$KPR_OWNER\" || return 1\n  touch \"$KPR_PENDING\" || return 1\n  kpr_plan_remove \"$KPR_OLD\" && kpr_plan_install \"$KPR_NEXT\"\n}\nkpr_routes_commit() {\n  [ -f \"$KPR_PENDING\" ] || return 0\n  mv -f \"$KPR_NEXT\" \"$KPR_PLAN\" || return 1\n  rm -f \"$KPR_PENDING\" \"$KPR_OLD\" || return 1\n}\nkpr_routes_rollback() (\n  [ -f \"$KPR_PENDING\" ] || exit 0\n  kpr_plan_remove \"$KPR_NEXT\" || exit 1\n  kpr_plan_remove \"$KPR_PLAN\" || exit 1\n  kpr_plan_install \"$KPR_OLD\" || exit 1\n  cp \"$KPR_OLD\" \"$KPR_PLAN\" || exit 1\n  rm -f \"$KPR_PENDING\" \"$KPR_OLD\" \"$KPR_NEXT\"\n)\nkpr_add_capture() (\n  ipt=\"$1\";chain=\"$2\";fam=\"$3\";op=\"${4:--A}\"\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do\n    [ \"$(kpr_net \"$net\")\" = \"$fam\" ] || continue\n    for dev in $(printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {print $3}' | sort -u);do\n      for proto in tcp udp;do\n        if [ \"$KPR_MODE\" = tproxy ];then\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j TPROXY --on-port \"$KPR_PORT\" --tproxy-mark \"$KPR_MARK\" || exit 1\n        else\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j MARK --set-xmark \"$KPR_MARK\" || exit 1\n          \"$ipt\" -t mangle \"$op\" \"$chain\" -i \"$dev\" -d \"$net\" -p \"$proto\" -j ACCEPT || exit 1\n        fi\n      done\n    done\n  done\n)\nkpr_add_dns_exceptions() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$3\" ] || \"$1\" -t nat \"${4:--A}\" \"$2\" -d \"$net\" -j ACCEPT || exit 1;done\n)\nkpr_add_quic_exceptions() (\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$3\" ] || \"$1\" -t filter \"${4:--A}\" \"$2\" -d \"$net\" -j RETURN || exit 1;done\n)\nkpr_forward_rules() (\n  ipt=\"$1\";chain=\"$2\";fam=\"$3\";op=\"${4:--A}\"\n  [ \"$KPR_ACTIVE:$KPR_MODE\" = 1:tun ] || exit 0\n  for net in $KPR_TARGETS;do\n    [ \"$(kpr_net \"$net\")\" = \"$fam\" ] || continue\n    for dev in $(printf '%s\\n' \"$KPR_DOWN\" | awk -v f=\"$fam\" '$1==f {print $3}' | sort -u);do\n      for proto in tcp udp;do\n        \"$ipt\" -t filter \"$op\" \"$chain\" -i \"$dev\" -o \"$KPR_TUN\" -d \"$net\" -p \"$proto\" -j ACCEPT || exit 1\n        \"$ipt\" -t filter \"$op\" \"$chain\" -i \"$KPR_TUN\" -o \"$dev\" -s \"$net\" -p \"$proto\" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || exit 1\n      done\n    done\n  done\n)\nkpr_forward_switch() (\n  ipt=\"$1\";fam=\"$2\"\n  found=0\n  for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n  if [ \"$KPR_ACTIVE:$KPR_MODE:$found\" != 1:tun:1 ];then\n    remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n    exit 0\n  fi\n  active=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\"\n  next=\"$(prepare_inactive_chain \"$ipt\" filter \"$active\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\" || exit 1\n  kpr_forward_rules \"$ipt\" \"$next\" \"$fam\" || exit 1\n  \"$ipt\" -t filter -A \"$next\" -j RETURN || exit 1\n  remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n  pos=1\n  quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\"\n  [ -z \"$quic\" ] || pos=2\n  \"$ipt\" -t filter -I FORWARD \"$pos\" -j \"$next\"\n)\nkpr_forward_restore() (\n  ipt=\"$1\";old=\"$2\"\n  remove_managed_hooks \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\"\n  if [ -n \"$old\" ];then\n    pos=1;quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\";[ -z \"$quic\" ] || pos=2\n    \"$ipt\" -t filter -I FORWARD \"$pos\" -j \"$old\" || exit 1\n  fi\n  cleanup_unused_chains \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\" \"$old\"\n)\nkpr_verify() (\n  kpr_read || exit 1\n  plan=\"$KPR_PLAN\";[ ! -f \"$KPR_PENDING\" ] || plan=\"$KPR_NEXT\"\n  wanted=\"$(kpr_plan_make)\" || exit 1\n  [ \"$wanted\" = \"$(cat \"$plan\" 2>/dev/null)\" ] || { kpr_error route_plan_mismatch;exit 1; }\n  [ \"$KPR_ACTIVE\" = 1 ] || exit 0\n  for fam in 4 6;do\n    name=iptables;[ \"$fam\" != 6 ] || name=ip6tables\n    [ \"$fam\" != 6 ] || [ \"$(get_opt ipv6 off)\" = on ] || continue\n    ipt=\"$(get_ipt \"$name\")\";[ -n \"$ipt\" ] || exit 1\n    chain=\"$(managed_hook_target \"$ipt\" mangle PREROUTING \"$POLICY_CHAIN\" \"$POLICY_CHAIN_A\" \"$POLICY_CHAIN_B\")\"\n    kpr_add_capture \"$ipt\" \"$chain\" \"$fam\" -C || exit 1\n    if [ \"$(get_opt dns_hijack off)\" = on ];then\n      dns=\"$(managed_hook_target \"$ipt\" nat PREROUTING \"$DNS_CHAIN\" \"$DNS_CHAIN_A\" \"$DNS_CHAIN_B\")\"\n      kpr_add_dns_exceptions \"$ipt\" \"$dns\" \"$fam\" -C || exit 1\n    fi\n    if [ \"$(get_opt quic_block off)\" = on ];then\n      quic=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$QUIC_CHAIN\" \"$QUIC_CHAIN_A\" \"$QUIC_CHAIN_B\")\"\n      kpr_add_quic_exceptions \"$ipt\" \"$quic\" \"$fam\" -C || exit 1\n    fi\n    found=0;for net in $KPR_TARGETS;do [ \"$(kpr_net \"$net\")\" != \"$fam\" ] || found=1;done\n    if [ \"$KPR_MODE:$found\" = tun:1 ];then\n      forward=\"$(managed_hook_target \"$ipt\" filter FORWARD \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\")\"\n      [ -n \"$forward\" ] || exit 1\n      kpr_forward_rules \"$ipt\" \"$forward\" \"$fam\" -C || exit 1\n    fi\n  done\n  while read kind fam arg dev;do\n    case \"$kind\" in\n      C) ip -\"$fam\" route show table \"$KPR_TABLE\" proto \"$KPR_PROTO\" | grep -q \"dev $dev\" || { kpr_error capture_route_missing;exit 1; } ;;\n      M) ip -\"$fam\" rule show | grep \"^$KPR_PREF:\" | grep -q \"lookup $KPR_TABLE\" || { kpr_error mark_rule_missing;exit 1; } ;;\n      B) ip -\"$fam\" rule show | grep \"^$KPR_RETURN_PREF:\" | grep \"iif $dev\" | grep -q \"lookup $KPR_RETURN_TABLE\" || { kpr_error return_rule_missing;exit 1; } ;;\n      R) ip -\"$fam\" route show table \"$KPR_RETURN_TABLE\" proto \"$KPR_PROTO\" | grep -q \"dev $dev\" || { kpr_error downstream_route_missing;exit 1; } ;;\n    esac\n  done < \"$plan\"\n)\nkpr_cleanup() (\n  if [ -f \"$KPR_OWNER\" ];then\n    kpr_routes_rollback || exit 1\n    kpr_plan_remove \"$KPR_PLAN\" || exit 1\n    rm -f \"$KPR_PLAN\" \"$KPR_OWNER\" \"$KPR_NEXT\" \"$KPR_OLD\" \"$KPR_PENDING\" || exit 1\n  fi\n  for name in iptables ip6tables;do\n    for ipt in $(list_ipt_candidates \"$name\");do\n      for chain in \"$KPR_FORWARD\" \"$KPR_FORWARD_A\" \"$KPR_FORWARD_B\";do flush_chain \"$ipt\" filter FORWARD \"$chain\";done\n    done\n  done\n)\nkpr_status() (\n  echo '[Private-route: configured]'\n  echo \"enabled=$(get_opt private_route_enabled off) mode=$(get_opt traffic_mode tproxy) ipv6=$(get_opt ipv6 off)\"\n  echo \"targets=$(get_opt private_route_cidrs '')\"\n  echo '[Private-route: installed plan]'\n  cat \"$KPR_PLAN\" 2>/dev/null || true\n  for fam in 4 6;do\n    echo \"[IPv$fam rules]\"\n    ip -\"$fam\" rule show 2>/dev/null | grep -E \"^($KPR_PREF|$KPR_RETURN_PREF):\" || true\n    ip -\"$fam\" route show table \"$KPR_TABLE\" 2>/dev/null || true\n    ip -\"$fam\" route show table \"$KPR_RETURN_TABLE\" 2>/dev/null || true\n  done\n  if kpr_verify;then echo 'PRIVATE_ROUTE_VERIFY=ok';else echo 'PRIVATE_ROUTE_VERIFY=failed';exit 1;fi\n  echo 'TCP/UDP rules checked; remote service reachability is not tested.'\n)\n";
+
+
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Embedded inside the original plugin closure; no new runtime dependency.
 const KPR = createPrivateRouteLogic();
 
-function readF50TproxyPortCmd() {
-  return `port="$(grep -Ei 'TPROXY|tproxy|on-port|789[0-9]' ${shellQuote(CLASH_SERVICE)} 2>/dev/null | grep -Eo '[0-9]{3,5}' | grep -E '^789[0-9]$' | tail -n 1)"
-  [ -n "$port" ] || port=7895
-  printf '\\ntproxy_port=%s\\n' "$port"`;
-}
+function readF50TproxyPortCmd() { return 'printf \"tproxy_port=7895\\ndns_port=1053\\n\"'; }
 
 async function kprReadOptions() {
   const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' || exit 1; fi\n' + readF50TproxyPortCmd(), 10000);
@@ -483,9 +1299,7 @@ async function savePolicyState(state, options = {}) {
       const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
       if (!config.ok) throw new Error(config.message || 'Cannot read config.yaml');
       KPR.checkConnected(feature, await kprReadConnected(config.value, next.options));
-      if (next.options.traffic_mode === 'tun' && String(next.deviceBypass || '').replace(/#[^\n]*/g, '').trim()) {
-        throw new Error('原插件的 TUN 设备绕过不完整。请使用 TProxy，或先清空“直连设备”再开启 TUN 私网定向代理');
-      }
+
     }
     return await kprBaseSavePolicyState(next, options);
   } catch (error) {
@@ -497,125 +1311,436 @@ async function savePolicyState(state, options = {}) {
 async function kprVerifySelection(options) {
   const feature = KPR.fromOptions(options);
   if (!feature.enabled || options.traffic_mode === 'off') return '';
+  const live = await callMihomoApi('/configs', 'GET', null, null, 5);
+  if (!live.success || String(JSON.parse(live.responseText || '{}').mode).toLowerCase() !== 'rule') throw new Error('私网定向代理需要核心实际运行在规则模式');
   const response = await callMihomoApi('/proxies', 'GET', null, null, 8);
   if (!response.success) throw new Error('无法确认代理组的实际出站');
   const payload = JSON.parse(response.responseText || '{}');
   return KPR.resolveSelection(payload.proxies || {}, feature.policy);
 }
 
-async function ensureRuntimeTrafficMode(trafficMode, expectedConfig = null) {
-  try {
-    const want = trafficMode === 'tun';
-    let read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!read.ok) throw new Error(read.message || '运行配置读取失败');
-    if (expectedConfig && JSON.stringify(read.value) !== JSON.stringify(expectedConfig)) {
-      const startupController = await buildControllerInfo({ fresh: true });
-      const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, expectedConfig, { label: 'config.yaml', backupTag: 'startup_rewrite' });
-      if (!written.ok) throw new Error(written.content || '无法恢复启动前配置');
-      const reloaded = await reloadConfigHot(startupController);
-      if (!reloaded.success) throw new Error('启动程序改写配置后，恢复配置未能加载');
-      read = { ok: true, value: expectedConfig };
-    }
-    const desired = read.value.tun && typeof read.value.tun === 'object' ? read.value.tun : {};
-    if (!!desired.enable !== want) throw new Error('模式设置与 config.yaml 不一致');
-    const info = await buildControllerInfo({ fresh: true });
-    const corePid = await getCorePid();
-    const inspect = async () => {
-      const result = await callMihomoApi('/configs', 'GET', null, info, 5, { corePid });
-      if (!result.success) throw new Error('无法读取核心 TUN 状态');
-      return JSON.parse(result.responseText || '{}').tun || {};
-    };
-    let live = await inspect();
-    const exposedMismatch = () => want && ['device', 'auto-route', 'auto-redirect'].some((key) =>
-      Object.prototype.hasOwnProperty.call(live, key) && Object.prototype.hasOwnProperty.call(desired, key) && live[key] !== desired[key]);
-    if (!!live.enable !== want || exposedMismatch()) {
-      const patched = await callMihomoApi('/configs', 'PATCH', JSON.stringify({ tun: want ? desired : { enable: false } }), info, 10, { corePid });
-      if (!patched.success) throw new Error('核心拒绝更新 TUN 配置');
-      live = await inspect();
-    }
-    if (!!live.enable !== want) throw new Error('核心 TUN 开关未生效');
-    if (exposedMismatch()) throw new Error('核心 TUN 路由配置未生效');
-    if (trafficMode === 'tproxy') {
-      const port = Number(read.value['tproxy-port']);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('TProxy 端口无效');
-      const check = await runShellWithRoot(buildPortListenerFunction() + '\nis_port_listening ' + port + ' 4' +
-        (read.value.ipv6 === true ? ' && is_port_listening ' + port + ' 6' : ''), 10000);
-      if (!check.success) throw new Error('TProxy TCP/UDP 端口未按所选 IPv4/IPv6 模式监听：' + port);
-    }
-    if (want) {
-      const device = String(desired.device || live.device || 'Mihomo');
-      if (!/^[A-Za-z0-9_.-]{1,15}$/.test(device)) throw new Error('TUN 接口名称无效');
-      const check = await runShellWithRoot('test -e ' + shellQuote('/sys/class/net/' + device + '/tun_flags') + ' && ip link show dev ' + shellQuote(device), 10000);
-      if (!check.success) throw new Error('核心声明 TUN 已开启，但内核接口不存在：' + device);
-      if (read.value.ipv6 === true) {
-        const ipv6 = await runShellWithRoot('ip -o -6 addr show dev ' + shellQuote(device) + " | grep -q inet6", 10000);
-        if (!ipv6.success) throw new Error('TUN IPv6 address missing');
-      }
-    }
-    return true;
-  } catch (error) {
-    createToast('流量模式校验失败：' + safeTextToHtml(error.message || String(error)), 'red', 10000);
-    return false;
-  }
+function networkStateKey(state, runtimeOnly = false) {
+  const keys = ['traffic_mode', 'ipv6', 'dns_hijack', 'dns_port', 'private_route_enabled', 'private_route_cidrs', 'private_route_policy', 'tproxy_port'];
+  if (!runtimeOnly) keys.push('quic_block', 'proxy_group');
+  const options = state.options || {};
+  const values = keys.map((key) => String(options[key] == null ? '' : options[key]).trim());
+  if (!runtimeOnly) for (const key of ['deviceBypass', 'directDomain', 'directIp', 'proxyDomain', 'rejectDomain']) values.push(String(state[key] || '').trim());
+  return JSON.stringify(values);
 }
 
 async function kprSaveNetworkState(previous, next) {
-  let backup = '', saved = false, restartAttempted = false;
+  let backup = '', saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
   try {
+    operationStage('\u68c0\u67e5\u6a21\u5f0f\u548c\u7f51\u7edc\u8bbe\u7f6e', 0, 4);
+    next = { ...next, options: { ...next.options } };
     const feature = KPR.fromOptions(next.options);
-    const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!source.ok) throw new Error(source.message || '无法读取运行配置');
-    KPR.runtime(source.value, next.options, feature.enabled && next.options.traffic_mode !== 'off' ? await kprReadConnected(source.value, next.options) : []);
-    if (await getCorePid()) await kprVerifySelection(next.options);
-    if (next.options.traffic_mode === 'tun') {
-      const tun = await runShellWithRoot('test -c /dev/net/tun || test -c /dev/tun', 10000);
-      if (!tun.success) throw new Error('设备没有可用 TUN 节点，保留原模式');
+    next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
+    next.options.private_route_cidrs = feature.cidrs.join(' ');
+    next.options.private_route_policy = feature.policy;
+    next.options.transparent = next.options.traffic_mode === 'tproxy' ? 'on' : 'off';
+    if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
+    if (networkStateKey(previous) === networkStateKey(next)) {
+      createToast('\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green');
+      return true;
     }
-    backup = await createConfigRollbackPoint('private_route_network');
-    if (!backup) throw new Error('无法创建 config.yaml 回滚点');
-    if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
+    configChanged = networkStateKey(previous, true) !== networkStateKey(next, true);
+    const devices = normalizeDeviceBypassText(next.deviceBypass || '');
+    if (devices.invalid.length) throw new Error('\u8bbe\u5907\u5217\u8868\u683c\u5f0f\u9519\u8bef\uff1a' + devices.invalid.join('; '));
+    // Preserve the list; PolicyTools disables its effect outside TProxy.
+    next.deviceBypass = devices.text;
+    const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!source.ok) throw new Error(source.message || '\u65e0\u6cd5\u8bfb\u53d6\u8fd0\u884c\u914d\u7f6e');
+    const connected = feature.enabled && next.options.traffic_mode !== 'off' ? await kprReadConnected(source.value, next.options) : [];
+    const prepared = KPR.runtime(source.value, next.options, connected);
+    wasRunning = !!(await getCorePid());
+    if (wasRunning) await kprVerifySelection(next.options);
+    if (configChanged) {
+      backup = await createConfigRollbackPoint('network');
+      if (!backup) throw new Error('\u65e0\u6cd5\u521b\u5efa\u914d\u7f6e\u56de\u6eda\u70b9');
+    }
+    operationStage('\u5199\u5165\u8bbe\u7f6e\u4e0e\u8fd0\u884c\u914d\u7f6e', 1, 4);
+    if (!(await savePolicyState(next, { apply: false }))) throw new Error('\u7f51\u7edc\u8bbe\u7f6e\u672a\u4fdd\u5b58');
     saved = true;
-    next.options = await kprReadOptions();
-    restartAttempted = true;
-    if (!(await restartClash({ skipCheck: true, preferReload: true, policyReady: true }))) throw new Error('新模式或接管规则未通过检查');
-    const leaf = await kprVerifySelection(next.options);
+    if (configChanged) {
+      const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, prepared, { label: 'config.yaml', backup: false });
+      if (!written.ok) throw new Error(written.content || '\u914d\u7f6e\u5199\u5165\u5931\u8d25');
+    }
+    if (wasRunning) {
+      operationStage('\u540c\u6b65\u5185\u6838\u6a21\u5f0f\u4e0e\u63a5\u7ba1\u89c4\u5219', 2, 4);
+      restartAttempted = true;
+      const ok = configChanged
+        ? await restartClashOk({ skipCheck: true, preferReload: false, policyReady: true, preparedConfig: prepared })
+        : await reapplyPolicyRulesSilent({ ensureScript: false });
+      if (!ok) throw new Error('\u65b0\u8bbe\u7f6e\u672a\u901a\u8fc7\u8fd0\u884c\u68c0\u67e5');
+      await kprVerifySelection(next.options);
+    }
+    operationStage('\u786e\u8ba4\u6a21\u5f0f\u5df2\u751f\u6548', 3, 4);
+    invalidateStatusSnapshot();
     Object.assign(previous, JSON.parse(JSON.stringify(next)));
-    createToast(feature.enabled && next.options.traffic_mode !== 'off'
-      ? '私网定向代理已应用；出站：' + escapeHtml(leaf) + '。尚未验证家中服务是否可达。'
-      : '网络设置已应用', 'green', 10000);
+    if (wasRunning && typeof refreshDashboardAfterModeChange === 'function') {
+      try { await refreshDashboardAfterModeChange(); } catch (_) {}
+    }
+    if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN \u5df2\u6682\u505c\u8bbe\u5907\u7ed5\u8fc7\uff0c\u540d\u5355\u4fdd\u7559\uff1b\u5207\u56de TProxy \u81ea\u52a8\u6062\u590d', 'yellow', 8000);
+    operationFinish(true, wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u5df2\u4fdd\u5b58\uff0c\u6838\u5fc3\u4fdd\u6301\u505c\u6b62');
+    createToast(wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62', 'green', 8000);
     return true;
   } catch (error) {
+    if (error.name === 'OperationCancelled') return false;
+    operationStage('\u5e94\u7528\u5931\u8d25\uff0c\u6062\u590d\u539f\u8bbe\u7f6e');
     let recovered = !saved;
     if (saved) {
-      const restoredSettings = await savePolicyState(previous, { apply: false, replaceOptions: true });
-      const restoredConfig = backup ? await restoreConfigRollbackPoint(backup, '网络设置', { showToast: false }) : false;
+      let restoredSettings = false, restoredConfig = !backup;
+      try { restoredSettings = await savePolicyState(previous, { apply: false, replaceOptions: true }); } catch (_) {}
+      try { if (backup) restoredConfig = await restoreConfigRollbackPoint(backup, '\u7f51\u7edc\u8bbe\u7f6e', { showToast: false }); } catch (_) {}
       recovered = restoredSettings && restoredConfig;
-      if (recovered && restartAttempted) {
-        try { recovered = await restartClash({ skipCheck: true, preferReload: true, policyReady: true }); }
-        catch (_) { recovered = false; }
+      if (recovered && wasRunning && restartAttempted) {
+        try {
+          recovered = configChanged
+            ? await restartClashOk({ skipCheck: true, preferReload: true, policyReady: true })
+            : await reapplyPolicyRulesSilent({ ensureScript: false });
+        } catch (_) { recovered = false; }
       }
       if (!recovered) {
-        await networkRescue({ stopService: true, showOutput: false, reason: '私网定向代理回滚未完成' });
+        try { await networkRescue({ stopService: true, showOutput: false, reason: '\u7f51\u7edc\u8bbe\u7f6e\u56de\u6eda\u5931\u8d25' }); } catch (_) {}
       }
     }
+    operationFinish(false, recovered ? '\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u6062\u590d\u539f\u8bbe\u7f6e' : '\u5e94\u7528\u4e0e\u56de\u6eda\u5931\u8d25');
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
-      (recovered ? (saved ? '已恢复原设置和配置。' : '未应用新设置。') : '恢复未完整完成，已尝试停止核心并清理规则。'), recovered ? 'yellow' : 'red', 14000);
+      (recovered ? (saved ? '\u5df2\u6062\u590d\u539f\u8bbe\u7f6e\u548c\u914d\u7f6e' : '\u672a\u5e94\u7528\u65b0\u8bbe\u7f6e') : '\u56de\u6eda\u672a\u5b8c\u6210\uff0c\u5df2\u5c1d\u8bd5\u505c\u6b62\u6838\u5fc3\u5e76\u6e05\u7406\u89c4\u5219'), recovered ? 'yellow' : 'red', 14000);
     return false;
   }
 }
 
-function buildPolicyToolsScript() {
-  return augmentPrivatePolicyShell(kprBaseBuildPolicyToolsScript(), KPR_SHELL);
-}
 
-function flushGeneratedRulesCmd() {
-  const original = kprBaseFlushGeneratedRulesCmd();
-  const policy = buildPolicyToolsScript();
-  return original + '\nkpr_original_flush_rc=$?\n(\nset -- private-cleanup\n' + policy + '\n)\nkpr_extra_flush_rc=$?\n[ "$kpr_original_flush_rc" -eq 0 ] && [ "$kpr_extra_flush_rc" -eq 0 ]\n';
+function buildPolicyToolsScript() { return "#!/system/bin/sh\n# KANO_POLICY_SCRIPT_VERSION=" + F50_COMPAT_VERSION + "\n# SPDX-License-Identifier: AGPL-3.0-or-later\n: \"${CLASH_ROOT:=/data/clash}\"\ncase \"$1\" in\n  apply|boot-apply) action=apply ;;\n  flush|private-cleanup) action=flush ;;\n  verify|status|private-status) action=verify ;;\n  *) echo \"F50_POLICY_UNKNOWN_ACTION\"; exit 2 ;;\nesac\nexec \"$CLASH_ROOT/Scripts/Clash.Service\" policy \"$action\"\n"; }
+
+function flushGeneratedRulesCmd() {return 'sh ' + shellQuote(CLASH_SERVICE) + ' policy flush';}
+function verifyGeneratedRulesFlushedCmd() {return 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-clean';}
+
+  // Progress advances only at completed checkpoints; a moving bar is not a device heartbeat.
+  let operationProgress = null;
+  let recoveryInProgress = false;
+  let pluginArtifactsRemoved = false;
+  let taskCommandSequence = 0;
+  let statusSnapshotCache = null;
+  let statusSnapshotPromise = null;
+  let statusSnapshotGeneration = 0;
+
+  function shouldShowOperationProgress(label = '') {
+    return /^(?:\u5b89\u88c5\u6838\u5fc3|\u5b89\u88c5\u732b\u732b|\u5378\u8f7d\u732b\u732b|\u5378\u8f7d\u6838\u5fc3|\u6062\u590d\u7f51\u7edc|\u66f4\u65b0\u8ba2\u9605|\u4fdd\u5b58\u66f4\u65b0\u8ba2\u9605|\u91cd\u65b0\u66f4\u65b0\u5931\u8d25\u8282\u70b9\u6765\u6e90|\u4fee\u590d\u8ba2\u9605\u914d\u7f6e|\u4fdd\u5b58\u7f51\u7edc\u4e0e\u79c1\u7f51\u8bbe\u7f6e|\u91cd\u542f\u6838\u5fc3|\u505c\u6b62\u6838\u5fc3|\u4fee\u590d\u4ee3\u7406\u914d\u7f6e|\u4fee\u590d\u7b56\u7565\u89c4\u5219|\u5e94\u7528\u6a21\u677f|\u5e94\u7528\u56fe\u5f62\u89c4\u5219|\u5e94\u7528 JS \u8986\u5199|\u68c0\u67e5\u5e76\u542f\u52a8\u732b\u732b|\u5bfc\u5165\u8f6c\u6362\u7ec4\u4ef6|\u5b89\u88c5\u6216\u66f4\u65b0\u8f6c\u6362\u7ec4\u4ef6|\u5bfc\u5165\u914d\u7f6e\u5305|\u5bfc\u51fa\u914d\u7f6e\u5305|\u4e0a\u4f20\u6a21\u677f|\u6e05\u7406\u7f13\u5b58|\u4fdd\u5b58 config\.yaml)$/.test(String(label));
+  }
+
+  function createOperationProgress(label, { enabled = shouldShowOperationProgress(label), delayMs = 800 } = {}) {
+    if (operationProgress) operationProgress.dispose();
+    const element = document.createElement('section');
+    element.id = 'mm_operation_progress';
+    element.setAttribute('aria-label', '\u4efb\u52a1\u8fdb\u5ea6');
+    element.innerHTML = '<div class="mm-op-head"><span class="mm-op-title"></span><button type="button" aria-label="\u6536\u8d77">&#8722;</button></div>' +
+      '<div class="mm-op-body"><div class="mm-op-phase" role="status" aria-live="polite"></div>' +
+      '<div class="mm-op-track" role="progressbar" aria-label="\u4efb\u52a1\u8fdb\u5ea6"><div class="mm-op-fill"></div></div>' +
+      '<div class="mm-op-foot"><span class="mm-op-count"></span><span class="mm-op-time"></span></div></div>';
+    const get = (selector) => element.querySelector(selector);
+    setText(get('.mm-op-title'), label);
+    let started = 0, terminal = false, disposed = false, shown = false, suspended = false;
+    let pending = 0, timer = null, revealTimer = null, closeTimer = null, collapsed = false;
+    const tick = () => {
+      if (disposed || !started) return;
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      setText(get('.mm-op-time'), Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'));
+    };
+    const reveal = () => {
+      revealTimer = null;
+      if (!enabled || terminal || disposed || suspended) return;
+      if (!document.getElementById('mm_operation_progress_style')) {
+        const style = document.createElement('style');
+        style.id = 'mm_operation_progress_style';
+        style.textContent = `
+#mm_operation_progress{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(310px,calc(100vw - 32px));z-index:2147483646;box-sizing:border-box;background:#172131f5;color:#edf2fa;border:1px solid #3b4b63;border-radius:14px;padding:14px 16px;box-shadow:0 14px 48px #0006;font:13px/1.5 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;backdrop-filter:blur(12px)}
+#mm_operation_progress .mm-op-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:600}
+#mm_operation_progress button{border:0;background:transparent;color:#b9c7d9;padding:0 4px;border-radius:5px;cursor:pointer;font:18px/1.2 system-ui}
+#mm_operation_progress .mm-op-title,#mm_operation_progress .mm-op-phase{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mm_operation_progress .mm-op-phase{margin:8px 0 10px;color:#c2cee0;font-size:12px}
+#mm_operation_progress .mm-op-track{height:5px;border-radius:6px;background:#ffffff16;overflow:hidden}
+#mm_operation_progress .mm-op-fill{height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,#69b7ef,#81d7bf);transition:width .2s ease}
+#mm_operation_progress[data-pending=true] .mm-op-fill{width:30%!important;animation:mm_op_wait 1.6s ease-in-out infinite}
+#mm_operation_progress[data-result=failed] .mm-op-fill{background:#ec8189;animation:none}
+#mm_operation_progress[data-result=done] .mm-op-fill{background:#81d7a4;animation:none}
+#mm_operation_progress .mm-op-foot{display:flex;justify-content:space-between;gap:8px;color:#9caec6;font-size:11px;margin-top:6px}
+@keyframes mm_op_wait{0%{transform:translateX(-100%)}100%{transform:translateX(440%)}}
+@media(prefers-reduced-motion:reduce){#mm_operation_progress .mm-op-fill{animation:none!important;transition:none}}
+`;
+        (document.head || document.body).appendChild(style);
+      }
+      if (!shown) { document.body.appendChild(element); shown = true; }
+      element.hidden = false;
+      tick();
+    };
+    const arm = () => {
+      if (!enabled || terminal || disposed || suspended) return;
+      if (!started) { started = Date.now(); timer = setInterval(tick, 1000); }
+      if (!shown && revealTimer === null) revealTimer = setTimeout(reveal, delayMs);
+    };
+    const progress = {
+      element,
+      get visible() { return shown && !disposed && !suspended; },
+      stage(text, completed = null, total = null) {
+        if (terminal || disposed) return;
+        const safe = sanitizeSubscriptionSecrets(String(text || ''));
+        setText(get('.mm-op-phase'), safe);
+        get('.mm-op-phase').title = safe;
+        const known = Number.isFinite(completed) && Number.isFinite(total) && total > 0;
+        element.dataset.pending = known ? 'false' : 'true';
+        element.setAttribute('aria-busy', 'true');
+        if (known) {
+          const percent = Math.max(0, Math.min(99, Math.floor(completed / total * 100)));
+          get('.mm-op-fill').style.width = percent + '%';
+          get('.mm-op-track').setAttribute('aria-valuenow', String(percent));
+          setText(get('.mm-op-count'), Math.min(completed, total) + '/' + total);
+        } else {
+          get('.mm-op-track').removeAttribute('aria-valuenow');
+          setText(get('.mm-op-count'), '');
+        }
+        arm(); tick();
+      },
+      request(delta) { pending = Math.max(0, pending + delta); if (delta > 0) arm(); tick(); },
+      pause(value) {
+        suspended = !!value;
+        if (suspended) { clearTimeout(revealTimer); revealTimer = null; element.hidden = true; }
+        else if (shown && !disposed) element.hidden = false;
+        else if (pending) arm();
+      },
+      finish(ok, message) {
+        if (disposed || terminal) return;
+        terminal = true;
+        clearInterval(timer); clearTimeout(revealTimer); revealTimer = null;
+        if (!shown) {
+          if (ok === false && message) createToast(safeTextToHtml(message), 'red', 7000);
+          return;
+        }
+        collapsed = false; get('.mm-op-body').hidden = false;
+        element.dataset.pending = 'false';
+        element.dataset.result = ok === true ? 'done' : ok === false ? 'failed' : 'ended';
+        element.setAttribute('aria-busy', 'false');
+        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '\u5df2\u5b8c\u6210' : ok === false ? '\u672a\u5b8c\u6210\uff0c\u8bf7\u67e5\u770b\u9519\u8bef\u8be6\u60c5' : '\u5df2\u7ed3\u675f'));
+        setText(get('.mm-op-phase'), safe); get('.mm-op-phase').title = safe;
+        if (ok === true) { get('.mm-op-fill').style.width = '100%'; get('.mm-op-track').setAttribute('aria-valuenow', '100'); }
+        else get('.mm-op-track').removeAttribute('aria-valuenow');
+        setText(get('.mm-op-count'), ok === true ? '100%' : '');
+        setText(get('button'), '\u00d7');
+        get('button').setAttribute('aria-label', '\u5173\u95ed');
+        tick();
+        if (ok !== false) closeTimer = setTimeout(() => progress.dispose(), 1600);
+      },
+      dispose() { disposed = true; clearInterval(timer); clearTimeout(revealTimer); clearTimeout(closeTimer); element.remove(); },
+    };
+    get('button').onclick = () => {
+      if (terminal) progress.dispose();
+      else { collapsed = !collapsed; get('.mm-op-body').hidden = collapsed; setText(get('button'), collapsed ? '+' : '\u2212'); }
+    };
+    element.dataset.pending = 'true';
+    setText(get('.mm-op-phase'), '\u5904\u7406\u4e2d');
+    operationProgress = progress;
+    return progress;
+  }
+
+  function operationStage(label, completed = null, total = null) {
+    const op = activeCriticalOperation;
+    if (op && !op.token.cancelled && op.progress) op.progress.stage(label, completed, total);
+  }
+  function operationFinish(ok, detail = '') {
+    const op = activeCriticalOperation;
+    if (op && !op.token.cancelled && op.progress) op.progress.finish(ok, detail);
+  }
+  function operationCancelled() {
+    const error = new Error('\u5df2\u88ab\u6062\u590d\u7f51\u7edc\u4e2d\u6b62\uff0c\u4e0d\u518d\u7ee7\u7eed\u5b89\u88c5\u6216\u91cd\u542f');
+    error.name = 'OperationCancelled';
+    return error;
+  }
+  function invalidateStatusSnapshot() {
+    statusSnapshotGeneration++;
+    statusSnapshotCache = null;
+    statusSnapshotPromise = null;
+    controllerInfoCache = null;
+    controllerInfoCacheExpiresAt = 0;
+    controllerInfoLoadPromise = null;
+  }
+
+  // One read-only device request supplies the status widgets and controller metadata.
+  function decodeYamlRootScalar(value) {
+    const raw = String(value || '').trim();
+    if (raw.length >= 2 && raw[0] == '"' && raw[raw.length - 1] == '"') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed == 'string') return parsed;
+      } catch (_) {}
+    }
+    if (raw.length >= 2 && raw[0] == "'" && raw[raw.length - 1] == "'") {
+      return raw.slice(1, -1).replace(/''/g, "'");
+    }
+    return raw;
+  }
+
+
+  function buildStatusSnapshotCommand() {
+    return `set +e
+if [ -r /data/clash/Scripts/Clash.Service ]; then
+  sh /data/clash/Scripts/Clash.Service snapshot
+  rc=$?
+  printf '\nF50_SNAPSHOT_RC=%s\n' "$rc"
+  exit 0
+fi
+${buildOwnedCoreFunctions()}
+printf 'F50_SNAPSHOT_FALLBACK=1\nF50_CORE_PID=%s\n' "$(find_runtime_pid)"
+if [ -d /data/clash ]; then echo F50_INSTALL_STATE=damaged; else echo F50_INSTALL_STATE=missing; fi
+exit 0`;
+  }
+  async function readStatusSnapshot({fresh=false} = {}) {
+    if (!fresh && statusSnapshotCache && statusSnapshotCache.expires > Date.now()) return statusSnapshotCache.value;
+    if (statusSnapshotPromise) return statusSnapshotPromise;
+    const generation = statusSnapshotGeneration;
+    const pending = (async () => {
+      // Read probes are not cancellable workers of an install/recovery operation.
+      const r = await hostRunShellWithRoot.call(globalThis, buildStatusSnapshotCommand(), 8000);
+      const text = String(r?.content || '');
+      const line = text.split(/\r?\n/).find(s => s.startsWith('F50_SNAPSHOT='));
+      let value;
+      if (line) {
+        value = JSON.parse(line.slice('F50_SNAPSHOT='.length));
+        if (typeof value.corePid !== 'string' || typeof value.apiOk !== 'boolean') throw new Error('Invalid runtime snapshot');
+      } else if (r?.success && text.includes('F50_SNAPSHOT_FALLBACK=1')) {
+        const fields = Object.fromEntries(text.split(/\r?\n/).filter(l => l.includes('=')).map(l => {const i=l.indexOf('=');return [l.slice(0,i),l.slice(i+1)];}));
+        value = {corePid: fields.F50_CORE_PID || '', apiOk: false, processReadStatus: 'ok',
+          configReadStatus: fields.F50_INSTALL_STATE === 'missing' ? 'missing' : 'unavailable',
+          installState: fields.F50_INSTALL_STATE, trafficMode: 'unknown',
+          configError: '\u8fd0\u884c\u7ec4\u4ef6\u7f3a\u5931', apiError: '\u65e0\u6cd5\u8bfb\u53d6\u9762\u677f\u8fde\u63a5\u914d\u7f6e'};
+      } else {
+        throw new Error(f50Error(text) || '\u72b6\u6001\u547d\u4ee4\u672a\u8fd4\u56de\u7ed3\u679c\uff08\u8d85\u65f6\u6216\u6267\u884c\u5931\u8d25\uff09');
+      }
+      return value;
+    })();
+    statusSnapshotPromise = pending;
+    try {
+      const value = await pending;
+      if (generation !== statusSnapshotGeneration) return readStatusSnapshot({fresh:true});
+      statusSnapshotCache = {value, expires: Date.now()+2000};
+      return value;
+    } finally { if (statusSnapshotPromise === pending) statusSnapshotPromise = null; }
+  }
+
+  function validateSubscriptionMode(sources, mode) {
+    const stored = normalizeStoredSubSourceList(sources);
+    const enabled = normalizeSubSourceList(stored);
+    if (normalizeSubRuleModeValue(mode) === SUB_RULE_MODE_ORIGINAL && (stored.length !== 1 || enabled.length !== 1)) {
+      throw new Error('\u8ba2\u9605\u81ea\u5e26\u914d\u7f6e\u53ea\u5141\u8bb8\u4e00\u6761\u5df2\u542f\u7528\u7684\u8ba2\u9605\u94fe\u63a5\uff1b\u591a\u6761\u94fe\u63a5\u8bf7\u9009\u62e9\u672c\u5730\u6a21\u677f');
+    }
+    return { stored, enabled };
+  }
+
+  function buildRelatedProcessFunctions() {
+    return `${buildOwnedCoreFunctions()}
+kano_is_related() (
+  PID="$1"
+  case "$PID" in ''|*[!0-9]*|1|"$$") exit 1 ;; esac
+  [ -r "/proc/$PID/status" ] || exit 1
+  exe="$(readlink "/proc/$PID/exe" 2>/dev/null)"
+  case "$exe" in
+    ${CLASH_CORE}|'${CLASH_CORE} (deleted)'|${CLASH_DIR}/Tools/kano-f50-helper*|${CLASH_DIR}/Tools/mosdns*|${CLASH_DIR}/Tools/yq_linux_*|${CLASH_DIR}/Scripts/clashctl*) exit 0 ;;
+  esac
+  # Only these workers can outlive a cancelled plugin shell request.
+  case "\${exe##*/}" in sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz) ;; *) exit 1 ;; esac
+  # The marker is inherited by the plugin's downloads and child processes, not by the host shell.
+  task="$(tr '\\0' '\\n' < "/proc/$PID/environ" 2>/dev/null | sed -n 's/^KANO_TPROXY_TASK=mm_/mm_/p' | head -n 1)"
+  if [ -n "$task" ] && [ "$task" != "$KANO_TPROXY_TASK" ]; then exit 0; fi
+  case "\${exe##*/}" in sh|bash|dash|mksh|toybox|busybox|inotifyd) ;; *) exit 1 ;; esac
+  args="$(tr '\\0' '\\n' < "/proc/$PID/cmdline" 2>/dev/null)"
+  printf '%s\\n' "$args" | grep -qx -- '-c' && exit 1
+  # Match whole argv entries. Never match a path embedded in sh -c command text.
+  printf '%s\\n' "$args" | grep -Eq '^${CLASH_DIR}/Scripts/Clash\\.(Inotify|MacBypass|PolicyTools|KanoStart)$' && exit 0
+  if printf '%s\\n' "$args" | grep -qxF '${CLASH_SERVICE}'; then
+    printf '%s\\n' "$args" | grep -Eq '^(boot|start|restart)$' && exit 0
+  fi
+  exit 1
+)
+kano_related_pids() (
+  for p in /proc/[0-9]*; do
+    # comm is read by the shell; avoid spawning several tools for every Android process.
+    IFS= read -r name < "$p/comm" 2>/dev/null || continue
+    case "$name" in Clash.Core|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|Clash.*) ;; *) continue ;; esac
+    n="\${p##*/}"; kano_is_related "$n" && printf '%s\\n' "$n"
+  done
+  exit 0
+)
+kano_verify_related_stopped() (
+  remaining="$(kano_related_pids)"
+  [ -n "$remaining" ] || { echo KANO_RELATED_STOPPED; exit 0; }
+  for n in $remaining; do printf 'RELATED_PROCESS_REMAINS=%s %s\\n' "$n" "$(readlink "/proc/$n/exe" 2>/dev/null)"; done
+  exit 1
+)
+kano_stop_related() (
+  for signal in TERM KILL; do
+    remaining="$(kano_related_pids)"
+    [ -n "$remaining" ] || { echo KANO_RELATED_STOPPED; exit 0; }
+    for n in $remaining; do kano_is_related "$n" && kill -"$signal" "$n" 2>/dev/null || true; done
+    # The next phase rescans once to catch children created before TERM.
+    sleep 0.2 2>/dev/null || sleep 1
+  done
+  kano_verify_related_stopped
+)
+`;
+  }
+
+
+function buildF50CleanupScript() {
+  return buildF50MaintenanceFunctions() + `
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
+trap 'rm -rf "$F50_WORK"' EXIT
+f50_inspect || exit 1
+if [ "$F50_OLD_FOUND" = 1 ]; then
+  f50_clean_environment || exit 1
+else
+  echo F50_CLEAN_STATE=skipped_no_old_environment
+fi
+echo F50_CLEAN_OK=1
+`;
 }
-function verifyGeneratedRulesFlushedCmd() {
-  return kprBaseVerifyGeneratedRulesFlushedCmd() + '\n[ ! -f /data/clash/Policy/private_route.owner ] && [ ! -f /data/clash/Policy/private_route.pending ]\n';
+function buildF50FinalCheckScript() {
+  return buildF50MaintenanceFunctions() + `
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-verify.XXXXXX") || { echo F50_CHECK_UNKNOWN=verify_workdir; echo F50_UNINSTALL_STATE=unknown; exit 1; }
+trap 'rm -rf "$F50_WORK"' EXIT
+f50_final_probe
+if ! rm -rf "$F50_WORK"; then echo F50_REMAINS=verification_workdir; F50_FINAL_REMAINS=1; fi
+trap - EXIT
+if [ "$F50_FINAL_REMAINS" = 1 ]; then echo F50_UNINSTALL_STATE=residual; exit 1; fi
+if [ "$F50_FINAL_UNKNOWN" = 1 ]; then echo F50_UNINSTALL_STATE=unknown; exit 1; fi
+echo F50_UNINSTALL_STATE=clean
+echo UNINSTALL_VERIFIED
+`;
 }
+function buildUninstallStages() { return [
+  {title:'\u505c\u6b62\u732b\u732b\u5e76\u6062\u590d\u7f51\u7edc', timeout:60000, script:buildF50CleanupScript()},
+  {title:'\u79fb\u9664\u732b\u732b\u5f00\u673a\u542f\u52a8\u9879', timeout:15000, script:`set -e
+if [ -f ${shellQuote(BOOT_FILE)} ]; then
+  ${removeBootLinesCmd()}
+fi
+if [ -f /data/f50_boot_fix/clash_boot.sh ]; then rm -f /data/f50_boot_fix/clash_boot.sh; fi
+echo F50_BOOT_REMOVED
+`},
+  {title:'\u5220\u9664\u732b\u732b\u7ec4\u4ef6\u548c\u6570\u636e', timeout:45000, script:buildF50MaintenanceFunctions() + `
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-delete.XXXXXX") || exit 1
+trap 'rm -rf "$F50_WORK"' EXIT
+# Do not erase recoverable runtime files while owned processes or interception are demonstrably active.
+f50_runtime_guard || exit 1
+f50_remove_artifacts
+delete_rc=$?
+${removePluginOwnedArtifactsCmd()} || delete_rc=1
+[ "$delete_rc" = 0 ] && echo UNINSTALL_NO_BACKUP_DONE
+exit "$delete_rc"
+`},
+]; }
+  let refreshDashboardAfterModeChange = null;
+
+function verifyTunReleasedCmd() {return 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-clean';}
+
 
   // ===== Constants =====
   const CLASH_DIR = '/data/clash';
@@ -658,13 +1783,13 @@ function verifyGeneratedRulesFlushedCmd() {
   const F50_FILES_DIR = '/data/data/com.minikano.f50_sms/files';
   const KANO_INSTALL_TOOLBOX_DIR = '/data/kano_tproxy_tools';
   const KANO_INSTALL_TOOLBOX_BIN = `${KANO_INSTALL_TOOLBOX_DIR}/bin`;
-  const LOG_FILE = '/sdcard/Clash\u5185\u6838\u65e5\u5fd7.txt';
+  const LOG_FILE = '/data/clash/Proxy/Clash.log';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
   const CLASH_PACKAGE_URL = 'https://pan.kanokano.cn/d/UFI-TOOLS-UPDATE/plugins/mihomo-tproxy.zip';
   const CLASH_PACKAGE_FALLBACK_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
-  const ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
+  const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
   // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
   // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
@@ -673,11 +1798,11 @@ function verifyGeneratedRulesFlushedCmd() {
   const YQ_OFFICIAL_ARM64_URL =
     'https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_arm64';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
-  const CLASH_SERVICE_WRAPPER_VERSION = '1.0.4-kpr2';
+  const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
   const BOOT_CLEANUP_LINE = `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} flush >/dev/null 2>&1 || true`;
   // UFI-TOOLS 原生 samba_exec.sh 会在开机窗口直接执行: sh /sdcard/ufi_tools_boot.sh
   // 因此基础自启保持 1.3 已验证语义，不再要求 Clash.KanoStart / boot manager 作为必经路径。
-  const BOOT_SERVICE_LINE = `${CLASH_SERVICE} start`;
+  const BOOT_SERVICE_LINE = `${CLASH_SERVICE} boot`;
   const BOOT_ASYNC_LINE = `nohup ${CLASH_SERVICE} boot </dev/null >/dev/null 2>&1 &`;
   const LEGACY_BOOT_SERVICE_LINE = `${CLASH_RUNTIME_MANAGER} --boot`;
   const LEGACY_BOOT_FIX_WRAPPER_LINE = '/data/f50_boot_fix/clash_boot.sh >/dev/null 2>&1 &';
@@ -698,7 +1823,7 @@ function verifyGeneratedRulesFlushedCmd() {
   const LOCAL_SUBSCRIPTION_MAX_FILE_BYTES = 8 * 1024 * 1024;
   const LOCAL_SUBSCRIPTION_TOTAL_BYTES = 32 * 1024 * 1024;
   const KANO_PROVIDER_USER_AGENT = 'clash.meta';
-  const POLICY_SCRIPT_VERSION = '6.6-kpr-dualstack-3';
+  const POLICY_SCRIPT_VERSION = F50_COMPAT_VERSION;
   // Controller settings and the helper snapshot are shared by several widgets during panel refresh.
   // Explicit actions still request a fresh value after they change the configuration.
   const CONTROLLER_INFO_CACHE_TTL = 1500;
@@ -716,13 +1841,36 @@ function verifyGeneratedRulesFlushedCmd() {
   const KANO_HELPER_SNAPSHOT_TTL = 1500;
 
   // ===== Basic helpers =====
-  const runShellWithRoot = (script = '', timeout) =>
-    hostRunShellWithRoot.call(
-      globalThis,
-      `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi
-${script}`,
-      timeout,
-    );
+  const runShellWithRoot = async (script = '', timeout) => {
+  if (typeof script !== 'string' || script.includes(String.fromCharCode(0))) {
+    return { success: false, content: 'SHELL_INVALID_TEXT: command contains NUL or is not a string' };
+  }
+  const op = activeCriticalOperation;
+  if (op && op.token.cancelled) throw operationCancelled();
+  const base = `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${script}`;
+  let command = base;
+  if (op) {
+    const tag = 'mm_' + String(op.token.id).replace(/[^A-Za-z0-9_-]/g, '_');
+    const file = '/dev/kano_tproxy_tasks/' + tag + '.' + (++taskCommandSequence);
+    command = `set +e
+mkdir -p /dev/kano_tproxy_tasks || exit 1
+env KANO_TPROXY_TASK=${shellQuote(tag)} sh -c ${shellQuote(base)} &
+kano_task_pid=$!
+printf '%s\\n' "$kano_task_pid" > ${shellQuote(file)}
+wait "$kano_task_pid"
+kano_task_rc=$?
+rm -f ${shellQuote(file)}
+rmdir /dev/kano_tproxy_tasks 2>/dev/null || true
+exit "$kano_task_rc"`;
+    if (op.progress) op.progress.request(1);
+  }
+  try {
+    const result = await hostRunShellWithRoot.call(globalThis, command, timeout);
+    if (op && op.token.cancelled) throw operationCancelled();
+    return result;
+  } finally { if (op && op.progress) op.progress.request(-1); }
+};
+
 
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
@@ -730,29 +1878,33 @@ ${script}`,
   const templateFlowMessages = [];
   let templateFlowTimer = null;
   let templateFlowWriting = false;
+  let templateFlowWritePromise = null;
   const flushTemplateFlowDebug = async () => {
     templateFlowTimer = null;
-    if (templateFlowWriting || !templateFlowMessages.length) return;
+    if (pluginArtifactsRemoved || templateFlowWriting || !templateFlowMessages.length) return;
     templateFlowWriting = true;
     const messages = templateFlowMessages.splice(0);
     try {
-      await runShellWithRoot(`
+      templateFlowWritePromise = runShellWithRoot(`
         FLOW=${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
         if [ -f "$FLOW" ] && [ "$(wc -c < "$FLOW")" -gt 262144 ]; then
           tail -c 131072 "$FLOW" > "$FLOW.trim.$$" && mv "$FLOW.trim.$$" "$FLOW"
         fi
         printf '%s\\n' ${messages.map(shellQuote).join(' ')} >> "$FLOW"
       `, 5000);
+      await templateFlowWritePromise;
     } catch (e) {
       console.error(e);
     } finally {
       templateFlowWriting = false;
+      templateFlowWritePromise = null;
       if (templateFlowMessages.length && templateFlowTimer === null) {
         templateFlowTimer = setTimeout(flushTemplateFlowDebug, 250);
       }
     }
   };
   const appendTemplateFlowDebug = (message = '') => {
+    if (pluginArtifactsRemoved || (activeCriticalOperation && activeCriticalOperation.token.cancelled)) return;
     templateFlowMessages.push(`${new Date().toISOString()} ${sanitizeSubscriptionSecrets(String(message || '')).replace(/[\r\n]+/g, ' ').slice(0, 2000)}`);
     if (templateFlowMessages.length > 100) templateFlowMessages.shift();
     if (templateFlowTimer === null && !templateFlowWriting) {
@@ -892,6 +2044,7 @@ ${script}`,
   };
 
   const uploadFileToDevice = async (file) => {
+    const operation = activeCriticalOperation;
     const formData = new FormData();
     formData.append('file', file);
     const response = await fetch(`${KANO_baseURL}/upload_img`, {
@@ -899,6 +2052,7 @@ ${script}`,
       headers: common_headers,
       body: formData,
     });
+    if (operation && operation.token.cancelled) throw operationCancelled();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
     if (!result || typeof result.url !== 'string' || !result.url.trim()) {
@@ -949,7 +2103,12 @@ ${script}`,
             mkdir "$BOOT_LOCK/recover" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; }
             owner=$(cat "$BOOT_LOCK/pid" 2>/dev/null || true)
             case "$owner" in
-              ''|*[!0-9]*) rmdir "$BOOT_LOCK/recover"; rmdir "$BOOT_LOCK" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; } ;;
+              ''|*[!0-9]*)
+                sleep 1
+                owner=$(cat "$BOOT_LOCK/pid" 2>/dev/null || true)
+                case "$owner" in ''|*[!0-9]*) ;; *) rmdir "$BOOT_LOCK/recover"; echo BOOT_WRITE_BUSY; exit 1 ;; esac
+                rm -f "$BOOT_LOCK/pid"
+                rmdir "$BOOT_LOCK/recover"; rmdir "$BOOT_LOCK" 2>/dev/null || { echo BOOT_WRITE_BUSY; exit 1; } ;;
               *)
                 if kill -0 "$owner" 2>/dev/null; then
                   rmdir "$BOOT_LOCK/recover"
@@ -979,7 +2138,7 @@ ${script}`,
             -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '$0 != async && $0 != cleanup && $0 != runtime && $0 != service && $0 != legacy_wrapper && $0 != legacy_inotify && $0 != inotify && $0 != legacy_policy && $0 != policy && $0 != mac { print }' \
+            '{ sub(/\\r$/, ""); line=$0; gsub(/^[ \t]+|[ \t]+$/, "", line); if(line != "/data/clash/Scripts/Clash.Service start" && line != async && line != cleanup && line != runtime && line != service && line != legacy_wrapper && line != legacy_inotify && line != inotify && line != legacy_policy && line != policy && line != mac) print }' \
             "$BOOT_SOURCE" > "$BOOT_TMP" || exit 1
           ${enable ? `printf '%s\\n' ${shellQuote(BOOT_ASYNC_LINE)} >> "$BOOT_TMP" || exit 1` : ''}
           sh -n "$BOOT_TMP" || exit 1
@@ -1094,172 +2253,9 @@ KANO_YQ_SMOKE_EOF
     return values;
   };
 
-  const buildServiceWrapperScript = () => `#!/system/bin/sh
-# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}
-set +e
-CORE=${CLASH_CORE}
-CONFIG=${CLASH_CONFIG}
-CONFIG_TEST_LOG=/data/kano_clash_config_test.log
-RUN_LOG=${LOG_FILE}
+  const buildServiceWrapperScript = () => "#!/system/bin/sh\n# KANO_SERVICE_WRAPPER_VERSION=8.0.0-compat.2.3\n# SPDX-License-Identifier: AGPL-3.0-or-later\n: \"${CLASH_ROOT:=/data/clash}\"\nexport CLASH_ROOT\nexport PATH=/system/bin:/system/xbin:/vendor/bin:/data/kano_tproxy_tools/bin:$PATH\ncase \"$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)\" in\n  *arm64*|*aarch64*|*armv8*) binary=\"$CLASH_ROOT/Scripts/clashctl_arm64\" ;;\n  *armeabi*|*armv7*) binary=\"$CLASH_ROOT/Scripts/clashctl_armv7\" ;;\n  *) binary=\"$CLASH_ROOT/Scripts/clashctl\" ;;\nesac\n[ -x \"$binary\" ] || { echo F50_BACKEND_MISSING; exit 1; }\nexec \"$binary\" \"$@\"\n";
 
-case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
-  *arm64-v8a*|*aarch64*|*armv8*) binary=${CLASH_DIR}/Scripts/clashctl_arm64 ;;
-  *armeabi-v7a*|*armeabi*|*armv7*|*armv6*) binary=${CLASH_DIR}/Scripts/clashctl_armv7 ;;
-  *) binary=${CLASH_DIR}/Scripts/clashctl ;;
-esac
-
-find_runtime_pid() {
-  for p in /proc/[0-9]*; do
-    [ -r "$p/cmdline" ] || continue
-    PID="\${p##*/}"
-    exe="$(readlink "$p/exe" 2>/dev/null)"
-    cmdline="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
-    comm="$(cat "$p/comm" 2>/dev/null | tr -d '\\r\\n')"
-    case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
-    case "$exe|$cmdline|$comm" in
-      *"$CORE"*|*"/Clash.Core"*|*"/mihomo"*|*"|Clash.Core"|*"|mihomo") ;;
-      *) continue ;;
-    esac
-    printf '%s\\n' "$PID"
-    return 0
-  done
-  return 1
-}
-
-validate_config() {
-  [ "$KANO_CONFIG_PREVALIDATED" = "1" ] && return 0
-  [ -x "$CORE" ] || { echo "SERVICE_CONFIG_TEST_FAILED: Clash.Core 不可执行"; return 6; }
-  [ -s "$CONFIG" ] || { echo "SERVICE_CONFIG_TEST_FAILED: config.yaml 不存在或为空"; return 6; }
-  if command -v timeout >/dev/null 2>&1; then
-    (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-  else
-    (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-  fi
-  test_rc=$?
-  if [ "$test_rc" -ne 0 ]; then
-    echo "SERVICE_CONFIG_TEST_FAILED: rc=$test_rc"
-    tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
-    return 6
-  fi
-  return 0
-}
-
-[ -x "$binary" ] || { echo "找不到适用于当前架构的 clashctl: $binary"; exit 1; }
-action="$1"
-if [ "$action" = boot ]; then
-  export PATH=${KANO_INSTALL_TOOLBOX_BIN}:/system/bin:/system/xbin:/vendor/bin:/bin:/usr/bin:$PATH
-  BOOT_LOCK=/dev/kano_clash_boot.lock
-  mkdir "$BOOT_LOCK" 2>/dev/null || exit 0
-  trap 'rmdir "$BOOT_LOCK" 2>/dev/null' EXIT
-  trap 'exit 1' HUP INT TERM
-  started=$(cut -d. -f1 /proc/uptime)
-  [ ! -f /data/kano_policy_boot.log ] || mv -f /data/kano_policy_boot.log /data/kano_policy_boot.previous.log
-  exec >/data/kano_policy_boot.log 2>&1
-  boot_result() {
-    elapsed=$(( $(cut -d. -f1 /proc/uptime) - started ))
-    printf 'BOOT_STAGE=%s ELAPSED=%s RC=%s\\n' "$1" "$elapsed" "$2"
-  }
-  boot_result core_start 0
-  if [ -z "$(find_runtime_pid)" ]; then
-    "$0" start
-    rc=$?
-    [ "$rc" -eq 0 ] || { boot_result core_failed "$rc"; exit "$rc"; }
-  fi
-  watcher=0
-  for p in /proc/[0-9]*/cmdline; do
-    [ -r "$p" ] || continue
-    cmd=$(tr '\\0' ' ' < "$p" 2>/dev/null)
-    case "$cmd" in *inotifyd*"${CLASH_DIR}/Scripts/Clash.Inotify"*) watcher=1; break ;; esac
-  done
-  if [ "$watcher" -eq 0 ]; then
-    mkdir -p "${CLASH_INOTIFY_DIR}" || { boot_result watcher_failed 1; exit 1; }
-    inotifyd ${CLASH_DIR}/Scripts/Clash.Inotify "${CLASH_INOTIFY_DIR}" >/dev/null 2>&1 &
-    watcher_pid=$!
-    sleep 1
-    kill -0 "$watcher_pid" 2>/dev/null || { boot_result watcher_failed 1; exit 1; }
-  fi
-  boot_result policy_start 0
-  if [ ! -x ${CLASH_POLICY_SCRIPT} ]; then
-    boot_result policy_missing 1
-    exit 1
-  fi
-  policy_attempt=0
-  while [ "$policy_attempt" -lt 3 ]; do
-    policy_attempt=$((policy_attempt + 1))
-    ${CLASH_POLICY_SCRIPT} boot-apply
-    rc=$?
-    if [ "$rc" -eq 0 ]; then boot_result ready 0; exit 0; fi
-    boot_result policy_retry "$rc"
-    [ "$policy_attempt" -ge 3 ] || sleep 10
-  done
-  boot_result policy_failed "$rc"
-  exit "$rc"
-fi
-case "$action" in start|restart) validate_config || exit $? ;; esac
-
-policy_rc=0
-case "$action" in
-  stop|restart)
-    if [ -x ${CLASH_POLICY_SCRIPT} ]; then
-      ${CLASH_POLICY_SCRIPT} flush || { policy_rc=$?; echo "SERVICE_POLICY_FLUSH_FAILED"; }
-    fi
-    ;;
-esac
-if [ "$policy_rc" -ne 0 ]; then
-  "$binary" stop
-  exit "$policy_rc"
-fi
-"$binary" "$@"
-controller_rc=$?
-[ "$controller_rc" -eq 0 ] || exit "$controller_rc"
-
-case "$action" in
-  start|restart)
-    stable=0
-    attempt=0
-    while [ "$attempt" -lt 30 ]; do
-      attempt=$((attempt + 1))
-      pid="$(find_runtime_pid)"
-      if [ -n "$pid" ]; then
-        stable=$((stable + 1))
-        if [ "$stable" -ge 2 ]; then
-          echo "SERVICE_START_VERIFIED_PID=$pid"
-          exit 0
-        fi
-      else
-        stable=0
-      fi
-      sleep 1
-    done
-    echo "SERVICE_START_VERIFY_FAILED: 控制器返回成功，但核心进程未稳定运行"
-    tail -n 120 "$RUN_LOG" 2>/dev/null || true
-    exit 7
-    ;;
-esac
-exit 0
-`;
-
-  const ensureServiceWrapper = async ({ force = false } = {}) => {
-    const script = buildServiceWrapperScript();
-    const marker = `# KANO_SERVICE_WRAPPER_VERSION=${CLASH_SERVICE_WRAPPER_VERSION}`;
-    return runShellWithRoot(`
-      set -e
-      TARGET=${shellQuote(CLASH_SERVICE)}
-      [ -d ${shellQuote(`${CLASH_DIR}/Scripts`)} ] || { echo "SERVICE_WRAPPER_SKIPPED=not_installed"; exit 3; }
-      NEW="$TARGET.new.$$"
-      if [ ${shellQuote(force ? '1' : '0')} != "1" ] && [ -x "$TARGET" ] && grep -qxF ${shellQuote(marker)} "$TARGET"; then
-        echo "SERVICE_WRAPPER_READY=${CLASH_SERVICE_WRAPPER_VERSION}"
-        exit 0
-      fi
-      cat > "$NEW" <<'KANO_SERVICE_WRAPPER_EOF'
-${script}
-KANO_SERVICE_WRAPPER_EOF
-      chmod 755 "$NEW"
-      sh -n "$NEW" || { rm -f "$NEW"; echo "SERVICE_WRAPPER_SYNTAX_FAILED"; exit 1; }
-      mv -f "$NEW" "$TARGET"
-      echo "SERVICE_WRAPPER_READY=${CLASH_SERVICE_WRAPPER_VERSION}"
-    `, 20 * 1000);
-  };
+  const ensureServiceWrapper = async () => { const ok=await ensureCompatBackend(); return {success:ok,content:ok?'F50_CONTROLLER='+F50_COMPAT_VERSION:'F50_BACKEND_REQUIRED'}; };
 
   const parseRuntimePreflightResult = (result = {}) => {
     const values = parseKeyValueOutput(result.content || '');
@@ -1338,25 +2334,8 @@ KANO_SERVICE_WRAPPER_EOF
         exit 0
       fi
 
-      find_real_core_pid() {
-        candidates="$(pidof Clash.Core 2>/dev/null) $(pidof mihomo 2>/dev/null) $(pgrep -f '/data/clash/Proxy/[C]lash\\.Core' 2>/dev/null)"
-        for PID in $candidates; do
-          case "$PID" in ''|*[!0-9]*) continue ;; esac
-          [ -r "/proc/$PID/cmdline" ] || continue
-          cmdline="$(tr '\\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null)"
-          comm="$(cat "/proc/$PID/comm" 2>/dev/null | tr -d '\\r\\n')"
-          case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
-          case "$cmdline|$comm" in
-            *"$CORE"*|*"/data/clash/Proxy/Clash.Core"*|*"|Clash.Core"|*"|mihomo")
-              printf '%s\\n' "$PID"
-              return 0
-              ;;
-          esac
-        done
-        return 1
-      }
-
-      pid="$(find_real_core_pid 2>/dev/null | head -n 1)"
+      ${buildOwnedCoreFunctions()}
+      pid="$(find_runtime_pid)"
       state=installed_stopped
       [ -z "$pid" ] || state=running_api_unavailable
       echo "PREFLIGHT_STATE=$state"
@@ -1453,6 +2432,7 @@ KANO_SERVICE_WRAPPER_EOF
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
     // UFI root-shell requests have a finite request window. Keep every foreground
     // download attempt below that window and try sources one-by-one from JS.
+    operationStage('\u68c0\u67e5\u5b89\u88c5\u5305\u7f13\u5b58');
     if (allowCached) {
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -1470,6 +2450,7 @@ KANO_SERVICE_WRAPPER_EOF
     const sources = [CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
+      operationStage('\u4e0b\u8f7d\u5e76\u6821\u9a8c\u5b89\u88c5\u5305\uff1a\u6765\u6e90 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
       const result = await runShellWithRoot(`
         set +e
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -1480,7 +2461,7 @@ KANO_SERVICE_WRAPPER_EOF
         command -v unzip >/dev/null 2>&1 || { echo "ARCHIVE_VERIFY_FAILED=unzip_missing"; exit 1; }
 
         echo "TRY_PACKAGE_URL=${packageUrl ? shellQuote(packageUrl) : "''"}" > "$LOG"
-        "$CURL_BIN" -fL --connect-timeout 10 --max-time 82 --retry 1 --retry-delay 1 \
+        "$CURL_BIN" -fsSL --connect-timeout 8 --max-time 60 --retry 0 --speed-time 12 --speed-limit 1024 \
           ${shellQuote(packageUrl)} -o "$NEW" >>"$LOG" 2>&1
         download_rc=$?
         if [ "$download_rc" -ne 0 ]; then
@@ -1510,7 +2491,7 @@ KANO_SERVICE_WRAPPER_EOF
         echo "ARCHIVE_READY=downloaded"
         echo "ARCHIVE_SOURCE=${shellQuote(packageUrl)}"
         echo "ARCHIVE_BYTES=$size"
-      `, 95 * 1000);
+      `, 80 * 1000);
       const content = String(result.content || '');
       if (result.success && content.includes('ARCHIVE_READY=downloaded')) {
         return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
@@ -1530,6 +2511,7 @@ KANO_SERVICE_WRAPPER_EOF
   const stageAndCommitRepairArchive = async () => {
     const result = await runDangerousShellWithRoot(`
       set +e
+      ${buildF50ZashboardValidationFunction()}
       ZIP=${shellQuote(DOWNLOAD_ZIP)}
       TARGET=${shellQuote(CLASH_DIR)}
       STAGE="/data/kano_clash_repair.$$"
@@ -1681,6 +2663,9 @@ EOF_KANO_SERVICE
       fi
       "$CORE" -v >/dev/null 2>&1 || "$CORE" -h >/dev/null 2>&1 || { echo "REPAIR_FAILED=core_probe"; exit 1; }
       echo "REPAIR_ADVANCED_MISSING=$advanced_missing"
+      panel_probe="$(f50_validate_zashboard "$PACKAGE_ROOT/Proxy/WebUI/zashboard" 2>&1)"; panel_rc=$?
+      printf '%s\\n' "$panel_probe"
+      [ "$panel_rc" = 0 ] || { echo "REPAIR_FAILED=panel_candidate_rejected"; exit 1; }
 
       stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
       [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
@@ -1689,8 +2674,7 @@ EOF_KANO_SERVICE
       for relative in \
         Proxy/config.yaml Proxy/subscription_urls.txt Proxy/mac_bypass.txt Proxy/proxies Proxy/Policy \
         Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json \
-        Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf \
-        Tools/config_source.conf Policy; do
+        Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Policy; do
         source="$TARGET/$relative"
         [ -e "$source" ] || continue
         mkdir -p "$USER_BACKUP/$(dirname "$relative")" "$PACKAGE_ROOT/$(dirname "$relative")" || exit 1
@@ -1721,6 +2705,9 @@ EOF_KANO_SERVICE
         exit 1
       }
       committed=1
+      panel_probe="$(f50_validate_zashboard "$TARGET/Proxy/WebUI/zashboard" 2>&1)"; panel_rc=$?
+      printf '%s\\n' "$panel_probe"
+      [ "$panel_rc" = 0 ] || { echo "REPAIR_FAILED=panel_postcheck_failed"; exit 1; }
       [ "$PACKAGE_ROOT" = "$STAGE" ] || rm -rf "$STAGE" 2>/dev/null || true
       sync 2>/dev/null || true
       echo "REPAIR_TARGET_BACKUP=$TARGET_BACKUP"
@@ -1755,45 +2742,7 @@ EOF_KANO_SERVICE
     `, 60 * 1000, 'damaged_install_rollback');
   };
 
-  const selfHealDamagedInstall = async (initialState = null) => {
-    const state = initialState || await checkInstallState({ fresh: true });
-    if (state.state != 'damaged' || !state.repairable) return false;
-    const archive = await downloadCoreArchive({ allowCached: true });
-    if (!archive.ok) {
-      createToast(`安装自愈失败（${escapeHtml(archive.stage)}）<br>${safeTextToHtml(archive.content || archive.message)}`, 'red', 12000);
-      return false;
-    }
-    const committed = await stageAndCommitRepairArchive();
-    if (!committed.ok) {
-      createToast(`安装自愈提交失败<br>${safeTextToHtml(committed.content)}`, 'red', 12000);
-      return false;
-    }
-    const failAndRollback = async (stage, detail = '') => {
-      const rollback = await rollbackRepairedInstall(committed.targetBackup, stage);
-      runtimePreflightCache = null;
-      runtimePreflightLoadPromise = null;
-      createToast(
-        `安装自愈在 ${escapeHtml(stage)} 阶段失败<br>${safeTextToHtml(detail)}<br>${rollback.success ? '已恢复修复前安装目录。' : `回滚失败：${safeTextToHtml(rollback.content || '')}`}`,
-        'red',
-        14000,
-      );
-      return false;
-    };
-    const policyReady = await ensurePolicyToolsScript();
-    if (!policyReady) createToast('基础修复已完成；网络策略增强脚本暂不可用，可稍后在“网络设置”中重试。', 'yellow', 8000);
-    const checked = await runtimePreflight();
-    if (['not_installed', 'damaged'].includes(checked.state)) {
-      return failAndRollback('post_preflight', checked.content || checked.message);
-    }
-    const started = await startClashServiceClean({ stopFirst: true, reason: '安装自愈' });
-    if (!started.success) {
-      return failAndRollback('post_start', started.content || '未返回健康状态');
-    }
-    runtimePreflightCache = null;
-    runtimePreflightLoadPromise = null;
-    createToast(`安装自愈完成并已启动核心<br>用户数据备份：${escapeHtml(committed.userBackup)}`, 'green', 9000);
-    return true;
-  };
+  const selfHealDamagedInstall = async () => { createToast('请使用本版组件包修复，不会重装旧守护器。','red',9000); return false; };
 
   const setButtonBusy = (button, busy, busyText = '') => {
     if (!button) return;
@@ -1822,20 +2771,27 @@ EOF_KANO_SERVICE
     statusEl.textContent = label ? `任务：${label}` : '任务：空闲';
   };
   const acquireCriticalOperation = (label = '关键操作', token = null) => {
+    if (recoveryInProgress) {
+      createToast('\u7f51\u7edc\u6062\u590d\u6b63\u5728\u6267\u884c', 'yellow');
+      return null;
+    }
     if (activeCriticalOperation) {
       if (token && activeCriticalOperation.token === token) return token;
       createToast(`“${escapeHtml(activeCriticalOperation.label)}”正在执行，请完成后再试。`, 'yellow', 5000);
       return null;
     }
     const operationToken = token || { id: `${Date.now()}_${createRandomString(6)}` };
-    activeCriticalOperation = { label: String(label || '关键操作'), token: operationToken };
+    activeCriticalOperation = { label: String(label || '\u5173\u952e\u64cd\u4f5c'), token: operationToken, progress: createOperationProgress(label) };
+    invalidateStatusSnapshot();
     syncCriticalOperationStatus();
     return operationToken;
   };
 
   const releaseCriticalOperation = (token) => {
     if (activeCriticalOperation && activeCriticalOperation.token === token) {
+      if (activeCriticalOperation.progress && !token.cancelled) activeCriticalOperation.progress.finish(null);
       activeCriticalOperation = null;
+      invalidateStatusSnapshot();
       syncCriticalOperationStatus();
     }
   };
@@ -1846,7 +2802,13 @@ EOF_KANO_SERVICE
     if (!operationToken) return false;
     const ownsLock = !reentrant;
     try {
-      return await action(operationToken);
+      const result = await action(operationToken);
+      if (ownsLock) operationFinish(typeof result === 'boolean' ? result : null);
+      return result;
+    } catch (error) {
+      if (ownsLock) operationFinish(false, sanitizeSubscriptionSecrets(error.message || String(error)));
+      if (error.name !== 'OperationCancelled') throw error;
+      return false;
     } finally {
       if (ownsLock) releaseCriticalOperation(operationToken);
     }
@@ -1924,10 +2886,7 @@ EOF_KANO_SERVICE
           sed -n '1p' ${shellQuote(CLASH_SUB_USER_AGENT_FILE)}
         fi
         `, 10 * 1000);
-    if (!res.success) {
-      currentProviderUserAgent = KANO_PROVIDER_USER_AGENT;
-      return currentProviderUserAgent;
-    }
+    if (!res.success) throw new Error('\u8bfb\u53d6\u8ba2\u9605\u8bf7\u6c42\u5934\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u66f4\u65b0');
     try {
       currentProviderUserAgent =
         parseStoredProviderUserAgent(res.content || '') ||
@@ -2164,14 +3123,14 @@ EOF_KANO_SERVICE
       CURRENT_INFO=""
       CURRENT_VERSION=""
       if [ -x "$TARGET" ]; then
-        CURRENT_INFO="$("$TARGET" version 2>/dev/null || true)"
+        CURRENT_INFO="$(timeout -k 1 3 "$TARGET" version 2>/dev/null || true)"
         CURRENT_VERSION="$(helper_extract_version "$CURRENT_INFO")"
       fi
       # Best-effort migration only: if an older helper advertises 0.2.3, retain it as converter.
       # Failure to identify/copy it never blocks installing the new helper.
       if [ -f "$TARGET" ] && [ ! -s "$CONVERTER" ]; then
         old_info="$CURRENT_INFO"
-        [ -n "$old_info" ] || old_info="$("$TARGET" version 2>/dev/null || true)"
+        [ -n "$old_info" ] || old_info="$(timeout -k 1 3 "$TARGET" version 2>/dev/null || true)"
         if printf '%s\n' "$old_info" | grep -q '0\.2\.3'; then
           cp "$TARGET" "$CONVERTER.new.$$" 2>/dev/null && \
             chmod 700 "$CONVERTER.new.$$" 2>/dev/null && \
@@ -2181,7 +3140,7 @@ EOF_KANO_SERVICE
       mv -f "$SOURCE" "$STAGE"
       chmod 700 "$STAGE" || { echo "HELPER_CHMOD_FAILED"; exit 1; }
       [ -x "$STAGE" ] || { echo "HELPER_NOT_EXECUTABLE"; exit 1; }
-      VERSION_OUT="$("$STAGE" version 2>&1)" || {
+      VERSION_OUT="$(timeout -k 1 3 "$STAGE" version 2>&1)" || {
         helper_rc=$?
         printf '%s\n' "$VERSION_OUT"
         echo "HELPER_VERSION_PROBE_FAILED=$helper_rc"
@@ -2260,24 +3219,19 @@ EOF_KANO_SERVICE
       sourcePath,
       prepareCommand: `
         ${getCurlBinCmd()}
-        "$CURL_BIN" -fL --connect-timeout 10 --max-time 90 --retry 2 --retry-delay 1 \
+        "$CURL_BIN" -fL --connect-timeout 8 --max-time 50 --retry 0 --speed-time 12 --speed-limit 1024 \
           ${shellQuote(KANO_HELPER_DOWNLOAD_URL)} -o "$SOURCE"
       `,
-      timeout: 110 * 1000,
+      timeout: 75 * 1000,
       label: 'install_binary_helper_gitee',
       successMessage: '转换组件已从 Gitee 安装',
     });
   };
 
-  const installBinaryHelperPreferred = async ({ quiet = false, preferGitee = false } = {}) => {
-    if (preferGitee) {
-      const giteeOk = await installBinaryHelperFromGitee({ quiet: true });
-      const bundledOk = await installBinaryHelperFromBundled({ quiet: giteeOk || quiet });
-      return giteeOk || bundledOk;
-    }
-    const bundledOk = await installBinaryHelperFromBundled({ quiet: true });
-    if (bundledOk) return true;
-    return installBinaryHelperFromGitee({ quiet });
+  const installBinaryHelperPreferred = async ({ quiet = true } = {}) => {
+    const probe = await probeBinaryHelperState(5000);
+    if (probe.state == 'installed') return true;
+    return installBinaryHelperFromBundled({ quiet });
   };
 
   const installBinaryHelperFromFile = async (file) => {
@@ -2365,9 +3319,7 @@ EOF_KANO_SERVICE
 
   const providerNamesForTemplate = (sources = []) => {
     const cleanSources = normalizeSubSourceList(sources);
-    return cleanSources.length > 0
-      ? cleanSources.map((source) => source.name)
-      : [providerNameFor(0)];
+    return cleanSources.map((source) => source.name);
   };
 
   const parseStoredSubSourcesFromText = (content = '') => {
@@ -2411,23 +3363,14 @@ EOF_KANO_SERVICE
     if (!res.success) throw new Error('读取配置来源失败，未修改配置');
     return String(res.content || '').trim();
   };
-  const normalizeSubConvertModeValue = (value = '') =>
-    String(value || '').trim().toLowerCase() == SUB_CONVERT_MODE_LOCAL
-      ? SUB_CONVERT_MODE_LOCAL
-      : SUB_CONVERT_MODE_PROVIDER;
+  const normalizeSubConvertModeValue = () => SUB_CONVERT_MODE_LOCAL;
 
   const parseSubConvertModeFromText = (content = '') => {
     const match = String(content || '').match(/^# KANO_SUB_CONVERT_MODE=(\S+)\s*$/m);
     return normalizeSubConvertModeValue(match ? match[1] : '');
   };
 
-  const readSavedSubConvertMode = async () => {
-    const res = await runShellWithRoot(`
-        grep -m 1 '^# KANO_SUB_CONVERT_MODE=' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null |
-          sed 's/^# KANO_SUB_CONVERT_MODE=//' | tr -d '\\r'
-        `, 10 * 1000);
-    return normalizeSubConvertModeValue(res.success ? res.content : '');
-  };
+  const readSavedSubConvertMode = async () => SUB_CONVERT_MODE_LOCAL;
 
   const fileTransactionHelpersCmd = () => `
         snapshot_transaction_file() {
@@ -2572,15 +3515,16 @@ EOF_KANO_SERVICE
   };
 
   const setConfigSourceCmd = (source = 'unknown') => `
-        if mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)} 2>/dev/null; then
-          if printf 'KANO_CONFIG_SOURCE=%s\nKANO_CONFIG_SOURCE_TIME=%s\n' ${shellQuote(String(source || 'unknown'))} "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)" > ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}; then
-            chmod 600 ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null || true
-          else
-            echo "CONFIG_SOURCE_WARN: failed to write ${CLASH_CONFIG_SOURCE_FILE}"
-          fi
-        else
-          echo "CONFIG_SOURCE_WARN: failed to create ${CLASH_DIR}/Tools"
-        fi
+        (
+          umask 077
+          TARGET=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
+          TMP="$TARGET.new.$$"
+          trap 'rm -f "$TMP"' EXIT
+          trap 'exit 1' HUP INT TERM
+          mkdir -p ${shellQuote(CLASH_DIR + '/Tools')} || exit 1
+          printf 'KANO_CONFIG_SOURCE=%s\nKANO_CONFIG_SOURCE_TIME=%s\n' ${shellQuote(String(source || 'unknown'))} "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)" > "$TMP" || exit 1
+          chmod 600 "$TMP" && mv -f "$TMP" "$TARGET" || exit 1
+        ) || { echo CONFIG_SOURCE_WRITE_FAILED; exit 1; }
         `;
 
   const setSubRuleMode = async (mode = SUB_RULE_MODE_TEMPLATE) => {
@@ -2693,7 +3637,7 @@ EOF_KANO_SERVICE
       const controllerInfo = await buildControllerInfo();
       baseObject = buildF50TemplateObject(cleanSources, {
         controller: controllerInfo.externalController,
-        secret: controllerInfo.secretSet ? controllerInfo.secret : createRandomSecret(20),
+        secret: controllerInfo.secretSet ? controllerInfo.secret : F50_DEFAULT_SECRET,
       });
     } else {
       const read = await readYamlObject(templatePath, 'template.yaml');
@@ -2890,10 +3834,7 @@ EOF_KANO_SERVICE
     return value;
   };
 
-  const ensureObjectField = (target, key) => {
-    if (!isPlainYamlObject(target[key])) target[key] = {};
-    return target[key];
-  };
+
 
   const getPositivePort = (value, fallback = 7895) => {
     const port = Number(value);
@@ -2915,151 +3856,16 @@ EOF_KANO_SERVICE
 
   // yq is an advanced-feature dependency, not a prerequisite for installing/starting Mihomo.
   // On a clean UFI environment, repair it lazily only when a YAML-backed feature is actually used.
-  const ensureYqRuntime = async ({ quiet = false, force = false } = {}) => {
-    const now = Date.now();
-    if (!force && yqRuntimeReadyUntil > now) return true;
-    if (!force && yqRuntimeEnsurePromise) return yqRuntimeEnsurePromise;
-    const task = (async () => {
-      // Phase 1: zero-side-effect probe. Basic proxy operation never depends on this path.
-      const probe = await runShellWithRoot(`
-        set +e
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        verify_yq() {
-          candidate="$1"
-          [ -s "$candidate" ] || return 1
-          chmod 755 "$candidate" 2>/dev/null || return 1
-          version="$("$candidate" --version 2>&1)" || return 1
-          echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.'
-        }
-        if verify_yq "$YQ"; then
-          echo "YQ_RUNTIME_READY=existing"
-          exit 0
-        fi
-        abi="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        abilist="$(getprop ro.product.cpu.abilist 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        machine="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-        case "$abi $abilist $machine" in
-          *arm64-v8a*|*aarch64*|*armv8*|*arm64*) echo "YQ_RUNTIME_NEEDS_REPAIR=arm64"; exit 0 ;;
-          *) echo "YQ_RUNTIME_UNSUPPORTED_ABI=\${abi:-$machine}"; exit 2 ;;
-        esac
-      `, 10 * 1000);
-      const probeText = String(probe.content || '');
-      if (probe.success && probeText.includes('YQ_RUNTIME_READY=existing')) {
-        yqRuntimeReadyUntil = Date.now() + 5 * 60 * 1000;
-        return true;
-      }
-      if (!probeText.includes('YQ_RUNTIME_NEEDS_REPAIR=arm64')) {
-        if (!quiet) createToast(`YAML 运行组件不可用：当前 CPU ABI 不受自动修复支持。<br>${safeTextToHtml(probeText)}`, 'red', 9000);
-        return false;
-      }
+  const ensureYqRuntime = async ({quiet=false}={}) => {
+ if (!(await ensureCompatBackend())) return false;
+ const r=await runShellWithRoot('test -x /data/clash/Tools/yq_linux_arm64 && /data/clash/Tools/yq_linux_arm64 --version',5000);
+ const ok=!!r.success && /version\s+v?4\./i.test(r.content||'');
+ if(!ok&&!quiet)createToast('YAML 组件不可用，请重新安装本版组件包','red');return ok;
+};
 
-      // Phase 2: compatibility package first. This preserves the historical F50 bundle layout.
-      // Failure is non-fatal and falls through to the official yq binary.
-      const packageRepair = await runShellWithRoot(`
-        set +e
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        FALLBACK_URL=${shellQuote(CLASH_PACKAGE_FALLBACK_URL)}
-        CACHE=/data/kano_yq_repair.zip
-        TMP="$YQ.kano_new.$$"
-        CURL_BIN=${shellQuote(`${F50_FILES_DIR}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN=${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
-        UNZIP_BIN=${shellQuote(`${F50_FILES_DIR}/unzip`)}
-        [ -x "$UNZIP_BIN" ] || UNZIP_BIN=${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/unzip`)}
-        [ -x "$UNZIP_BIN" ] || UNZIP_BIN="$(command -v unzip 2>/dev/null)"
-        [ -x "$CURL_BIN" ] || { echo "YQ_PACKAGE_REPAIR_FAILED=curl_missing"; exit 1; }
-        [ -x "$UNZIP_BIN" ] || { echo "YQ_PACKAGE_REPAIR_FAILED=unzip_missing"; exit 1; }
-        rm -f "$CACHE.new.$$" "$TMP" 2>/dev/null || true
-        "$CURL_BIN" -fL --connect-timeout 10 --max-time 72 --retry 1 --retry-delay 1 "$FALLBACK_URL" -o "$CACHE.new.$$" || {
-          rm -f "$CACHE.new.$$" 2>/dev/null || true
-          echo "YQ_PACKAGE_REPAIR_FAILED=download"
-          exit 1
-        }
-        "$UNZIP_BIN" -t "$CACHE.new.$$" >/dev/null 2>&1 || {
-          rm -f "$CACHE.new.$$" 2>/dev/null || true
-          echo "YQ_PACKAGE_REPAIR_FAILED=archive"
-          exit 1
-        }
-        entry="$("$UNZIP_BIN" -Z1 "$CACHE.new.$$" 2>/dev/null | awk '/(^|\\/)Tools\\/yq_linux_arm64$/ {print; exit}')"
-        if [ -z "$entry" ]; then
-          entry="$("$UNZIP_BIN" -l "$CACHE.new.$$" 2>/dev/null | awk '$NF ~ /(^|\\/)Tools\\/yq_linux_arm64$/ {print $NF; exit}')"
-        fi
-        [ -n "$entry" ] || { rm -f "$CACHE.new.$$" 2>/dev/null || true; echo "YQ_PACKAGE_REPAIR_FAILED=asset_missing"; exit 1; }
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)} || exit 1
-        "$UNZIP_BIN" -p "$CACHE.new.$$" "$entry" > "$TMP" || {
-          rm -f "$CACHE.new.$$" "$TMP" 2>/dev/null || true
-          echo "YQ_PACKAGE_REPAIR_FAILED=extract"
-          exit 1
-        }
-        chmod 755 "$TMP" 2>/dev/null || { rm -f "$TMP"; exit 1; }
-        version="$("$TMP" --version 2>&1)" || { rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=execute"; exit 1; }
-        echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || { rm -f "$TMP"; echo "YQ_PACKAGE_REPAIR_FAILED=version"; exit 1; }
-        mv -f "$CACHE.new.$$" "$CACHE" 2>/dev/null || true
-        mv -f "$TMP" "$YQ" || { rm -f "$TMP" 2>/dev/null || true; exit 1; }
-        chmod 755 "$YQ" 2>/dev/null || true
-        echo "YQ_RUNTIME_READY=compat_package"
-      `, 88 * 1000);
-      if (packageRepair.success && String(packageRepair.content || '').includes('YQ_RUNTIME_READY=compat_package')) {
-        yqRuntimeReadyUntil = Date.now() + 5 * 60 * 1000;
-        return true;
-      }
-
-      // Phase 3: official mikefarah/yq ARM64 binary.
-      // This path intentionally does not need unzip, so a minimal clean F50 can still self-heal.
-      const officialRepair = await runShellWithRoot(`
-        set +e
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        URL=${shellQuote(YQ_OFFICIAL_ARM64_URL)}
-        TMP="$YQ.official_new.$$"
-        CURL_BIN=${shellQuote(`${F50_FILES_DIR}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN=${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
-        [ -x "$CURL_BIN" ] || { echo "YQ_OFFICIAL_REPAIR_FAILED=curl_missing"; exit 1; }
-        rm -f "$TMP" 2>/dev/null || true
-        "$CURL_BIN" -fL --connect-timeout 10 --max-time 72 --retry 1 --retry-delay 1 "$URL" -o "$TMP" || {
-          rm -f "$TMP" 2>/dev/null || true
-          echo "YQ_OFFICIAL_REPAIR_FAILED=download"
-          exit 1
-        }
-        chmod 755 "$TMP" 2>/dev/null || { rm -f "$TMP"; exit 1; }
-        version="$("$TMP" --version 2>&1)" || { rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=execute"; exit 1; }
-        printf '%s\\n' "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
-          rm -f "$TMP"; echo "YQ_OFFICIAL_REPAIR_FAILED=version:$version"; exit 1;
-        }
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)} || { rm -f "$TMP"; exit 1; }
-        mv -f "$TMP" "$YQ" || { rm -f "$TMP" 2>/dev/null || true; exit 1; }
-        chmod 755 "$YQ" 2>/dev/null || true
-        echo "YQ_RUNTIME_READY=official"
-      `, 88 * 1000);
-      const officialText = String(officialRepair.content || '');
-      const ok = !!(officialRepair.success && officialText.includes('YQ_RUNTIME_READY=official'));
-      if (ok) {
-        yqRuntimeReadyUntil = Date.now() + 5 * 60 * 1000;
-        return true;
-      }
-      if (!quiet) {
-        const packageText = String(packageRepair.content || '').trim();
-        createToast(
-          `YAML 运行组件自动修复失败；基础代理不受影响。<br>` +
-          `兼容包：${safeTextToHtml(packageText || '不可用')}<br>` +
-          `官方 yq：${safeTextToHtml(officialText || '不可用')}`,
-          'red',
-          12000,
-        );
-      }
-      return false;
-    })();
-    if (!force) yqRuntimeEnsurePromise = task;
-    try {
-      return await task;
-    } finally {
-      if (yqRuntimeEnsurePromise == task) yqRuntimeEnsurePromise = null;
-    }
-  };
-
-  const readYamlObject = async (yamlPath, label = 'YAML') => {
-    if (!(await ensureYqRuntime({ quiet: true }))) {
-      return { ok: false, value: null, message: `${label} 需要 yq v4；自动修复未成功，但基础代理仍可运行`, shell: null };
+  const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
+    if (!(await ensureYqRuntime({ quiet: true, allowDownload }))) {
+      return { ok: false, value: null, message: `${label} \u9700\u8981 yq v4\uff0c\u8bf7\u5148\u4fee\u590d YAML \u7ec4\u4ef6`, shell: null };
     }
     const res = await runShellWithRoot(`
         set -e
@@ -3068,7 +3874,7 @@ EOF_KANO_SERVICE
         ${prepareYqRuntimeCmd()}
         [ -s "$FILE" ] || { echo "YAML_FILE_MISSING: $FILE"; exit 1; }
         [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
-        version="$($YQ --version 2>&1)"
+        version="$(timeout -k 1 3 "$YQ" --version 2>&1)"
         echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
           echo "YQ_VERSION_UNSUPPORTED: $version"
           exit 1
@@ -3079,8 +3885,8 @@ EOF_KANO_SERVICE
           echo "YAML_FILE_TOO_LARGE: bytes=$size limit=${YAML_BRIDGE_MAX_BYTES}"
           exit 1
         }
-        "$YQ" e -o=json '.' "$FILE"
-        `, 45 * 1000);
+        timeout -k 1 15 "$YQ" e -o=json '.' "$FILE"
+        `, 20 * 1000);
     if (!res.success) {
       return {
         ok: false,
@@ -3212,7 +4018,7 @@ EOF_KANO_SERVICE
         [ -s "$STAGE" ] || { echo "YAML_STAGE_MISSING: $STAGE"; exit 1; }
         [ ! -L "$TARGET" ] || { echo "YAML_TARGET_SYMLINK_REJECTED: $TARGET"; exit 1; }
         [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
-        version="$($YQ --version 2>&1)"
+        version="$(timeout -k 1 3 "$YQ" --version 2>&1)"
         echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
           echo "YQ_VERSION_UNSUPPORTED: $version"
           exit 1
@@ -3252,13 +4058,11 @@ EOF_KANO_SERVICE
             exit 1
           }
         fi
-        chmod 644 "$STAGE" 2>/dev/null || true
-        sync 2>/dev/null || true
+        chmod 600 "$STAGE" || exit 1
         mv -f "$STAGE" "$TARGET" || {
           echo "YAML_COMMIT_FAILED: $TARGET"
           exit 1
         }
-        sync 2>/dev/null || true
         new_hash="$(hash_file "$TARGET")"
         new_size="$(wc -c < "$TARGET" 2>/dev/null || echo 0)"
         [ -z "$stage_hash" ] || [ "$stage_hash" = "$new_hash" ] || {
@@ -3275,6 +4079,7 @@ EOF_KANO_SERVICE
         echo "YAML_NEW_SIZE=$new_size"
         echo "YAML_STAGE_SIZE=$stage_size"
         `, 45 * 1000);
+    if (res.success) invalidateStatusSnapshot();
     const content = String(res.content || '');
     return {
       ok: !!res.success && (/YAML_COMMIT_OK=1/.test(content) || /YAML_COMMIT_UNCHANGED=1/.test(content)),
@@ -3325,30 +4130,18 @@ EOF_KANO_SERVICE
     return { ok: !!res.success, content: res.content || '', shell: res };
   };
 
-  const detectF50TproxyPort = async () => {
-    const res = await runShellWithRoot(`
-        port=""
-        if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-          port="$(grep -Ei 'TPROXY|tproxy|on-port|789[0-9]' ${shellQuote(CLASH_SERVICE)} 2>/dev/null | grep -Eo '[0-9]{3,5}' | grep -E '^789[0-9]$' | tail -n 1)"
-        fi
-        [ -n "$port" ] || port=7895
-        echo "$port"
-        `, 10 * 1000);
-    return getPositivePort(String(res.content || '').trim(), 7895);
-  };
+  const detectF50TproxyPort = async () => 7895;
 
   const buildManagedProxyProviders = (
     sources = [],
     { emptyUrls = false, ensureOne = false, localFiles = false } = {},
   ) => {
     let cleanSources = normalizeSubSourceList(sources);
-    if (cleanSources.length == 0 && ensureOne) {
-      cleanSources = [{ name: providerNameFor(0), url: '' }];
-    }
+    // A template without configured sources is an empty mapping, never a live URL placeholder.
     const providers = {};
     cleanSources.forEach((source) => {
       const provider = {
-        type: localFiles ? 'file' : 'http',
+        type: localFiles || emptyUrls ? 'file' : 'http',
         path: `./proxies/${source.name}.yaml`,
         'health-check': {
           enable: true,
@@ -3356,8 +4149,8 @@ EOF_KANO_SERVICE
           interval: 900,
         },
       };
-      if (!localFiles) {
-        provider.url = emptyUrls ? '' : source.url;
+      if (!localFiles && !emptyUrls) {
+        provider.url = source.url;
         provider.interval = 86400;
         provider.header = {
           'User-Agent': [currentProviderUserAgent],
@@ -3424,19 +4217,15 @@ EOF_KANO_SERVICE
       'webui/zashboard',
       '/data/clash/proxy/webui/zashboard',
     ]);
-    const usesManagedZashboard = managedUiPaths.has(normalizedUi) && (
-      (!externalUi && !externalUiName && !externalUiUrl)
-      || externalUiName == 'zashboard'
-      || /github\.com\/Zephyruso\/zashboard\//i.test(externalUiUrl)
-      || normalizedUi.endsWith('/zashboard')
-    );
-    if (!usesManagedZashboard) return false;
+    if (!managedUiPaths.has(normalizedUi)) return false;
 
     const changed = externalUi != ZASHBOARD_UI_DIR
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
-      || !externalUiUrl;
+      || externalUiUrl != ZASHBOARD_UI_URL
+      || config['unified-delay'] !== true;
     config['external-ui'] = ZASHBOARD_UI_DIR;
-    if (!externalUiUrl) config['external-ui-url'] = ZASHBOARD_UI_URL;
+    config['external-ui-url'] = ZASHBOARD_UI_URL;
+    config['unified-delay'] = true;
     delete config['external-ui-name'];
     return changed;
   };
@@ -3446,14 +4235,13 @@ EOF_KANO_SERVICE
     preservedSecret = '',
   } = {}) => {
     assertYamlRootMap(config, '配置');
-    validateConfigObjectStructure(config);
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
       config['external-controller'] = '0.0.0.0:7788';
     }
     if (managedDashboard) {
       applyManagedDashboardFields(config);
     }
-    if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = preservedSecret || createRandomSecret(20);
+    if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = preservedSecret || F50_DEFAULT_SECRET;
     if (!Object.prototype.hasOwnProperty.call(config, 'proxies')) config.proxies = [];
     return config;
   };
@@ -3618,40 +4406,6 @@ EOF_KANO_SERVICE
     return true;
   };
 
-  const validateConfigObjectStructure = (config, label = '配置') => {
-    assertYamlRootMap(config, label);
-    ['proxies', 'proxy-groups', 'rules', 'listeners'].forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(config, key) && !Array.isArray(config[key])) {
-        throw new Error(`${key} 必须是数组`);
-      }
-    });
-    ['proxy-providers', 'rule-providers', 'dns', 'tun', 'profile', 'hosts'].forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(config, key) && !isPlainYamlObject(config[key])) {
-        throw new Error(`${key} 必须是映射对象`);
-      }
-    });
-
-    const names = new Set();
-    (config['proxy-groups'] || []).forEach((group, index) => {
-      if (!isPlainYamlObject(group)) throw new Error(`proxy-groups[${index}] 必须是映射对象`);
-      const name = String(group.name || '').trim();
-      if (!name) throw new Error(`proxy-groups[${index}] 缺少 name`);
-      if (names.has(name)) throw new Error(`proxy-groups 存在重复组名：${name}`);
-      names.add(name);
-    });
-    Object.entries(config['proxy-providers'] || {}).forEach(([name, provider]) => {
-      if (!name.trim() || !isPlainYamlObject(provider)) {
-        throw new Error(`proxy-provider ${name || '<empty>'} 格式无效`);
-      }
-    });
-    Object.entries(config['rule-providers'] || {}).forEach(([name, provider]) => {
-      if (!name.trim() || !isPlainYamlObject(provider)) {
-        throw new Error(`rule-provider ${name || '<empty>'} 格式无效`);
-      }
-    });
-    return true;
-  };
-
   const normalizeManagedTemplateObject = (rawConfig, sources = [], {
     generated = false,
     emptyProviderUrls = true,
@@ -3697,7 +4451,8 @@ EOF_KANO_SERVICE
     'external-controller': String(controllerSettings.controller || '0.0.0.0:7788'),
     'external-ui': ZASHBOARD_UI_DIR,
     'external-ui-url': ZASHBOARD_UI_URL,
-    secret: String(controllerSettings.secret || createRandomSecret(20)),
+    'unified-delay': true,
+    secret: String(controllerSettings.secret || F50_DEFAULT_SECRET),
     profile: {
       'store-selected': true,
       'store-fake-ip': false,
@@ -3753,24 +4508,7 @@ EOF_KANO_SERVICE
   };
 
 
-  const validateConfigFileStructure = async (configPath = CLASH_CONFIG, label = 'config.yaml') => {
-    const read = await readYamlObject(configPath, label);
-    if (!read.ok) {
-      return { ok: false, message: sanitizeSubscriptionSecrets(read.message || `${label} 解析失败`) };
-    }
-    try {
-      validateConfigObjectStructure(read.value, label);
-      return { ok: true, message: '' };
-    } catch (e) {
-      return {
-        ok: false,
-        message: sanitizeSubscriptionSecrets(e && e.message ? e.message : String(e || `${label} 结构无效`)),
-      };
-    }
-  };
-
   const validateOriginalSubscriptionConfig = (config) => {
-    validateConfigObjectStructure(config, '订阅原配置');
     if (!Array.isArray(config.rules) || config.rules.length == 0
       || !Array.isArray(config['proxy-groups']) || config['proxy-groups'].length == 0
       || (!(Array.isArray(config.proxies) && config.proxies.length > 0)
@@ -3781,29 +4519,38 @@ EOF_KANO_SERVICE
   };
 
   const writeOriginalSubscriptionConfig = async (sources, { backup = true } = {}) => {
-    const cleanSources = normalizeSubSourceList(sources);
+    let cleanSources;
+    try { cleanSources = validateSubscriptionMode(sources, SUB_RULE_MODE_ORIGINAL).enabled; }
+    catch (error) { createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
     if (cleanSources.length != 1) {
       createToast('使用订阅原配置时，只能启用一个完整配置订阅', 'red', 8000);
       return false;
     }
     const stagePath = `${CLASH_CONFIG}.kano_original_${Date.now()}_${createRandomString(6)}`;
     try {
+      if (!(await ensureYqRuntime({ quiet: true }))) throw new Error('YAML \u89e3\u6790\u7ec4\u4ef6\u4e0d\u53ef\u7528');
       const fetched = await convertSubscriptionsLocally(cleanSources, { rawConfigPath: stagePath });
       if (!fetched.ok) throw new Error(fetched.message || '原配置下载失败，未修改运行配置');
       const read = await readYamlObject(stagePath, '订阅原配置');
       if (!read.ok) throw new Error('订阅不是有效的 YAML/JSON 完整配置，请检查返回格式');
       validateOriginalSubscriptionConfig(read.value);
-      const written = await commitStagedYaml({
-        targetPath: CLASH_CONFIG, stagePath, label: '订阅原配置', backup, backupTag: 'subscription_original',
-      });
+      const info = await buildControllerInfo();
+      const adapted = applyRequiredF50Fields(read.value, { managedDashboard: true, preservedSecret: info.secret || '' });
+      // The subscription supplies policy, not credentials for the local control plane.
+      adapted['external-controller'] = info.externalController || '0.0.0.0:7788';
+      if (typeof info.secret === 'string') adapted.secret = info.secret;
+      for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
+      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original' });
       if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
       const marked = await runShellWithRoot(`
         ${setConfigSourceCmd('subscription_original')}
         grep -qx 'KANO_CONFIG_SOURCE=subscription_original' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
       `, 10 * 1000);
       if (!marked.success) throw new Error('保存原配置来源失败');
+      invalidateStatusSnapshot();
       return true;
     } catch (error) {
+      if (activeCriticalOperation) activeCriticalOperation.failure = sanitizeSubscriptionSecrets(error.message || String(error));
       createToast(safeTextToHtml(sanitizeSubscriptionSecrets(error.message || String(error))), 'red', 10000);
       return false;
     } finally {
@@ -3816,7 +4563,7 @@ EOF_KANO_SERVICE
     '/**',
     ' * F50 JS \u8986\u5199\uff1a\u5199\u6cd5\u5c3d\u91cf\u8d34\u8fd1\u684c\u9762\u7aef mihomo/Clash Verge \u8986\u5199\u811a\u672c\u3002',
     ' * \u4fdd\u5b58\u540e\u4f1a\u57fa\u4e8e template.base.yaml \u751f\u6210 template.yaml\uff0c\u4e0d\u4f1a\u76f4\u63a5\u628a\u6574\u4efd\u6a21\u677f\u66ff\u6362\u6210\u56fa\u5b9a\u5185\u5bb9\u3002',
-    ' * \u5e38\u7528\u5199\u6cd5\uff1a\u53ea\u6539 config.rules\uff0c\u6216\u5c11\u91cf\u6539 dns / proxy-groups\u3002',
+    ' * \u5e38\u7528\u5199\u6cd5\uff1a\u53ea\u6539 config.rules\uff0c\u6216\u5c11\u91cf\u6539 proxy-groups\u3002',
     ' */',
     'function main(config) {',
     '  config.rules = config.rules || [];',
@@ -4080,7 +4827,7 @@ EOF_KANO_SERVICE
     if (showToast) {
       createToast('覆写已应用到 template.yaml', 'green', 7000);
     }
-    if (restart) return await restartClash({ skipCheck: true });
+    if (restart) return await restartClashOk({ skipCheck: true });
     return true;
   };
 
@@ -4115,6 +4862,7 @@ KANO_WRITE_CHECK_EOF
         `, 10 * 1000);
     };
 
+    let configCommitted = false;
     const fail = async (step, message) => {
       const detail = sanitizeSubscriptionSecrets(String(message || 'unknown error'));
       await runShellWithRoot(`
@@ -4127,7 +4875,7 @@ KANO_WRITE_CHECK_EOF
       appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate failed step=${step} detail=${detail.replace(/[\r\n]+/g, ' ').slice(0, 500)}`);
       const checkRes = await runShellWithRoot(`cat ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} 2>/dev/null || true`, 10 * 1000);
       createToast(
-        `生成运行配置失败，config.yaml 未提交<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
+        `${configCommitted ? "配置已写入，但来源标记提交失败；本次应用未完成" : "生成运行配置失败，config.yaml 未提交"}<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
         'red',
         12000,
       );
@@ -4169,12 +4917,13 @@ KANO_WRITE_CHECK_EOF
     });
     if (!write.ok) return fail('validate_or_commit_runtime', write.content || '运行配置验证或提交失败');
 
+    configCommitted = true;
     const sourceRes = await runShellWithRoot(`
         ${setConfigSourceCmd('template.yaml')}
         echo 'CONFIG_SOURCE_COMMITTED=template.yaml'
         `, 15 * 1000);
-    if (!sourceRes.success) {
-      appendTemplateFlowDebug('warning: config source sidecar write failed after config commit');
+    if (!sourceRes.success || !String(sourceRes.content || '').includes('CONFIG_SOURCE_COMMITTED=template.yaml')) {
+      return fail('commit_config_source', sourceRes.content || '配置来源写入失败');
     }
 
     const oldSize = ((write.content.split('\n').find((line) => line.startsWith('YAML_OLD_SIZE=')) || '').replace(/^YAML_OLD_SIZE=/, '').trim());
@@ -4266,31 +5015,7 @@ KANO_WRITE_CHECK_EOF
         fi
         `;
 
-  const getCorePid = async () => {
-    // Do not trust helper snapshot PID blindly. A lingering `Clash.Core -t` process is
-    // a config-test worker, not the running proxy core, and must never make the UI/API
-    // state look "running".
-    const status = await runShellWithRoot(`
-        CORE=${shellQuote(CLASH_CORE)}
-        candidates="$(pidof Clash.Core 2>/dev/null) $(pidof mihomo 2>/dev/null) $(pgrep -f '/data/clash/Proxy/[C]lash\\.Core' 2>/dev/null)"
-        for PID in $candidates; do
-          case "$PID" in ''|*[!0-9]*) continue ;; esac
-          [ -r "/proc/$PID/cmdline" ] || continue
-          cmdline="$(tr '\\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null)"
-          comm="$(cat "/proc/$PID/comm" 2>/dev/null | tr -d '\\r\\n')"
-          case " $cmdline " in *" -t "*|*" --test "*) continue ;; esac
-          case "$cmdline|$comm" in
-            *"$CORE"*|*"/data/clash/Proxy/Clash.Core"*|*"|Clash.Core"|*"|mihomo")
-              echo "$PID"
-              exit 0
-              ;;
-          esac
-        done
-        exit 0
-        `, 8 * 1000);
-    const match = String(status.content || '').match(/(?:^|\s)(\d+)(?:\s|$)/);
-    return match ? match[1] : '';
-  };
+  const getCorePid = async () => (await readStatusSnapshot()).corePid;
 
   const normalizeController = (value = '') => {
     let controller = String(value || '').trim() || '127.0.0.1:7788';
@@ -4324,77 +5049,10 @@ KANO_WRITE_CHECK_EOF
   let controllerInfoLoadPromise = null;
 
   const readControllerInfo = async ({ fresh = false } = {}) => {
-    const fallbackController = '127.0.0.1:7788';
-    let externalController = '';
-    let secret = '';
-
-    try {
-      const snapshot = await readBinarySnapshot({ fresh });
-      if (snapshot) {
-        externalController = String(snapshot.externalController || '').trim();
-        secret = String(snapshot.secret || '').trim();
-      }
-      if (snapshot && externalController) {
-        const controllerInfo = normalizeController(externalController || fallbackController);
-        return {
-          ...controllerInfo,
-          externalController: externalController || fallbackController,
-          secret,
-          secretSet: snapshot.secretSet === true || !!secret,
-          usingFallbackController: !externalController,
-          usingFallbackSecret: !secret,
-          configSource: 'binary',
-        };
-      }
-      const res = await runShellWithRoot(`
-        CONFIG=${shellQuote(CLASH_CONFIG)}
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        ${prepareYqRuntimeCmd()}
-        controller=""
-        secret=""
-        if [ -f "$CONFIG" ]; then
-          if [ -x "$YQ" ]; then
-            controller="$("$YQ" e '.external-controller // ""' "$CONFIG" 2>/dev/null | head -n 1)"
-            secret="$("$YQ" e '.secret // ""' "$CONFIG" 2>/dev/null | head -n 1)"
-          fi
-          if [ -z "$controller" ] || [ "$controller" = "null" ]; then
-            controller="$(grep -m 1 '^[[:space:]]*external-controller[[:space:]]*:' "$CONFIG" 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]#.*$//' | sed "s/^[\\"'']//;s/[\\"'']$//")"
-          fi
-          if [ -z "$secret" ] || [ "$secret" = "null" ]; then
-            secret="$(grep -m 1 '^[[:space:]]*secret[[:space:]]*:' "$CONFIG" 2>/dev/null | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]#.*$//' | sed "s/^[\\"'']//;s/[\\"'']$//")"
-          fi
-        fi
-        printf 'CONTROLLER=%s\\n' "$controller"
-        if [ -n "$secret" ] && [ "$secret" != "null" ]; then
-          printf 'SECRET=%s\\n' "$secret"
-          echo 'SECRET_SET=1'
-        else
-          echo 'SECRET_SET=0'
-        fi
-        `);
-      const lines = String(res.content || '').split('\n');
-      externalController =
-        (lines.find((line) => line.startsWith('CONTROLLER=')) || '')
-          .replace(/^CONTROLLER=/, '')
-          .trim();
-      secret =
-        (lines.find((line) => line.startsWith('SECRET=')) || '')
-          .replace(/^SECRET=/, '')
-          .trim();
-    } catch (e) {
-      console.error(e);
-    }
-
-    const controllerInfo = normalizeController(externalController || fallbackController);
-    return {
-      ...controllerInfo,
-      externalController: externalController || fallbackController,
-      secret,
-      secretSet: !!secret,
-      usingFallbackController: !externalController,
-      usingFallbackSecret: !secret,
-      configSource: externalController ? 'config' : 'controller_fallback',
-    };
+    const data = await readStatusSnapshot({ fresh });
+    const controller = data.externalController || '127.0.0.1:7788';
+    return { ...normalizeController(controller), externalController: controller, secret: data.secret || '', secretSet: !!data.secret,
+      usingFallbackController: !data.externalController, usingFallbackSecret: !data.secret, configSource: data.externalController ? 'config' : 'controller_fallback' };
   };
 
   const buildControllerInfo = async ({ fresh = false } = {}) => {
@@ -4402,7 +5060,7 @@ KANO_WRITE_CHECK_EOF
     if (!fresh && controllerInfoCache && controllerInfoCacheExpiresAt > now) {
       return controllerInfoCache;
     }
-    if (!fresh && controllerInfoLoadPromise) return controllerInfoLoadPromise;
+    if (controllerInfoLoadPromise) return controllerInfoLoadPromise;
 
     const loadPromise = readControllerInfo({ fresh });
     controllerInfoLoadPromise = loadPromise;
@@ -4588,7 +5246,7 @@ KANO_WRITE_CHECK_EOF
         : false;
       const templateRestored = await restoreTemplateWrite();
       const rollbackReload = configRestored ? await reloadConfigHot(oldInfo) : { success: false };
-      const runtimeRecovered = rollbackReload.success || (configRestored && await restartClash({ skipCheck: true }));
+      const runtimeRecovered = rollbackReload.success || (configRestored && await restartClashOk({ skipCheck: true }));
       const rollbackSummary = configRestored && templateRestored
         ? (runtimeRecovered ? '已恢复原配置，核心运行正常' : '已恢复原配置，但核心未能恢复运行')
         : '原配置回滚未完整完成';
@@ -4637,6 +5295,7 @@ KANO_WRITE_CHECK_EOF
     return [
       '"$CURL_BIN"',
       '-sS',
+      "--noproxy '*' --connect-timeout 2",
       `-m ${Math.max(1, Number(requestTimeout) || 8)}`,
       outputArg,
       '-X',
@@ -4763,6 +5422,7 @@ KANO_WRITE_CHECK_EOF
       'PUT',
       JSON.stringify({ path: configPath }),
       controllerInfo,
+      25,
     );
 
   const parseProviderNamesFromYamlText = (content = '') => {
@@ -4790,45 +5450,41 @@ KANO_WRITE_CHECK_EOF
     return { proxyProviders, ruleProviders };
   };
 
-  const readProviderNamesFromCurrentConfig = async () => {
-    const res = await runShellWithRoot(`
+  const readProviderNamesFromCurrentConfig = async (config = null) => {
+    try {
+      if (config) return { ok: true, proxyProviders: Object.keys(config['proxy-providers'] || {}), ruleProviders: Object.keys(config['rule-providers'] || {}) };
+      const res = await runShellWithRoot(`
+        set -e
         CONFIG=${shellQuote(CLASH_CONFIG)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        ${prepareYqRuntimeCmd()}
-        [ -s "$CONFIG" ] || exit 0
-        if [ -x "$YQ" ]; then
-          "$YQ" e -r '(."proxy-providers" // {}) | keys | .[]' "$CONFIG" 2>/dev/null | sed 's/^/PROXY_PROVIDER=/'
-          "$YQ" e -r '(."rule-providers" // {}) | keys | .[]' "$CONFIG" 2>/dev/null | sed 's/^/RULE_PROVIDER=/'
-        else
-          timeout 5s sed 's/^/__CONFIG_LINE__=/' "$CONFIG"
-        fi
-        `, 10 * 1000);
-    const proxyProviders = [];
-    const ruleProviders = [];
-    const configLines = [];
-    String(res.content || '').split('\n').forEach((line) => {
-      if (line.startsWith('PROXY_PROVIDER=')) proxyProviders.push(line.replace(/^PROXY_PROVIDER=/, '').trim());
-      if (line.startsWith('RULE_PROVIDER=')) ruleProviders.push(line.replace(/^RULE_PROVIDER=/, '').trim());
-      if (line.startsWith('__CONFIG_LINE__=')) configLines.push(line.replace(/^__CONFIG_LINE__=/, ''));
-    });
-    if (configLines.length > 0) {
-      const fallback = parseProviderNamesFromYamlText(configLines.join('\n'));
-      proxyProviders.push(...fallback.proxyProviders);
-      ruleProviders.push(...fallback.ruleProviders);
+        [ -s "$CONFIG" ] || { echo CONFIG_MISSING; exit 1; }
+        [ -x "$YQ" ] || { echo YQ_MISSING; exit 1; }
+        timeout -k 1 6 "$YQ" e -o=json -I=0 '{"proxy": ((.\"proxy-providers\" // {}) | keys), "rule": ((.\"rule-providers\" // {}) | keys)}' "$CONFIG" || exit 1
+        echo KANO_PROVIDER_NAMES_END
+      `, 9000);
+      const content = String(res.content || '');
+      if (!res.success || !content.includes('KANO_PROVIDER_NAMES_END')) throw new Error(content || 'No provider list returned');
+      const value = JSON.parse(content.slice(0, content.indexOf('KANO_PROVIDER_NAMES_END')).trim());
+      if (!Array.isArray(value.proxy) || !Array.isArray(value.rule) || [...value.proxy, ...value.rule].some(n => typeof n !== 'string')) throw new Error('Invalid provider list');
+      return { ok: true, proxyProviders: [...new Set(value.proxy)], ruleProviders: [...new Set(value.rule)] };
+    } catch (error) {
+      if (error.name === 'OperationCancelled') throw error;
+      return { ok: false, proxyProviders: [], ruleProviders: [], message: '\u8282\u70b9\u6765\u6e90\u8bfb\u53d6\u5931\u8d25\uff1a' + sanitizeSubscriptionSecrets(error.message || String(error)).slice(0, 500) };
     }
-    return {
-      proxyProviders: [...new Set(proxyProviders.filter(Boolean))],
-      ruleProviders: [...new Set(ruleProviders.filter(Boolean))],
-    };
   };
 
   const classifyProviderUpdateError = (rawError = '', statusCode = 0) => {
     const raw = String(rawError || '');
     const lower = raw.toLowerCase();
-    const embeddedStatus = Number((raw.match(/(?:status(?: code)?|http)[^0-9]{0,8}(\d{3})/i) || [])[1] || 0);
+    let detail = raw;
+    try { detail = String(JSON.parse(raw).message || raw); } catch (_) {}
+    const embeddedStatus = Number((detail.match(/(?:status(?: code)?|http)[^0-9]{0,8}(\d{3})/i) || detail.match(/^\s*(\d{3})(?:\s|$)/) || [])[1] || 0);
     const status = embeddedStatus || Number(statusCode) || 0;
-    if (status == 401 || status == 403 || /(?:unauthorized|forbidden|token[^\n]*(?:invalid|expired))/.test(lower)) {
+    if (Number(statusCode) === 401 || Number(statusCode) === 403) {
       return { type: 'api_auth', message: `Mihomo 控制 API 鉴权失败${status ? `（HTTP ${status}）` : ''}`, retryable: false };
+    }
+    if (status === 401 || status === 403 || /(?:unauthorized|forbidden|token[^\n]*(?:invalid|expired))/.test(lower)) {
+      return { type: 'upstream_auth', message: '\u8ba2\u9605\u670d\u52a1\u5668\u62d2\u7edd\u8bf7\u6c42' + (status ? '\uff08HTTP ' + status + '\uff09' : ''), retryable: false };
     }
     if (status == 404 || /provider[^\n]*(?:not found|does not exist)/.test(lower)) {
       const providerMissing = /provider[^\n]*(?:not found|does not exist)/.test(lower);
@@ -4841,7 +5497,7 @@ KANO_WRITE_CHECK_EOF
     if (status == 390) {
       return {
         type: 'upstream_390',
-        message: '订阅服务器拒绝 Mihomo HTTP Provider 请求（HTTP 390）',
+        message: 'HTTP Provider 更新失败（HTTP 390）',
         retryable: false,
         autoLocalFallback: true,
       };
@@ -4869,7 +5525,8 @@ KANO_WRITE_CHECK_EOF
   const parseProviderApiSnapshot = (responseText = '') => {
     try {
       const parsed = JSON.parse(String(responseText || '').trim());
-      const providers = parsed && parsed.providers && typeof parsed.providers == 'object' ? parsed.providers : {};
+      if (!parsed || !parsed.providers || typeof parsed.providers !== 'object' || Array.isArray(parsed.providers)) return null;
+      const providers = parsed.providers;
       return Object.keys(providers).reduce((result, name) => {
         const item = providers[name] || {};
         result[name] = {
@@ -4885,25 +5542,30 @@ KANO_WRITE_CHECK_EOF
 
   const waitForProviderApiReady = async (
     providerNames = [],
-    tries = 12,
-    delayMs = 750,
+    tries = 3,
+    delayMs = 300,
     { corePid = '' } = {},
   ) => {
     const targets = [...new Set((providerNames || []).filter(Boolean))];
+    tries = Math.max(1, Math.min(3, Number(tries) || 3));
+    const deadline = Date.now() + 10000;
     const controllerInfo = await buildControllerInfo();
     let lastResponse = null;
     let snapshot = null;
     let detectedCorePid = String(corePid || '');
     for (let attempt = 1; attempt <= tries; attempt++) {
-      if (!detectedCorePid || attempt % 4 == 0) detectedCorePid = await getCorePid();
+      if (Date.now() >= deadline) break;
+      if (!detectedCorePid) detectedCorePid = await getCorePid();
       if (detectedCorePid || attempt == tries) {
         lastResponse = await callMihomoApi('/providers/proxies', 'GET', null, controllerInfo, 3, {
           corePid: detectedCorePid,
         });
+        if (lastResponse.errorType === 'auth_failed') break;
         snapshot = lastResponse.success ? parseProviderApiSnapshot(lastResponse.responseText) : null;
         if (snapshot && targets.every((name) => Object.prototype.hasOwnProperty.call(snapshot, name))) {
           return { ok: true, controllerInfo, corePid: detectedCorePid, snapshot, response: lastResponse };
         }
+        if (lastResponse.success) break;
       }
       if (attempt < tries) await wait(delayMs);
     }
@@ -4987,655 +5649,66 @@ KANO_WRITE_CHECK_EOF
     };
   };
 
-  const forceUpdateProvidersFromConfig = async ({ showToast = false, providerNames = null } = {}) => {
-    const names = await readProviderNamesFromCurrentConfig();
-    const configuredNames = names.proxyProviders;
-    const requestedNames = Array.isArray(providerNames)
-      ? [...new Set(providerNames.filter((name) => configuredNames.includes(name)))]
-      : configuredNames;
-    if (requestedNames.length == 0) {
-      const emptyResult = buildProviderUpdateResult([]);
-      if (showToast) createToast('当前配置没有需要更新的节点来源。', 'yellow', 5000);
-      return emptyResult;
+  const forceUpdateProvidersFromConfig = async ({ showToast = false, providerNames = null, config = null, refreshRemote = false } = {}) => {
+  const read = config ? {ok:true,value:config} : await readYamlObject(CLASH_CONFIG, 'config.yaml');
+  if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,message:read.message || 'config read failed'}]);
+  const defs = read.value['proxy-providers'] || {};
+  const names = Object.keys(defs).filter(n => !providerNames || providerNames.includes(n));
+  if(refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(n => names.includes(n))) {
+    const refreshed = await f50Command('refresh-remote-providers',100000);
+    if(!refreshed.success)return buildProviderUpdateResult(names.map(name=>({name,ok:false,message:f50Error(refreshed.content)})));
+  }
+  const info = await buildControllerInfo({fresh:true});
+  const pid = await getCorePid();
+  const results = [];
+  for (const name of names) {
+    if (defs[name].type === 'http') {
+      results.push({type:'proxy-provider',name,ok:false,message:'\u65e7 HTTP Provider \u5c1a\u672a\u8fc1\u79fb\uff0c\u8bf7\u91cd\u65b0\u5bfc\u5165\u8ba2\u9605\u6216\u91cd\u542f\u6838\u5fc3',errorType:'legacy_http_provider'});
+      continue;
     }
+    if (!pid) { results.push({type:'proxy-provider',name,ok:false,message:'\u6838\u5fc3\u672a\u8fd0\u884c'}); continue; }
+    const updated = await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'PUT', null, info, 5, {corePid:pid});
+    const snap = updated.success ? await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'GET', null, info, 5, {corePid:pid}) : updated;
+    let count = 0;
+    try { const value = JSON.parse(snap.responseText || '{}'); count = Array.isArray(value.proxies) ? value.proxies.length : 0; } catch (_) {}
+    const ok = !!updated.success && !!snap.success && count > 0;
+    results.push({type:'proxy-provider',name,ok,attempts:1,proxyCount:count,statusCode:snap.statusCode || 0,
+      message:ok ? '' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d',errorType:ok ? '' : 'local_reload_failed'});
+  }
+  const result = buildProviderUpdateResult(results, {controllerInfo:info,corePid:pid,via:'file'});
+  if (showToast) createToast(result.failed ? '\u90e8\u5206\u672c\u5730\u8282\u70b9\u672a\u52a0\u8f7d' : '\u672c\u5730\u8282\u70b9\u5df2\u52a0\u8f7d', result.failed ? 'red':'green');
+  return result;
+};
 
-    const runtime = await checkInstallState({ fresh: true });
-    if (!runtime.corePid) {
-      const runtimeMessage = runtime.state == 'damaged'
-        ? '未执行：运行组件预检失败'
-        : '未执行：核心未运行';
-      const notRunResult = buildProviderUpdateResult(requestedNames.map((name) => ({
-        type: 'proxy-provider',
-        name,
-        ok: false,
-        attempts: 0,
-        statusCode: null,
-        errorType: runtime.state == 'damaged' ? 'not_run_runtime_damaged' : 'not_run_core_stopped',
-        message: runtimeMessage,
-        rawMessage: runtime.content || runtime.message || '',
-        urlMasked: '',
-        proxyCount: null,
-        cacheAvailable: false,
-      })), {
-        controllerInfo: null,
-        corePid: runtime.corePid || '',
-        apiStatusCode: 0,
-        apiErrorType: runtime.state == 'damaged' ? 'runtime_damaged' : 'core_not_running',
-        notRunReason: runtimeMessage,
-        runtimeState: runtime.state,
-      });
-      if (showToast) createToast(runtimeMessage, 'yellow', 7000);
-      return notRunResult;
-    }
-
-    const readiness = await waitForProviderApiReady(requestedNames, 12, 750, {
-      corePid: runtime.corePid,
-    });
-    if (!readiness.ok) {
-      const rawMessage = sanitizeSubscriptionSecrets(
-        readiness.response && (readiness.response.responseText || readiness.response.content) || '',
-      );
-      const snapshot = readiness.snapshot || {};
-      const results = requestedNames.map((name) => {
-        const providerMissing = Object.keys(snapshot).length > 0 && !Object.prototype.hasOwnProperty.call(snapshot, name);
-        const classified = providerMissing
-          ? { type: 'provider_missing', message: '运行配置中未找到该节点来源' }
-          : {
-            type: readiness.response && readiness.response.errorType || 'api_unavailable',
-            message: readiness.response && readiness.response.message || 'Mihomo 控制 API 暂不可用',
-          };
-        return {
-          type: 'proxy-provider', name, ok: false, attempts: 0,
-          statusCode: readiness.response && readiness.response.statusCode || null,
-          errorType: classified.type, message: classified.message, rawMessage, urlMasked: '',
-          proxyCount: snapshot[name] ? snapshot[name].proxyCount : null,
-          cacheAvailable: !!(snapshot[name] && snapshot[name].proxyCount > 0),
-        };
-      });
-      for (const item of results) {
-        appendTemplateFlowDebug(`provider_update_final name=${item.name} result=failed type=${item.errorType} attempts=0`);
-      }
-      const unavailableResult = buildProviderUpdateResult(results, {
-        controllerInfo: readiness.controllerInfo,
-        corePid: readiness.corePid,
-        apiStatusCode: readiness.response && readiness.response.statusCode || 0,
-        apiErrorType: readiness.response && readiness.response.errorType || 'api_unavailable',
-      });
-      if (showToast) createToast(`节点来源更新失败：${escapeHtml(results[0].message)}`, 'red', 7000);
-      return unavailableResult;
-    }
-
-    const results = await mapWithConcurrency(requestedNames, 2, async (name) => {
-      let finalItem = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        appendTemplateFlowDebug(`provider_update_start name=${name} attempt=${attempt}`);
-        const res = await callMihomoApi(
-          `/providers/proxies/${encodeURIComponent(name)}`,
-          'PUT',
-          null,
-          readiness.controllerInfo,
-          12,
-          { corePid: readiness.corePid },
-        );
-        if (res.success) {
-          finalItem = {
-            type: 'proxy-provider', name, ok: true, attempts: attempt, statusCode: res.statusCode || null,
-            errorType: '', message: '', rawMessage: '', urlMasked: '', via: 'mihomo',
-          };
-          appendTemplateFlowDebug(`provider_update_final name=${name} result=success attempts=${attempt}`);
-          break;
-        }
-
-        const originalRaw = String(res.responseText || res.content || '');
-        const rawMessage = sanitizeSubscriptionSecrets(originalRaw);
-        const classified = classifyProviderUpdateError(originalRaw, res.statusCode);
-        const rawUrl = (originalRaw.match(/https?:\/\/[^\s"'<>)}\]]+/i) || [])[0] || '';
-        finalItem = {
-          type: 'proxy-provider', name, ok: false, attempts: attempt, statusCode: res.statusCode || null,
-          errorType: classified.type, message: classified.message, rawMessage,
-          urlMasked: rawUrl ? maskSubscriptionUrl(rawUrl) : '', via: '',
-        };
-        appendTemplateFlowDebug(`provider_update_failed name=${name} type=${classified.type} attempt=${attempt}`);
-        if (!classified.retryable || attempt >= 3) break;
-        const delayMs = attempt * 1000;
-        appendTemplateFlowDebug(`provider_update_retry name=${name} next_attempt=${attempt + 1} delay_ms=${delayMs}`);
-        createToast(`正在重试 ${escapeHtml(name)}（${attempt + 1}/3）`, 'yellow', delayMs + 1200);
-        await wait(delayMs);
-      }
-
-      if (!finalItem.ok) {
-        appendTemplateFlowDebug(`provider_update_final name=${name} result=failed type=${finalItem.errorType} attempts=${finalItem.attempts}`);
-      }
-      return finalItem;
-    });
-
-    let parsedSnapshot = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const currentSnapshot = await callMihomoApi(
-        '/providers/proxies',
-        'GET',
-        null,
-        readiness.controllerInfo,
-        3,
-        { corePid: readiness.corePid },
-      );
-      parsedSnapshot = currentSnapshot.success ? parseProviderApiSnapshot(currentSnapshot.responseText) : null;
-      const successfulNames = results.filter((item) => item.ok).map((item) => item.name);
-      const snapshotReady = parsedSnapshot && successfulNames.every((name) =>
-        parsedSnapshot[name] && Number.isInteger(parsedSnapshot[name].proxyCount) && parsedSnapshot[name].proxyCount > 0);
-      if (snapshotReady || attempt == 3) break;
-      await wait(attempt * 500);
-    }
-    results.forEach((item) => {
-      const providerState = parsedSnapshot && parsedSnapshot[item.name] || readiness.snapshot[item.name] || null;
-      item.proxyCount = providerState ? providerState.proxyCount : null;
-      item.updatedAt = providerState ? providerState.updatedAt : '';
-      item.cacheAvailable = !!(providerState && providerState.proxyCount > 0);
-      if (item.ok && providerState && providerState.proxyCount === 0) {
-        item.ok = false;
-        item.errorType = 'empty_provider';
-        item.message = '节点来源已更新，但没有可用节点';
-      }
-    });
-
-    const providerUpdateResult = buildProviderUpdateResult(results, {
-      controllerInfo: readiness.controllerInfo,
-      corePid: readiness.corePid,
-      apiStatusCode: readiness.response && readiness.response.statusCode || 200,
-    });
-    if (showToast) {
-      const firstFailed = results.find((item) => !item.ok);
-      createToast(
-        firstFailed
-          ? `${escapeHtml(firstFailed.name)} 更新失败：${escapeHtml(firstFailed.message)}`
-          : `节点来源更新成功：${providerUpdateResult.success}/${providerUpdateResult.total}`,
-        firstFailed ? 'yellow' : 'green',
-        7000,
-      );
-    }
-    return providerUpdateResult;
-  };
-
-  const ensureLocalSubscriptionConverter = async () => {
-    const probe = await probeBinaryHelperState();
-    if (probe.state != 'installed') {
-      if (!(await installBinaryHelperPreferred({ preferGitee: probe.state != 'missing' }))) return false;
-      const installed = await probeBinaryHelperState();
-      if (installed.state != 'installed') return false;
-    }
-    const permission = await runShellWithRoot(`
-      CONVERTER=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
-      if [ -s "$CONVERTER" ]; then
-        chmod 700 "$CONVERTER" || exit 1
-        [ -x "$CONVERTER" ] || exit 1
-        echo CONVERTER_READY
-      else
-        exit 2
-      fi
-    `, 10 * 1000);
-    if (permission.success && String(permission.content || '').includes('CONVERTER_READY')) return true;
-
-    const archive = await downloadCoreArchive({ allowCached: true });
-    if (!archive.ok) {
-      appendTemplateFlowDebug(`local_converter_repair archive_failed stage=${archive.stage || 'unknown'}`);
-      return true;
-    }
-    const repaired = await runDangerousShellWithRoot(`
-      set -e
-      ZIP=${shellQuote(DOWNLOAD_ZIP)}
-      TARGET=${shellQuote(KANO_HELPER_CONVERTER_PATH)}
-      STAGE="$TARGET.kano_repair.$$"
-      trap 'rm -f "$STAGE" 2>/dev/null || true' EXIT
-      entry="$(unzip -Z1 "$ZIP" 2>/dev/null | awk '/(^|\/)Tools\/kano-f50-helper-converter$/ { print }')"
-      [ "$(printf '%s\n' "$entry" | sed '/^$/d' | wc -l | tr -d ' ')" = '1' ] || {
-        echo CONVERTER_ARCHIVE_ENTRY_INVALID
-        exit 1
-      }
-      unzip -p "$ZIP" "$entry" > "$STAGE"
-      [ -s "$STAGE" ] || exit 1
-      chmod 700 "$STAGE"
-      info="$("$STAGE" version 2>/dev/null)" || exit 1
-      printf '%s' "$info" | grep -q '"ok":true' || exit 1
-      printf '%s' "$info" | grep -q '"convert-subscription"' || exit 1
-      mv -f "$STAGE" "$TARGET"
-      trap - EXIT
-      echo CONVERTER_REPAIRED
-    `, 45 * 1000, 'repair_local_subscription_converter');
-    appendTemplateFlowDebug(`local_converter_repair result=${repaired.success ? 'success' : 'failed'}`);
-    return true;
-  };
+  const ensureLocalSubscriptionConverter = async () => { if(!(await ensureCompatBackend()))return false;const r=await runShellWithRoot('test -x /data/clash/Tools/kano-f50-helper-converter',4000);return !!r.success; };
 
   const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
-    const cleanSources = normalizeSubSourceList(sources);
-    if (cleanSources.length == 0) return buildProviderUpdateResult([]);
-    const sourceChecks = cleanSources.map((source) => validateLocalSubscriptionUrl(source.url));
-    const blockedIndex = sourceChecks.findIndex((check) => !check.ok);
-    if (blockedIndex >= 0) {
-      return buildProviderUpdateResult(cleanSources.map((source, index) => ({
-        type: 'proxy-provider',
-        name: source.name,
-        ok: false,
-        attempts: 0,
-        errorType: index == blockedIndex ? 'url_policy' : 'local_preflight_blocked',
-        message: index == blockedIndex
-          ? sourceChecks[index].message
-          : '\u5176\u5b83\u8ba2\u9605\u5730\u5740\u672a\u901a\u8fc7\u5b89\u5168\u68c0\u67e5\uff0c\u672c\u6b21\u672c\u5730\u8f6c\u6362\u5df2\u53d6\u6d88',
-        rawMessage: '',
-        urlMasked: index == blockedIndex ? maskSubscriptionUrl(source.url) : '',
-        proxyCount: null,
-        cacheAvailable: false,
-      })), { via: 'local', committed: false });
-    }
-    await loadProviderUserAgent();
-    if (!rawConfigPath && !(await ensureLocalSubscriptionConverter())) {
-      const cacheProbe = await runShellWithRoot(cleanSources.map((source) => `
-        [ -s ${shellQuote(`${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`)} ] && echo ${shellQuote(source.name)} || true
-      `).join('\n'), 10 * 1000);
-      const cachedNames = new Set(String(cacheProbe.content || '').split('\n').map((line) => line.trim()).filter(Boolean));
-      return buildProviderUpdateResult(cleanSources.map((source) => ({
-        type: 'proxy-provider',
-        name: source.name,
-        ok: false,
-        attempts: 0,
-        errorType: 'converter_unavailable',
-        message: '本地订阅转换器不可用',
-        rawMessage: '',
-        urlMasked: '',
-        proxyCount: null,
-        cacheAvailable: cachedNames.has(source.name),
-      })), { via: 'local' });
-    }
-
-    const localFetchUserAgents = [...new Set([
-      currentProviderUserAgent,
-      'ClashMetaForAndroid/2.11.15.Meta',
-      'clash.meta',
-      'ClashMeta',
-      'mihomo/1.19.29',
-      'mihomo',
-      'Clash Verge Rev',
-      'ClashforWindows/0.20.39',
-      'clash',
-      'v2rayN/7.15.7',
-      'v2rayN',
-      'Stash',
-      'Shadowrocket',
-      'clash.meta',
-    ].map((value) => String(value || '').trim()).filter(Boolean))];
-    const localFetchUserAgentShell = (rawConfigPath ? [currentProviderUserAgent] : localFetchUserAgents)
-      .map((value) => shellQuote(value)).join(' ');
-    const txName = `.kano_local_subscription_${Date.now()}_${createRandomString(6)}`;
-    const txDir = `${CLASH_PROXY_DIR}/proxies/${txName}`;
-    const cacheProbeCommands = cleanSources.map((source) => {
-      const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
-      return `
-        if [ -s ${shellQuote(target)} ]; then
-          echo ${shellQuote(`LOCAL_CACHE_STATE=${source.name}|1`)}
-        else
-          echo ${shellQuote(`LOCAL_CACHE_STATE=${source.name}|0`)}
-        fi
-      `;
-    }).join('\n');
-    const downloadCommands = cleanSources.map((source, index) => {
-      const rawPath = `$TX/raw_${index + 1}`;
-      const outputPath = `$TX/${source.name}.yaml`;
-      const sourceCheck = sourceChecks[index];
-      return `
-        candidate_ok=0
-        last_http=000
-        last_ua=''
-        last_kind=unknown
-        last_convert=''
-        last_stage=download
-        raw_tmp="${rawPath}.tmp"
-        out_tmp="${outputPath}.tmp"
-        err_tmp="${rawPath}.err"
-        conv_err="${rawPath}.convert.err"
-        source_host=${shellQuote(sourceCheck.hostname)}
-        source_port=${shellQuote(sourceCheck.port)}
-        source_family=${shellQuote(sourceCheck.addressFamily)}
-        rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-        resolved_target="$(resolve_public_address "$source_host" "$source_family")" || {
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|resolve|000|blocked_target|subscription host has no usable public IP address`)}
-          exit 22
-        }
-        resolved_family="${'$'}{resolved_target%%|*}"
-        resolved_ip="${'$'}{resolved_target#*|}"
-        resolve_host="$source_host"
-        [ "$resolved_family" = ipv6 ] && [ "$source_family" = ipv6 ] && resolve_host="[$source_host]"
-        resolve_spec="$resolve_host:$source_port:$resolved_ip"
-        [ "$resolved_family" = ipv6 ] && resolve_spec="$resolve_host:$source_port:[$resolved_ip]"
-        classify_candidate() {
-          FILE="$1"
-          first="$(head -c 384 "$FILE" 2>/dev/null | tr '\\r\\n\\t' '   ')"
-          if printf '%s' "$first" | grep -Eiq '<!doctype|<html|<head|<body'; then echo html; return; fi
-          case "$(printf '%s' "$first" | sed 's/^[[:space:]]*//' | cut -c1)" in
-            \\{|\\[) echo json; return ;;
-          esac
-          grep -Eq '^[[:space:]]*proxies[[:space:]]*:' "$FILE" 2>/dev/null && { echo yaml; return; }
-          grep -Eq '^[[:space:]]*(vmess|vless|trojan|ss|ssr|hysteria2|hy2|tuic)://' "$FILE" 2>/dev/null && { echo share-links; return; }
-          if head -c 2048 "$FILE" 2>/dev/null | tr -d '\\r\\n\\t ' | grep -Eq '^[A-Za-z0-9_+/-]{32,}={0,2}$'; then echo base64-or-token; return; fi
-          echo text-or-binary
-        }
-        for LOCAL_UA in ${localFetchUserAgentShell}; do
-          rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-          last_stage=download
-          last_convert=''
-          if http_code="$("$CURL_BIN" -sS --proto '=https' --max-redirs 0 \
-            --max-filesize ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} \
-            --resolve "$resolve_spec" \
-            --connect-timeout 10 --max-time 90 --retry 1 --retry-delay 1 \
-            -H 'Accept: application/yaml, text/yaml, application/x-yaml, text/plain, application/json, */*' \
-            -A "$LOCAL_UA" -o "$raw_tmp" -w '%{http_code}' ${shellQuote(source.url)} 2>"$err_tmp")"; then
-            curl_rc=0
-          else
-            curl_rc=$?
-          fi
-          last_http="\${http_code:-000}"
-          last_ua="$LOCAL_UA"
-          if [ "$curl_rc" -eq 63 ]; then
-            last_stage=download_limit
-            last_kind=too-large
-            last_convert="subscription exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
-            break
-          fi
-          case "$http_code" in
-            2??)
-              if [ "$curl_rc" -eq 0 ] && [ -s "$raw_tmp" ]; then
-                raw_bytes="$(wc -c < "$raw_tmp" 2>/dev/null || echo 0)"
-                if ! echo "$raw_bytes" | grep -Eq '^[0-9]+$' || [ "$raw_bytes" -gt ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} ]; then
-                  last_stage=download_limit
-                  last_kind=too-large
-                  last_convert="subscription exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
-                  break
-                fi
-                last_kind="$(classify_candidate "$raw_tmp")"
-                ${rawConfigPath ? `
-                mv -f "$raw_tmp" "${outputPath}"
-                candidate_ok=1
-                break
-                ` : ''}
-                last_stage=convert
-                if CONVERT_JSON="$("$HELPER" convert-subscription --input "$raw_tmp" --output "$out_tmp" 2>"$conv_err")"; then
-                  convert_rc=0
-                else
-                  convert_rc=$?
-                fi
-                if [ "$convert_rc" -eq 0 ] && printf '%s' "$CONVERT_JSON" | grep -q '"ok":true' && [ -s "$out_tmp" ]; then
-                  proxy_count="$(printf '%s' "$CONVERT_JSON" | sed -n 's/.*"proxyCount":\\([0-9][0-9]*\\).*/\\1/p')"
-                  if ! echo "$proxy_count" | grep -Eq '^[0-9]+$' || [ "$proxy_count" -le 0 ]; then
-                    last_stage=convert
-                    last_kind=empty-provider
-                    last_convert='converter returned no usable proxies'
-                    continue
-                  fi
-                  out_bytes="$(wc -c < "$out_tmp" 2>/dev/null || echo 0)"
-                  if ! echo "$out_bytes" | grep -Eq '^[0-9]+$' || [ "$out_bytes" -gt ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} ]; then
-                    last_stage=download_limit
-                    last_kind=converted-output-too-large
-                    last_convert="converted provider exceeds ${LOCAL_SUBSCRIPTION_MAX_FILE_BYTES} bytes"
-                    break
-                  fi
-                  mv -f "$raw_tmp" "${rawPath}"
-                  mv -f "$out_tmp" "${outputPath}"
-                  candidate_ok=1
-                  convert_format="$(printf '%s' "$CONVERT_JSON" | sed -n 's/.*"format":"\\([^"]*\\)".*/\\1/p')"
-                  echo ${shellQuote(`LOCAL_FETCH_OK=${source.name}|`)}"$http_code|$LOCAL_UA|$last_kind"
-                  echo ${shellQuote(`LOCAL_CONVERT_OK=${source.name}|`)}"$proxy_count|$convert_format"
-                  break
-                fi
-                last_convert="$(printf '%s' "$CONVERT_JSON" | tr '\\r\\n' '  ' | cut -c1-260)"
-                [ -n "$last_convert" ] || last_convert="$(tail -n 2 "$conv_err" 2>/dev/null | tr '\\r\\n' '  ' | cut -c1-260)"
-              fi
-              ;;
-          esac
-          if [ "$last_stage" = 'download' ]; then
-            last_convert="$(tail -n 2 "$err_tmp" 2>/dev/null | tr '\\r\\n' '  ' | cut -c1-260)"
-          fi
-          case "$last_http" in
-            2??|401|403|406|418) ;;
-            *) break ;;
-          esac
-        done
-        rm -f "$raw_tmp" "$out_tmp" "$err_tmp" "$conv_err" 2>/dev/null || true
-        if [ "$candidate_ok" != '1' ]; then
-          [ -n "$last_convert" ] || last_convert='no usable subscription response'
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|`)}"$last_stage|$last_http|$last_kind|$last_convert"
-          exit 22
-        fi
-      `;
+  const clean = normalizeSubSourceList(sources);
+  if (!clean.length) return buildProviderUpdateResult([]);
+  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'F50_BACKEND_REQUIRED'})));
+  const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
+  const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent(), rawConfigPath }), 'subscription request');
+  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:staged.message || 'request staging failed'})));
+  let r;
+  try {
+    operationStage('\u4e0b\u8f7d\u5e76\u9a8c\u8bc1\u8ba2\u9605');
+    r = await f50Command('fetch-batch ' + shellQuote(staged.stagePath), 100000);
+    const line = String(r.content || '').split(/\r?\n/).find(s => s.startsWith('F50_FETCH_RESULT='));
+    let data = null;
+    try { if (line) data = JSON.parse(line.slice('F50_FETCH_RESULT='.length)); } catch (_) {}
+    const committed = !!r.success && data && data.ok === true && data.committed === true;
+    const results = clean.map(s => {
+      const found = data && Array.isArray(data.providers) && data.providers.find(p => p.name === s.name);
+      return {type:'proxy-provider',name:s.name,ok:!!(committed && found && found.ok),attempts:1,
+        proxyCount:found ? found.proxyCount : null,statusCode:found ? found.statusCode : 0,
+        message:committed ? '' : (found && found.message || f50Error(r.content)),errorType:committed ? '' : 'local_download_failed',
+        rawMessage:'',cacheAvailable:null};
     });
-    const parallelDownloadCommands = [];
-    for (let offset = 0; offset < downloadCommands.length; offset += 2) {
-      const batch = downloadCommands.slice(offset, offset + 2);
-      parallelDownloadCommands.push(batch.map((command, batchIndex) => {
-        const jobIndex = offset + batchIndex + 1;
-        return `
-          (
-            ${command}
-          ) > "$TX/result_${jobIndex}.log" 2>&1 &
-          local_pid_${jobIndex}=$!
-        `;
-      }).join('\n'));
-      parallelDownloadCommands.push(batch.map((_, batchIndex) => {
-        const jobIndex = offset + batchIndex + 1;
-        return `if ! wait "$local_pid_${jobIndex}"; then LOCAL_JOB_FAILED=1; fi`;
-      }).join('\n'));
-      parallelDownloadCommands.push(batch.map((_, batchIndex) => {
-        const jobIndex = offset + batchIndex + 1;
-        return `cat "$TX/result_${jobIndex}.log" 2>/dev/null || true`;
-      }).join('\n'));
-      parallelDownloadCommands.push('[ "$LOCAL_JOB_FAILED" -eq 0 ] || exit 22');
-    }
-    const totalQuotaCommands = cleanSources.map((source, index) => `
-        raw_bytes="$(wc -c < "$TX/raw_${index + 1}" 2>/dev/null || echo 0)"
-        out_bytes="$(wc -c < "$TX/${source.name}.yaml" 2>/dev/null || echo 0)"
-        if ! echo "$raw_bytes $out_bytes" | grep -Eq '^[0-9]+ [0-9]+$'; then
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|download_limit|000|size_invalid|local conversion size check failed`)}
-          exit 22
-        fi
-        LOCAL_TOTAL_BYTES=$((LOCAL_TOTAL_BYTES + raw_bytes + out_bytes))
-        if [ "$LOCAL_TOTAL_BYTES" -gt ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} ]; then
-          echo ${shellQuote(`LOCAL_CONVERT_FAILED=${source.name}|download_limit|000|total-quota|local conversion exceeds ${LOCAL_SUBSCRIPTION_TOTAL_BYTES} bytes total`)}
-          exit 22
-        fi
-      `).join('\n');
-    const snapshotCommands = cleanSources.map((source) => {
-      const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
-      return `
-        if [ -f ${shellQuote(target)} ]; then
-          cp ${shellQuote(target)} "$TX/old_${source.name}.yaml"
-          touch "$TX/old_${source.name}.had"
-        else
-          touch "$TX/old_${source.name}.absent"
-        fi
-        cp "$TX/${source.name}.yaml" ${shellQuote(`${target}.kano_new`)}
-        chmod 600 ${shellQuote(`${target}.kano_new`)}
-      `;
-    }).join('\n');
-    const restoreCommands = cleanSources.map((source) => {
-      const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
-      return `
-        if [ -f "$TX/old_${source.name}.had" ]; then
-          cp "$TX/old_${source.name}.yaml" ${shellQuote(target)} 2>/dev/null || true
-        elif [ -f "$TX/old_${source.name}.absent" ]; then
-          rm -f ${shellQuote(target)} 2>/dev/null || true
-        fi
-        rm -f ${shellQuote(`${target}.kano_new`)} 2>/dev/null || true
-      `;
-    }).join('\n');
-    const commitCommands = cleanSources.map((source) => {
-      const target = `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`;
-      return `mv -f ${shellQuote(`${target}.kano_new`)} ${shellQuote(target)}`;
-    }).join('\n');
-
-    const res = await runDangerousShellWithRoot(`
-        set -e
-        TX=${shellQuote(txDir)}
-        HELPER=${shellQuote(KANO_HELPER_PATH)}
-        committing=0
-        LOCAL_TOTAL_BYTES=0
-        LOCAL_JOB_FAILED=0
-        umask 077
-        is_public_ipv4() {
-          printf '%s\n' "$1" | awk -F. '
-            NF != 4 { exit 1 }
-            {
-              for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1
-              if ($1 == 0 || $1 == 10 || $1 == 127 || $1 >= 224) exit 1
-              if ($1 == 100 && $2 >= 64 && $2 <= 127) exit 1
-              if ($1 == 169 && $2 == 254) exit 1
-              if ($1 == 172 && $2 >= 16 && $2 <= 31) exit 1
-              if ($1 == 192 && $2 == 0 && ($3 == 0 || $3 == 2)) exit 1
-              if ($1 == 192 && $2 == 168) exit 1
-              if ($1 == 198 && ($2 == 18 || $2 == 19)) exit 1
-              if ($1 == 198 && $2 == 51 && $3 == 100) exit 1
-              if ($1 == 203 && $2 == 0 && $3 == 113) exit 1
-              exit 0
-            }
-          '
-        }
-        is_public_ipv6() {
-          candidate_ipv6="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-          case "$candidate_ipv6" in
-            ''|*.*|*[!0-9a-f:]*|::|::1|fc*|fd*|fe8*|fe9*|fea*|feb*|ff*|2001:db8:*) return 1 ;;
-          esac
-          printf '%s\n' "$candidate_ipv6" | awk -F: '
-            NF < 3 || NF > 8 { exit 1 }
-            {
-              for (i = 1; i <= NF; i++) if (length($i) > 4) exit 1
-              exit 0
-            }
-          '
-        }
-        resolve_public_address() {
-          resolve_host="$1"
-          requested_family="$2"
-          candidates=''
-          case "$resolve_host" in
-            *:*) candidates="$resolve_host" ;;
-            *[!0-9.]*|'') ;;
-            *) candidates="$resolve_host" ;;
-          esac
-          if [ -z "$candidates" ] && command -v getent >/dev/null 2>&1; then
-            [ "$requested_family" = ipv6 ] || candidates="$(getent ahostsv4 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
-            [ -n "$candidates" ] || candidates="$(getent ahostsv6 "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
-            [ -n "$candidates" ] || candidates="$(getent hosts "$resolve_host" 2>/dev/null | awk '{print $1}' | sort -u)"
-          fi
-          if [ -z "$candidates" ] && [ "$requested_family" != ipv6 ] && command -v ping >/dev/null 2>&1; then
-            candidates="$(LC_ALL=C ping -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
-              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9][0-9.]*[)]$/) {
-                gsub(/[()]/, "", $i); print $i; exit
-              }
-            }')"
-          fi
-          if [ -z "$candidates" ] && command -v ping6 >/dev/null 2>&1; then
-            candidates="$(LC_ALL=C ping6 -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
-              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9A-Fa-f:]+[)]$/) {
-                gsub(/[()]/, "", $i); print $i; exit
-              }
-            }')"
-          fi
-          if [ -z "$candidates" ] && command -v ping >/dev/null 2>&1; then
-            candidates="$(LC_ALL=C ping -6 -c 1 -W 2 "$resolve_host" 2>&1 | awk 'NR == 1 {
-              for (i = 1; i <= NF; i++) if ($i ~ /^[(][0-9A-Fa-f:]+[)]$/) {
-                gsub(/[()]/, "", $i); print $i; exit
-              }
-            }')"
-          fi
-          for candidate_ip in $candidates; do
-            if [ "$requested_family" != ipv6 ] && is_public_ipv4 "$candidate_ip"; then
-              printf 'ipv4|%s\n' "$candidate_ip"
-              return 0
-            fi
-            if is_public_ipv6 "$candidate_ip"; then
-              printf 'ipv6|%s\n' "$candidate_ip"
-              return 0
-            fi
-          done
-          return 1
-        }
-        cleanup_local_conversion() {
-          rc=$?
-          if [ "$committing" = 1 ]; then
-            ${restoreCommands}
-          fi
-          rm -rf "$TX" 2>/dev/null || true
-          trap - EXIT
-          exit "$rc"
-        }
-        trap cleanup_local_conversion EXIT
-        mkdir -p "$TX" ${shellQuote(`${CLASH_PROXY_DIR}/proxies`)}
-        ${cacheProbeCommands}
-        ${getCurlBinCmd()}
-        ${parallelDownloadCommands.join('\n')}
-        ${rawConfigPath ? `
-        mv -f "$TX/${cleanSources[0].name}.yaml" ${shellQuote(rawConfigPath)}
-        echo ORIGINAL_CONFIG_FETCHED=1
-        exit 0
-        ` : ''}
-        ${totalQuotaCommands}
-        ${snapshotCommands}
-        committing=1
-        ${commitCommands}
-        committing=0
-        echo "LOCAL_CONVERT_COMMITTED=${cleanSources.length}"
-      `, Math.max(120, cleanSources.length * 100) * 1000, 'convert_subscriptions_locally');
-
-    if (rawConfigPath) {
-      return {
-        ok: !!res.success && /(^|\n)ORIGINAL_CONFIG_FETCHED=1(\n|$)/.test(res.content || ''),
-        message: sanitizeSubscriptionSecrets(String(res.content || '下载失败')),
-      };
-    }
-    const lines = String(res.content || '').split('\n').map((line) => line.trim()).filter(Boolean);
-    const converted = new Map();
-    const existingCache = new Map();
-    lines.filter((line) => line.startsWith('LOCAL_CACHE_STATE=')).forEach((line) => {
-      const [name, available] = line.replace(/^LOCAL_CACHE_STATE=/, '').split('|');
-      existingCache.set(name, available == '1');
-    });
-    lines.filter((line) => line.startsWith('LOCAL_CONVERT_OK=')).forEach((line) => {
-      const [name, count, format] = line.replace(/^LOCAL_CONVERT_OK=/, '').split('|');
-      converted.set(name, { count: Number(count) || 0, format: format || '' });
-    });
-    const failedLine = lines.find((line) => line.startsWith('LOCAL_CONVERT_FAILED='));
-    const [failedName, failedStage, failedHttp, failedKind, ...failedDetailParts] = failedLine
-      ? failedLine.replace(/^LOCAL_CONVERT_FAILED=/, '').split('|')
-      : ['', '', '', '', ''];
-    const failedDetail = failedDetailParts.join('|').trim();
-    const committed = !!res.success && lines.includes(`LOCAL_CONVERT_COMMITTED=${cleanSources.length}`);
-    const providers = cleanSources.map((source) => {
-      const item = converted.get(source.name);
-      const ok = committed && !!item;
-      const message = ok
-        ? ''
-        : source.name == failedName
-          ? (failedStage == 'resolve'
-            ? '订阅主机未解析到公网 IPv4 地址，已拒绝本地访问'
-            : failedStage == 'download_limit'
-              ? '订阅响应超过本地转换的文件或总配额'
-              : (failedStage == 'download'
-                ? `订阅下载失败${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}`
-                : `订阅响应无法转换${failedHttp && failedHttp != '000' ? `（HTTP ${failedHttp}）` : ''}${failedKind ? `，响应类型 ${failedKind}` : ''}`))
-          : '本次本地转换未提交，继续保留原节点缓存';
-      return {
-        type: 'proxy-provider',
-        name: source.name,
-        ok,
-        attempts: 1,
-        errorType: ok ? '' : (failedStage || 'local_commit_failed'),
-        message,
-        rawMessage: source.name == failedName ? sanitizeSubscriptionSecrets(failedDetail || '') : '',
-        urlMasked: source.name == failedName ? maskSubscriptionUrl(source.url) : '',
-        proxyCount: ok && item ? item.count : null,
-        cacheAvailable: ok || existingCache.get(source.name) === true,
-        format: item ? item.format : '',
-        via: 'local',
-      };
-    });
-    return buildProviderUpdateResult(providers, { via: 'local', committed });
-  };
+    return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : f50Error(r.content)});
+  } finally {
+    await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000).catch(() => {});
+  }
+};
 
   const mergeLocalConversionReloadResult = (conversionResult = {}, reloadResult = {}) => {
     const reloadByName = new Map(((reloadResult && reloadResult.providers) || [])
@@ -5692,108 +5765,7 @@ KANO_WRITE_CHECK_EOF
     return mergeLocalConversionReloadResult(conversion, runtimeReload);
   };
 
-  const readCurrentModeStatus = async () => {
-    const res = await runShellWithRoot(`
-        set +e
-        CONFIG=${shellQuote(CLASH_CONFIG)}
-        SOURCE_FILE=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
-        CHECK=${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)}
-        WRITE_CHECK=${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        ${prepareYqRuntimeCmd()}
-        mode="$(sed -n 's/^# KANO_SUB_RULE_MODE=//p' ${shellQuote(CLASH_SUB_URLS)} 2>/dev/null | head -n 1 | tr -d '\\r')"
-        case "$mode" in original) ;; *) mode=template ;; esac
-        config_source="$(grep -m 1 '^KANO_CONFIG_SOURCE=' "$SOURCE_FILE" 2>/dev/null | sed 's/^KANO_CONFIG_SOURCE=//' | tr -d '\r')"
-        [ -n "$config_source" ] || config_source="unknown"
-        config_source_time="$(grep -m 1 '^KANO_CONFIG_SOURCE_TIME=' "$SOURCE_FILE" 2>/dev/null | sed 's/^KANO_CONFIG_SOURCE_TIME=//' | tr -d '\r')"
-        config_read_status=missing
-        rules_count=
-        proxy_groups_count=
-        proxy_providers_count=
-        if [ -s "$CONFIG" ]; then
-          if [ -x "$YQ" ]; then
-            if counts="$("$YQ" e '[((.rules // []) | length), ((."proxy-groups" // []) | length), ((."proxy-providers" // {}) | length)] | join(" ")' "$CONFIG" 2>/dev/null)"; then
-              set -- $counts
-              if [ "$#" -eq 3 ]; then
-                config_read_status=yq
-                rules_count="$1"
-                proxy_groups_count="$2"
-                proxy_providers_count="$3"
-              else
-                config_read_status=invalid
-              fi
-            else
-              config_read_status=invalid
-            fi
-          else
-            config_read_status=text
-            rules_count="$(awk '
-              BEGIN { in_block=0; c=0 }
-              /^[^[:space:]#][^:]*[[:space:]]*:/ { in_block=0 }
-              /^[[:space:]]*rules[[:space:]]*:/ { in_block=1; next }
-              in_block && /^[[:space:]]*-[[:space:]]*/ { c++ }
-              END { print c+0 }
-            ' "$CONFIG" 2>/dev/null)"
-            proxy_groups_count="$(awk '
-              BEGIN { in_block=0; c=0 }
-              /^[^[:space:]#][^:]*[[:space:]]*:/ { in_block=0 }
-              /^[[:space:]]*proxy-groups[[:space:]]*:/ { in_block=1; next }
-              in_block && /^[[:space:]]*-[[:space:]]*name[[:space:]]*:/ { c++ }
-              END { print c+0 }
-            ' "$CONFIG" 2>/dev/null)"
-            proxy_providers_count="$(awk '
-              BEGIN { in_block=0; c=0 }
-              /^[^[:space:]#][^:]*[[:space:]]*:/ { in_block=0 }
-              /^[[:space:]]*proxy-providers[[:space:]]*:/ { in_block=1; next }
-              in_block && /^[[:space:]]{2,}[A-Za-z0-9_.-]+[[:space:]]*:/ { c++ }
-              END { print c+0 }
-            ' "$CONFIG" 2>/dev/null)"
-          fi
-        fi
-        for vname in rules_count proxy_groups_count proxy_providers_count; do
-          eval "v=\$$vname"
-          case "$v" in ''|*[!0-9]*) eval "$vname=";; esac
-        done
-        last_write_time="$config_source_time"
-        if [ -z "$last_write_time" ] && [ -s "$CONFIG" ]; then
-          last_write_time="$(stat -c %y "$CONFIG" 2>/dev/null | cut -d. -f1)"
-        fi
-        [ -n "$last_write_time" ] || last_write_time="unknown"
-        last_result="$(grep -m 1 '^result=' "$CHECK" 2>/dev/null | tail -n 1 | sed 's/^result=//' | tr -d '\r')"
-        [ -n "$last_result" ] || last_result="unknown"
-        last_reason="$(grep -m 1 '^reason=' "$CHECK" 2>/dev/null | tail -n 1 | sed 's/^reason=//' | tr -d '\r')"
-        failed_stage="$(grep -m 1 '^failed_step=' "$WRITE_CHECK" 2>/dev/null | sed 's/^failed_step=//' | tr -d '\r')"
-        [ -n "$failed_stage" ] || failed_stage="$last_reason"
-        echo "mode=$mode"
-        echo "config_source=$config_source"
-        echo "config_read_status=$config_read_status"
-        echo "rules_count=$rules_count"
-        echo "proxy_groups_count=$proxy_groups_count"
-        echo "proxy_providers_count=$proxy_providers_count"
-        echo "last_write_time=$last_write_time"
-        echo "last_result=$last_result"
-        echo "last_reason=$last_reason"
-        echo "failed_stage=$failed_stage"
-        `, 12 * 1000);
-    const lines = String(res.content || '').split('\n');
-    const pick = (key, fallback = '') => ((lines.find((line) => line.startsWith(`${key}=`)) || `${key}=${fallback}`).replace(new RegExp(`^${key}=`), '').trim());
-    const pickCount = (key) => {
-      const value = pick(key, '');
-      return /^[0-9]+$/.test(value) ? Number(value) : null;
-    };
-    return {
-      mode: normalizeSubRuleModeValue(pick('mode', SUB_RULE_MODE_TEMPLATE)),
-      configSource: pick('config_source', 'unknown'),
-      configReadStatus: pick('config_read_status', 'missing'),
-      rulesCount: pickCount('rules_count'),
-      proxyGroupsCount: pickCount('proxy_groups_count'),
-      proxyProvidersCount: pickCount('proxy_providers_count'),
-      lastWriteTime: pick('last_write_time', 'unknown'),
-      lastResult: pick('last_result', 'unknown'),
-      lastReason: pick('last_reason', ''),
-      failedStage: pick('failed_stage', ''),
-    };
-  };
+  const readCurrentModeStatus = async () => readStatusSnapshot();
 
   let ruleModeStatusRequestId = 0;
   const refreshRuleModeStatus = async () => {
@@ -5807,13 +5779,10 @@ KANO_WRITE_CHECK_EOF
       ? '\u8fd0\u884c\u914d\u7f6e\u672a\u627e\u5230'
       : status.configReadStatus == 'invalid'
         ? '\u8fd0\u884c\u914d\u7f6e\u89e3\u6790\u5931\u8d25'
-        : '\u8fd0\u884c\u914d\u7f6e\u5df2\u52a0\u8f7d';
+        : status.configReadStatus === 'unavailable' ? '\u672a\u80fd\u89e3\u6790\u914d\u7f6e' : '\u8fd0\u884c\u914d\u7f6e\u5df2\u52a0\u8f7d';
     const parts = [
       status.configSource == 'uploaded_config' ? '自定义配置' : status.mode == SUB_RULE_MODE_ORIGINAL ? '订阅原配置' : '模板规则',
       configLabel,
-      status.rulesCount != null ? `\u89c4\u5219 ${status.rulesCount}` : '',
-      status.proxyGroupsCount != null ? `\u7b56\u7565\u7ec4 ${status.proxyGroupsCount}` : '',
-      status.proxyProvidersCount != null ? `\u8282\u70b9\u6e90 ${status.proxyProvidersCount}` : '',
       status.failedStage ? `\u5931\u8d25\u9636\u6bb5\uff1a${status.failedStage}` : '',
     ].filter(Boolean);
     setText(el, parts.join(' · '));
@@ -5836,41 +5805,70 @@ KANO_WRITE_CHECK_EOF
     const hostPromise = waitForLanHost();
     try {
       const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
-      return `http://${host}:${info.port || '7788'}/ui/?t=${Date.now()}`;
+      return `http://${host}:${info.port || '7788'}/ui/?_f50=${Date.now()}#/`;
     } catch (e) {
       console.error(e);
       const host = await hostPromise;
-      return `http://${host}:7788/ui/?t=${Date.now()}`;
+      return `http://${host}:7788/ui/?_f50=${Date.now()}#/`;
     }
   };
+
+  function renderRuntimeStatus(state, text, label = document.querySelector('#running_mm')) {
+    if (!label) return;
+    resetChildren(label);
+    const dot = document.createElement('span');
+    dot.className = 'mm-status-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const color = { healthy: '#38c878', stopped: '#ef646a', error: '#ef646a', checking: '#e6b652', unknown: '#8b96a6' }[state] || '#8b96a6';
+    Object.assign(dot.style, { display: 'inline-block', flex: '0 0 10px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color, boxShadow: '0 0 0 3px ' + color + '20' });
+    const caption = document.createElement('span');
+    caption.className = 'mm-status-text'; caption.textContent = text;
+    Object.assign(label.style, { display: 'inline-flex', alignItems: 'center', gap: '8px' });
+    label.dataset.state = state;
+    label.setAttribute('aria-label', text);
+    label.appendChild(dot); label.appendChild(caption);
+  }
 
   let runningStatusRequestId = 0;
   const isMMRunning = async (runtimeSnapshot = null) => {
     const requestId = ++runningStatusRequestId;
-    const hasPidSnapshot = !!runtimeSnapshot
-      && Object.prototype.hasOwnProperty.call(runtimeSnapshot, 'corePid');
-    const hasApiSnapshot = !!runtimeSnapshot && typeof runtimeSnapshot.apiOk == 'boolean';
-    const pid = hasPidSnapshot ? String(runtimeSnapshot.corePid || '') : await getCorePid();
-    let apiOk = hasApiSnapshot ? runtimeSnapshot.apiOk : false;
-    if (pid && !hasApiSnapshot) {
-      const version = await callMihomoApi('/version', 'GET', null, null, 8, { corePid: pid });
-      apiOk = !!version.success;
+    const label = document.querySelector('#running_mm');
+    try {
+      const snapshot = runtimeSnapshot && Object.prototype.hasOwnProperty.call(runtimeSnapshot, 'corePid')
+        ? runtimeSnapshot : await readStatusSnapshot();
+      const pid = String(snapshot.corePid || '');
+      if (requestId !== runningStatusRequestId) return !!pid;
+      if (label) label.title = [snapshot.processError, snapshot.configError, snapshot.optionsError, snapshot.apiError, snapshot.networkWarning].filter(Boolean).join('\n');
+      if (snapshot.processReadStatus === 'unavailable') {
+        renderRuntimeStatus('unknown', '\u732b\u732b - \u8fdb\u7a0b\u72b6\u6001\u4e0d\u53ef\u8bfb', label);
+        return false;
+      }
+      if (!pid && snapshot.installState === 'missing') {
+        renderRuntimeStatus('stopped', '\u732b\u732b - \u672a\u5b89\u88c5', label);
+        return false;
+      }
+      renderRuntimeStatus(pid ? 'checking' : 'stopped', pid ? '\u732b\u732b - \u68c0\u67e5 API' : '\u732b\u732b - \u5df2\u505c\u6b62', label);
+      // Badges are supplementary: they must not delay the API indicator.
+      Promise.allSettled([refreshRuleModeStatus(), refreshModeBadge()]).catch(() => {});
+      let apiOk = snapshot.apiOk === true;
+      if (pid && typeof snapshot.apiOk !== 'boolean') {
+        const info = snapshot.externalController !== undefined ? { ...normalizeController(snapshot.externalController || '127.0.0.1:7788'), secret: snapshot.secret || '', secretSet: !!snapshot.secret } : null;
+        const version = await callMihomoApi('/version', 'GET', null, info, 3, { corePid: pid });
+        apiOk = !!version.success;
+      }
+      if (requestId === runningStatusRequestId) renderRuntimeStatus(apiOk ? 'healthy' : pid ? 'error' : 'stopped',
+        apiOk ? '\u732b\u732b - API \u6b63\u5e38' : pid ? '\u732b\u732b - API \u672a\u901a' : '\u732b\u732b - \u5df2\u505c\u6b62', label);
+      return !!pid;
+    } catch (error) {
+      if (requestId === runningStatusRequestId && label) label.title = f50Error(error?.message || error);
+      if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '\u732b\u732b - \u72b6\u6001\u8bfb\u53d6\u5931\u8d25', label);
+      return false;
     }
-    if (requestId != runningStatusRequestId) return !!pid;
-    const running_mm = document.querySelector('#running_mm');
-    if (running_mm) {
-      running_mm.textContent = apiOk
-        ? '\u732b\u732b - \u{1f7e2}API\u6b63\u5e38'
-        : (pid ? '\u732b\u732b - \u{1f7e1}\u8fdb\u7a0b\u8fd0\u884c/API\u672a\u901a' : '\u732b\u732b - \u{1f534}\u5df2\u505c\u6b62');
-    }
-    await Promise.all([
-      refreshRuleModeStatus(),
-      refreshModeBadge(),
-    ]);
-    return !!pid;
   };
 
   const askConfirm = (id, title, body, ok = '\u786e\u8ba4', cancel = '\u53d6\u6d88') => new Promise((resolve) => {
+    const progress = activeCriticalOperation && activeCriticalOperation.progress;
+    if (progress) progress.pause(true);
     const { el, close } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:90vw;max-width:520px;">
@@ -5884,6 +5882,7 @@ KANO_WRITE_CHECK_EOF
     );
     const done = (value) => {
       close();
+      if (progress) progress.pause(false);
       resolve(value);
     };
     const okBtn = el.querySelector('.ok');
@@ -5928,205 +5927,231 @@ KANO_WRITE_CHECK_EOF
     return !!(res.success && String(res.content || '').trim().split(/\s+/).includes('1'));
   };
 
-  const ensureInstalled = async ({ readOnly = false } = {}) => {
-    if (await checkIsInstalled()) {
-      if (readOnly) return true;
-      const wrapperResult = await ensureServiceWrapper();
-      if (!wrapperResult.success) {
-        createToast(`Clash.Service 启动保护修复失败<br>${safeTextToHtml(wrapperResult.content || '')}`, 'red', 9000);
-        return false;
-      }
-      if (!(await migrateBootPolicyIntegration())) {
-        createToast('开机绕过规则升级失败；当前操作继续，但重启后可能仍使用旧启动时序。', 'yellow', 9000);
-      }
-      return true;
-    }
-    let state = readOnly ? { state: 'not_installed' } : await checkInstallState({ fresh: true });
-    if (!['not_installed', 'damaged'].includes(state.state)) return true;
-    if (state.state == 'damaged' && state.repairable) {
-      createToast(`检测到安装损坏，正在安全修复<br>${safeTextToHtml(state.message || state.content)}`, 'yellow', 8000);
-      if (await selfHealDamagedInstall(state)) {
-        state = await checkInstallState({ fresh: true });
-        if (!['not_installed', 'damaged'].includes(state.state)) return true;
-      }
-      createToast('安装自愈失败，已取消当前操作', 'red', 10000);
-      return false;
-    }
-    createToast(
-      state.state == 'not_installed'
-        ? '\u672a\u5b89\u88c5\u732b\u732b\uff0c\u8bf7\u5148\u5b89\u88c5'
-        : `猫猫安装不可用<br>${safeTextToHtml(state.message || state.content)}`,
-      'red',
-      9000,
-    );
-    return false;
-  };
+  const ensureInstalled = async () => await ensureCompatBackend();
 
   const ensureReady = async (options = {}) =>
     (await ensureAdvanced()) && (await ensureInstalled(options));
 
-  const kprBaseFlushGeneratedRulesCmd = () => `
-        list_cleanup_ipt() {
-          NAME="$1"
-          {
-            command -v "$NAME" 2>/dev/null || true
-            command -v "\${NAME}-legacy" 2>/dev/null || true
-            command -v "\${NAME}-nft" 2>/dev/null || true
-            for BASE in /system/bin /system/xbin /vendor/bin /sbin; do
-              for CANDIDATE in "$BASE/$NAME" "$BASE/\${NAME}-legacy" "$BASE/\${NAME}-nft"; do
-                [ ! -x "$CANDIDATE" ] || echo "$CANDIDATE"
-              done
-            done
-          } | awk 'NF && !seen[$0]++'
-        }
-        flush_one_chain() {
-          IPT="$1"; TABLE="$2"; CHAIN="$3"
-          for HOOK in PREROUTING OUTPUT FORWARD INPUT; do
-            while "$IPT" -t "$TABLE" -D "$HOOK" -j "$CHAIN" 2>/dev/null; do :; done
-          done
-          "$IPT" -t "$TABLE" -F "$CHAIN" 2>/dev/null || true
-          "$IPT" -t "$TABLE" -X "$CHAIN" 2>/dev/null || true
-        }
-        for BIN_NAME in iptables ip6tables; do
-          for IPT in $(list_cleanup_ipt "$BIN_NAME"); do
-            for TABLE in mangle nat filter; do
-              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_POLICY_A KANO_POLICY_B KANO_DNS_HIJACK KANO_DNS_A KANO_DNS_B KANO_QUIC_BLOCK KANO_QUIC_A KANO_QUIC_B; do
-                flush_one_chain "$IPT" "$TABLE" "$CHAIN"
-              done
-            done
-          done
-        done
-        `;
-
-  const kprBaseVerifyGeneratedRulesFlushedCmd = () => `
-        cleanup_bin_count=0
-        cleanup_failed=0
-        for BIN_NAME in iptables ip6tables; do
-          for IPT in $(list_cleanup_ipt "$BIN_NAME"); do
-            cleanup_bin_count=$((cleanup_bin_count + 1))
-            for TABLE in mangle nat filter; do
-              for CHAIN in ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} KANO_POLICY_PRE KANO_POLICY_A KANO_POLICY_B KANO_DNS_HIJACK KANO_DNS_A KANO_DNS_B KANO_QUIC_BLOCK KANO_QUIC_A KANO_QUIC_B; do
-                if "$IPT" -t "$TABLE" -S "$CHAIN" >/dev/null 2>&1; then
-                  echo "RESCUE_CHAIN_REMAINS:$IPT:$TABLE:$CHAIN"
-                  cleanup_failed=1
-                fi
-                for HOOK in PREROUTING OUTPUT FORWARD INPUT; do
-                  if "$IPT" -t "$TABLE" -S "$HOOK" 2>/dev/null | grep -E -e "-j[[:space:]]+$CHAIN([[:space:]]|$)" >/dev/null 2>&1; then
-                    echo "RESCUE_HOOK_REMAINS:$IPT:$TABLE:$HOOK:$CHAIN"
-                    cleanup_failed=1
-                  fi
-                done
-              done
-            done
-          done
-        done
-        if [ "$cleanup_bin_count" -eq 0 ]; then
-          echo "RESCUE_CLEANUP_UNAVAILABLE:no iptables/ip6tables executable"
-          cleanup_failed=1
+  const buildManagedFirewallFunctions = () => `list_cleanup_ipt() (
+  NAME="$1"
+  {
+    command -v "$NAME" 2>/dev/null || true
+    command -v "\${NAME}-legacy" 2>/dev/null || true
+    command -v "\${NAME}-nft" 2>/dev/null || true
+    for BASE in /system/bin /system/xbin /vendor/bin /sbin; do
+      for BIN in "$BASE/$NAME" "$BASE/\${NAME}-legacy" "$BASE/\${NAME}-nft"; do
+        [ ! -x "$BIN" ] || echo "$BIN"
+      done
+    done
+  } | awk 'NF && !seen[$0]++'
+)
+kano_table_read() (
+  rules="$("$1" -t "$2" -S 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    case "$rules" in
+      *"Table does not exist"*|*"table does not exist"*|*"Address family not supported"*) exit 3 ;;
+    esac
+    printf 'FIREWALL_READ_FAILED:%s:%s:%s\\n' "$1" "$2" "$rules" >&2
+    exit 1
+  fi
+  printf '%s\\n' "$rules" | grep -Eq '^-(P|N|A) ' || { echo "FIREWALL_EMPTY_SNAPSHOT:$1:$2" >&2; exit 1; }
+  printf '%s\\n' "$rules"
+)
+kano_rule_records() {
+  awk -v mode="$1" -v tproxy="$2" -v redirect="$3" '
+  function owned(s) {if(mode=="private")return s ~ /^(KANO_PR_FWD|KANO_PR_FWD_A|KANO_PR_FWD_B)$/;return s ~ /^(KANO_MAC_BYPASS|KANO_POLICY_PRE|KANO_POLICY_A|KANO_POLICY_B|KANO_DNS_HIJACK|KANO_DNS_A|KANO_DNS_B|KANO_QUIC_BLOCK|KANO_QUIC_A|KANO_QUIC_B|KANO_PR_FWD|KANO_PR_FWD_A|KANO_PR_FWD_B)$/}
+  function unquoted(s, out,q,escape,i,c) {
+    out="";q="";escape=0
+    for(i=1;i<=length(s);i++) {
+      c=substr(s,i,1)
+      if(escape){escape=0;if(q=="")out=out "_";continue}
+      if(c=="\\\\"){escape=1;continue}
+      if(q!=""){if(c==q)q="";continue}
+      if(c=="\\""||c==sprintf("%c",39)){q=c;out=out "_";continue}
+      out=out c
+    }
+    return out
+  }
+  BEGIN {split(tproxy,a,",");for(i in a)tp[a[i]]=1;split(redirect,a,",");for(i in a)rp[a[i]]=1}
+  {
+    $0=unquoted($0)
+    if(mode=="native") {
+      target="";port=""
+      for(i=3;i<NF;i++){if($i=="-j")target=$(i+1);if($i=="--on-port"||$i=="--to-ports")port=$(i+1)}
+      if((target=="TPROXY"&&tp[port])||(target=="REDIRECT"&&rp[port]))print
+      next
+    }
+  }
+  $1=="-N" && owned($2) {print "C",$2}
+  $1=="-A" {
+    n[$2]++
+    if(!owned($2))for(i=3;i<NF;i++)if(($i=="-j"||$i=="-g")&&owned($(i+1))){print "J",$2,n[$2];break}
+  }'
+}
+kano_firewall() (
+  mode="$1"; tp="$2"; rp="$3"; failed=0; found=0
+  for name in iptables ip6tables; do
+    for ipt in $(list_cleanup_ipt "$name"); do
+      found=$((found + 1))
+      for table in mangle nat filter; do
+        rules="$(kano_table_read "$ipt" "$table")"; rc=$?
+        [ "$rc" -ne 3 ] || continue
+        if [ "$rc" -ne 0 ]; then failed=1; continue; fi
+        if [ "$mode" = native ]; then
+          native="$(printf '%s\\n' "$rules" | kano_rule_records native "$tp" "$rp")"
+          if [ -n "$native" ]; then echo "NATIVE_CAPTURE_REMAINS:$ipt:$table:$native"; failed=1; fi
+          continue
         fi
-        [ "$cleanup_failed" -eq 0 ]
-        `;
-
-  const verifyCoreStoppedCmd = (marker = 'KANO') => `
-        core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
-        if [ -n "$core_pid" ]; then
-          echo "${marker}_CORE_STILL_RUNNING:$core_pid"
-          echo "KANO_ERROR_STAGE=service_stop"
-          echo "KANO_ERROR_CODE=core_still_running"
-          false
-        else
-          true
+        records="$(printf '%s\\n' "$rules" | kano_rule_records "$mode")"
+        [ -n "$records" ] || continue
+        if [ "$mode" = verify ]; then
+          echo "FIREWALL_REMAINS:$ipt:$table:$records"; failed=1; continue
         fi
-        `;
-
-  const removePluginOwnedArtifactsCmd = () => `
-        rm -f \
-          ${shellQuote(KANO_SUBSCRIPTION_RAW)} \
-          ${shellQuote(KANO_SUBSCRIPTION_YAML)} \
-          ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} \
-          ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} \
-          ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)} \
-          ${shellQuote(DOWNLOAD_ZIP)} \
-          ${shellQuote(DOWNLOAD_LOG)} \
-          ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
-          /data/kano_policy_boot.log \
-          /data/kano_policy_boot.previous.log \
-          /data/kano_clash_config_test.log \
-          /data/kano_clash_start.log \
-          /data/kano_clash_repair_zip_test.out \
-          /data/kano_clash_repair_unzip.out \
-          /data/kano_clash_repair_config.err \
-          /data/kano_yq_expression_smoke.err \
-          /data/kano_template_node_check.err \
-          /data/kano_clash_zip_test.out \
-          /data/kano_clash_unzip.out \
-          /data/kano_config_package_archive_test.out \
-          /data/kano_config_package_archive_list.out \
-          /data/kano_config_package_yaml_test.out \
-          /data/kano_runtime_landed_check.err \
-          /data/kano_yaml_after_override.yaml \
-          /data/kano_ui_rules_patch.yaml \
-          /data/mm_uninstall_backup.err \
-          ${shellQuote(LOG_FILE)} 2>/dev/null || true
-        for artifact in \
-          /data/kano_mihomo_api_*.out \
-          /data/kano_mihomo_api_*.err \
-          /data/kano_ui_rules_*.txt \
-          /data/kano_helper_bundled_* \
-          /data/kano_helper_gitee_*; do
-          [ -f "$artifact" ] && rm -f "$artifact" 2>/dev/null || true
-        done
-        for artifact_dir in \
-          /data/kano_clash_repair.* \
-          /data/kano_policy_save.* \
-          /data/kano_sub_persist.* \
-          /data/kano_template_upload_* \
-          /data/kano_subscription_save_* \
-          /data/kano_config_package_restore_* \
-          /data/kano_boot_backup_* \
-          /data/kano_helper_backup_* \
-          /data/kano_clash_user_backup.* \
-          /data/kano_policy_test_* \
-          /data/kano_reinstall_backup \
-          /data/kano_diag_runtime \
-          /data/kano_iptables_dns \
-          /data/media/0/.config/mihomo; do
-          [ -e "$artifact_dir" ] && rm -rf "$artifact_dir" 2>/dev/null || true
-        done
-        rm -rf ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} 2>/dev/null || true
-        artifact_cleanup_failed=0
-        for artifact in \
-          ${shellQuote(KANO_SUBSCRIPTION_RAW)} \
-          ${shellQuote(KANO_SUBSCRIPTION_YAML)} \
-          ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} \
-          ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} \
-          ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)} \
-          ${shellQuote(DOWNLOAD_ZIP)} \
-          ${shellQuote(DOWNLOAD_LOG)} \
-          ${shellQuote(DOWNLOAD_SOURCE_FILE)} \
-          ${shellQuote(KANO_YQ_RUNTIME_DIR)} \
-          ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)} \
-          /data/kano_clash_start.log \
-          /data/kano_boot_backup_* \
-          /data/kano_helper_backup_* \
-          /data/kano_clash_user_backup.* \
-          /data/kano_policy_test_* \
-          /data/kano_reinstall_backup \
-          /data/kano_diag_runtime \
-          /data/kano_iptables_dns \
-          /data/media/0/.config/mihomo \
-          ${shellQuote(LOG_FILE)}; do
-          if [ -e "$artifact" ]; then
-            echo "UNINSTALL_ARTIFACT_REMAINS:$artifact"
-            artifact_cleanup_failed=1
+        # Remove external references first, descending indices within each chain.
+        jumps="$(printf '%s\\n' "$records" | awk '$1=="J" {print $2,$3}' | sort -k1,1 -k2,2nr)"
+        while read chain index; do
+          [ -n "$chain" ] || continue
+          case "$chain" in *[!A-Za-z0-9_.:+-]*) failed=1; continue ;; esac
+          current="$("$ipt" -t "$table" -S "$chain" 2>/dev/null)" || { failed=1; continue; }
+          expected="$(printf '%s\\n' "$rules" | awk -v c="$chain" -v n="$index" '$1=="-A"&&$2==c {if(++i==n)print}')"
+          actual="$(printf '%s\\n' "$current" | awk -v c="$chain" -v n="$index" '$1=="-A"&&$2==c {if(++i==n)print}')"
+          if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+            echo "FIREWALL_CONCURRENT_CHANGE:$ipt:$table:$chain"; failed=1; continue
           fi
-        done
-        if [ "$artifact_cleanup_failed" -ne 0 ]; then
-          echo "KANO_ERROR_STAGE=uninstall_artifact_cleanup"
-          echo "KANO_ERROR_CODE=artifact_remains"
+          "$ipt" -t "$table" -D "$chain" "$index" || failed=1
+        done <<KANO_JUMPS_EOF
+$jumps
+KANO_JUMPS_EOF
+        chains="$(printf '%s\\n' "$records" | awk '$1=="C" {print $2}')"
+        for chain in $chains; do "$ipt" -t "$table" -F "$chain" || failed=1; done
+        for chain in $chains; do "$ipt" -t "$table" -X "$chain" || failed=1; done
+        remaining="$(kano_table_read "$ipt" "$table")" || { failed=1; continue; }
+        if [ -n "$(printf '%s\\n' "$remaining" | kano_rule_records "$mode")" ]; then
+          echo "FIREWALL_CLEANUP_INCOMPLETE:$ipt:$table"; failed=1
         fi
-        [ "$artifact_cleanup_failed" -eq 0 ]
-        `;
+      done
+    done
+  done
+  [ "$found" -gt 0 ] || { echo FIREWALL_BACKEND_MISSING; exit 1; }
+  [ "$failed" -eq 0 ]
+)
+`;
+const verifyNativeTrafficReleasedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-clean';
+
+
+
+
+  const buildOwnedCoreFunctions = () => `
+CORE=${shellQuote(CLASH_CORE)}
+kano_is_owned_core() (
+  case "$1" in ''|*[!0-9]*) exit 1 ;; esac
+  exe="$(readlink "/proc/$1/exe" 2>/dev/null)"
+  case "$exe" in "$CORE"|"$CORE (deleted)") ;; *) exit 1 ;; esac
+  if [ "$2" != all ]; then
+    cmd="$(tr '\\0' ' ' < "/proc/$1/cmdline" 2>/dev/null)"
+    case " $cmd " in *" -t "*|*" --test "*) exit 1 ;; esac
+  fi
+)
+kano_core_pids() (
+  found=0
+  candidates="$(pidof Clash.Core 2>/dev/null) $(pidof mihomo 2>/dev/null)"
+  for pid in $candidates; do
+    if kano_is_owned_core "$pid" "$1"; then printf '%s\\n' "$pid"; found=1; fi
+  done
+  [ "$found" = 0 ] || exit 0
+  for p in /proc/[0-9]*; do
+    IFS= read -r name < "$p/comm" 2>/dev/null || continue
+    case "$name" in Clash.Core|mihomo) ;; *) continue ;; esac
+    pid="\${p##*/}"
+    kano_is_owned_core "$pid" "$1" && printf '%s\\n' "$pid"
+  done
+  exit 0
+)
+find_runtime_pid() {
+  kano_core_pids runtime | head -n 1
+}
+kano_stop_core() (
+  for signal in TERM KILL; do
+    pids="$(kano_core_pids all)"
+    [ -n "$pids" ] || exit 0
+    for pid in $pids; do
+      kano_is_owned_core "$pid" all && kill -"$signal" "$pid" 2>/dev/null
+    done
+    count=0
+    while [ "$count" -lt 4 ]; do
+      [ -n "$(kano_core_pids all)" ] || exit 0
+      count=$((count + 1)); sleep 1
+    done
+  done
+  echo KANO_CORE_STOP_FAILED
+  exit 1
+)
+kano_stop_watchers() (
+  for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
+    # Check executable and complete argv, never text embedded in a shell -c script.
+    exe="$(readlink "$p/exe" 2>/dev/null)"
+    case "\${exe##*/}" in inotifyd|busybox|sh|bash|dash|mksh|toybox) ;; *) continue ;; esac
+    args="$(tr '\\0' '\\n' < "$p/cmdline" 2>/dev/null)"
+    if printf '%s\\n' "$args" | grep -qxF ${shellQuote(`${CLASH_DIR}/Scripts/Clash.Inotify`)}; then
+      kill -TERM "\${p##*/}" 2>/dev/null || true
+    elif printf '%s\\n' "$args" | grep -qxF ${shellQuote(CLASH_SERVICE)} && printf '%s\\n' "$args" | grep -qxF boot; then
+      kill -TERM "\${p##*/}" 2>/dev/null || true
+    fi
+  done
+)
+`;
+
+const stopOwnedClashCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' recover';
+
+const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-stopped';
+
+
+  const removePluginOwnedArtifactsCmd = () => `(
+  cleanup_rc=0
+  for artifact in \
+    ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} \
+    ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} \
+    ${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)} ${shellQuote(DOWNLOAD_ZIP)} ${shellQuote(DOWNLOAD_LOG)} \
+    ${shellQuote(DOWNLOAD_SOURCE_FILE)} ${shellQuote(LOG_FILE)} \
+    /data/kano_policy_boot.log /data/kano_policy_boot.previous.log \
+    /data/kano_clash_config_test.log /data/kano_clash_start.log \
+    /data/kano_clash_repair_zip_test.out /data/kano_clash_repair_unzip.out /data/kano_clash_repair_config.err \
+    /data/kano_yq_expression_smoke.err /data/kano_yq_repair.zip \
+    /data/kano_template_node_check.err /data/kano_template_upload_check.err \
+    /data/kano_clash_zip_test.out /data/kano_clash_unzip.out /data/kano_policy_script_check.out \
+    /data/kano_config_package_archive_test.out /data/kano_config_package_archive_list.out /data/kano_config_package_yaml_test.out \
+    /data/kano_runtime_landed_check.err /data/kano_yaml_after_override.yaml /data/kano_ui_rules_patch.yaml \
+    /data/mm_uninstall_backup.err       /data/kano_yq_repair.zip.new.* /data/kano_clash.zip.new.* /data/kano_mihomo_latest.dlog.verify \
+    /data/kano_mihomo_api_*.out /data/kano_mihomo_api_*.err /data/kano_ui_rules_*.txt \
+    /data/kano_helper_bundled_* /data/kano_helper_gitee_* \
+    /data/kano_clash_install.* /data/kano_clash_repair.* /data/kano_clash_user_backup.* \
+    /data/clash.before_install.* /data/clash.before_repair.* /data/clash.failed_repair.* \
+    /data/kano_policy_save.* /data/kano_sub_persist.* /data/kano_template_upload_* \
+    /data/kano_subscription_save_* /data/kano_subscription_urls_before_template_* \
+    /data/kano_config_package_restore_* \
+    ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)}; do
+    [ -e "$artifact" ] || [ -L "$artifact" ] || continue
+    rm -rf "$artifact" || cleanup_rc=1
+    if [ -e "$artifact" ] || [ -L "$artifact" ]; then
+      printf 'UNINSTALL_ARTIFACT_REMAINS:%s\\n' "$artifact"
+      cleanup_rc=1
+    fi
+  done
+  # Never remove the shared UFI upload directory or another plugin's boot entries.
+  for lock in /dev/kano_boot_write.lock /dev/kano_clash_boot.lock /dev/kano_policy_apply.lock /dev/kano_tproxy_tasks; do
+    [ -d "$lock" ] || continue
+    owner="$(cat "$lock/pid" 2>/dev/null)"
+    case "$owner" in
+      ''|*[!0-9]*) rm -rf "$lock" || cleanup_rc=1 ;;
+      *) if kill -0 "$owner" 2>/dev/null; then echo "UNINSTALL_LOCK_BUSY:$lock"; cleanup_rc=1
+         else rm -rf "$lock" || cleanup_rc=1; fi ;;
+    esac
+  done
+  [ "$cleanup_rc" -eq 0 ] || { echo KANO_ERROR_STAGE=uninstall_artifact_cleanup; echo KANO_ERROR_CODE=artifact_remains; }
+  exit "$cleanup_rc"
+)`;
 
   const collectNetworkStatus = async () => {
     const helperResult = await runBinaryHelperJson('network-status', [
@@ -6224,134 +6249,40 @@ KANO_WRITE_CHECK_EOF
     return sanitizeSubscriptionSecrets(res.content || '');
   };
 
-  const networkRescue = async ({ stopService = true, showOutput = true, reason = '\u624b\u52a8\u6062\u590d' } = {}) => {
-    createToast('\u6b63\u5728\u6062\u590d\u7f51\u7edc\u5e76\u6e05\u7406\u63d2\u4ef6\u89c4\u5219...', 'yellow');
-    const stopFlag = stopService ? '1' : '0';
-    const res = await runShellWithRoot(`
-        set +e
-        rescue_rc=0
-        echo "[rescue] reason: ${shellQuote(reason)}"
-        if [ ${shellQuote(stopFlag)} = '1' ] && [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-          echo "[rescue] stopping Clash.Service"
-          ${shellQuote(CLASH_SERVICE)} stop 2>&1 || echo "RESCUE_STOP_COMMAND_FAILED"
-        fi
-        if [ ${shellQuote(stopFlag)} = '1' ]; then
-          sleep 1
-          ${verifyCoreStoppedCmd('RESCUE')} || rescue_rc=1
-        fi
-        echo "[rescue] flushing KANO chains"
-        ${flushGeneratedRulesCmd()}
-        ${verifyGeneratedRulesFlushedCmd()} || rescue_rc=1
-        if [ "$rescue_rc" -eq 0 ]; then
-          echo "[rescue] done"
-        else
-          echo "[rescue] incomplete"
-        fi
-        exit "$rescue_rc"
-        `, 60 * 1000);
-    await isMMRunning();
-    if (showOutput) {
-      showInfoDialog(
-        'mm_network_rescue',
-        res.success ? '\u7f51\u7edc\u6062\u590d\u5b8c\u6210' : '\u7f51\u7edc\u6062\u590d\u5931\u8d25',
-        `<pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '\u5df2\u6267\u884c')}</pre>`,
-      );
+  const networkRescue = async ({ stopService = true, showOutput = true, reason = '\u6062\u590d\u7f51\u7edc', preempt = false } = {}) => {
+  if (recoveryInProgress) return false;
+  if (!(await ensureCompatBackend())) return false;
+  recoveryInProgress = true;
+  if (preempt && activeCriticalOperation) activeCriticalOperation.token.cancelled = true;
+  const own = preempt || !activeCriticalOperation;
+  const progress = own ? createOperationProgress('\u6062\u590d\u7f51\u7edc') : activeCriticalOperation.progress;
+  try {
+    if (progress) progress.stage('\u505c\u6b62\u8fdb\u7a0b\u5e76\u91ca\u653e\u63a5\u7ba1\u89c4\u5219');
+    const r = await hostRunShellWithRoot.call(globalThis, 'sh ' + shellQuote(CLASH_SERVICE) + ' recover', 65000);
+    const ok = !!r.success && String(r.content || '').includes('RECOVERY_VERIFIED');
+    invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
+    if (progress) progress.finish(ok, ok ? '\u5df2\u505c\u6b62\u5e76\u91ca\u653e\u7f51\u7edc' : '\u4ecd\u6709\u6b8b\u7559\uff0c\u8bf7\u67e5\u770b\u8be6\u60c5');
+    if (ok) renderRuntimeStatus('stopped', '\u732b\u732b - \u5df2\u505c\u6b62', document.querySelector('#running_mm'));
+    createToast(ok ? '\u7f51\u7edc\u63a5\u7ba1\u5df2\u91ca\u653e' : '\u6062\u590d\u672a\u5b8c\u6210<br>' + safeTextToHtml(f50Error(r.content)), ok ? 'green':'red', ok ? 5000:15000);
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? '\u6062\u590d\u5b8c\u6210':'\u6e05\u7406\u6b8b\u7559', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    return ok;
+  } catch (error) {
+    if (progress) progress.finish(false, '\u8bf7\u6c42\u5931\u8d25\uff0c\u72b6\u6001\u672a\u77e5');
+    createToast(safeTextToHtml(error.message || String(error)), 'red', 12000); return false;
+  } finally { recoveryInProgress = false; syncCriticalOperationStatus(); }
+};
+
+  const startClashServiceClean = async ({stopFirst=false}={}) => {
+    let response;
+    try {
+      if (!(await ensureCompatBackend())) response = {success:false, content:'F50_BACKEND_REQUIRED'};
+      else response = await runShellWithRoot(buildF50StartScript(stopFirst ? 'restart' : 'start'), 120000);
+    } catch (error) {
+      if (error?.name === 'OperationCancelled') throw error;
+      response = {success:false, content:error?.message || String(error)};
     }
-    return res.success;
-  };
-
-  const startClashServiceClean = async ({ stopFirst = false, reason = '\u542f\u52a8' } = {}) => {
-    const wrapperResult = await ensureServiceWrapper();
-    if (!wrapperResult.success) {
-      return {
-        ...wrapperResult,
-        success: false,
-        content: `START_STATE=service_wrapper_failed\n${wrapperResult.content || ''}`,
-      };
-    }
-    const result = await runShellWithRoot(`
-      set +e
-      SERVICE=${shellQuote(CLASH_SERVICE)}
-      CORE=${shellQuote(CLASH_CORE)}
-      CONFIG=${shellQuote(CLASH_CONFIG)}
-      START_LOG=${shellQuote('/data/kano_clash_start.log')}
-      CONFIG_TEST_LOG=${shellQuote('/data/kano_clash_config_test.log')}
-      RUN_LOG=${shellQuote(LOG_FILE)}
-      [ -s "$SERVICE" ] || { echo "START_STATE=not_installed"; exit 3; }
-      [ -x "$SERVICE" ] || chmod 755 "$SERVICE" 2>/dev/null || { echo "START_STATE=service_not_executable"; exit 4; }
-      [ -x "$CORE" ] || chmod 755 "$CORE" 2>/dev/null || { echo "START_STATE=core_not_executable"; exit 4; }
-      [ -s "$CONFIG" ] || { echo "START_STATE=config_missing"; exit 6; }
-
-      cleanup_stale_config_tests() {
-        for p in /proc/[0-9]*; do
-          [ -r "$p/cmdline" ] || continue
-          PID="\${p##*/}"
-          case "$PID" in ''|*[!0-9]*) continue ;; esac
-          exe="$(readlink "$p/exe" 2>/dev/null)"
-          case "$exe" in
-            "$CORE"|*/Clash.Core|*/mihomo) ;;
-            *) continue ;;
-          esac
-          cmdline="$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null)"
-          case " $cmdline " in
-            *" -t "*|*" --test "*)
-              echo "CLEAN_STALE_TEST_PID=$PID"
-              kill "$PID" 2>/dev/null || true
-              sleep 1
-              [ ! -d "/proc/$PID" ] || kill -9 "$PID" 2>/dev/null || true
-              ;;
-          esac
-        done
-      }
-
-      echo "START_REASON=${shellQuote(reason)}"
-      cleanup_stale_config_tests
-      if command -v timeout >/dev/null 2>&1; then
-        (cd "$(dirname "$CONFIG")" && timeout 60 "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-      else
-        (cd "$(dirname "$CONFIG")" && "$CORE" -t -f "$CONFIG") >"$CONFIG_TEST_LOG" 2>&1
-      fi
-      config_test_rc=$?
-      {
-        echo "===== Clash.Core config test ====="
-        echo "CONFIG_TEST_RC=$config_test_rc"
-        tail -n 160 "$CONFIG_TEST_LOG" 2>/dev/null || true
-      } >>"$RUN_LOG" 2>/dev/null || true
-      if [ "$config_test_rc" -ne 0 ]; then
-        echo "START_STATE=config_invalid"
-        echo "CONFIG_TEST_RC=$config_test_rc"
-        cat "$CONFIG_TEST_LOG" 2>/dev/null || true
-        exit 6
-      fi
-      echo "CONFIG_TEST_STATE=valid"
-      if [ ${shellQuote(stopFirst ? '1' : '0')} = "1" ]; then
-        "$SERVICE" stop || { echo "START_STATE=stop_failed"; exit 5; }
-        sleep 1
-      fi
-
-      (
-        echo "===== Clash.Service start ====="
-        echo "reason=${shellQuote(reason)}"
-        date 2>/dev/null || true
-        KANO_CONFIG_PREVALIDATED=1 "$SERVICE" start
-        rc=$?
-        echo "START_SERVICE_RC=$rc"
-        exit "$rc"
-      ) >"$START_LOG" 2>&1
-      rc=$?
-      cat "$START_LOG" 2>/dev/null || true
-      {
-        echo
-        echo "===== Clash.Service start output ====="
-        tail -n 120 "$START_LOG" 2>/dev/null || true
-      } >>"$RUN_LOG" 2>/dev/null || true
-      [ "$rc" -eq 0 ] || { echo "START_STATE=service_failed"; exit "$rc"; }
-      echo "START_STATE=started_verified_process"
-      exit 0
-    `, 90 * 1000);
-    runtimePreflightCache = null;
-    runtimePreflightLoadPromise = null;
-    return result;
+    invalidateStatusSnapshot();
+    return f50StartResult(response);
   };
 
   const waitForCoreApi = async (tries = 12, delayMs = 1000) => {
@@ -6552,7 +6483,7 @@ KANO_WRITE_CHECK_EOF
 
   const restartClashWithConfigRollback = async (rollbackPath = null, context = '\u91cd\u542f') => {
     appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
-    const ok = await restartClash({ skipCheck: true });
+    const ok = await restartClashOk({ skipCheck: true });
     appendTemplateFlowDebug(`leave restartClashWithConfigRollback ok=${ok ? '1' : '0'} context=${context}`);
     if (ok) return true;
 
@@ -6593,7 +6524,7 @@ KANO_WRITE_CHECK_EOF
     }
 
     createToast('新配置启动失败，正在尝试用上一份 config.yaml 恢复核心…', 'yellow', 9000);
-    const recoveryOk = await restartClash({ skipCheck: true });
+    const recoveryOk = await restartClashOk({ skipCheck: true });
     appendTemplateFlowDebug(`rollback recovery restart result=${recoveryOk ? '1' : '0'} context=${context}`);
     if (recoveryOk) {
       createToast(`${escapeHtml(context)}失败；上一份 config.yaml 已恢复，核心已重新启动。`, 'yellow', 12000);
@@ -6672,7 +6603,7 @@ KANO_WRITE_CHECK_EOF
         if (savedSources.length == 0) {
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = '\u5df2\u4ece\u6a21\u677f proxy-providers \u5bfc\u5165\u8ba2\u9605\u94fe\u63a5\uff0c\u5e76\u7edf\u4e00\u547d\u540d\u4e3a Provider1/Provider2\u3002';
+          templateSubSyncMessage = '\u5df2\u4ece\u6a21\u677f proxy-providers \u5bfc\u5165\u8ba2\u9605\u94fe\u63a5\uff0c\u5e76\u6309\u987a\u5e8f\u547d\u540d\u4e3a Provider1\u3001Provider2\u2026\u2026\u3002';
         } else if (savedKey != templateKey) {
           const oldSources = normalizeSubSourceList(savedSources);
           const newSources = normalizeSubSourceList(templateSources);
@@ -6704,10 +6635,6 @@ KANO_WRITE_CHECK_EOF
         templatePath: txTemplate,
       }))) {
         throw 'JS/UI \u8986\u5199\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
-      }
-      const templateCheck = await validateConfigFileStructure(txTemplate, 'template.yaml');
-      if (!templateCheck.ok) {
-        throw `模板结构检查失败，原 template.base.yaml / template.yaml 未改动\n${templateCheck.message || ''}`.trim();
       }
       if (templateSubSourcesToPersist.length > 0) {
         const subBackupRes = await runShellWithRoot(`
@@ -6998,7 +6925,7 @@ KANO_WRITE_CHECK_EOF
           [ -r "$p/cmdline" ] || continue
           exe="$(readlink "$p/exe" 2>/dev/null)"
           case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
-          c="$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null)"
+          c="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
           case " $c " in
             *" -t "*|*" --test "*) n="\${p##*/}"; stale="\${stale:+$stale,}$n" ;;
           esac
@@ -7086,13 +7013,13 @@ KANO_WRITE_CHECK_EOF
       'mm_status_diagnostic',
       '运行日志/诊断',
       `${rowHtml}
+      ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
       <pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,
     );
   };
 
 
-  let lastSanitizedTrafficMode = 'tproxy';
 
   const sanitizeConfigForTProxy = async ({ showToast = false, errorToast = true } = {}) => {
     let runtimeOptions;
@@ -7103,8 +7030,6 @@ KANO_WRITE_CHECK_EOF
       return false;
     }
     const runtimeRes = await runShellWithRoot(`
-        if [ -c /dev/net/tun ] || [ -c /dev/tun ]; then tun_device=1; else tun_device=0; fi
-        echo "tun_device=$tun_device"
         echo "config_source=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)"
         `, 15 * 1000);
     if (!runtimeRes.success) {
@@ -7119,11 +7044,6 @@ KANO_WRITE_CHECK_EOF
     const trafficMode = runtimeOptions.traffic_mode;
     const ipv6Enabled = runtimeOptions.ipv6 == 'on';
     const tproxyPort = getPositivePort(runtimeOptions.tproxy_port, 7895);
-    if (trafficMode == 'tun' && values.tun_device != '1') {
-      if (errorToast) createToast('配置自检失败：TUN 模式需要 /dev/net/tun 或 /dev/tun，原配置未改写', 'red', 9000);
-      return false;
-    }
-
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
       if (errorToast) createToast(`配置自检失败<br>${safeTextToHtml(storage.content || '')}`, 'red', 9000);
@@ -7141,18 +7061,9 @@ KANO_WRITE_CHECK_EOF
       config = cloneJsonValue(read.value);
       applyRequiredF50Fields(config);
 
-      if (Object.prototype.hasOwnProperty.call(config, 'proxy-groups') && !Array.isArray(config['proxy-groups'])) {
-        throw new Error('proxy-groups 必须是数组');
-      }
-      if (Object.prototype.hasOwnProperty.call(config, 'rules') && !Array.isArray(config.rules)) {
-        throw new Error('rules 必须是数组');
-      }
       const preserveUserRules = ['subscription_original', 'uploaded_config'].includes(values.config_source);
       if (!preserveUserRules && Array.isArray(config.rules)) {
         config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
-      }
-      if (Object.prototype.hasOwnProperty.call(config, 'proxy-providers') && !isPlainYamlObject(config['proxy-providers'])) {
-        throw new Error('proxy-providers 必须是映射对象');
       }
       if (Object.prototype.hasOwnProperty.call(config, 'rule-providers')) {
         if (!isPlainYamlObject(config['rule-providers'])) throw new Error('rule-providers 必须是映射对象');
@@ -7168,30 +7079,21 @@ KANO_WRITE_CHECK_EOF
           });
         }
       }
-      const names = new Set();
-      (config['proxy-groups'] || []).forEach((group, index) => {
-        if (!isPlainYamlObject(group)) throw new Error(`proxy-groups[${index}] 必须是映射对象`);
-        const name = String(group.name || '').trim();
-        if (!name) throw new Error(`proxy-groups[${index}] 缺少 name`);
-        if (names.has(name)) throw new Error(`proxy-groups 存在重复组名：${name}`);
-        names.add(name);
-      });
     } catch (e) {
       if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
       return false;
     }
 
-    const write = await writeYamlObjectAtomic(CLASH_CONFIG, config, {
-      label: 'config.yaml',
-      backup: true,
-      backupTag: 'f50_sanitize',
-      runtimeOptions,
-    });
+    let shaped;
+    try { shaped = await kprShapeRuntimeConfig(config, runtimeOptions); }
+    catch (error) { if (errorToast) createToast(safeTextToHtml(error.message || String(error)), 'red', 9000); return false; }
+    const write = JSON.stringify(shaped) === JSON.stringify(read.value)
+      ? { ok: true }
+      : await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, shaped, { label: 'config.yaml', backup: true, backupTag: 'f50_sanitize' });
     if (!write.ok) {
       if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
       return false;
     }
-    lastSanitizedTrafficMode = trafficMode;
     if (showToast) {
       createToast(
         `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '开启' : '关闭'} · 端口 ${tproxyPort}`,
@@ -7202,7 +7104,7 @@ KANO_WRITE_CHECK_EOF
     return true;
   };
 
-  const buildBootstrapConfig = (secret = createRandomSecret()) => [
+  const buildBootstrapConfig = (secret = F50_DEFAULT_SECRET) => [
     'port: 7890',
     'socks-port: 7891',
     'mixed-port: 7892',
@@ -7216,6 +7118,7 @@ KANO_WRITE_CHECK_EOF
     'external-controller: 0.0.0.0:7788',
     `external-ui: ${ZASHBOARD_UI_DIR}`,
     `external-ui-url: ${ZASHBOARD_UI_URL}`,
+    'unified-delay: true',
     `secret: ${yamlSingleQuote(secret)}`,
     'profile:',
     '  store-selected: true',
@@ -7232,6 +7135,7 @@ KANO_WRITE_CHECK_EOF
     '    - https://dns.alidns.com/dns-query',
     '    - https://doh.pub/dns-query',
     'proxies: []',
+    'proxy-providers: {}',
     'proxy-groups:',
     '  - name: Proxy',
     '    type: select',
@@ -7254,7 +7158,7 @@ KANO_WRITE_CHECK_EOF
   ].join('\n');
 
   const ensureBootstrapConfig = async () => {
-    const bootstrapSecret = createRandomSecret(20);
+    const bootstrapSecret = F50_DEFAULT_SECRET;
     const yaml = buildBootstrapConfig(bootstrapSecret);
     const res = await runShellWithRoot(`
         CONFIG=${shellQuote(CLASH_CONFIG)}
@@ -7299,7 +7203,6 @@ ${yaml}
 KANO_BOOTSTRAP_CONFIG
           chmod 644 "$CONFIG_NEW"
           mv -f "$CONFIG_NEW" "$CONFIG" || exit 1
-          sync 2>/dev/null || true
           ${setConfigSourceCmd('bootstrap')}
           ${pruneKanoBackupsCmd()}
           echo "BOOTSTRAP_CREATED:$reason"
@@ -7317,1173 +7220,91 @@ KANO_BOOTSTRAP_CONFIG
 
   const btn_enabled = document.createElement('button');
   btn_enabled.classList.add('btn');
-  btn_enabled.textContent = '\u5b89\u88c5';
+  btn_enabled.textContent = '在线安装/更新';
   let disabled_btn_enabled = false;
-  btn_enabled.onclick = async () => {
-    if (disabled_btn_enabled) return;
-    const operationToken = acquireCriticalOperation('安装核心');
-    if (!operationToken) return;
-    disabled_btn_enabled = true;
-    setButtonBusy(btn_enabled, true, '\u5b89\u88c5\u4e2d\u2026');
-    try {
-      if (!(await ensureAdvanced())) return;
-      const currentInstallState = await checkInstallState({ fresh: true });
-      if (currentInstallState.state == 'damaged') {
-        await selfHealDamagedInstall(currentInstallState);
-        return;
-      }
-      if (currentInstallState.state != 'not_installed') {
-        createToast('\u5df2\u7ecf\u5b89\u88c5\u8fc7\u732b\u732b\u4e86\uff01', 'red');
-        return;
-      }
-
-      // 兼容基线：不再因诊断/策略 applet 缺失阻断基础安装。真正必需的 curl/unzip 在实际步骤中校验。
-
-      createToast('\u4e0b\u8f7d\u5e76\u6821\u9a8c\u6240\u9700\u7ec4\u4ef6\u4e2d...');
-      const archive = await downloadCoreArchive({ allowCached: false });
-      if (!archive.ok) {
-        return createToast(
-          `\u4e0b\u8f7d\u6216\u6821\u9a8c\u5b89\u88c5\u5305\u5931\u8d25<br>${safeTextToHtml(archive.content || archive.message)}`,
-          'red',
-          12000,
-        );
-      }
-
-      createToast('\u89e3\u538b\u732b\u732b\u6587\u4ef6...');
-      const res2 = await runShellWithRoot(`
-        set +e
-        ZIP=${shellQuote(DOWNLOAD_ZIP)}
-        TARGET=${shellQuote(CLASH_DIR)}
-        STAGE="/data/kano_clash_install.$$"
-        PACKAGE_ROOT=""
-        BACKUP=""
-        cleanup_install_stage() {
-          rc=$?
-          trap - EXIT
-          [ -d "$STAGE" ] && rm -rf "$STAGE" 2>/dev/null || true
-          if [ "$rc" -ne 0 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP" ] && [ ! -e "$TARGET" ]; then
-            mv "$BACKUP" "$TARGET" 2>/dev/null || true
-          fi
-          exit "$rc"
-        }
-        trap cleanup_install_stage EXIT
-        command -v unzip >/dev/null 2>&1 || { echo "INSTALL_VERIFY_FAILED: unzip missing"; exit 1; }
-        [ -s "$ZIP" ] || { echo "INSTALL_VERIFY_FAILED: downloaded zip missing or empty"; exit 1; }
-        zip_size="$(wc -c < "$ZIP" 2>/dev/null || echo 0)"
-        echo "$zip_size" | grep -Eq '^[0-9]+$' || zip_size=0
-        [ "$zip_size" -ge 100000 ] || { echo "INSTALL_VERIFY_FAILED: zip too small ($zip_size bytes)"; exit 1; }
-        [ "$zip_size" -le 209715200 ] || { echo "INSTALL_VERIFY_FAILED: zip too large ($zip_size bytes)"; exit 1; }
-        unzip -t "$ZIP" >/data/kano_clash_zip_test.out 2>&1 || {
-          echo "INSTALL_VERIFY_FAILED: zip integrity test failed"
-          cat /data/kano_clash_zip_test.out 2>/dev/null || true
-          exit 1
-        }
-        total_unpacked="$(unzip -l "$ZIP" 2>/dev/null | tail -n 1 | awk '{print $1}')"
-        if echo "$total_unpacked" | grep -Eq '^[0-9]+$'; then
-          [ "$total_unpacked" -le 314572800 ] || {
-            echo "INSTALL_VERIFY_FAILED: archive expands beyond 300 MiB ($total_unpacked bytes)"
-            exit 1
-          }
-        fi
-        archive_names="$(unzip -Z1 "$ZIP" 2>/dev/null || true)"
-        if [ -n "$archive_names" ] && printf '%s\\n' "$archive_names" | grep -Eq '(^/|(^|/)\\.\\.(/|$))'; then
-          echo "INSTALL_VERIFY_FAILED: unsafe archive path detected"
-          exit 1
-        fi
-        rm -rf "$STAGE" 2>/dev/null || true
-        mkdir -p "$STAGE" || exit 1
-        unzip -q "$ZIP" -d "$STAGE" >/data/kano_clash_unzip.out 2>&1 || {
-          echo "INSTALL_VERIFY_FAILED: unzip failed"
-          cat /data/kano_clash_unzip.out 2>/dev/null || true
-          exit 1
-        }
-        if find "$STAGE" -type l 2>/dev/null | grep -q .; then
-          command -v readlink >/dev/null 2>&1 || { echo "INSTALL_VERIFY_FAILED: archive contains symlinks but readlink is unavailable"; exit 1; }
-          unsafe_link=0
-          while IFS= read -r link_path; do
-            link_target="$(readlink "$link_path" 2>/dev/null)"
-            case "$link_target" in
-              /*) unsafe_link=1 ;;
-              *../*|../*|*/..|..) unsafe_link=1 ;;
-            esac
-            [ "$unsafe_link" = "0" ] || break
-          done <<EOF_SAFE_LINKS
-$(find "$STAGE" -type l 2>/dev/null)
-EOF_SAFE_LINKS
-          [ "$unsafe_link" = "0" ] || { echo "INSTALL_VERIFY_FAILED: unsafe archive symlink"; exit 1; }
-        fi
-        stage_kb="$(du -sk "$STAGE" 2>/dev/null | awk '{print $1}')"
-        if echo "$stage_kb" | grep -Eq '^[0-9]+$' && [ "$stage_kb" -gt 0 ]; then
-          [ "$stage_kb" -le 307200 ] || {
-            echo "INSTALL_VERIFY_FAILED: extracted package exceeds 300 MiB ($stage_kb KiB)"
-            exit 1
-          }
-        else
-          echo "INSTALL_ADVANCED_WARNING=du_unavailable_size_checked_from_zip"
-        fi
-        # Locate package root by either Service or Core. Accept an extra top-level folder and case-varied names.
-        service_candidate="$(find "$STAGE" -type f -iname 'Clash.Service' 2>/dev/null | head -n 1)"
-        core_candidate="$(find "$STAGE" -type f -iname 'Clash.Core' 2>/dev/null | head -n 1)"
-        if [ -n "$service_candidate" ]; then
-          PACKAGE_ROOT="$(dirname "$(dirname "$service_candidate")")"
-        elif [ -n "$core_candidate" ]; then
-          PACKAGE_ROOT="$(dirname "$(dirname "$core_candidate")")"
-        fi
-        [ -n "$PACKAGE_ROOT" ] && [ -d "$PACKAGE_ROOT" ] || {
-          echo "INSTALL_VERIFY_FAILED: package root not found (Clash.Core/Clash.Service absent)"
-          find "$STAGE" -maxdepth 3 -type f 2>/dev/null | head -n 80 || true
-          exit 1
-        }
-        # Normalize the three canonical directories when a Windows/repacked archive changed letter case.
-        for canonical in Scripts Proxy Tools; do
-          if [ ! -d "$PACKAGE_ROOT/$canonical" ]; then
-            actual_dir="$(find "$PACKAGE_ROOT" -maxdepth 1 -type d -iname "$canonical" 2>/dev/null | head -n 1)"
-            if [ -n "$actual_dir" ] && [ "$actual_dir" != "$PACKAGE_ROOT/$canonical" ]; then
-              mv "$actual_dir" "$PACKAGE_ROOT/$canonical" 2>/dev/null || true
-            fi
-          fi
-        done
-        mkdir -p "$PACKAGE_ROOT/Scripts" "$PACKAGE_ROOT/Proxy" "$PACKAGE_ROOT/Tools" 2>/dev/null || true
-        if [ ! -f "$PACKAGE_ROOT/Proxy/Clash.Core" ]; then
-          core_candidate="$(find "$PACKAGE_ROOT" -type f -iname 'Clash.Core' 2>/dev/null | head -n 1)"
-          [ -n "$core_candidate" ] && [ "$core_candidate" != "$PACKAGE_ROOT/Proxy/Clash.Core" ] && mv "$core_candidate" "$PACKAGE_ROOT/Proxy/Clash.Core" 2>/dev/null || true
-        fi
-        if [ ! -f "$PACKAGE_ROOT/Scripts/Clash.Service" ]; then
-          service_candidate="$(find "$PACKAGE_ROOT" -type f -iname 'Clash.Service' 2>/dev/null | head -n 1)"
-          [ -n "$service_candidate" ] && [ "$service_candidate" != "$PACKAGE_ROOT/Scripts/Clash.Service" ] && mv "$service_candidate" "$PACKAGE_ROOT/Scripts/Clash.Service" 2>/dev/null || true
-        fi
-        SERVICE="$PACKAGE_ROOT/Scripts/Clash.Service"
-        CORE="$PACKAGE_ROOT/Proxy/Clash.Core"
-        YQ="$PACKAGE_ROOT/Tools/yq_linux_arm64"
-        DEVICE_SDK="$(getprop ro.build.version.sdk 2>/dev/null | head -n 1 | tr -d '[:space:]')"
-        case "$DEVICE_SDK" in ''|*[!0-9]*) DEVICE_SDK=0 ;; esac
-        DEVICE_ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        echo "INSTALL_DEVICE_SDK=$DEVICE_SDK"
-        [ -n "$DEVICE_ABI" ] || DEVICE_ABI="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-        case "$DEVICE_ABI" in
-          arm64-v8a|aarch64|armv8*|*arm64*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_arm64" ;;
-          armeabi-v7a|armeabi|armv7*|armv6*) CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl_armv7" ;;
-          *)
-            CONTROLLER=""
-            echo "INSTALL_ADVANCED_WARNING=unsupported_controller_abi:\${DEVICE_ABI:-unknown}"
-            ;;
-        esac
-        # Clash.Service is a tiny compatibility wrapper. Rebuild it when a repacked archive omitted only that file.
-        if [ ! -s "$SERVICE" ] && [ -s "$CONTROLLER" ]; then
-          cat > "$SERVICE" <<'EOF_KANO_SERVICE'
-#!/system/bin/sh
-case "$(getprop ro.product.cpu.abi 2>/dev/null)" in
-  arm64-v8a) binary=/data/clash/Scripts/clashctl_arm64 ;;
-  armeabi-v7a|armeabi) binary=/data/clash/Scripts/clashctl_armv7 ;;
-  *) binary=/data/clash/Scripts/clashctl ;;
-esac
-if [ ! -x "$binary" ]; then
-  echo "找不到适用于当前架构的 clashctl: $binary"
-  exit 1
-fi
-exec "$binary" "$@"
-EOF_KANO_SERVICE
-          chmod 755 "$SERVICE" 2>/dev/null || true
-          echo "INSTALL_COMPAT_SERVICE_REBUILT=1"
-        fi
-        [ -s "$SERVICE" ] || { echo "INSTALL_VERIFY_FAILED: Clash.Service/clashctl missing"; exit 1; }
-        [ -s "$CORE" ] || { echo "INSTALL_VERIFY_FAILED: Clash.Core missing"; exit 1; }
-        chmod 755 "$SERVICE" "$CORE" || { echo "INSTALL_VERIFY_FAILED: base executable chmod failed"; exit 1; }
-        advanced_missing=""
-        yq_version="missing"
-        if [ -s "$YQ" ]; then
-          chmod 755 "$YQ" 2>/dev/null || true
-          yq_version="$("$YQ" --version 2>&1)"
-          if ! echo "$yq_version" | grep -Eiq 'version[[:space:]]+v?4\\.'; then
-            advanced_missing="\${advanced_missing} yq_invalid"
-            yq_version="invalid"
-          fi
-        else
-          advanced_missing="\${advanced_missing} yq"
-        fi
-        if [ -s "$CONTROLLER" ]; then
-          chmod 755 "$CONTROLLER" 2>/dev/null || true
-          controller_probe="$("$CONTROLLER" --help 2>&1)"
-          controller_probe_rc=$?
-          case "$controller_probe_rc" in
-            126|127) advanced_missing="\${advanced_missing} controller_unusable" ;;
-            *)
-              FALLBACK_CONTROLLER="$PACKAGE_ROOT/Scripts/clashctl"
-              if [ ! -e "$FALLBACK_CONTROLLER" ]; then
-                controller_name="$(basename "$CONTROLLER")"
-                ln -s "$controller_name" "$FALLBACK_CONTROLLER" 2>/dev/null || {
-                  cp "$CONTROLLER" "$FALLBACK_CONTROLLER" 2>/dev/null && chmod 755 "$FALLBACK_CONTROLLER" 2>/dev/null || true
-                }
-              fi
-              ;;
-          esac
-        else
-          advanced_missing="\${advanced_missing} controller"
-        fi
-        echo "INSTALL_CORE_RUNTIME_PROBE=skipped_relaxed_final"
-        stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
-        [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-        if [ -e "$TARGET" ]; then
-          BACKUP="/data/clash.before_install.$stamp"
-          mv "$TARGET" "$BACKUP" || { echo "INSTALL_COMMIT_FAILED: cannot back up existing clash directory"; exit 1; }
-        fi
-        mv "$PACKAGE_ROOT" "$TARGET" || {
-          echo "INSTALL_COMMIT_FAILED: cannot atomically install staged package"
-          exit 1
-        }
-        [ "$PACKAGE_ROOT" = "$STAGE" ] || rm -rf "$STAGE" 2>/dev/null || true
-        sync 2>/dev/null || true
-        rm -f /data/kano_clash_zip_test.out /data/kano_clash_unzip.out 2>/dev/null || true
-        install_backup_count=0
-        for stale_install in $(ls -1dt /data/clash.before_install.* 2>/dev/null); do
-          install_backup_count=$((install_backup_count + 1))
-          [ "$install_backup_count" -le 2 ] || rm -rf "$stale_install" 2>/dev/null || true
-        done
-        echo "INSTALL_BACKUP=$BACKUP"
-        echo "INSTALL_ADVANCED_MISSING=$advanced_missing"
-        echo "INSTALL_PACKAGE_COMMITTED: yq=$yq_version zip_size=$zip_size unpacked=\${total_unpacked:-unknown}"
-        `, 92 * 1000);
-      if (!res2.success || !String(res2.content || '').includes('INSTALL_PACKAGE_COMMITTED')) {
-        return createToast(`安装包校验或提交失败<br>${safeTextToHtml(res2.content || '')}`, 'red', 10000);
-      }
-      const installBackupPath = ((String(res2.content || '').split('\n').find((line) => line.startsWith('INSTALL_BACKUP=')) || '')
-        .replace(/^INSTALL_BACKUP=/, '')
-        .trim());
-      const rollbackInstalledPackage = async (reason = '安装后检查失败') => {
-        const rollbackRes = await runDangerousShellWithRoot(`
-          set +e
-          rollback_rc=0
-          TARGET=${shellQuote(CLASH_DIR)}
-          BACKUP=${shellQuote(installBackupPath)}
-          [ -f ${shellQuote(CLASH_SERVICE)} ] && ${shellQuote(CLASH_SERVICE)} stop >/dev/null 2>&1 || true
-          sleep 1
-          ${verifyCoreStoppedCmd('INSTALL_ROLLBACK')} || rollback_rc=1
-          ${removeBootLinesCmd()}
-          ${flushGeneratedRulesCmd()}
-          ${verifyGeneratedRulesFlushedCmd()} || rollback_rc=1
-          if [ "$rollback_rc" -ne 0 ]; then
-            echo "KANO_ERROR_STAGE=install_rollback_cleanup"
-            echo "KANO_ERROR_CODE=cleanup_incomplete"
-            exit "$rollback_rc"
-          fi
-          if [ -n "$BACKUP" ] && [ ! -d "$BACKUP" ]; then
-            echo "INSTALL_ROLLBACK_BACKUP_MISSING: $BACKUP"
-            exit 1
-          fi
-          if [ -d "$TARGET" ]; then rm -rf "$TARGET" || exit 1; fi
-          if [ -n "$BACKUP" ] && [ -d "$BACKUP" ]; then
-            mv "$BACKUP" "$TARGET" || exit 1
-            echo "INSTALL_ROLLBACK=restored_previous"
-          else
-            echo "INSTALL_ROLLBACK=removed_failed_install"
-          fi
-          printf 'INSTALL_ROLLBACK_REASON=%s\n' ${shellQuote(reason)}
-        `, 60 * 1000, 'install_rollback');
-        const rollbackOk = rollbackRes.success
-          && /INSTALL_ROLLBACK=(?:restored_previous|removed_failed_install)/.test(String(rollbackRes.content || ''));
-        if (!rollbackOk) {
-          createToast(`安装失败，且安装目录回滚失败<br>${safeTextToHtml(rollbackRes.content || '')}`, 'red', 12000);
-        }
-        return rollbackOk;
-      };
-      const failInstalledPackage = async (message, detail = '') => {
-        const rolledBack = await rollbackInstalledPackage(message);
-        createToast(
-          `${escapeHtml(message)}${detail ? `<br>${safeTextToHtml(detail)}` : ''}<br>${rolledBack ? '已恢复安装前状态。' : '安装目录回滚失败。'}`,
-          'red',
-          12000,
-        );
-        return false;
-      };
-
-      createToast('\u68c0\u67e5\u4f9d\u8d56\u6587\u4ef6\uff0c\u53ef\u80fd\u9700\u8981\u4e00\u70b9\u65f6\u95f4...');
-      const res3 = await runShellWithRoot(`
-        [ -f ${shellQuote(CLASH_SERVICE)} ] && echo 1 || echo 0
-        `);
-      if (!res3.success || String(res3.content || '').trim() != '1') {
-        return await failInstalledPackage('依赖文件检查失败', res3.content || '');
-      }
-
-      createToast('\u6b63\u5728\u5b89\u88c5\u732b\u732b\uff0c\u8bbe\u7f6eClash\u81ea\u542f\u52a8...');
-      const res5 = await runShellWithRoot(`
-        mkdir -p ${shellQuote(CLASH_INOTIFY_DIR)} || exit 1
-        if [ -d ${shellQuote(CLASH_DIR)} ]; then
-          find ${shellQuote(CLASH_DIR)} -type d -exec chmod 755 {} \\;
-          find ${shellQuote(CLASH_DIR)} -type f -exec chmod 644 {} \\;
-        fi
-        for EXECUTABLE in \
-          ${shellQuote(CLASH_SERVICE)} \
-          ${shellQuote(CLASH_CORE)} \
-          ${shellQuote(`${CLASH_DIR}/Scripts/Clash.Inotify`)} \
-          ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)} \
-          ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_armv7`)} \
-          ${shellQuote(`${CLASH_DIR}/Scripts/clashctl`)} \
-          ${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)} \
-          ${shellQuote(`${CLASH_DIR}/Tools/mosdns_arm64`)} \
-          ${shellQuote(KANO_HELPER_CONVERTER_PATH)}; do
-          [ ! -f "$EXECUTABLE" ] || chmod 755 "$EXECUTABLE" || exit 1
-        done
-        DEVICE_ABI="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-        [ -n "$DEVICE_ABI" ] || DEVICE_ABI="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-        case "$DEVICE_ABI" in
-          arm64-v8a|aarch64|armv8*|*arm64*) INSTALLED_CONTROLLER=${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)} ;;
-          armeabi-v7a|armeabi|armv7*|armv6*) INSTALLED_CONTROLLER=${shellQuote(`${CLASH_DIR}/Scripts/clashctl_armv7`)} ;;
-          *)
-            INSTALLED_CONTROLLER=""
-            echo "INSTALL_ADVANCED_WARNING=unsupported_controller_abi:\${DEVICE_ABI:-unknown}"
-            ;;
-        esac
-        if [ -n "$INSTALLED_CONTROLLER" ] && [ -x "$INSTALLED_CONTROLLER" ]; then
-          controller_probe="$("$INSTALLED_CONTROLLER" --help 2>&1)"
-          controller_probe_rc=$?
-          case "$controller_probe_rc" in
-            126|127) echo "INSTALL_ADVANCED_WARNING=controller_unusable:$INSTALLED_CONTROLLER" ;;
-          esac
-        else
-          echo "INSTALL_ADVANCED_WARNING=controller_missing:$INSTALLED_CONTROLLER"
-        fi
-        [ -x ${shellQuote(CLASH_SERVICE)} ] || { echo "INSTALL_PERMISSION_FAILED: Clash.Service is not executable"; exit 1; }
-        [ -x ${shellQuote(CLASH_CORE)} ] || { echo "INSTALL_PERMISSION_FAILED: Clash.Core is not executable"; exit 1; }
-        service_probe="$(${shellQuote(CLASH_SERVICE)} --help 2>&1)"
-        service_probe_rc=$?
-        case "$service_probe_rc" in
-          126|127)
-            echo "INSTALL_PERMISSION_FAILED: Clash.Service cannot execute"
-            echo "$service_probe"
-            exit 1
-            ;;
-        esac
-        [ -f ${shellQuote(CLASH_SUB_URLS)} ] && chmod 600 ${shellQuote(CLASH_SUB_URLS)}
-        `);
-      if (!res5.success) return await failInstalledPackage('设置开机启动失败', res5.content || '');
-      const serviceWrapperReadyAfterInstall = await ensureServiceWrapper({ force: true });
-      if (!serviceWrapperReadyAfterInstall.success) {
-        return await failInstalledPackage('安装 Clash.Service 启动保护失败', serviceWrapperReadyAfterInstall.content || '');
-      }
-      const policyReadyAfterInstall = await ensurePolicyToolsScript();
-      if (!policyReadyAfterInstall) createToast('猫猫基础安装已完成；网络策略增强脚本暂未就绪，不影响核心启动。', 'yellow', 9000);
-      if (!(await ensureBootstrapConfig())) return await failInstalledPackage('创建基础配置失败');
-      const installYqReady = await ensureYqRuntime({ quiet: true });
-      if (installYqReady) {
-        const sanitized = await sanitizeConfigForTProxy({ showToast: false });
-        if (!sanitized) return await failInstalledPackage('配置适配失败，未启动新配置');
-      } else {
-        createToast('基础代理已安装；YAML 高级组件暂未就绪，将在首次使用订阅/模板/规则功能时自动修复。', 'yellow', 9000);
-      }
-      const bootWrite = await runShellWithRoot(addBootLinesCmd());
-      if (!bootWrite.success) return await failInstalledPackage('设置开机启动失败', bootWrite.content || '');
-
-      createToast('\u6b63\u5728\u542f\u52a8\u6838\u5fc3...');
-      const res6 = await startClashServiceClean({ stopFirst: false, reason: '首次启动' });
-      if (!res6.success) {
-        await networkRescue({ stopService: true, showOutput: false, reason: '\u9996\u6b21\u542f\u52a8\u5931\u8d25' });
-        return await failInstalledPackage('首次启动失败', res6.content || '');
-      }
-      if (!(await verifyStartOrRollback('\u9996\u6b21\u542f\u52a8'))) {
-        return await failInstalledPackage('首次启动健康检查失败');
-      }
-      const trafficModeReadyAfterInstall = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-      if (!trafficModeReadyAfterInstall) return await failInstalledPackage('首次启动流量模式检查失败');
-      const policyAppliedAfterInstall = !policyReadyAfterInstall
-        || await reapplyPolicyRulesSilent({ ensureScript: false });
-      if (!policyAppliedAfterInstall) return await failInstalledPackage('首次启动网络策略应用失败');
-      const helperReadyAfterInstall = await installBinaryHelperPreferred({ quiet: true });
-      scheduleBinaryHelperButtonRefresh();
-      if (!helperReadyAfterInstall) {
-        createToast('基础代理已安装；转换组件安装失败，当前使用 Shell 兼容模式。', 'yellow', 8000);
-      }
-
-      disabled_btn_enabled = false;
-
-      checkIsBootUp().then((isBootUp) => {
-        const boot_on = document.querySelector('#clash_boot_on');
-        if (!boot_on) return;
-        if (isBootUp) {
-          boot_on.style.background = 'var(--dark-btn-color-active)';
-        } else {
-          boot_on.style.background = '';
-        }
-      });
-      setTimeout(() => {
-        isMMRunning();
-      }, 3000);
-
-      showInfoDialog(
-        'mm_installed_confirm_1',
-        '\u6838\u5fc3\u5df2\u542f\u52a8',
-        `Web 面板：<a href="http://${UFI_DATA.lan_ipaddr}:7788/ui/" target="_blank">http://${UFI_DATA.lan_ipaddr}:7788/ui/</a><br />
-        访问密钥在“面板连接”中管理；节点在“订阅设置”中添加。`,
-      );
-    } finally {
-      disabled_btn_enabled = false;
-      setButtonBusy(btn_enabled, false);
-      releaseCriticalOperation(operationToken);
-      await runShellWithRoot(`rm -f ${shellQuote(DOWNLOAD_ZIP)} ${shellQuote(DOWNLOAD_LOG)}`);
-    }
-  };
+  btn_enabled.onclick = installF50PackageFromNetwork;
+  const localPackageBtn = document.createElement('button');
+  localPackageBtn.classList.add('btn');
+  localPackageBtn.textContent = '导入组件包';
+  localPackageBtn.onclick = chooseF50Package;
   const btn_disabled = document.createElement('button');
   btn_disabled.classList.add('btn', 'kano-danger');
   btn_disabled.textContent = '卸载插件';
-  btn_disabled.onclick = async () => {
-    if (!(await ensureAdvanced())) return;
-    const installState = await runShellWithRoot(`[ -d ${shellQuote(CLASH_DIR)} ] && echo 1 || echo 0`, 10 * 1000);
-    if (String(installState.content || '').trim() != '1') {
-      createToast('未发现可卸载的核心目录。', 'yellow');
-      return;
-    }
-    const operationToken = acquireCriticalOperation('卸载核心');
-    if (!operationToken) return;
-    const confirmed = await askConfirm(
-      'mm_uninstall_confirm',
-      '\u786e\u8ba4\u5378\u8f7d\u732b\u732b\uff1f',
-      `\u5c06\u505c\u6b62\u670d\u52a1\u3001\u79fb\u9664\u5f00\u673a\u81ea\u542f\uff0c\u6e05\u7406 TProxy/DNS/Policy \u94fe\uff0c\u5e76\u5220\u9664 <code>/data/clash</code> \u548c\u672c\u63d2\u4ef6\u521b\u5efa\u7684\u4e34\u65f6\u6587\u4ef6\u3002<br />
-      <b>\u672c\u6b21\u5378\u8f7d\u4e0d\u4f1a\u505a\u4efb\u4f55\u5907\u4efd</b>\uff1bconfig.yaml\u3001template.yaml\u3001\u8ba2\u9605\u8bb0\u5f55\u3001\u8986\u5199\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7\u90fd\u4f1a\u76f4\u63a5\u5220\u9664\u3002<br />
-      \u7ee7\u7eed\u524d\u8bf7\u786e\u8ba4\u4f60\u5df2\u7ecf\u4e0d\u9700\u8981\u8fd9\u4e9b\u6570\u636e\u3002`,
-      '\u786e\u8ba4\u5378\u8f7d',
-      '\u53d6\u6d88',
-    );
-    if (!confirmed) {
-      releaseCriticalOperation(operationToken);
-      return;
-    }
-    createToast('\u5378\u8f7d\u4e2d...', 'red');
-    setButtonBusy(btn_disabled, true, '\u5378\u8f7d\u4e2d\u2026');
-    try {
-      const res = await runShellWithRoot(`
-          set +e
-          uninstall_rc=0
-          echo "\u5378\u8f7d\u7b56\u7565: \u4e0d\u5907\u4efd\uff0c\u76f4\u63a5\u5220\u9664\u6240\u6709\u732b\u732b\u6570\u636e"
-          if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-            ${shellQuote(CLASH_SERVICE)} stop 2>&1 || echo "常规停止返回失败，继续检查核心状态"
-          fi
-          sleep 1
-          core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
-          if [ -n "$core_pid" ]; then
-            echo "常规停止未完成，正在强制停止核心"
-            for pid in $core_pid; do kill "$pid" 2>/dev/null || true; done
-            sleep 1
-            core_pid="$(pidof Clash.Core 2>/dev/null; pidof Clash 2>/dev/null; pidof mihomo 2>/dev/null || true)"
-            for pid in $core_pid; do kill -9 "$pid" 2>/dev/null || true; done
-            sleep 1
-          fi
-          ${verifyCoreStoppedCmd('UNINSTALL')} || uninstall_rc=1
-          ${removeBootLinesCmd()}
-          ${flushGeneratedRulesCmd()}
-          ${verifyGeneratedRulesFlushedCmd()} || uninstall_rc=1
-          if [ "$uninstall_rc" -ne 0 ]; then
-            echo "KANO_ERROR_STAGE=uninstall_cleanup"
-            echo "KANO_ERROR_CODE=cleanup_incomplete"
-            exit "$uninstall_rc"
-          fi
-          if [ -d ${shellQuote(CLASH_DIR)} ]; then
-            if rm -rf ${shellQuote(CLASH_DIR)}; then
-              echo "\u5df2\u5220\u9664 /data/clash"
-            else
-              echo "\u5220\u9664 /data/clash \u5931\u8d25"
-              exit 1
-            fi
-          else
-            echo "/data/clash \u4e0d\u5b58\u5728"
-          fi
-          ${removePluginOwnedArtifactsCmd()} || uninstall_rc=1
-          [ ! -e ${shellQuote(CLASH_DIR)} ] || {
-            echo "KANO_ERROR_STAGE=uninstall_delete"
-            echo "KANO_ERROR_CODE=clash_directory_remains"
-            exit 1
-          }
-          if [ "$uninstall_rc" -ne 0 ]; then exit "$uninstall_rc"; fi
-          echo "\u5df2\u5220\u9664\u63d2\u4ef6\u4e34\u65f6\u6587\u4ef6\u548c\u5185\u6838\u65e5\u5fd7"
-          echo "UNINSTALL_NO_BACKUP_DONE"
-          `, 60 * 1000);
-      if (!res.success || !String(res.content || '').includes('UNINSTALL_NO_BACKUP_DONE')) {
-        return createToast(`\u5378\u8f7d\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 10000);
-      }
-      createToast('\u5378\u8f7d\u5b8c\u6210', 'green');
-      await isMMRunning();
-    } finally {
-      setButtonBusy(btn_disabled, false);
-      releaseCriticalOperation(operationToken);
-    }
+  const buildUninstallCmd = () => {
+    const stages = buildUninstallStages();
+    return stages.map(stage => '( ' + stage.script + '\n)\nprintf "F50_STAGE_RC=%s\\n" "$?"').join('\n') + '\n' + buildF50FinalCheckScript();
   };
+
+btn_disabled.onclick = async () => {
+  const operationToken = acquireCriticalOperation('\u5378\u8f7d\u732b\u732b');
+  if (!operationToken) return;
+  setButtonBusy(btn_disabled, true, '\u5378\u8f7d\u4e2d\u2026');
+  pluginArtifactsRemoved = true;
+  try {
+    if (templateFlowTimer !== null) clearTimeout(templateFlowTimer);
+    templateFlowTimer = null;
+    templateFlowMessages.length = 0;
+    const result = await performF50Uninstall();
+    if (result.ok) {
+      runtimePreflightCache = null; runtimePreflightLoadPromise = null; f50BackendReady = false;
+      invalidateBinarySnapshot(); invalidateStatusSnapshot();
+      try { localStorage.removeItem('kano_mm_web_panel_visible'); localStorage.removeItem('#collapse_mm'); } catch (_) {}
+      const frame = document.getElementById('mm_iframe'); if (frame) frame.src = 'about:blank';
+      renderRuntimeStatus('stopped', '\u732b\u732b - \u672a\u5b89\u88c5', document.querySelector('#running_mm'));
+      const ruleStatus = document.querySelector('#mm_rule_mode_status'); if (ruleStatus) ruleStatus.textContent = '\u732b\u732b\u7ec4\u4ef6\u5df2\u5220\u9664';
+    } else pluginArtifactsRemoved = false;
+    operationFinish(result.ok, result.summary);
+    createToast(safeTextToHtml(result.summary), result.ok ? 'green' : 'red', result.ok ? 5000 : 12000);
+    return result.ok;
+  } catch (error) {
+    pluginArtifactsRemoved = false;
+    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error));
+    operationFinish(false, lastInstallDiagnostic.summary);
+    createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 12000);
+    return false;
+  } finally {
+    setButtonBusy(btn_disabled, false);
+    releaseCriticalOperation(operationToken);
+  }
+};
 
 
   const normalizeMac = (value = '') => {
     const text = String(value || '').replace(/#.*$/g, '').trim();
     if (!/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2}|(?:[0-9a-f]{4}\.){2}[0-9a-f]{4})$/i.test(text)) return '';
-    return text.replace(/[:.-]/g, '').toUpperCase().match(/.{2}/g).join(':');
+    const compact = text.replace(/[:.-]/g, '').toUpperCase();
+    if (compact === '000000000000' || (parseInt(compact.slice(0, 2), 16) & 1)) return '';
+    return compact.match(/.{2}/g).join(':');
   };
 
 
-  const syncUnifiedDeviceBypassStorage = async () => {
-    const res = await runShellWithRoot(`
-        set -e
-        DEVICE=${shellQuote(CLASH_DEVICE_BYPASS_FILE)}
-        LEGACY=${shellQuote(CLASH_MAC_BYPASS_FILE)}
-        BOOT=${shellQuote(BOOT_FILE)}
-        TMP="$DEVICE.unified.$$"
-        TMP_MAC="$LEGACY.unified.$$"
-        cleanup_unified_bypass() {
-          [ -z "$TMP" ] || rm -f "$TMP" 2>/dev/null || true
-          [ -z "$TMP_MAC" ] || rm -f "$TMP_MAC" 2>/dev/null || true
-        }
-        trap cleanup_unified_bypass EXIT
-        mkdir -p ${shellQuote(CLASH_POLICY_DIR)} ${shellQuote(CLASH_PROXY_DIR)}
-        [ -f "$DEVICE" ] || : > "$DEVICE"
-        [ -f "$LEGACY" ] || : > "$LEGACY"
-        normalize_device_items() {
-          sed 's/#.*$//' "$DEVICE" 2>/dev/null | awk 'NF {print $1}' | while IFS= read -r item; do
-            if echo "$item" | grep -Eiq '^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$|^[0-9A-F]{12}$|^([0-9A-F]{4}[.]){2}[0-9A-F]{4}$'; then
-              echo "$item" | tr '[:lower:]' '[:upper:]' | sed 's/[^0-9A-F]//g;s/../&:/g;s/:$//'
-            else
-              echo "$item"
-            fi
-          done
-        }
-        {
-          normalize_device_items
-          sed 's/#.*$//' "$LEGACY" 2>/dev/null | tr '[:lower:]' '[:upper:]' | sed 's/[[:space:]:.-]//g' | grep -E '^[0-9A-F]{12}$' | sed 's/../&:/g;s/:$//' || true
-        } | awk 'NF && !seen[toupper($0)]++ {print $0}' > "$TMP"
-        mv "$TMP" "$DEVICE"
-        TMP=""
-        grep -Ei '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' "$DEVICE" 2>/dev/null | tr '[:lower:]' '[:upper:]' | awk '!seen[$0]++' > "$TMP_MAC" || true
-        mv "$TMP_MAC" "$LEGACY"
-        TMP_MAC=""
-        chmod 600 "$DEVICE" "$LEGACY" 2>/dev/null || true
-        if [ -f "$BOOT" ]; then
-          awk -v line=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} '$0 != line { print }' "$BOOT" > "$BOOT.kano.$$" &&
-            mv "$BOOT.kano.$$" "$BOOT"
-          rm -f "$BOOT.kano.$$" 2>/dev/null || true
-        fi
-        rm -f ${shellQuote(CLASH_MAC_BYPASS_SCRIPT)} 2>/dev/null || true
-        for NAME in iptables ip6tables; do
-          IPT="$(command -v "$NAME" 2>/dev/null || true)"
-          if [ -z "$IPT" ]; then
-            for ALT in "\${NAME}-legacy" "\${NAME}-nft"; do
-              IPT="$(command -v "$ALT" 2>/dev/null || true)"
-              [ -z "$IPT" ] || break
-            done
-          fi
-          if [ -z "$IPT" ]; then
-            for BASE in /system/bin /system/xbin /vendor/bin /sbin; do
-              for CANDIDATE in "$BASE/$NAME" "$BASE/\${NAME}-legacy" "$BASE/\${NAME}-nft"; do
-                [ ! -x "$CANDIDATE" ] || { IPT="$CANDIDATE"; break 2; }
-              done
-            done
-          fi
-          [ -n "$IPT" ] || continue
-          for TABLE in mangle nat filter; do
-            for HOOK in PREROUTING OUTPUT FORWARD INPUT; do
-              while "$IPT" -t "$TABLE" -D "$HOOK" -j ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} 2>/dev/null; do :; done
-            done
-            "$IPT" -t "$TABLE" -F ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} 2>/dev/null || true
-            "$IPT" -t "$TABLE" -X ${shellQuote(CLASH_MAC_BYPASS_CHAIN)} 2>/dev/null || true
-          done
-        done
-        trap - EXIT
-        echo "UNIFIED_DEVICE_BYPASS_READY"
-        `, 15 * 1000);
-    return !!res.success;
-  };
+  const syncUnifiedDeviceBypassStorage = async () => true;
 
 
 
-  const kprBaseBuildPolicyToolsScript = () => [
-    '#!/system/bin/sh',
-    `# KANO_POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}`,
-    `POLICY_DIR=${shellQuote(CLASH_POLICY_DIR)}`,
-    `OPTIONS_FILE=${shellQuote(CLASH_POLICY_OPTIONS_FILE)}`,
-    `DEVICE_FILE=${shellQuote(CLASH_DEVICE_BYPASS_FILE)}`,
-    `SERVICE_FILE=${shellQuote(CLASH_SERVICE)}`,
-    'POLICY_CHAIN=KANO_POLICY_PRE',
-    'POLICY_CHAIN_A=KANO_POLICY_A',
-    'POLICY_CHAIN_B=KANO_POLICY_B',
-    `LEGACY_MAC_CHAIN=${shellQuote(CLASH_MAC_BYPASS_CHAIN)}`,
-    'DNS_CHAIN=KANO_DNS_HIJACK',
-    'DNS_CHAIN_A=KANO_DNS_A',
-    'DNS_CHAIN_B=KANO_DNS_B',
-    'QUIC_CHAIN=KANO_QUIC_BLOCK',
-    'QUIC_CHAIN_A=KANO_QUIC_A',
-    'QUIC_CHAIN_B=KANO_QUIC_B',
-    'list_ipt_candidates() {',
-    '  NAME="$1"',
-    '  {',
-    '    command -v "$NAME" 2>/dev/null || true',
-    '    command -v "${NAME}-legacy" 2>/dev/null || true',
-    '    command -v "${NAME}-nft" 2>/dev/null || true',
-    '    for BASE in /system/bin /system/xbin /vendor/bin /sbin; do',
-    '      for CANDIDATE in "$BASE/$NAME" "$BASE/${NAME}-legacy" "$BASE/${NAME}-nft"; do',
-    '        [ ! -x "$CANDIDATE" ] || echo "$CANDIDATE"',
-    '      done',
-    '    done',
-    "  } | awk 'NF && !seen[$0]++'",
-    '}',
-    'get_ipt() {',
-    '  NAME="$1"',
-    '  FIRST=""',
-    '  KANO_BIN=""',
-    '  for BIN in $(list_ipt_candidates "$NAME"); do',
-    '    [ -n "$FIRST" ] || FIRST="$BIN"',
-    '    RULES="$("$BIN" -t mangle -S PREROUTING 2>/dev/null)"',
-    '    if echo "$RULES" | grep -Eiq "TPROXY|clash|mihomo"; then',
-    '      echo "$BIN"',
-    '      return',
-    '    fi',
-    '    if [ -z "$KANO_BIN" ] && echo "$RULES" | grep -q "KANO"; then KANO_BIN="$BIN"; fi',
-    '  done',
-    '  if [ -n "$KANO_BIN" ]; then echo "$KANO_BIN"; elif [ -n "$FIRST" ]; then echo "$FIRST"; fi',
-    '}',
-    'get_opt() {',
-    '  KEY="$1"',
-    '  DEF="$2"',
-    '  VAL=""',
-    '  [ -f "$OPTIONS_FILE" ] && VAL="$(grep -E "^${KEY}=" "$OPTIONS_FILE" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\\r")"',
-    '  [ -n "$VAL" ] && echo "$VAL" || echo "$DEF"',
-    '}',
-    'norm_mac() {',
-    '  echo "$1" | tr "[:lower:]" "[:upper:]" | sed "s/[^0-9A-F]//g" | grep -E "^[0-9A-F]{12}$" | sed "s/../&:/g;s/:$//"',
-    '}',
-    'is_ipv4() {',
-    '  echo "$1" | awk -F. \'NF != 4 {exit 1} {for (i=1; i<=4; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1}\'',
-    '}',
-    'is_cidr() {',
-    '  addr="\${1%/*}"',
-    '  prefix="\${1##*/}"',
-    '  [ "$addr" != "$1" ] || return 1',
-    '  is_ipv4 "$addr" || return 1',
-    '  echo "$prefix" | grep -Eq "^[0-9]{1,2}$" || return 1',
-    '  [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 32 ] 2>/dev/null',
-    '}',
-    'is_ipv6() {',
-    '  echo "$1" | grep -q ":" && echo "$1" | grep -Eq "^[0-9A-Fa-f:]+$"',
-    '}',
-    'is_cidr6() {',
-    '  addr="${1%/*}"',
-    '  prefix="${1##*/}"',
-    '  [ "$addr" != "$1" ] || return 1',
-    '  is_ipv6 "$addr" || return 1',
-    '  echo "$prefix" | grep -Eq "^[0-9]{1,3}$" || return 1',
-    '  [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 128 ] 2>/dev/null',
-    '}',
-    'is_port_listening() {',
-    '  PORT="$1"; FAMILY="$2"',
-    '  HEX="$(printf "%04X" "$PORT" 2>/dev/null)"',
-    '  [ -n "$HEX" ] || return 1',
-    '  if [ "$FAMILY" = "6" ]; then',
-    '    ss -6 -lun 2>/dev/null | grep -Eq "[:.]$PORT[[:space:]]" && return 0',
-    '    netstat -lnu6 2>/dev/null | grep -Eq "[:.]$PORT[[:space:]]" && return 0',
-    '    grep -qi ":$HEX " /proc/net/udp6 2>/dev/null && return 0',
-    '  else',
-    '    ss -4 -lun 2>/dev/null | grep -Eq "[:.]$PORT[[:space:]]" && return 0',
-    '    netstat -lnu 2>/dev/null | grep -Ev "udp6" | grep -Eq "[:.]$PORT[[:space:]]" && return 0',
-    '    grep -qi ":$HEX " /proc/net/udp 2>/dev/null && return 0',
-    '  fi',
-    '  return 1',
-    '}',
-    'normalize_sources() {',
-    '  [ -f "$DEVICE_FILE" ] || return 0',
-    '  sed "s/#.*$//" "$DEVICE_FILE" 2>/dev/null | while IFS= read -r line; do',
-    '    set -- $line',
-    '    item="$1"',
-    '    [ -n "$item" ] || continue',
-    '    mac="$(norm_mac "$item")"',
-    '    if [ -n "$mac" ]; then echo "mac $mac"; continue; fi',
-    '    if is_cidr "$item"; then echo "src $item"; continue; fi',
-    '    if is_ipv4 "$item"; then echo "src $item/32"; continue; fi',
-    '    if is_cidr6 "$item"; then echo "src6 $item"; continue; fi',
-    '    if is_ipv6 "$item"; then echo "src6 $item/128"; continue; fi',
-    "  done | awk '!seen[$0]++'",
-    '}',
-    'flush_chain() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; CHAIN="$4"',
-    '  [ -n "$IPT" ] || return 0',
-    '  # Robust cleanup: remove jumps to CHAIN not only from the hook, but also from',
-    '  # previously generated chains. This prevents accidental self-jumps such as',
-    '  # KANO_POLICY_PRE -> KANO_POLICY_PRE, which can blackhole traffic.',
-    '  for SRC in PREROUTING OUTPUT FORWARD INPUT "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"; do',
-    '    while "$IPT" -t "$TABLE" -D "$SRC" -j "$CHAIN" 2>/dev/null; do :; done',
-    '  done',
-    '  "$IPT" -t "$TABLE" -F "$CHAIN" 2>/dev/null || true',
-    '  "$IPT" -t "$TABLE" -X "$CHAIN" 2>/dev/null || true',
-    '}',
-    'managed_hook_target() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"',
-    '  "$IPT" -t "$TABLE" -S "$HOOK" 2>/dev/null | awk -v hook="$HOOK" -v base="$BASE" -v a="$CHAIN_A" -v b="$CHAIN_B" \'',
-    '    $1 == "-A" && $2 == hook && $3 == "-j" && ($4 == base || $4 == a || $4 == b) { print $4; exit }',
-    "  '",
-    '}',
-    'remove_managed_hooks() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"',
-    '  for CHAIN in "$BASE" "$CHAIN_A" "$CHAIN_B"; do',
-    '    while "$IPT" -t "$TABLE" -D "$HOOK" -j "$CHAIN" 2>/dev/null; do :; done',
-    '  done',
-    '}',
-    'prepare_inactive_chain() {',
-    '  IPT="$1"; TABLE="$2"; ACTIVE="$3"; CHAIN_A="$4"; CHAIN_B="$5"',
-    '  [ "$ACTIVE" = "$CHAIN_A" ] && NEXT="$CHAIN_B" || NEXT="$CHAIN_A"',
-    '  "$IPT" -t "$TABLE" -N "$NEXT" 2>/dev/null || "$IPT" -t "$TABLE" -F "$NEXT" || return 1',
-    '  printf "%s\\n" "$NEXT"',
-    '}',
-    'activate_managed_hook() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; NEXT="$7"',
-    '  ACTIVE="$(managed_hook_target "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B")"',
-    '  if [ -n "$ACTIVE" ] && hook_is_first "$IPT" "$TABLE" "$HOOK" "$ACTIVE"; then',
-    '    "$IPT" -t "$TABLE" -R "$HOOK" 1 -j "$NEXT" || return 1',
-    '  else',
-    '    remove_managed_hooks "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B"',
-    '    "$IPT" -t "$TABLE" -I "$HOOK" 1 -j "$NEXT" || return 1',
-    '  fi',
-    '  hook_is_first "$IPT" "$TABLE" "$HOOK" "$NEXT"',
-    '}',
-    'cleanup_unused_chains() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; ACTIVE="$7"',
-    '  for CHAIN in "$BASE" "$CHAIN_A" "$CHAIN_B"; do',
-    '    [ "$CHAIN" = "$ACTIVE" ] && continue',
-    '    while "$IPT" -t "$TABLE" -D "$HOOK" -j "$CHAIN" 2>/dev/null; do :; done',
-    '    "$IPT" -t "$TABLE" -F "$CHAIN" 2>/dev/null || true',
-    '    "$IPT" -t "$TABLE" -X "$CHAIN" 2>/dev/null || true',
-    '  done',
-    '}',
-    'add_source_returns() {',
-    '  IPT="$1"; TABLE="$2"; CHAIN="$3"; FAMILY="$4"',
-    '  normalize_sources | while read kind value; do',
-    '    [ -n "$kind" ] || continue',
-    '    case "$kind" in',
-    '      mac) "$IPT" -t "$TABLE" -A "$CHAIN" -m mac --mac-source "$value" -j RETURN || exit 1 ;;',
-    '      src) [ "$FAMILY" != "4" ] || "$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j RETURN || exit 1 ;;',
-    '      src6) [ "$FAMILY" != "6" ] || "$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j RETURN || exit 1 ;;',
-    '    esac',
-    '  done',
-    '}',
-    'add_source_accepts() {',
-    '  IPT="$1"; TABLE="$2"; CHAIN="$3"; FAMILY="$4"',
-    '  normalize_sources | while read kind value; do',
-    '    [ -n "$kind" ] || continue',
-    '    case "$kind" in',
-    '      mac)',
-    '        ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -m mac --mac-source "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED mac $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
-    '        ;;',
-    '      src)',
-    '        if [ "$FAMILY" = "4" ]; then',
-    '          ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED src $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
-    '        fi',
-    '        ;;',
-    '      src6)',
-    '        if [ "$FAMILY" = "6" ]; then',
-    '          ERR="$("$IPT" -t "$TABLE" -A "$CHAIN" -s "$value" -j ACCEPT 2>&1)" || { echo "DEVICE_BYPASS_ITEM_FAILED src6 $value IPv$FAMILY: $ERR"; "$IPT" -t "$TABLE" -S "$CHAIN" 2>&1 || true; exit 1; }',
-    '        fi',
-    '        ;;',
-    '    esac',
-    '  done',
-    '}',
-    'flush_all() (',
-    '  FOUND=0',
-    '  for NAME in iptables ip6tables; do',
-    '    for IPT in $(list_ipt_candidates "$NAME"); do',
-    '      FOUND=1',
-    '      flush_chain "$IPT" mangle PREROUTING "$LEGACY_MAC_CHAIN"',
-    '      for CHAIN in "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"; do flush_chain "$IPT" mangle PREROUTING "$CHAIN"; done',
-    '      for CHAIN in "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; do flush_chain "$IPT" nat PREROUTING "$CHAIN"; done',
-    '      for CHAIN in "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"; do',
-    '        flush_chain "$IPT" filter FORWARD "$CHAIN"',
-    '        flush_chain "$IPT" filter OUTPUT "$CHAIN"',
-    '      done',
-    '    done',
-    '  done',
-    '  [ "$FOUND" = "1" ] || { echo "iptables/ip6tables \u4e0d\u5b58\u5728"; exit 1; }',
-    ')',
-    'apply_policy() {',
-    '  IPT="$1"; FAMILY="$2"',
-    '  traffic_mode="$(get_opt traffic_mode legacy)"',
-    '  case "$traffic_mode" in tproxy) transparent=on ;; tun|off) transparent=off ;; *) transparent="$(get_opt transparent on)" ;; esac',
-    '  ACTIVE="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  NEXT="$(prepare_inactive_chain "$IPT" mangle "$ACTIVE" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")" || { echo "POLICY_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  if [ "$transparent" = "off" ]; then',
-    '    "$IPT" -t mangle -A "$NEXT" -j ACCEPT || { echo "POLICY_OFF_ACCEPT_FAILED IPv$FAMILY"; return 1; }',
-    '  fi',
-    '  add_source_accepts "$IPT" mangle "$NEXT" "$FAMILY" || { echo "DEVICE_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t mangle -A "$NEXT" -j RETURN || { echo "POLICY_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  activate_managed_hook "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$NEXT" || { echo "POLICY_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
-    '}',
-    'apply_dns() {',
-    '  IPT="$1"; FAMILY="$2"',
-    '  dns_hijack="$(get_opt dns_hijack off)"',
-    '  dns_port="$(get_opt dns_port 1053)"',
-    '  echo "$dns_port" | grep -Eq "^[0-9]{2,5}$" || dns_port=1053',
-    '  if [ "$dns_hijack" != "on" ]; then',
-    '    remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"',
-    '    return 0',
-    '  fi',
-    '  if ! is_port_listening "$dns_port" "$FAMILY"; then remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1a\u7aef\u53e3 $dns_port \u672a\u76d1\u542c"; return 0; fi',
-    '  if ! "$IPT" -t nat -L >/dev/null 2>&1; then remove_managed_hooks "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"; echo "IPv$FAMILY DNS \u52ab\u6301\u8df3\u8fc7\uff1anat \u8868\u4e0d\u53ef\u7528"; return 0; fi',
-    '  ACTIVE="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '  NEXT="$(prepare_inactive_chain "$IPT" nat "$ACTIVE" "$DNS_CHAIN_A" "$DNS_CHAIN_B")" || { echo "DNS_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  add_source_accepts "$IPT" nat "$NEXT" "$FAMILY" || { echo "DNS_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$NEXT" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_UDP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$NEXT" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" || { echo "DNS_TCP_REDIRECT_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t nat -A "$NEXT" -j RETURN || { echo "DNS_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  activate_managed_hook "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$NEXT" || { echo "DNS_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
-    '}',
-    'apply_quic() {',
-    '  IPT="$1"; FAMILY="$2"',
-    '  quic_block="$(get_opt quic_block off)"',
-    '  if [ "$quic_block" != "on" ]; then',
-    '    remove_managed_hooks "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"',
-    '    return 0',
-    '  fi',
-    '  ACTIVE="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '  NEXT="$(prepare_inactive_chain "$IPT" filter "$ACTIVE" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")" || { echo "QUIC_CHAIN_PREPARE_FAILED IPv$FAMILY"; return 1; }',
-    '  add_source_returns "$IPT" filter "$NEXT" "$FAMILY" || { echo "QUIC_BYPASS_RULE_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t filter -A "$NEXT" -p udp --dport 443 -j DROP || { echo "QUIC_DROP_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t filter -A "$NEXT" -j RETURN || { echo "QUIC_RETURN_FAILED IPv$FAMILY"; return 1; }',
-    '  activate_managed_hook "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$NEXT" || { echo "QUIC_HOOK_SWITCH_FAILED IPv$FAMILY"; return 1; }',
-    '}',
-    'hook_is_first() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; CHAIN="$4"',
-    '  FIRST_RULE="$("$IPT" -t "$TABLE" -S "$HOOK" 2>/dev/null | awk -v hook="$HOOK" \'$1 == "-A" && $2 == hook {print; exit}\')"',
-    '  [ "$FIRST_RULE" = "-A $HOOK -j $CHAIN" ]',
-    '}',
-    'verify_source_accepts() {',
-    '  IPT="$1"; TABLE="$2"; CHAIN="$3"; FAMILY="$4"',
-    '  normalize_sources | while read kind value; do',
-    '    [ -n "$kind" ] || continue',
-    '    case "$kind" in',
-    '      mac) "$IPT" -t "$TABLE" -C "$CHAIN" -m mac --mac-source "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
-    '      src) [ "$FAMILY" != "4" ] || "$IPT" -t "$TABLE" -C "$CHAIN" -s "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
-    '      src6) [ "$FAMILY" != "6" ] || "$IPT" -t "$TABLE" -C "$CHAIN" -s "$value" -j ACCEPT >/dev/null 2>&1 || exit 1 ;;',
-    '    esac',
-    '  done',
-    '}',
-    'verify_family() {',
-    '  IPT="$1"; FAMILY="$2"',
-    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  [ -n "$ACTIVE_POLICY" ] && hook_is_first "$IPT" mangle PREROUTING "$ACTIVE_POLICY" || { echo "POLICY_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  "$IPT" -t mangle -C "$ACTIVE_POLICY" -j RETURN >/dev/null 2>&1 || { echo "POLICY_RETURN_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  verify_source_accepts "$IPT" mangle "$ACTIVE_POLICY" "$FAMILY" || { echo "DEVICE_BYPASS_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  dns_hijack="$(get_opt dns_hijack off)"',
-    '  dns_port="$(get_opt dns_port 1053)"',
-    '  echo "$dns_port" | grep -Eq "^[0-9]{2,5}$" || dns_port=1053',
-    '  if [ "$dns_hijack" = "on" ] && is_port_listening "$dns_port" "$FAMILY" && "$IPT" -t nat -L >/dev/null 2>&1; then',
-    '    ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '    [ -n "$ACTIVE_DNS" ] && hook_is_first "$IPT" nat PREROUTING "$ACTIVE_DNS" || { echo "DNS_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t nat -C "$ACTIVE_DNS" -p udp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_UDP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t nat -C "$ACTIVE_DNS" -p tcp --dport 53 -j REDIRECT --to-ports "$dns_port" >/dev/null 2>&1 || { echo "DNS_TCP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  fi',
-    '  if [ "$(get_opt quic_block off)" = "on" ]; then',
-    '    ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '    [ -n "$ACTIVE_QUIC" ] && hook_is_first "$IPT" filter FORWARD "$ACTIVE_QUIC" || { echo "QUIC_ORDER_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '    "$IPT" -t filter -C "$ACTIVE_QUIC" -p udp --dport 443 -j DROP >/dev/null 2>&1 || { echo "QUIC_DROP_VERIFY_FAILED IPv$FAMILY"; return 1; }',
-    '  fi',
-    '}',
-    'verify_all() {',
-    '  IPT="$(get_ipt iptables)"',
-    '  IP6T="$(get_ipt ip6tables)"',
-    '  ipv6="$(get_opt ipv6 off)"',
-    '  [ -n "$IPT" ] || { echo "POLICY_VERIFY_NO_IPV4_BACKEND"; return 1; }',
-    '  verify_family "$IPT" 4 || return 1',
-    '  if [ "$ipv6" = "on" ]; then',
-    '    [ -n "$IP6T" ] || { echo "POLICY_VERIFY_NO_IPV6_BACKEND"; return 1; }',
-    '    verify_family "$IP6T" 6 || return 1',
-    '  fi',
-    '  echo "POLICY_RULES_VERIFIED"',
-    '}',
-    'rollback_managed_hook() {',
-    '  IPT="$1"; TABLE="$2"; HOOK="$3"; BASE="$4"; CHAIN_A="$5"; CHAIN_B="$6"; OLD="$7"',
-    '  if [ -n "$OLD" ] && "$IPT" -t "$TABLE" -S "$OLD" >/dev/null 2>&1; then',
-    '    activate_managed_hook "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B" "$OLD" >/dev/null 2>&1 || return 1',
-    '  else',
-    '    remove_managed_hooks "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B"',
-    '  fi',
-    '  cleanup_unused_chains "$IPT" "$TABLE" "$HOOK" "$BASE" "$CHAIN_A" "$CHAIN_B" "$OLD"',
-    '}',
-    'rollback_family_hooks() {',
-    '  IPT="$1"; OLD_POLICY="$2"; OLD_DNS="$3"; OLD_QUIC="$4"',
-    '  rollback_managed_hook "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$OLD_POLICY" || return 1',
-    '  rollback_managed_hook "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$OLD_DNS" || return 1',
-    '  rollback_managed_hook "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$OLD_QUIC" || return 1',
-    '}',
-    'cleanup_family_chains() {',
-    '  IPT="$1"',
-    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '  ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '  cleanup_unused_chains "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B" "$ACTIVE_POLICY"',
-    '  cleanup_unused_chains "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B" "$ACTIVE_DNS"',
-    '  cleanup_unused_chains "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B" "$ACTIVE_QUIC"',
-    '}',
-    'apply_all() {',
-    '  IPT="$(get_ipt iptables)"',
-    '  IP6T="$(get_ipt ip6tables)"',
-    '  ipv6="$(get_opt ipv6 off)"',
-    '  [ -n "$IPT" ] || { echo "IPv4 iptables \u4e0d\u5b58\u5728\uff0c\u62d2\u7edd\u5047\u62a5\u89c4\u5219\u5df2\u5e94\u7528"; exit 1; }',
-    '  [ "$ipv6" != "on" ] || [ -n "$IP6T" ] || { echo "IPv6 \u5df2\u5f00\u542f\uff0c\u4f46 ip6tables \u4e0d\u5b58\u5728"; exit 1; }',
-    '  mkdir -p "$POLICY_DIR"',
-    '  P4_OLD_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  P4_OLD_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '  P4_OLD_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '  P6_OLD_POLICY=""; P6_OLD_DNS=""; P6_OLD_QUIC=""',
-    '  if [ -n "$IP6T" ]; then',
-    '    P6_OLD_POLICY="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '    P6_OLD_DNS="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '    P6_OLD_QUIC="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '  fi',
-    "  trap 'rc=$?; if [ \"$rc\" -ne 0 ]; then rollback_family_hooks \"$IPT\" \"$P4_OLD_POLICY\" \"$P4_OLD_DNS\" \"$P4_OLD_QUIC\" >/dev/null 2>&1 || true; [ -z \"$IP6T\" ] || rollback_family_hooks \"$IP6T\" \"$P6_OLD_POLICY\" \"$P6_OLD_DNS\" \"$P6_OLD_QUIC\" >/dev/null 2>&1 || true; echo \"POLICY_APPLY_ROLLED_BACK\"; fi; trap - EXIT; exit \"$rc\"' EXIT",
-    '  apply_policy "$IPT" 4 || exit 1',
-    '  apply_dns "$IPT" 4 || exit 1',
-    '  apply_quic "$IPT" 4 || exit 1',
-    '  if [ "$ipv6" = "on" ]; then',
-    '    apply_policy "$IP6T" 6 || exit 1',
-    '    apply_dns "$IP6T" 6 || exit 1',
-    '    apply_quic "$IP6T" 6 || exit 1',
-    '  elif [ -n "$IP6T" ]; then',
-    '    remove_managed_hooks "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B"',
-    '    remove_managed_hooks "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B"',
-    '    remove_managed_hooks "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B"',
-    '  fi',
-    '  verify_all || exit 1',
-    '  cleanup_family_chains "$IPT"',
-    '  [ -z "$IP6T" ] || cleanup_family_chains "$IP6T"',
-    '  trap - EXIT',
-    '  [ "$ipv6" = "on" ] && echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4/IPv6\uff09" || echo "\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528\uff08IPv4\uff09"',
-    '}',
-    'core_is_running() {',
-    '  pidof Clash.Core >/dev/null 2>&1 && return 0',
-    '  pidof mihomo >/dev/null 2>&1 && return 0',
-    '  pgrep -f "/data/clash/Proxy/[C]lash\\.Core" >/dev/null 2>&1 && return 0',
-    '  return 1',
-    '}',
-    'policy_is_first() {',
-    '  IPT="$1"',
-    '  ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  [ -n "$ACTIVE_POLICY" ] && hook_is_first "$IPT" mangle PREROUTING "$ACTIVE_POLICY"',
-    '}',
-    'runtime_firewall_ready() {',
-    '  IPT="$1"',
-    '  traffic_mode="$(get_opt traffic_mode legacy)"',
-    '  [ "$traffic_mode" = "tproxy" ] || return 0',
-    '  "$IPT" -t mangle -S PREROUTING 2>/dev/null | grep -Eiq "TPROXY|clash|mihomo"',
-    '}',
-    'policy_order_stable() {',
-    '  IPT="$1"',
-    '  policy_is_first "$IPT" || return 1',
-    '  [ "$(get_opt ipv6 off)" = "on" ] || return 0',
-    '  IP6T="$(get_ipt ip6tables)"',
-    '  [ -n "$IP6T" ] && policy_is_first "$IP6T"',
-    '}',
-    'boot_apply() {',
-    '  attempt=0',
-    '  stable=0',
-    '  while [ "$attempt" -lt 30 ]; do',
-    '    attempt=$((attempt + 1))',
-    '    if core_is_running; then',
-    '      IPT="$(get_ipt iptables)"',
-    '      if [ -n "$IPT" ] && runtime_firewall_ready "$IPT"; then',
-    '        if policy_order_stable "$IPT"; then',
-    '          stable=$((stable + 1))',
-    '          if [ "$stable" -ge 5 ]; then',
-    '            echo "BOOT_POLICY_STABLE=1 attempts=$attempt"',
-    '            return 0',
-    '          fi',
-    '        else',
-    '          stable=0',
-    '          (apply_all) || { echo "BOOT_POLICY_APPLY_RETRY=$attempt"; sleep 2; continue; }',
-    '        fi',
-    '      else',
-    '        stable=0',
-    '      fi',
-    '    else',
-    '      stable=0',
-    '    fi',
-    '    sleep 2',
-    '  done',
-    '  echo "BOOT_POLICY_STABLE=0 attempts=$attempt"',
-    '  return 1',
-    '}',
-    'status_all() {',
-    '  IPT="$(get_ipt iptables)"',
-    '  IP6T="$(get_ipt ip6tables)"',
-    '  [ -n "$IPT" ] || [ -n "$IP6T" ] || { echo "iptables/ip6tables \u4e0d\u5b58\u5728"; exit 1; }',
-    '  echo "[iptables binaries]"',
-    '  echo "IPv4=${IPT:-missing}"',
-    '  echo "IPv6=${IP6T:-missing}"',
-    '  echo',
-    '  echo "[iptables candidates]"',
-    '  for NAME in iptables ip6tables; do',
-    '    echo "$NAME:"',
-    '    CANDIDATES="$(list_ipt_candidates "$NAME")"',
-    '    if [ -z "$CANDIDATES" ]; then',
-    '      echo "  missing"',
-    '      continue',
-    '    fi',
-    '    for BIN in $CANDIDATES; do',
-    '      VERSION="$("$BIN" --version 2>&1 | head -n 1)"',
-    '      ACTIVE="$("$BIN" -t mangle -S PREROUTING 2>/dev/null | grep -Eic "TPROXY|clash|mihomo|KANO" || true)"',
-    '      echo "  $BIN | ${VERSION:-unknown} | active_markers=${ACTIVE:-0}"',
-    '    done',
-    '  done',
-    '  echo',
-    '  echo "[Clash.Service firewall references]"',
-    '  grep -En "iptables|ip6tables|nft" "$SERVICE_FILE" 2>/dev/null | head -n 20 || true',
-    '  echo',
-    '  echo "[options]"',
-    '  [ -f "$OPTIONS_FILE" ] && cat "$OPTIONS_FILE" || echo "transparent=on"',
-    '  echo',
-    '  echo "[device bypass: normalized]"',
-    '  normalize_sources || true',
-    '  echo',
-    '  echo "[mangle PREROUTING]"',
-    '  [ -z "$IPT" ] || "$IPT" -t mangle -S PREROUTING 2>/dev/null || true',
-    '  echo',
-    '  ACTIVE_POLICY=""',
-    '  [ -z "$IPT" ] || ACTIVE_POLICY="$(managed_hook_target "$IPT" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '  echo "[active policy chain: ${ACTIVE_POLICY:-none}]"',
-    '  [ -z "$IPT" ] || [ -z "$ACTIVE_POLICY" ] || "$IPT" -t mangle -S "$ACTIVE_POLICY" 2>/dev/null || true',
-    '  echo "[active policy counters]"',
-    '  [ -z "$IPT" ] || [ -z "$ACTIVE_POLICY" ] || "$IPT" -t mangle -nvxL "$ACTIVE_POLICY" --line-numbers 2>/dev/null || true',
-    '  echo',
-    '  echo "[nat DNS]"',
-    '  [ -z "$IPT" ] || "$IPT" -t nat -S PREROUTING 2>/dev/null | grep -E "$DNS_CHAIN|$DNS_CHAIN_A|$DNS_CHAIN_B" || true',
-    '  ACTIVE_DNS=""',
-    '  [ -z "$IPT" ] || ACTIVE_DNS="$(managed_hook_target "$IPT" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '  [ -z "$IPT" ] || [ -z "$ACTIVE_DNS" ] || "$IPT" -t nat -S "$ACTIVE_DNS" 2>/dev/null || true',
-    '  echo',
-    '  echo "[filter QUIC]"',
-    '  ACTIVE_QUIC=""',
-    '  [ -z "$IPT" ] || ACTIVE_QUIC="$(managed_hook_target "$IPT" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '  [ -z "$IPT" ] || "$IPT" -t filter -S FORWARD 2>/dev/null | grep -E "$QUIC_CHAIN|$QUIC_CHAIN_A|$QUIC_CHAIN_B" || true',
-    '  [ -z "$IPT" ] || [ -z "$ACTIVE_QUIC" ] || "$IPT" -t filter -S "$ACTIVE_QUIC" 2>/dev/null || true',
-    '  echo',
-    '  echo "[clients]"',
-    '  cat /proc/net/arp 2>/dev/null || true',
-    '  if [ -n "$IP6T" ]; then',
-    '    echo',
-    '    echo "[IPv6 mangle PREROUTING]"',
-    '    "$IP6T" -t mangle -S PREROUTING 2>/dev/null | grep -E "$POLICY_CHAIN|TPROXY|clash|mihomo|KANO" || true',
-    '    ACTIVE_POLICY6="$(managed_hook_target "$IP6T" mangle PREROUTING "$POLICY_CHAIN" "$POLICY_CHAIN_A" "$POLICY_CHAIN_B")"',
-    '    echo "[IPv6 active policy: ${ACTIVE_POLICY6:-none}]"',
-    '    [ -z "$ACTIVE_POLICY6" ] || "$IP6T" -t mangle -S "$ACTIVE_POLICY6" 2>/dev/null || true',
-    '    echo "[IPv6 nat DNS]"',
-    '    ACTIVE_DNS6="$(managed_hook_target "$IP6T" nat PREROUTING "$DNS_CHAIN" "$DNS_CHAIN_A" "$DNS_CHAIN_B")"',
-    '    [ -z "$ACTIVE_DNS6" ] || "$IP6T" -t nat -S "$ACTIVE_DNS6" 2>/dev/null || true',
-    '    echo "[IPv6 filter QUIC]"',
-    '    ACTIVE_QUIC6="$(managed_hook_target "$IP6T" filter FORWARD "$QUIC_CHAIN" "$QUIC_CHAIN_A" "$QUIC_CHAIN_B")"',
-    '    [ -z "$ACTIVE_QUIC6" ] || "$IP6T" -t filter -S "$ACTIVE_QUIC6" 2>/dev/null || true',
-    '  fi',
-    '}',
-    'case "$1" in',
-    '  apply) apply_all ;;',
-    '  boot-apply) boot_apply ;;',
-    '  verify) verify_all ;;',
-    '  flush) flush_all; echo "\u7b56\u7565\u89c4\u5219\u5df2\u6e05\u7a7a" ;;',
-    '  status) status_all ;;',
-    '  *) apply_all ;;',
-    'esac',
-  ].join('\n');
 
-  const ensurePolicyToolsScript = async ({ syncStorage = true } = {}) => {
-    let res = await runShellWithRoot(`
-        set -e
-        TARGET=${shellQuote(CLASH_POLICY_SCRIPT)}
-        VERSION_MARKER=${shellQuote(`# KANO_POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}`)}
-        if [ -x "$TARGET" ] && grep -qxF "$VERSION_MARKER" "$TARGET" 2>/dev/null; then
-          echo "POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}"
-          echo "POLICY_SCRIPT_UNCHANGED=1"
-          exit 0
-        fi
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Scripts`)} ${shellQuote(CLASH_POLICY_DIR)}
-        `, 10000);
-    if (res.success && !String(res.content || '').includes('POLICY_SCRIPT_UNCHANGED=1')) {
-      const staged = await stageTextBesideTarget(CLASH_POLICY_SCRIPT, buildPolicyToolsScript(), '策略脚本');
-      if (!staged.ok) {
-        createToast(`策略脚本暂存失败<br>${safeTextToHtml(staged.message || '')}`, 'red', 8000);
-        return false;
-      }
-      res = await runShellWithRoot(`
-        set -e
-        TARGET=${shellQuote(CLASH_POLICY_SCRIPT)}
-        STAGE=${shellQuote(staged.stagePath)}
-        CHECK_OUT=/data/kano_policy_script_check.out
-        cleanup_policy_script() {
-          rc=$?
-          rm -f "$STAGE" "$CHECK_OUT" 2>/dev/null || true
-          trap - EXIT
-          exit "$rc"
-        }
-        trap cleanup_policy_script EXIT
-        [ -s "$STAGE" ] || { echo POLICY_SCRIPT_STAGE_MISSING; exit 1; }
-        chmod 755 "$STAGE"
-        if [ -x /system/bin/sh ] && /system/bin/sh -n /dev/null >/dev/null 2>&1; then
-          /system/bin/sh -n "$STAGE" >"$CHECK_OUT" 2>&1 || {
-            echo "POLICY_SCRIPT_SYNTAX_FAILED"
-            cat "$CHECK_OUT" 2>/dev/null || true
-            exit 1
-          }
-          echo "POLICY_SCRIPT_SYNTAX=ok"
-        else
-          echo "POLICY_SCRIPT_SYNTAX=unsupported"
-        fi
-        mv -f "$STAGE" "$TARGET"
-        trap - EXIT
-        rm -f "$CHECK_OUT" 2>/dev/null || true
-        echo "POLICY_SCRIPT_VERSION=${POLICY_SCRIPT_VERSION}"
-        `, 20000);
-    }
-    if (!res.success) {
-      createToast(`\u5199\u5165\u7b56\u7565\u5de5\u5177\u811a\u672c\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
-      return false;
-    }
-    if (syncStorage && !(await syncUnifiedDeviceBypassStorage())) {
-      createToast('统一 IP/MAC 绕过存储失败，未应用新规则', 'red', 8000);
-      return false;
-    }
-    return true;
-  };
 
-  const parsePolicyOptionsText = (text = '') => {
-    const options = {
-      traffic_mode: '',
-      transparent: 'on',
-      ipv6: 'off',
-      quic_block: 'off',
-      dns_hijack: 'off',
-      dns_port: '1053',
-      proxy_group: 'Proxy',
-    };
-    String(text || '').split(/\r?\n/).forEach((line) => {
-      const m = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
-      if (m) options[m[1]] = m[2];
-    });
-    if (!['tproxy', 'tun', 'off'].includes(options.traffic_mode)) {
-      options.traffic_mode = options.transparent == 'off' ? 'off' : 'tproxy';
-    }
-    return options;
-  };
+  const ensurePolicyToolsScript = async () => await ensureCompatBackend();
+
+  const parsePolicyOptionsText = (text='')=>{
+ const options={traffic_mode:'',transparent:'on',ipv6:'off',quic_block:'off',dns_hijack:'on',dns_port:'1053',tproxy_port:'7895',proxy_group:'Proxy'};
+ for(const line of String(text).split(/\r?\n/)){const m=line.match(/^([A-Za-z0-9_]+)=(.*)$/);if(m)options[m[1]]=m[2]}
+ if(!['tproxy','tun','off'].includes(options.traffic_mode))options.traffic_mode=options.transparent==='off'?'off':'tproxy';
+ options.dns_port='1053';options.tproxy_port='7895';return options;
+};
 
   const readPolicyState = async () => {
-    const helperResult = await runBinaryHelperJson('policy-read', [
-      '--options', CLASH_POLICY_OPTIONS_FILE,
-      '--device', CLASH_DEVICE_BYPASS_FILE,
-      '--direct-domain', CLASH_DIRECT_DOMAIN_FILE,
-      '--direct-ip', CLASH_DIRECT_IP_FILE,
-      '--proxy-domain', CLASH_PROXY_DOMAIN_FILE,
-      '--reject-domain', CLASH_REJECT_DOMAIN_FILE,
-    ]);
-    if (helperResult) {
-      return {
-        options: parsePolicyOptionsText(helperResult.options || ''),
-        deviceBypass: String(helperResult.deviceBypass || ''),
-        directDomain: String(helperResult.directDomain || ''),
-        directIp: String(helperResult.directIp || ''),
-        proxyDomain: String(helperResult.proxyDomain || ''),
-        rejectDomain: String(helperResult.rejectDomain || ''),
-      };
-    }
     const res = await runShellWithRoot(`
         set -e
         emit_policy_file() {
           name="$1"
           path="$2"
           [ -f "$path" ] || return 0
-          timeout 5s awk -v prefix="KANO_POLICY_\${name}=" '{print prefix $0}' "$path"
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 5s awk -v prefix="KANO_POLICY_\${name}=" '{print prefix $0}' "$path"
+          else
+            awk -v prefix="KANO_POLICY_\${name}=" '{print prefix $0}' "$path"
+          fi
         }
         emit_policy_file options ${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
         emit_policy_file deviceBypass ${shellQuote(CLASH_DEVICE_BYPASS_FILE)}
@@ -8523,19 +7344,8 @@ EOF_KANO_SERVICE
   };
 
   const refreshModeBadge = async () => {
-    try {
-      let optionsText = '';
-      const snapshot = await readBinarySnapshot();
-      if (snapshot) {
-        optionsText = String(snapshot.options || '');
-      } else {
-        const res = await runShellWithRoot(`[ -f ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} ] && timeout 5s cat ${shellQuote(CLASH_POLICY_OPTIONS_FILE)}; exit 0`);
-        if (res.success) optionsText = String(res.content || '');
-      }
-      updateModeBadge(parsePolicyOptionsText(optionsText).traffic_mode);
-    } catch (e) {
-      console.error('refresh mode badge failed', e);
-    }
+    try { updateModeBadge((await readStatusSnapshot()).trafficMode); }
+    catch (error) { console.error('mode status unavailable', error); }
   };
 
   const normalizeIpLike = (value = '') => {
@@ -8561,9 +7371,10 @@ EOF_KANO_SERVICE
     const seen = new Set();
     const rows = [];
     String(value || '').split('\n').forEach((line, index) => {
-      const raw = line.trim();
-      if (!raw || raw.startsWith('#')) return;
-      const item = raw.split(/\s+/)[0];
+      const raw = line.replace(/#.*$/, '').trim();
+      if (!raw) return;
+      const item = raw;
+      if (/\s/.test(item)) { invalid.push(`${index + 1}: ${raw}`); return; }
       const mac = normalizeMac(item);
       const ip = normalizeIpLike(item);
       const ipv6 = normalizeIpv6Like(item);
@@ -8626,6 +7437,10 @@ EOF_KANO_SERVICE
   };
 
   const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
+    if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
+      createToast('\u6a21\u5f0f\u6216 DNS \u7aef\u53e3\u65e0\u6548', 'red', 8000);
+      return false;
+    }
     const normalizedDevice = normalizeDeviceBypassText(state.deviceBypass || '');
     if (normalizedDevice.invalid.length > 0) {
       createToast(`\u8bbe\u5907\u7ed5\u8fc7\u5217\u8868\u6709\u683c\u5f0f\u9519\u8bef\uff1a<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
@@ -8635,7 +7450,7 @@ EOF_KANO_SERVICE
       .map((line) => normalizeMac(line.trim()))
       .filter(Boolean)
       .filter((item, index, array) => array.indexOf(item) == index);
-    const macMirrorText = macMirrorRows.join('\n') + (macMirrorRows.length ? '\n' : '');
+    const macMirrorText = state.options.traffic_mode === 'tproxy' ? macMirrorRows.join('\n') + (macMirrorRows.length ? '\n' : '') : '';
     const trafficMode = ['tproxy', 'tun', 'off'].includes(state.options.traffic_mode)
       ? state.options.traffic_mode
       : 'tproxy';
@@ -8812,8 +7627,12 @@ EOF_KANO_SERVICE
 
   const applyPolicyToolsRules = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
+    if (!(await getCorePid())) {
+      createToast('规则脚本已更新；核心未运行，未下发接管规则', 'yellow', 7000);
+      return false;
+    }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply`);
-    if (!res.success) {
+    if (!res.success || !String(res.content || '').includes('POLICY_APPLY_OK')) {
       createToast(`\u7b56\u7565\u89c4\u5219\u5e94\u7528\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
     }
@@ -8823,30 +7642,38 @@ EOF_KANO_SERVICE
 
   const reapplyPolicyRulesSilent = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
-    const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply`);
-    return res.success;
+    const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply 2>&1`);
+    const ok = !!res.success && String(res.content || '').includes('POLICY_APPLY_OK');
+    if (!ok) {
+      const detail = sanitizeSubscriptionSecrets(String(res.content || '策略脚本未返回成功结果')).slice(-1800);
+      const message = `网络策略应用失败：${detail}`;
+      if (activeCriticalOperation) activeCriticalOperation.failure = message;
+      createToast(safeTextToHtml(message), 'red', 12000);
+    }
+    return ok;
   };
 
 
+
   const readClientListText = async () => {
-    const helperResult = await runBinaryHelperJson('clients');
-    if (helperResult) return String(helperResult.text || '');
     const res = await runShellWithRoot(`
         echo "IP MAC SOURCE"
-        awk 'NR>1 && $1 != "IP" && $4 != "00:00:00:00:00:00" {print $1, $4, "arp"}' /proc/net/arp 2>/dev/null
-        ip neigh 2>/dev/null | awk 'NF >= 5 {ip=$1; mac=""; for(i=1;i<=NF;i++){if($i=="lladdr") mac=$(i+1)} if(mac!="") print ip, mac, "neigh"}'
-        `);
-    if (!res.success) return '';
-    const seen = new Set();
-    return String(res.content || '').split('\n').filter((line, index) => {
-      if (index == 0) return true;
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 2) return false;
-      const key = `${parts[0]} ${parts[1]}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).join('\n');
+        awk 'NR>1 && $3!="0x0" && $4!="00:00:00:00:00:00" {print $1, $4, "arp"}' /proc/net/arp 2>/dev/null
+        ip -4 neigh show 2>/dev/null || exit 1
+        if [ -f /proc/net/if_inet6 ]; then ip -6 neigh show 2>/dev/null || exit 1; fi
+        `, 8000);
+    if (!res.success) throw new Error('\u65e0\u6cd5\u8bfb\u53d6\u5ba2\u6237\u7aef\u90bb\u5c45\u8868');
+    const seen = new Set(), rows = ['IP MAC SOURCE'];
+    for (const line of String(res.content || '').split('\n')) {
+      if (/\b(?:FAILED|INCOMPLETE)\b/.test(line)) continue;
+      const parts = line.trim().split(/\s+/), macAt = parts.indexOf('lladdr');
+      const ip = normalizeIpLike(parts[0]) || normalizeIpv6Like(parts[0]);
+      const mac = normalizeMac(macAt >= 0 ? parts[macAt + 1] : parts[1]);
+      if (!ip || !mac) continue;
+      const key = ip + ' ' + mac;
+      if (!seen.has(key)) { seen.add(key); rows.push(key + (macAt >= 0 ? ' neigh' : ' arp')); }
+    }
+    return rows.join('\n');
   };
 
   const showPolicyStatus = async () => {
@@ -8871,25 +7698,25 @@ EOF_KANO_SERVICE
       'mm_policy_tools_toast',
       `
         <style>
-          #kano_policy_shell{pointer-events:all;width:94vw;max-width:960px;box-sizing:border-box;}
+          #kano_policy_shell{pointer-events:all;min-width:0;width:min(960px,calc(100vw - 64px));max-width:100%;box-sizing:border-box;}
           #kano_policy_shell *{box-sizing:border-box;}
           #kano_policy_shell .kp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
           #kano_policy_shell .kp-title{font-size:.82rem;font-weight:800;line-height:1.2;}
-          #kano_policy_shell .kp-body{display:grid;grid-template-columns:170px 1fr;gap:12px;max-height:72vh;min-height:430px;}
+          #kano_policy_shell .kp-body{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px;max-height:72vh;min-height:430px;}
           #kano_policy_shell .kp-nav{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:8px;background:rgba(255,255,255,.045);height:max-content;}
           #kano_policy_shell .kp-tab{width:100%;text-align:left;border:1px solid transparent;border-radius:10px;padding:10px 11px;margin-bottom:6px;background:transparent;color:inherit;font-size:.64rem;line-height:1.25;}
           #kano_policy_shell .kp-tab:last-child{margin-bottom:0;}
           #kano_policy_shell .kp-tab.kp-active{background:var(--dark-btn-color-active);border-color:rgba(255,255,255,.18);color:#fff;}
-          #kano_policy_shell .kp-main{min-width:0;overflow:auto;padding-right:4px;}
+          #kano_policy_shell .kp-main{max-width:100%;min-width:0;overflow:auto;padding-right:4px;}
           #kano_policy_shell .kp-panel{display:none;}
           #kano_policy_shell .kp-panel.kp-show{display:block;}
-          #kano_policy_shell .kp-card{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px;background:rgba(255,255,255,.045);margin-bottom:10px;}
+          #kano_policy_shell .kp-card{min-width:0;overflow-wrap:anywhere;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px;background:rgba(255,255,255,.045);margin-bottom:10px;}
           #kano_policy_shell .kp-card-title{font-size:.70rem;font-weight:800;margin-bottom:8px;}
           #kano_policy_shell .kp-desc{font-size:.60rem;line-height:1.6;opacity:.72;margin:6px 0 10px;}
-          #kano_policy_shell .kp-row{display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:.63rem;}
+          #kano_policy_shell .kp-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:.63rem;}
           #kano_policy_shell .kp-row:first-of-type{border-top:none;}
           #kano_policy_shell .kp-label{opacity:.82;font-weight:700;}
-          #kano_policy_shell input,#kano_policy_shell select,#kano_policy_shell textarea{border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(0,0,0,.45);color:inherit;outline:none;}
+          #kano_policy_shell input,#kano_policy_shell select,#kano_policy_shell textarea{min-width:0;max-width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(0,0,0,.45);color:inherit;outline:none;}
           #kano_policy_shell select,#kano_policy_shell input{padding:8px;}
           #kano_policy_shell textarea{width:100%;min-height:130px;padding:10px;font-family:monospace;line-height:1.45;resize:vertical;}
           #kano_policy_shell .kp-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
@@ -8940,11 +7767,11 @@ EOF_KANO_SERVICE
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">QUIC</div>
-                    <label><input id="mm_policy_quic" type="checkbox"> \u62e6\u622a UDP/443\uff0c\u4f7f\u5e94\u7528\u56de\u843d TCP</label>
+                    <label><input id="mm_policy_quic" type="checkbox"> 拦截下游 UDP/443（直连设备、定向私网除外）</label>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS \u52ab\u6301</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> \u52ab\u6301 53 \u5230 mihomo DNS \u7aef\u53e3 <input id="mm_policy_dns_port" style="width:82px;margin-left:6px;" value="1053"></label>
+                    <label><input id="mm_policy_dns" type="checkbox"> \u52ab\u6301 53 \u5230 mihomo DNS \u7aef\u53e3 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="1053"></label>
                   </div>
                 </div>
               </section>
@@ -9020,14 +7847,15 @@ EOF_KANO_SERVICE
     const updateDeviceBypassScope = () => {
       const mode = get('#mm_policy_traffic_mode').value;
       const note = get('#mm_policy_device_scope');
-      note.classList.toggle('kp-warning', mode != 'tproxy');
-      if (mode == 'tun') {
-        setText(note, 'TUN 模式下，本列表不保证绕过 Mihomo TUN；设备直连请使用 TProxy 模式。');
-      } else if (mode == 'off') {
-        setText(note, '流量接管已关闭，所有设备均不经过 TProxy。');
-      } else {
-        setText(note, 'TProxy 模式下，匹配设备会同时绕过代理和 DNS 劫持，并跳过 QUIC 拦截。');
-      }
+      const disabled = mode !== 'tproxy';
+      get('#mm_policy_device').disabled = disabled;
+      get('#mm_policy_scan_clients').disabled = disabled;
+      if (disabled) get('#mm_policy_clients').innerHTML = '';
+      note.classList.toggle('kp-warning', disabled);
+      setText(note, mode === 'tun'
+        ? 'TUN \u4f7f\u7528\u56fa\u5b9a\u8def\u7531\u63a5\u7ba1\uff0c\u8bbe\u5907\u7ed5\u8fc7\u5df2\u6682\u505c\u3002\u540d\u5355\u4fdd\u7559\uff0c\u5207\u56de TProxy \u81ea\u52a8\u6062\u590d\u3002'
+        : mode === 'off' ? '\u6d41\u91cf\u63a5\u7ba1\u5df2\u5173\u95ed\uff0c\u540d\u5355\u4fdd\u7559\u4f46\u4e0d\u751f\u6548\u3002'
+        : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配它的全部 IP。勿将下级路由器 MAC 当作单台设备。');
     };
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
     updateDeviceBypassScope();
@@ -9035,7 +7863,7 @@ EOF_KANO_SERVICE
     get('#mm_policy_close').onclick = close;
     const appendDeviceBypassValue = (value = '') => {
       const item = String(value || '').trim();
-      if (!item) return;
+      if (!item || get('#mm_policy_device').disabled) return;
       const textarea = get('#mm_policy_device');
       const rows = String(textarea.value || '').split('\n').map((row) => row.trim()).filter(Boolean);
       if (!rows.some((row) => row.toUpperCase() == item.toUpperCase())) rows.push(item);
@@ -9048,7 +7876,13 @@ EOF_KANO_SERVICE
       setText(box, '\u626b\u63cf\u4e2d...');
       try {
         const text = await readClientListText();
-        const lines = String(text || '').split('\n').slice(1).filter(Boolean);
+        if (get('#mm_policy_traffic_mode').value !== 'tproxy') return;
+        const lines = String(text || '').split('\n').filter(line => {
+          const [ip, mac] = line.trim().split(/\s+/);
+          return (normalizeIpLike(ip) || normalizeIpv6Like(ip)) && normalizeMac(mac);
+        });
+        const macCounts = new Map();
+        for (const line of lines) { const [ip, mac] = line.trim().split(/\s+/); const key=normalizeMac(mac); if(!macCounts.has(key))macCounts.set(key,new Set());macCounts.get(key).add(ip); }
         resetChildren(box);
         if (lines.length == 0) {
           setText(box, '\u6ca1\u6709\u626b\u63cf\u5230\u5ba2\u6237\u7aef\u3002\u8bbe\u5907\u9700\u8981\u5148\u4ea7\u751f\u6d41\u91cf\uff0cARP \u8868\u91cc\u624d\u4f1a\u51fa\u73b0\u3002');
@@ -9061,7 +7895,7 @@ EOF_KANO_SERVICE
           const ipEl = document.createElement('span');
           ipEl.textContent = ip || '';
           const macEl = document.createElement('span');
-          macEl.textContent = mac || '';
+          macEl.textContent = (mac || '') + ' (' + (macCounts.get(normalizeMac(mac))?.size || 0) + ' IP)';
           const addIp = document.createElement('button');
           addIp.className = 'add_ip';
           addIp.style.fontSize = '.58rem';
@@ -9069,6 +7903,7 @@ EOF_KANO_SERVICE
           addIp.textContent = '\u52a0 IP';
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
+          addMac.title = '此 MAC 的全部 IPv4/IPv6；路由器可能代表多台设备';
           addMac.style.fontSize = '.58rem';
           addMac.dataset.mac = mac || '';
           addMac.textContent = '\u52a0 MAC';
@@ -9082,10 +7917,18 @@ EOF_KANO_SERVICE
           btn.onclick = () => appendDeviceBypassValue(btn.dataset.ip);
         });
         Array.from(box.querySelectorAll('.add_mac')).forEach((btn) => {
-          btn.onclick = () => appendDeviceBypassValue(btn.dataset.mac);
+          btn.onclick = async () => {
+            const value = normalizeMac(btn.dataset.mac);
+            if (!value || get('#mm_policy_device').disabled) return;
+            const yes = await askConfirm('mm_mac_scope', '按 MAC 直连？', '会包含此 MAC 的全部 IP；下级路由器可能代表多台终端。');
+            if (yes) appendDeviceBypassValue(value);
+          };
         });
+      } catch (error) {
+        setText(box, error.message || String(error));
       } finally {
         setButtonBusy(scanBtn, false);
+        updateDeviceBypassScope();
       }
     };
 
@@ -9095,7 +7938,7 @@ EOF_KANO_SERVICE
       if (!operationToken) return;
       setButtonBusy(btn, true, '\u4fee\u590d\u4e2d\u2026');
       try {
-        await restartClash({ skipCheck: true });
+        await restartClashOk({ skipCheck: true });
       } finally {
         setButtonBusy(btn, false);
         releaseCriticalOperation(operationToken);
@@ -9152,7 +7995,13 @@ EOF_KANO_SERVICE
     get('#kpr_policy').value = feature.policy || (names.includes('家宽') ? '家宽' : '');
     get('#kpr_status').onclick = async () => {
       const response = await runShellWithRoot('if [ -x ' + shellQuote(CLASH_POLICY_SCRIPT) + ' ]; then ' + shellQuote(CLASH_POLICY_SCRIPT) + ' private-status; else echo PRIVATE_ROUTE_SCRIPT_MISSING; fi', 15000);
-      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(response.content || '无输出') + '</pre><p>规则存在不等于家中服务可达。请从下游浏览器访问实际服务端口，并查看 Mihomo 连接列表。</p>');
+      let liveStatus;
+      try {
+        const savedOptions = await kprReadOptions();
+        const leaf = await kprVerifySelection(savedOptions);
+        liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
+      } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
+      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不等于远端服务可达；请从下游访问实际 TCP/UDP 服务验证。</p>');
     };
     get('#mm_policy_save_apply').onclick = async () => {
       const token = acquireCriticalOperation('保存网络与私网设置');
@@ -9174,6 +8023,10 @@ EOF_KANO_SERVICE
         if (!(await kprSaveNetworkState(state, next))) {
           get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
           get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
+          get('#mm_policy_quic').checked = state.options.quic_block === 'on';
+          get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
+          get('#mm_policy_dns_port').value = '1053';
+          get('#mm_policy_device').value = state.deviceBypass || '';
           get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
           get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
           get('#kpr_policy').value = state.options.private_route_policy || '';
@@ -9188,98 +8041,33 @@ EOF_KANO_SERVICE
     };
   };
 
-  const stopClash = async ({ skipCheck = false, showOutput = true } = {}) => {
-    if (!skipCheck && !(await ensureReady())) return false;
-    createToast('\u6b63\u5728\u505c\u6b62\u6838\u5fc3...', 'yellow');
-    const res = await runShellWithRoot(`
-        set +e
-        stop_rc=0
-        if [ -f ${shellQuote(CLASH_SERVICE)} ]; then
-          ${shellQuote(CLASH_SERVICE)} stop
-          stop_rc=$?
-        else
-          echo "Clash.Service \u4e0d\u5b58\u5728"
-          stop_rc=1
-        fi
-        sleep 1
-        ${verifyCoreStoppedCmd('STOP')} || stop_rc=1
-        ${flushGeneratedRulesCmd()}
-        cleanup_rc=0
-        ${verifyGeneratedRulesFlushedCmd()} || cleanup_rc=1
-        if [ "$cleanup_rc" -eq 0 ]; then
-          echo "\u5df2\u6e05\u7406\u63d2\u4ef6\u81ea\u5efa\u89c4\u5219"
-        else
-          echo "STOP_RULE_CLEANUP_INCOMPLETE"
-        fi
-        [ "$stop_rc" -eq 0 ] && [ "$cleanup_rc" -eq 0 ]
-        `);
-    if (!res.success) {
-      createToast(`停止核心或清理插件规则失败。<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
-      await isMMRunning();
-      return false;
-    }
-    if (showOutput) {
-      createToast('核心已停止，插件规则已清理', 'green');
-    }
-    await isMMRunning();
-    return true;
-  };
+  const stopClash = async () => await networkRescue({stopService:true,showOutput:false,reason:'停止核心'});
 
-  const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false } = {}) => {
-    if (!skipCheck && !(await ensureReady())) return false;
-    createToast(
-      preferReload ? '正在应用网络设置…' : '\u6b63\u5728\u91cd\u542f\u6838\u5fc3...',
-      'yellow',
-    );
-    const sanitized = await sanitizeConfigForTProxy({ showToast: false });
-    if (!sanitized) {
-      createToast("配置校验失败，已取消重启，未使用旧 YAML 冒充新模式。", "red", 10000);
-      return false;
-    }
-    if (preferReload && await getCorePid()) {
-      const reloaded = await reloadConfigHot(await buildControllerInfo({ fresh: true }));
-      if (reloaded.success) {
-        const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-        const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent({ ensureScript: !policyReady });
-        if (trafficModeOk && rulesOk) return true;
-        await networkRescue({ stopService: true, showOutput: false, reason: '网络设置热加载检查失败' });
-        return false;
-      }
-    }
-    const prepared = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!prepared.ok) {
-      createToast(safeTextToHtml(prepared.message || '无法保存启动前配置'), 'red', 9000);
-      return false;
-    }
-    const res = await startClashServiceClean({ stopFirst: true, reason: '\u91cd\u542f' });
-    if (!res.success) {
-      const startState = parseKeyValueOutput(res.content || '').START_STATE || '';
-      if (startState == 'config_invalid' || startState == 'config_missing') {
-        createToast(`配置校验失败，未停止当前正在运行的核心<br>${safeTextToHtml(res.content || '')}`, 'red', 12000);
-        await isMMRunning();
-        return false;
-      }
-      await networkRescue({ stopService: true, showOutput: false, reason: '\u91cd\u542f\u5931\u8d25' });
-      createToast(`重启失败，已自动清理规则<br>${safeTextToHtml(res.content || '')}`, 'red', 10000);
-      return false;
-    }
-    if (!(await verifyStartOrRollback('\u91cd\u542f'))) return false;
-    const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode, prepared.value);
-    const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent({ ensureScript: !policyReady });
-    if (!trafficModeOk || !rulesOk) {
-      const failedParts = [
-        trafficModeOk ? '' : '流量模式同步',
-        trafficModeOk && !rulesOk ? '网络策略应用' : '',
-      ].filter(Boolean).join('、');
-      await networkRescue({ stopService: true, showOutput: false, reason: failedParts + '失败' });
-      createToast(`核心 API 已启动，但${failedParts}失败`, 'red', 10000);
-      await isMMRunning();
-      return false;
-    }
-    createToast('核心已重启，运行配置和网络策略已生效', 'green');
-    await isMMRunning();
-    return true;
-  };
+
+  const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false, preparedConfig = null } = {}) => {
+  if (!skipCheck && !(await ensureReady())) return f50StartResult({success:false,content:'F50_START_CODE=backend_not_ready'});
+  operationStage('\u9a8c\u8bc1\u56fa\u5b9a\u914d\u7f6e\u5e76\u542f\u52a8\u6838\u5fc3');
+  if (preparedConfig) {
+    const write = await writeYamlObjectAtomic(CLASH_CONFIG, preparedConfig, {label:'config.yaml',backup:false});
+    if (!write.ok) return f50StartResult({success:false,content:'F50_START_CODE=config_write_failed\n' + (write.content || '')});
+  }
+  const result = await startClashServiceClean({stopFirst:true});
+  invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null; runtimePreflightLoadPromise = null;
+  if (!result.ok) {
+    lastInstallDiagnostic = {...f50Diagnostic(result.detail), ok:false, code:result.code};
+    operationFinish(false, result.summary);
+    createToast(safeTextToHtml(result.summary), 'red', 12000);
+    return result;
+  }
+  const refresh = await Promise.allSettled([
+    buildControllerInfo({fresh:true}), isMMRunning(),
+    typeof refreshDashboardAfterModeChange === 'function' ? refreshDashboardAfterModeChange() : Promise.resolve(),
+  ]);
+  result.warnings = refresh.filter(item => item.status === 'rejected').map(item => f50Diagnostic(item.reason?.message || String(item.reason)).summary);
+  createToast(result.summary, 'green');
+  return result;
+};
+  const restartClashOk = async options => (await restartClash(options)).ok;
 
   const btn_restart = document.createElement('button');
   btn_restart.classList.add('btn');
@@ -9288,7 +8076,7 @@ EOF_KANO_SERVICE
     await runCriticalOperation('重启核心', async () => {
       setButtonBusy(btn_restart, true, '重启中…');
       try {
-        return await restartClash();
+        return await restartClashOk();
       } finally {
         setButtonBusy(btn_restart, false);
       }
@@ -9360,7 +8148,7 @@ EOF_KANO_SERVICE
     }
     const requiredNamesCmd = requiredNames.map((name) => shellQuote(name)).join(' ');
     const restoreStageFilesCmd = restoreFiles.map((item) => {
-      const mode = /\.(?:yaml|yml)$/i.test(item.label) ? '644' : '600';
+      const mode = '600';
       return `
         stage_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)} ${shellQuote(mode)}
         `;
@@ -9372,7 +8160,7 @@ EOF_KANO_SERVICE
         rollback_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)}
         `).join('');
     const restorePostRollbackFilesCmd = restoreFiles.slice().reverse().map((item) => {
-      const mode = /\.(?:yaml|yml)$/i.test(item.label) ? '644' : '600';
+      const mode = '600';
       return `
         name=${shellQuote(item.label)}
         dst=${shellQuote(item.path)}
@@ -9587,8 +8375,8 @@ EOF_KANO_SERVICE
       const sanitized = await sanitizeConfigForTProxy({ showToast: false, errorToast: false });
       const reload = sanitized ? await reloadConfigHot(oldControllerInfo) : { success: false };
       const runtimeRecovered = reload.success
-        ? await ensureRuntimeTrafficMode(lastSanitizedTrafficMode) && await reapplyPolicyRulesSilent()
-        : await restartClash({ skipCheck: true });
+        ? await reapplyPolicyRulesSilent()
+        : await restartClashOk({ skipCheck: true });
       createToast(
         `${escapeHtml(context)}失败，已恢复导入前的配置${runtimeRecovered ? '和运行状态' : '；核心或网络策略未能恢复'}${detail ? `<br>${safeTextToHtml(detail)}` : ''}`,
         runtimeRecovered ? 'yellow' : 'red',
@@ -9601,20 +8389,13 @@ EOF_KANO_SERVICE
       await rollbackRestoredPackage('导入配置包清理');
       return false;
     }
-    const packageCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
-    if (!packageCheck.ok) {
-      await rollbackRestoredPackage('导入配置包结构检查', packageCheck.message);
-      return false;
-    }
     const reloadRes = await reloadConfigHot(oldControllerInfo);
     let runningOk = reloadRes.success;
     if (!runningOk) {
       createToast(`\u70ed\u91cd\u8f7d\u5931\u8d25\uff0c\u5df2\u6539\u7528\u670d\u52a1\u91cd\u542f<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
-      runningOk = await restartClash({ skipCheck: true });
+      runningOk = await restartClashOk({ skipCheck: true });
     } else {
-      const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-      const rulesOk = await reapplyPolicyRulesSilent();
-      runningOk = trafficModeOk && rulesOk;
+      runningOk = await reapplyPolicyRulesSilent();
     }
     if (!runningOk) {
       await rollbackRestoredPackage('导入配置包后启动');
@@ -9874,6 +8655,9 @@ EOF_KANO_SERVICE
     );
     syncCriticalOperationStatus();
 
+    refreshDashboardAfterModeChange = async () => {
+      if (isWebPanelVisible()) await refreshPanel({ forceReload: true });
+    };
     const WEB_VISIBLE_KEY = 'kano_mm_web_panel_visible';
     const isWebPanelVisible = () => localStorage.getItem(WEB_VISIBLE_KEY) != 'hidden';
     let webPanelToggleBtn = null;
@@ -9935,13 +8719,18 @@ EOF_KANO_SERVICE
     open.classList.add('btn');
     open.textContent = '打开新窗口';
     open.onclick = async () => {
-      const a = document.createElement('a');
-      a.href = await buildPanelUrl();
-      a.target = '_blank';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const panelWindow = window.open('about:blank', '_blank');
+      if (!panelWindow) {
+        createToast('浏览器阻止了新窗口，请允许此页面打开弹窗。', 'yellow', 7000);
+        return;
+      }
+      try {
+        panelWindow.opener = null;
+        panelWindow.location.replace(await buildPanelUrl());
+      } catch (error) {
+        panelWindow.close();
+        createToast(`打开面板失败<br>${safeTextToHtml(error.message || String(error))}`, 'red', 8000);
+      }
     };
 
     const controllerSettingsBtn = document.createElement('button');
@@ -10010,6 +8799,12 @@ EOF_KANO_SERVICE
     showLogBtn.classList.add('btn');
     showLogBtn.textContent = '状态与日志';
     showLogBtn.onclick = async () => {
+      if (lastInstallDiagnostic && !lastInstallDiagnostic.ok && !lastInstallDiagnostic.viewed) {
+        lastInstallDiagnostic.viewed = true;
+        showInfoDialog('mm_last_install_failure', lastInstallDiagnostic.summary,
+          '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre>');
+        return;
+      }
       if (!(await ensureAdvanced())) return;
       setButtonBusy(showLogBtn, true, '读取中…');
       try {
@@ -10019,97 +8814,6 @@ EOF_KANO_SERVICE
       }
     };
 
-    const helperUploadEl = document.createElement('input');
-    helperUploadEl.type = 'file';
-    helperUploadEl.style.display = 'none';
-    document.body.appendChild(helperUploadEl);
-
-    const binaryHelperBtn = document.createElement('button');
-    binaryHelperBtn.classList.add('btn');
-    binaryHelperBtn.textContent = '转换组件';
-    const binaryHelperUploadBtn = document.createElement('button');
-    binaryHelperUploadBtn.classList.add('btn');
-    binaryHelperUploadBtn.textContent = '导入组件';
-    const applyBinaryHelperButtonState = (probe = {}) => {
-      const installed = probe.state == 'installed';
-      const info = probe.info || null;
-      const version = info && info.version ? String(info.version) : '';
-      binaryHelperBtn.dataset.helperState = probe.state || 'unknown';
-      binaryHelperBtn.style.background = installed ? 'var(--dark-btn-color-active)' : '';
-      if (installed) {
-        binaryHelperBtn.textContent = version ? `转换组件 ✓ ${version}` : '转换组件 ✓';
-        binaryHelperBtn.title = '转换组件正常；点击检查更新';
-      } else if (probe.state == 'missing') {
-        binaryHelperBtn.textContent = '安装转换组件';
-        binaryHelperBtn.title = '当前使用 Shell 兼容模式；点击安装转换组件';
-      } else if (probe.state == 'invalid') {
-        binaryHelperBtn.textContent = '修复转换组件';
-        binaryHelperBtn.title = '转换组件异常；点击修复';
-      } else {
-        binaryHelperBtn.textContent = '修复转换组件';
-        binaryHelperBtn.title = '转换组件不可用；点击重装';
-      }
-    };
-    let binaryHelperRefreshRequestId = 0;
-    const refreshBinaryHelperButton = async (timeout = 12 * 1000) => {
-      const requestId = ++binaryHelperRefreshRequestId;
-      const probe = await probeBinaryHelperState(timeout);
-      if (requestId == binaryHelperRefreshRequestId) applyBinaryHelperButtonState(probe);
-      return probe;
-    };
-    const scheduleBinaryHelperButtonRefresh = ({ delay = 1000, retryDelay = 1500 } = {}) => {
-      const run = async (retry) => {
-        let probe = null;
-        try {
-          probe = await refreshBinaryHelperButton(6 * 1000);
-        } catch (e) {
-          console.error('辅助内核延迟状态探测失败', e);
-        }
-        if (retry && (!probe || probe.state != 'installed')) {
-          setTimeout(() => run(false), retryDelay);
-        }
-      };
-      setTimeout(() => run(true), delay);
-    };
-    helperUploadEl.onchange = async (event) => {
-      try {
-        const file = event && event.target && event.target.files && event.target.files[0];
-        if (!file) return;
-        setButtonBusy(binaryHelperUploadBtn, true, '安装中…');
-        await installBinaryHelperFromFile(file);
-      } finally {
-        helperUploadEl.value = '';
-        setButtonBusy(binaryHelperUploadBtn, false);
-        await refreshBinaryHelperButton();
-      }
-    };
-    binaryHelperBtn.onclick = async () => {
-      if (!(await ensureAdvanced())) return;
-      const current = await refreshBinaryHelperButton();
-      const isUpdate = current.state != 'missing';
-      if (isUpdate) {
-        const healthy = current.state == 'installed';
-        const confirmed = await askConfirm(
-          `mm_binary_helper_update_${createRandomString(4)}`,
-          healthy ? '检查转换组件更新？' : '修复转换组件？',
-          '优先从 Gitee 下载，失败后使用本地安装包；可用版本只升级不降级。',
-          healthy ? '检查更新' : '更新修复',
-          '取消',
-        );
-        if (!confirmed) return;
-      }
-      setButtonBusy(binaryHelperBtn, true, '下载中…');
-      try {
-        await installBinaryHelperPreferred({ preferGitee: isUpdate });
-      } finally {
-        setButtonBusy(binaryHelperBtn, false);
-        await refreshBinaryHelperButton();
-      }
-    };
-    binaryHelperUploadBtn.onclick = async () => {
-      if (!(await ensureAdvanced())) return;
-      helperUploadEl.click();
-    };
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
     userAgentBtn.textContent = '订阅请求头';
@@ -10178,14 +8882,13 @@ EOF_KANO_SERVICE
         '\u53d6\u6d88',
       );
       if (!confirmed) return;
-      const operationToken = acquireCriticalOperation('恢复网络');
-      if (!operationToken) return;
+
       setButtonBusy(rescueBtn, true, '\u6062\u590d\u4e2d\u2026');
       try {
-        await networkRescue({ stopService: true, showOutput: true, reason: '\u624b\u52a8\u65ad\u7f51\u6062\u590d' });
+        await networkRescue({ stopService: true, showOutput: true, preempt: true, reason: '\u624b\u52a8\u65ad\u7f51\u6062\u590d' });
       } finally {
         setButtonBusy(rescueBtn, false);
-        releaseCriticalOperation(operationToken);
+
       }
     };
 
@@ -10373,7 +9076,7 @@ EOF_KANO_SERVICE
     ) => {
       const sources = normalizeSubSourceList(cleanSources);
       if (sources.length == 0) return { ok: false, conversion: buildProviderUpdateResult([]) };
-      createToast(`订阅服务器拒绝 HTTP Provider（${escapeHtml(reason)}），正在自动改用设备本地下载/转换...`, 'yellow', 10000);
+      createToast(`HTTP Provider 更新失败（${escapeHtml(reason)}），正在改用设备本地下载/转换...`, 'yellow', 10000);
       appendTemplateFlowDebug(`provider_auto_local_fallback enter reason=${reason} sources=${sources.length}`);
 
       const conversion = await convertSubscriptionsLocally(sources);
@@ -10422,7 +9125,7 @@ EOF_KANO_SERVICE
       appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
       createToast(
         appliedConversion.failed == 0
-          ? 'HTTP Provider 被上游拒绝；已自动切换为设备本地转换并恢复节点。'
+          ? '已自动切换为设备本地转换并恢复节点。'
           : '已切换为设备本地转换，但运行节点刷新未确认。',
         appliedConversion.failed == 0 ? 'green' : 'yellow',
         10000,
@@ -10581,175 +9284,55 @@ EOF_KANO_SERVICE
       };
     };
 
-    const inspectSubscriptionRuntimeConfig = async (
-      sources = [],
-      mode = SUB_RULE_MODE_TEMPLATE,
-      convertMode = SUB_CONVERT_MODE_PROVIDER,
-    ) => {
-      const cleanSources = normalizeSubSourceList(sources);
-      const cleanMode = normalizeSubRuleModeValue(mode);
-      const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
-      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
-        const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-        const configSource = await readConfigSource();
-        const modeLineOk = await readCurrentSubRuleMode() == cleanMode;
-        const issues = [];
-        try {
-          if (!read.ok) throw new Error('运行配置读取失败');
-          validateOriginalSubscriptionConfig(read.value);
-          if (configSource != 'subscription_original') throw new Error('当前运行配置不是订阅原配置');
-          if (!modeLineOk) throw new Error('已保存的订阅模式不是原配置模式');
-        } catch (error) { issues.push(error.message || String(error)); }
-        const config = read.ok ? read.value : {};
-        return {
-          ok: issues.length == 0, status: issues.length ? 'invalid' : 'ok', issues,
-          configSource, rulesCount: (config.rules || []).length,
-          proxyGroupsCount: (config['proxy-groups'] || []).length,
-          providerCount: Object.keys(config['proxy-providers'] || {}).length,
-          providerUrlCount: Object.values(config['proxy-providers'] || {}).filter((p) => p && p.url).length,
-          modeLineOk, convertModeOk: true, missingUrls: 0, providerShapeErrors: 0, content: '',
-        };
+    const inspectSubscriptionRuntimeConfig = async (sources = [], mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
+  const cleanSources = normalizeSubSourceList(sources), cleanMode = normalizeSubRuleModeValue(mode);
+  const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+  const [read, meta, ua] = await Promise.all([
+    readYamlObject(CLASH_CONFIG, 'config.yaml', { allowDownload: false }),
+    runShellWithRoot(`
+      [ ! -r ${shellQuote(CLASH_SUB_URLS)} ] || sed -n -e 's/^# KANO_SUB_RULE_MODE=/mode=/p' -e 's/^# KANO_SUB_CONVERT_MODE=/convert=/p' ${shellQuote(CLASH_SUB_URLS)}
+      [ ! -r ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} ] || sed -n 's/^KANO_CONFIG_SOURCE=/source=/p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
+      echo SUBSCRIPTION_META_READ
+    `, 8000),
+    loadProviderUserAgent(),
+  ]);
+  const data = parseKeyValueOutput(meta.content || ''), config = read.ok ? read.value : {};
+  const readable = !!read.ok && !!meta.success && String(meta.content || '').includes('SUBSCRIPTION_META_READ');
+  const providers = isPlainYamlObject(config['proxy-providers']) ? config['proxy-providers'] : {};
+  const issues = [];
+  if (!read.ok) issues.push(read.message || '\u8fd0\u884c\u914d\u7f6e\u65e0\u6cd5\u8bfb\u53d6');
+  if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('\u8ba2\u9605\u6807\u8bb0\u8bfb\u53d6\u5931\u8d25');
+  const modeLineOk = data.mode === cleanMode, convertModeOk = cleanMode === SUB_RULE_MODE_ORIGINAL || data.convert === cleanConvertMode;
+  const providerCount = Object.keys(providers).length;
+  const providerUrlCount = Object.values(providers).filter(p => p && /^https?:\/\//.test(String(p.url || ''))).length;
+  const rulesCount = Array.isArray(config.rules) ? config.rules.length : 0;
+  const proxyGroupsCount = Array.isArray(config['proxy-groups']) ? config['proxy-groups'].length : 0;
+  let missingUrls = 0, providerShapeErrors = 0;
+  if (!modeLineOk) issues.push('\u914d\u7f6e\u6765\u6e90\u6807\u8bb0\u4e0d\u5339\u914d');
+  if (!convertModeOk) issues.push('\u8282\u70b9\u5904\u7406\u65b9\u5f0f\u6807\u8bb0\u4e0d\u5339\u914d');
+  if (cleanMode === SUB_RULE_MODE_ORIGINAL) {
+    try { validateOriginalSubscriptionConfig(config); } catch (e) { issues.push(e.message); }
+    if (data.source !== 'subscription_original') issues.push('\u5f53\u524d\u4e0d\u662f\u8ba2\u9605\u539f\u914d\u7f6e');
+  } else {
+    const local = cleanConvertMode === SUB_CONVERT_MODE_LOCAL;
+    for (const source of cleanSources) {
+      const p = providers[source.name] || {};
+      if (p.type !== (local ? 'file' : 'http') || p.path !== './proxies/' + source.name + '.yaml') providerShapeErrors++;
+      if (!local) {
+        if (p.url !== source.url) missingUrls++;
+        if (!p.header || !Array.isArray(p.header['User-Agent']) || p.header['User-Agent'][0] !== (ua || currentProviderUserAgent)) providerShapeErrors++;
       }
-      await loadProviderUserAgent();
-      const expectedProviderChecks = cleanSources.map((source) => `
-          provider_type="$("$YQ" e -r ${shellQuote(`."proxy-providers".${source.name}.type // ""`)} "$CONFIG" 2>/dev/null)"
-          provider_path="$("$YQ" e -r ${shellQuote(`."proxy-providers".${source.name}.path // ""`)} "$CONFIG" 2>/dev/null)"
-          [ "$provider_type" = ${shellQuote(cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? 'file' : 'http')} ] || provider_shape_errors=$((provider_shape_errors + 1))
-          [ "$provider_path" = ${shellQuote(`./proxies/${source.name}.yaml`)} ] || provider_shape_errors=$((provider_shape_errors + 1))
-          ${cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-            ? ''
-            : `
-          "$YQ" e -r ${shellQuote(`."proxy-providers".${source.name}.url // ""`)} "$CONFIG" 2>/dev/null | grep -Fx ${shellQuote(source.url)} >/dev/null 2>&1 || missing_urls=$((missing_urls + 1))
-          provider_user_agent="$("$YQ" e -r ${shellQuote(`."proxy-providers".${source.name}.header."User-Agent"[0] // ""`)} "$CONFIG" 2>/dev/null)"
-          [ "$provider_user_agent" = ${shellQuote(currentProviderUserAgent)} ] || provider_shape_errors=$((provider_shape_errors + 1))
-          `}
-        `).join('\n');
-      const res = await runShellWithRoot(`
-        set +e
-        CONFIG=${shellQuote(CLASH_CONFIG)}
-        SUB_URLS=${shellQuote(CLASH_SUB_URLS)}
-        SOURCE_FILE=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        ${prepareYqRuntimeCmd()}
-        expected_count=${cleanSources.length}
-        missing_urls=0
-        provider_count=0
-        provider_url_count=0
-        rules_count=0
-        proxy_groups_count=0
-        mode_line_ok=0
-        convert_mode_ok=0
-        provider_shape_errors=0
-        mode_line="$(sed -n '1p' "$SUB_URLS" 2>/dev/null | tr -d '\r')"
-        [ "$mode_line" = ${shellQuote(`# KANO_SUB_RULE_MODE=${cleanMode}`)} ] && mode_line_ok=1
-        convert_mode_line="$(grep -m 1 '^# KANO_SUB_CONVERT_MODE=' "$SUB_URLS" 2>/dev/null | tr -d '\r')"
-        [ "$convert_mode_line" = ${shellQuote(`# KANO_SUB_CONVERT_MODE=${cleanConvertMode}`)} ] && convert_mode_ok=1
-        config_source="$(grep -m 1 '^KANO_CONFIG_SOURCE=' "$SOURCE_FILE" 2>/dev/null | sed 's/^KANO_CONFIG_SOURCE=//' | tr -d '\r')"
-        [ -n "$config_source" ] || config_source=unknown
-
-        if [ ! -s "$CONFIG" ]; then
-          echo "RUNTIME_CONFIG_CHECK=config_missing"
-          echo "mode_line=$mode_line"
-          echo "mode_line_ok=$mode_line_ok"
-          echo "config_source=$config_source"
-          exit 0
-        fi
-        if [ ! -x "$YQ" ]; then
-          echo "RUNTIME_CONFIG_CHECK=yq_missing"
-          echo "mode_line=$mode_line"
-          echo "mode_line_ok=$mode_line_ok"
-          echo "config_source=$config_source"
-          exit 0
-        fi
-        first_line="$(sed -n '1p' "$CONFIG" 2>/dev/null | tr -d '\r' | sed 's/^[[:space:]]*//')"
-        if echo "$first_line" | grep -Eq '^https?://'; then
-          echo "RUNTIME_CONFIG_CHECK=legacy_url_entrypoint"
-          echo "mode_line=$mode_line"
-          echo "mode_line_ok=$mode_line_ok"
-          echo "config_source=$config_source"
-          exit 0
-        fi
-        "$YQ" e '.' "$CONFIG" >/dev/null 2>/data/kano_runtime_landed_check.err || {
-          echo "RUNTIME_CONFIG_CHECK=yaml_invalid"
-          cat /data/kano_runtime_landed_check.err 2>/dev/null || true
-          rm -f /data/kano_runtime_landed_check.err
-          echo "mode_line=$mode_line"
-          echo "mode_line_ok=$mode_line_ok"
-          echo "config_source=$config_source"
-          exit 0
-        }
-        rm -f /data/kano_runtime_landed_check.err
-        provider_count="$("$YQ" e '(."proxy-providers" // {}) | length' "$CONFIG" 2>/dev/null)"
-        provider_url_count="$("$YQ" e '[(."proxy-providers" // {})[] | (.url // "")] | .[]' "$CONFIG" 2>/dev/null | grep -Ec '^https?://' || true)"
-        rules_count="$("$YQ" e '(.rules // []) | length' "$CONFIG" 2>/dev/null)"
-        proxy_groups_count="$("$YQ" e '(."proxy-groups" // []) | length' "$CONFIG" 2>/dev/null)"
-        echo "$provider_count" | grep -Eq '^[0-9]+$' || provider_count=0
-        echo "$provider_url_count" | grep -Eq '^[0-9]+$' || provider_url_count=0
-        echo "$rules_count" | grep -Eq '^[0-9]+$' || rules_count=0
-        echo "$proxy_groups_count" | grep -Eq '^[0-9]+$' || proxy_groups_count=0
-${expectedProviderChecks}
-        echo "RUNTIME_CONFIG_CHECK=ok"
-        echo "expected_count=$expected_count"
-        echo "provider_count=$provider_count"
-        echo "provider_url_count=$provider_url_count"
-        echo "rules_count=$rules_count"
-        echo "proxy_groups_count=$proxy_groups_count"
-        echo "missing_urls=$missing_urls"
-        echo "provider_shape_errors=$provider_shape_errors"
-        echo "mode_line=$mode_line"
-        echo "mode_line_ok=$mode_line_ok"
-        echo "convert_mode_ok=$convert_mode_ok"
-        echo "config_source=$config_source"
-        `, 20 * 1000);
-      const lines = String(res.content || '').split('\n');
-      const pick = (key, fallback = '') => ((lines.find((line) => line.startsWith(`${key}=`)) || `${key}=${fallback}`).replace(new RegExp(`^${key}=`), '').trim());
-      const status = pick('RUNTIME_CONFIG_CHECK');
-      const providerCount = Number(pick('provider_count', '0')) || 0;
-      const providerUrlCount = Number(pick('provider_url_count', '0')) || 0;
-      const rulesCount = Number(pick('rules_count', '0')) || 0;
-      const proxyGroupsCount = Number(pick('proxy_groups_count', '0')) || 0;
-      const missingUrls = Number(pick('missing_urls', '0')) || 0;
-      const providerShapeErrors = Number(pick('provider_shape_errors', '0')) || 0;
-      const modeLineOk = pick('mode_line_ok', '0') == '1';
-      const convertModeOk = pick('convert_mode_ok', '0') == '1';
-      const configSource = pick('config_source', 'unknown');
-      const issues = [];
-      if (status != 'ok') issues.push(`运行配置状态异常：${status || 'unknown'}`);
-      if (!modeLineOk) issues.push(`subscription_urls.txt 模式标记不是 ${cleanMode}`);
-      if (!convertModeOk) issues.push(`订阅转换模式标记不是 ${cleanConvertMode}`);
-      if (providerCount != cleanSources.length) issues.push(`proxy-providers 数量不匹配：${providerCount}/${cleanSources.length}`);
-      const expectedProviderUrlCount = cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? 0 : cleanSources.length;
-      if (providerUrlCount != expectedProviderUrlCount) {
-        issues.push(`有效订阅 URL 数量不匹配：${providerUrlCount}/${expectedProviderUrlCount}`);
-      }
-      if (missingUrls > 0) issues.push(`缺少订阅 URL：${missingUrls}`);
-      if (providerShapeErrors > 0) issues.push(`节点来源类型、路径或 User-Agent 不匹配：${providerShapeErrors}`);
-      if (rulesCount <= 0) issues.push('rules 为空');
-      if (proxyGroupsCount <= 0) issues.push('proxy-groups 为空');
-      if (cleanSources.length > 0 && configSource != 'template.yaml') issues.push(`config 来源异常：${configSource}`);
-      return {
-        ok: !!(res.success && issues.length == 0),
-        status,
-        providerCount,
-        providerUrlCount,
-        rulesCount,
-        proxyGroupsCount,
-        rawRulesCount: 0,
-        missingUrls,
-        providerShapeErrors,
-        modeLineOk,
-        convertModeOk,
-        convertMode: cleanConvertMode,
-        configSource,
-        rawKanoCount: 0,
-        finalKanoCount: 0,
-        templatePollutionCount: 0,
-        hasKanoPollution: false,
-        rulesShrunk: false,
-        issues,
-        content: res.content || '',
-      };
-    };
+    }
+    if (providerCount !== cleanSources.length || providerUrlCount !== (local ? 0 : cleanSources.length)) issues.push('\u8282\u70b9\u6765\u6e90\u6570\u91cf\u4e0d\u5339\u914d');
+    if (missingUrls || providerShapeErrors) issues.push('\u8ba2\u9605 URL\u3001\u7c7b\u578b\u3001\u8def\u5f84\u6216 User-Agent \u4e0d\u5339\u914d');
+    if (!rulesCount || !proxyGroupsCount) issues.push('\u89c4\u5219\u6216\u7b56\u7565\u7ec4\u4e3a\u7a7a');
+    if (cleanSources.length && data.source !== 'template.yaml') issues.push('\u5f53\u524d\u914d\u7f6e\u4e0d\u662f\u672c\u5730\u6a21\u677f\u751f\u6210');
+  }
+  return { ok: !issues.length, readable, config: read.ok ? config : null, status: !readable ? 'read_failed' : issues.length ? 'invalid' : 'ok', providerCount, providerUrlCount,
+    rulesCount, proxyGroupsCount, missingUrls, providerShapeErrors, modeLineOk, convertModeOk,
+    convertMode: cleanConvertMode, configSource: data.source || 'unknown', issues, content: '' };
+}
+;
 
     const mergeProviderUpdateResults = (previousResult, retryResult) => {
       const merged = new Map();
@@ -10871,7 +9454,7 @@ ${expectedProviderChecks}
           if (!operationToken) return;
           setButtonBusy(retryBtn, true, '重试中…');
           try {
-            if (providerNotRun && !(await restartClash())) return;
+            if (providerNotRun && !(await restartClashOk())) return;
             const retryResult = await forceUpdateProvidersFromConfig({
               showToast: false,
               providerNames: failedProviders.map((item) => item.name),
@@ -10986,115 +9569,33 @@ ${expectedProviderChecks}
       await showSubscriptionUpdateSelfCheck(sources, mode, providerUpdate, null, convertMode);
     };
 
-    const updateSubProviders = async (
-      sources,
-      mode = SUB_RULE_MODE_TEMPLATE,
-      convertMode = SUB_CONVERT_MODE_PROVIDER,
-    ) => {
-      const cleanMode = normalizeSubRuleModeValue(mode);
-      const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
-      const cleanSources = normalizeSubSourceList(sources);
-      let localConversion = null;
-      appendTemplateFlowDebug(`enter updateSubProviders mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
-      const configSource = await readConfigSource();
-      if (configSource == 'uploaded_config') {
-        const result = await forceUpdateProvidersFromConfig({ showToast: false });
-        createToast(result.failed == 0 ? '自定义配置已保留，已刷新配置内的节点来源' : '自定义配置已保留，部分节点来源刷新失败', result.failed == 0 ? 'green' : 'yellow', 8000);
-        return result.failed == 0;
-      }
-      if (configSource == 'subscription_original' && cleanMode != SUB_RULE_MODE_ORIGINAL) {
-        createToast('当前是订阅原配置，请在订阅设置中选择配置来源后应用', 'yellow', 8000);
-        return false;
-      }
-      if (configSource == 'template.yaml' && cleanMode == SUB_RULE_MODE_ORIGINAL) {
-        createToast('当前仍是模板配置，请在订阅设置中应用订阅原配置后再更新', 'yellow', 8000);
-        return false;
-      }
-      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
-        const rollbackPath = await createConfigRollbackPoint('subscription_original');
-        if (rollbackPath === null) {
-          createToast('无法创建配置回滚点，未更新订阅原配置', 'red', 8000);
-          return false;
-        }
-        if (!(await writeOriginalSubscriptionConfig(cleanSources))) {
-          await restoreConfigRollbackPoint(rollbackPath, '更新订阅原配置');
-          return false;
-        }
-        const restarted = await restartClashWithConfigRollback(rollbackPath, '更新订阅原配置');
-        if (restarted) {
-          const result = await forceUpdateProvidersFromConfig({ showToast: false });
-          await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, result);
-        }
-        return restarted;
-      }
-      const sourceCheck = await inspectConfigNodeSource(cleanSources, { requireSavedSubscription: true });
-      if (!sourceCheck.ok) {
-        appendTemplateFlowDebug(`updateSubProviders sourceCheck failed status=${sourceCheck.status || ''}`);
-        createToast(sourceCheck.message, 'red', 10000);
-        return false;
-      }
-      if (sourceCheck.requiresTemplateRebuild || sourceCheck.source == 'template_embedded') {
-        appendTemplateFlowDebug('updateSubProviders fallback to template rebuild');
-        createToast(sourceCheck.message, 'yellow', 8000);
-        const rebuilt = await overwriteConfigByTemplate({ confirm: false });
-        return rebuilt;
-      }
-      if (cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
-        createToast('正在设备本地下载并转换订阅...', 'yellow');
-        localConversion = await convertSubscriptionsLocally(cleanSources);
-        if (localConversion.failed > 0) {
-          const failed = localConversion.providers.find((item) => !item.ok);
-          createToast(`${escapeHtml(failed && failed.name || '订阅')}：${escapeHtml(failed && failed.message || '本地转换失败')}，原节点缓存未覆盖。`, 'red', 9000);
-          return false;
-        }
-      }
-      const runtimeCheck = await inspectSubscriptionRuntimeConfig(cleanSources, cleanMode, cleanConvertMode);
-      if (runtimeCheck.ok) {
-        appendTemplateFlowDebug('updateSubProviders fast path: runtime config unchanged');
-        if (cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
-          createToast('本地转换已完成，正在让 Mihomo 重新加载节点...', 'yellow');
-          const appliedConversion = await reloadLocalSubscriptionProviders(cleanSources, localConversion);
-          await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, appliedConversion, runtimeCheck, cleanConvertMode);
-          return appliedConversion.total == 0 || appliedConversion.okCount == appliedConversion.total;
-        }
-        createToast('运行配置未变，正在直接刷新节点订阅...', 'yellow');
-        const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
-        if (providerUpdateNeedsLocalFallback(providerUpdate)) {
-          const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
-          return fallback.ok;
-        }
-        await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, providerUpdate, runtimeCheck, cleanConvertMode);
-        return providerUpdate.total == 0 || providerUpdate.okCount == providerUpdate.total;
-      }
-      createToast('正在更新订阅并重启核心', 'yellow');
-      const rollbackPath = await createConfigRollbackPoint('subscription_update');
-      if (rollbackPath === null) {
-        createToast('无法创建 config.yaml 回滚点，未更新运行配置。', 'red', 9000);
-        return false;
-      }
-      if (!(await writeSubConfigByMode(cleanSources, cleanMode, {
-        backup: true,
-        convertMode: cleanConvertMode,
-      }))) {
-        await restoreConfigRollbackPoint(rollbackPath, '更新订阅生成运行配置');
-        return false;
-      }
-      const restarted = await restartClashWithConfigRollback(rollbackPath, '更新订阅后重启');
-      if (restarted) {
-        let providerUpdate = cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-          ? await reloadLocalSubscriptionProviders(cleanSources, localConversion)
-          : buildProviderUpdateResult([]);
-        if (cleanConvertMode == SUB_CONVERT_MODE_PROVIDER && cleanMode == SUB_RULE_MODE_TEMPLATE) {
-          providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
-          if (providerUpdateNeedsLocalFallback(providerUpdate)) {
-            const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
-            return fallback.ok;
-          }
-        }
-        await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, providerUpdate, null, cleanConvertMode);
-      }
-      return restarted;
-    };
+    const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_LOCAL) => {
+  if (!(await ensureCompatBackend())) return false;
+  const cleanMode = normalizeSubRuleModeValue(mode);
+  const cleanSources = normalizeSubSourceList(sources);
+  if (!cleanSources.length && await readConfigSource() === 'uploaded_config') {
+    const refreshed=await forceUpdateProvidersFromConfig({showToast:true,refreshRemote:true});return refreshed.failed===0;
+  }
+  if (!cleanSources.length) { createToast('\u6ca1\u6709\u5df2\u542f\u7528\u7684\u8ba2\u9605', 'red'); return false; }
+  const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+  if (!read.ok) { createToast(safeTextToHtml(read.message || '\u8bfb\u53d6\u914d\u7f6e\u5931\u8d25'), 'red'); return false; }
+  const definitions = read.value['proxy-providers'] || {};
+  const localReady = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanSources.every(s => definitions[s.name] && definitions[s.name].type === 'file') && await readConfigSource() !== 'subscription_original';
+  if (!localReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, SUB_CONVERT_MODE_LOCAL, {applyToCustom:true});
+  // Download first. A failed request never enters the restart/rollback path.
+  const converted = await convertSubscriptionsLocally(cleanSources);
+  if (converted.failed || !converted.ok) {
+    const message = (converted.providers || []).find(p => !p.ok)?.message || '\u8ba2\u9605\u4e0b\u8f7d\u5931\u8d25';
+    operationFinish(false, message); createToast(safeTextToHtml(message) + '<br>\u539f\u8282\u70b9\u548c\u6838\u5fc3\u8fd0\u884c\u72b6\u6001\u4fdd\u7559', 'red', 10000); return false;
+  }
+  if (!(await getCorePid())) { operationFinish(true, '\u8282\u70b9\u5df2\u4fdd\u5b58\uff0c\u6838\u5fc3\u4fdd\u6301\u505c\u6b62'); return true; }
+  const applied = await reloadLocalSubscriptionProviders(cleanSources, converted);
+  const ok = applied.failed === 0;
+  operationFinish(ok, ok ? '\u8282\u70b9\u5df2\u66f4\u65b0\uff0c\u672a\u91cd\u542f\u6838\u5fc3' : '\u4e0b\u8f7d\u5b8c\u6210\uff0c\u4f46\u672c\u5730\u52a0\u8f7d\u5931\u8d25');
+  createToast(ok ? '\u8282\u70b9\u5df2\u66f4\u65b0' : '\u8282\u70b9\u4e0b\u8f7d\u6210\u529f\uff0c\u4f46\u6838\u5fc3\u672a\u786e\u8ba4\u52a0\u8f7d', ok ? 'green':'red', 8000);
+  return ok;
+}
+;
 
     const readCurrentSubSources = async ({ includeDisabled = false } = {}) => {
       const source = await runShellWithRoot(`
@@ -11103,7 +9604,7 @@ ${expectedProviderChecks}
       if (!source.success) {
         createToast(`\u8bfb\u53d6\u8ba2\u9605\u6e90\u5931\u8d25\uff0c\u672a\u6267\u884c\u65e7\u914d\u7f6e\u8fc1\u79fb\u3002<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
         appendTemplateFlowDebug('readCurrentSubSources failed before legacy migration');
-        return [];
+        throw new Error('\u8bfb\u53d6\u8ba2\u9605\u5217\u8868\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u66f4\u65b0');
       }
       const sourceItems = parseStoredSubSourcesFromText(source.content || '');
       if (sourceItems.length > 0) {
@@ -11163,168 +9664,106 @@ ${expectedProviderChecks}
       return ok;
     };
 
-    const saveSubSources = async (
-      sources,
-      mode = SUB_RULE_MODE_TEMPLATE,
-      convertMode = SUB_CONVERT_MODE_PROVIDER,
-      { applyToCustom = false } = {},
-    ) => {
-      const cleanMode = normalizeSubRuleModeValue(mode);
-      const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
-      const storedSources = normalizeStoredSubSourceList(sources);
-      const cleanSources = normalizeSubSourceList(storedSources);
-      appendTemplateFlowDebug(`enter saveSubSources mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length} stored=${storedSources.length}`);
-      if (storedSources.length == 0) {
-        createToast('\u8bf7\u81f3\u5c11\u8f93\u5165\u4e00\u4e2a\u8ba2\u9605\u94fe\u63a5\uff01', 'red');
-        return false;
-      }
-      const invalidUrl = storedSources.find((source) => !isHttpUrl(source.url));
-      if (invalidUrl) {
-        createToast(`\u8ba2\u9605\u94fe\u63a5\u683c\u5f0f\u4e0d\u6b63\u786e\uff1a${escapeHtml(maskSubscriptionUrl(invalidUrl.url) || '\u8ba2\u9605\u5730\u5740\u5df2\u9690\u85cf')}`, 'red');
-        return false;
-      }
-      if (showSuspiciousSubSourcesError(storedSources)) return false;
-      if (cleanMode == SUB_RULE_MODE_ORIGINAL && cleanSources.length > 1) {
-        createToast('使用订阅原配置时，只能启用一个完整配置订阅', 'red', 8000);
-        return false;
-      }
-      if (!applyToCustom && await readConfigSource() == 'uploaded_config') {
-        const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
-        if (saved) createToast('订阅设置已保存，当前自定义配置保持不变', 'green', 8000);
-        return saved;
-      }
-      const subscriptionTxDir = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
-      const transactionFiles = [
-        { name: 'subscription_urls.txt', path: CLASH_SUB_URLS },
-        { name: 'sub_rule_mode.conf', path: CLASH_SUB_RULE_MODE_FILE },
-        { name: 'policy_options.conf', path: CLASH_POLICY_OPTIONS_FILE },
-        { name: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE },
-        { name: 'template.yaml', path: CLASH_TEMPLATE },
-        { name: 'template.base.yaml', path: CLASH_TEMPLATE_BASE },
-        ...(cleanMode == SUB_RULE_MODE_TEMPLATE && cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-          ? cleanSources.map((source) => ({
-            name: `provider_${source.name}.yaml`,
-            path: `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`,
-          }))
-          : []),
-      ];
-      const snapshotCommands = transactionFiles.map((item) => `
-        snapshot_file ${shellQuote(item.name)} ${shellQuote(item.path)}
-      `).join('');
-      const restoreCommands = transactionFiles.slice().reverse().map((item) => `
-        restore_file ${shellQuote(item.name)} ${shellQuote(item.path)}
-      `).join('');
-      const snapshotRes = await runShellWithRoot(`
-        set -e
-        TX=${shellQuote(subscriptionTxDir)}
-        rm -rf "$TX" 2>/dev/null || true
-        mkdir -p "$TX"
-        snapshot_file() {
-          name="$1"; path="$2"
-          if [ -f "$path" ]; then
-            cp "$path" "$TX/$name" || return 1
-            touch "$TX/$name.had"
-          else
-            touch "$TX/$name.absent"
-          fi
-        }
-        ${snapshotCommands}
-        echo "SUBSCRIPTION_TRANSACTION_READY"
-      `, 20 * 1000);
-      if (!snapshotRes.success || !String(snapshotRes.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
-        createToast(`无法创建订阅事务回滚点<br>${safeTextToHtml(snapshotRes.content || '')}`, 'red', 9000);
-        return false;
-      }
-      const restoreSubscriptionTransaction = async () => {
-        const restoreRes = await runShellWithRoot(`
-          set -e
-          TX=${shellQuote(subscriptionTxDir)}
-          restore_file() {
-            name="$1"; path="$2"; staged="$path.kano_restore.$$"
-            mkdir -p "$(dirname "$path")"
-            if [ -f "$TX/$name.had" ] && [ -f "$TX/$name" ]; then
-              cp "$TX/$name" "$staged" || return 1
-              chmod 600 "$staged" 2>/dev/null || true
-              case "$path" in *.yaml|*.yml) chmod 644 "$staged" 2>/dev/null || true ;; esac
-              mv -f "$staged" "$path" || return 1
-            elif [ -f "$TX/$name.absent" ]; then
-              rm -f "$path" || return 1
-            else
-              return 1
-            fi
-          }
-          ${restoreCommands}
-          rm -rf "$TX"
-          echo "SUBSCRIPTION_TRANSACTION_RESTORED"
-        `, 30 * 1000);
-        if (!restoreRes.success) {
-          createToast(`订阅相关文件回滚失败<br>${safeTextToHtml(restoreRes.content || '')}`, 'red', 10000);
-        }
-        return restoreRes.success;
-      };
-      if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) {
-        appendTemplateFlowDebug('saveSubSources persistSubSources failed');
-        await restoreSubscriptionTransaction();
-        createToast('\u4fdd\u5b58\u8ba2\u9605\u6e90\u5931\u8d25\uff01', 'red');
-        return false;
-      }
-      appendTemplateFlowDebug('saveSubSources persistSubSources ok');
-      if (cleanSources.length == 0) {
-        await runShellWithRoot(`rm -rf ${shellQuote(subscriptionTxDir)} 2>/dev/null || true`, 10 * 1000);
-        createToast('全部订阅已禁用，禁用状态已保存；当前运行配置保持不变。', 'green', 8000);
-        return true;
-      }
-      let localConversion = null;
-      if (cleanMode == SUB_RULE_MODE_TEMPLATE && cleanConvertMode == SUB_CONVERT_MODE_LOCAL) {
-        createToast('正在设备本地下载并转换订阅...', 'yellow');
-        localConversion = await convertSubscriptionsLocally(cleanSources);
-        if (localConversion.failed > 0) {
-          const failed = localConversion.providers.find((item) => !item.ok);
-          await restoreSubscriptionTransaction();
-          createToast(`${escapeHtml(failed && failed.name || '订阅')}：${escapeHtml(failed && failed.message || '本地转换失败')}，订阅设置未修改。`, 'red', 9000);
-          return false;
-        }
-      }
-      const rollbackPath = await createConfigRollbackPoint('subscription_save');
-      if (rollbackPath === null) {
-        await restoreSubscriptionTransaction();
-        createToast('无法创建 config.yaml 回滚点，订阅设置未修改。', 'red', 9000);
-        return false;
-      }
-      const writtenOk = await writeSubConfigByMode(cleanSources, cleanMode, {
-        convertMode: cleanConvertMode,
-      });
-      appendTemplateFlowDebug(`saveSubSources writeSubConfigByMode result=${writtenOk ? '1' : '0'}`);
-      if (!writtenOk) {
-        await restoreConfigRollbackPoint(rollbackPath, '\u4fdd\u5b58\u8ba2\u9605\u751f\u6210\u8fd0\u884c\u914d\u7f6e');
-        await restoreSubscriptionTransaction();
-        return false;
-      }
-      createToast('\u8ba2\u9605\u914d\u7f6e\u5df2\u5199\u5165\uff0c\u6b63\u5728\u91cd\u542f\u6838\u5fc3...', 'yellow');
-      const restarted = await restartClashWithConfigRollback(rollbackPath, '\u4fdd\u5b58\u8ba2\u9605\u540e\u91cd\u542f');
-      appendTemplateFlowDebug(`saveSubSources restart result=${restarted ? '1' : '0'}`);
-      if (!restarted) {
-        await restoreSubscriptionTransaction();
-        return false;
-      }
-      await runShellWithRoot(`rm -rf ${shellQuote(subscriptionTxDir)} 2>/dev/null || true`, 10 * 1000);
-      if (restarted && cleanMode == SUB_RULE_MODE_ORIGINAL) {
-        const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
-        await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, providerUpdate);
-        return true;
-      }
-      if (restarted) {
-        const providerUpdate = cleanConvertMode == SUB_CONVERT_MODE_LOCAL
-          ? await reloadLocalSubscriptionProviders(cleanSources, localConversion)
-          : await forceUpdateProvidersFromConfig({ showToast: false });
-        if (cleanConvertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
-          const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
-          return fallback.ok;
-        }
-        await showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, providerUpdate, null, cleanConvertMode);
-      }
-      return restarted;
-    };
+    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false } = {}) => {
+  const cleanMode = normalizeSubRuleModeValue(mode);
+  const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+  let storedSources, cleanSources;
+  try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
+  catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
+  if (!storedSources.length || storedSources.some((source) => !isHttpUrl(source.url))) {
+    operationFinish(false, '\u8bf7\u8f93\u5165\u6709\u6548\u8ba2\u9605\u94fe\u63a5');
+    return false;
+  }
+  if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
+  operationStage('\u68c0\u67e5\u8ba2\u9605\u548c\u914d\u7f6e\u6765\u6e90', 0, 5);
+  if ((!applyToCustom && await readConfigSource() === 'uploaded_config') || !cleanSources.length) {
+    const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
+    operationFinish(saved, saved ? '\u8ba2\u9605\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff0c\u5f53\u524d\u914d\u7f6e\u672a\u66f4\u6539' : '\u8ba2\u9605\u8bbe\u7f6e\u4fdd\u5b58\u5931\u8d25');
+    return saved;
+  }
+  const tx = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
+  const paths = [CLASH_CONFIG, CLASH_SUB_URLS, CLASH_SUB_RULE_MODE_FILE, CLASH_POLICY_OPTIONS_FILE,
+    CLASH_CONFIG_SOURCE_FILE, CLASH_TEMPLATE, CLASH_TEMPLATE_BASE, CLASH_RULE_OVERRIDE_APPLIED_JSON,
+    ...cleanSources.map((source) => `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`)];
+  const snapshot = await runShellWithRoot(`set -e
+umask 077
+TX=${shellQuote(tx)}
+mkdir -p "$TX"
+${paths.map((path, i) => `if [ -f ${shellQuote(path)} ]; then cp ${shellQuote(path)} "$TX/${i}"; touch "$TX/${i}.had"; else touch "$TX/${i}.absent"; fi`).join('\n')}
+echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
+  if (!snapshot.success || !String(snapshot.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
+    operationFinish(false, '\u65e0\u6cd5\u521b\u5efa\u56de\u6eda\u70b9\uff0c\u672a\u66f4\u6539\u8ba2\u9605');
+    return false;
+  }
+  let runtimeAttempted = false, wasRunning = false, restored = false, committed = false;
+  try {
+    wasRunning = !!(await getCorePid());
+    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('\u4fdd\u5b58\u8ba2\u9605\u8bbe\u7f6e\u5931\u8d25');
+    operationStage(cleanMode === SUB_RULE_MODE_ORIGINAL ? '\u4e0b\u8f7d\u8ba2\u9605\u7684\u5b8c\u6574\u914d\u7f6e' : '\u6839\u636e\u672c\u5730\u6a21\u677f\u751f\u6210\u914d\u7f6e', 1, 5);
+    let conversion = null;
+    if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
+      conversion = await convertSubscriptionsLocally(cleanSources);
+      if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '\u672c\u5730\u8ba2\u9605\u8f6c\u6362\u5931\u8d25');
+    }
+    if (!(await writeSubConfigByMode(cleanSources, cleanMode, { backup: false, convertMode: cleanConvertMode }))) {
+      throw new Error('\u8ba2\u9605\u914d\u7f6e\u751f\u6210\u5931\u8d25');
+    }
+    operationStage('\u505c\u6b62\u5e76\u542f\u52a8\u5df2\u6821\u9a8c\u7684\u65b0\u914d\u7f6e', 2, 5);
+    if (!wasRunning) { const prepared=await f50Command('prepare',120000); if(!prepared.success)throw new Error(f50Error(prepared.content)); committed=true; invalidateStatusSnapshot(); operationFinish(true,'配置已保存，核心保持停止'); createToast('订阅已保存，未启动核心','green'); return true; }
+    runtimeAttempted = true;
+    if (!(await restartClashOk({ skipCheck: true }))) throw new Error('\u65b0\u914d\u7f6e\u672a\u901a\u8fc7\u8fd0\u884c\u68c0\u67e5');
+    operationStage('\u66f4\u65b0\u5e76\u786e\u8ba4\u8282\u70b9\u6765\u6e90', 3, 5);
+    const providers = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL
+      ? await reloadLocalSubscriptionProviders(cleanSources, conversion)
+      : await forceUpdateProvidersFromConfig({ showToast: false });
+    if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
+      const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
+      if (!fallback.ok) throw new Error('\u8282\u70b9\u66f4\u65b0\u548c\u672c\u5730\u8f6c\u6362\u56de\u9000\u5747\u5931\u8d25');
+    } else if (providers.failed > 0) {
+      const failed = (providers.providers || []).find((item) => !item.ok);
+      throw new Error(failed && failed.message || '\u8282\u70b9\u6765\u6e90\u66f4\u65b0\u672a\u5b8c\u6210');
+    }
+    committed = true;
+    invalidateStatusSnapshot();
+    const message = cleanMode === SUB_RULE_MODE_ORIGINAL
+      ? '\u5df2\u4f7f\u7528\u8ba2\u9605\u81ea\u5e26\u914d\u7f6e\u8986\u76d6\u8fd0\u884c\u914d\u7f6e\uff0c\u672c\u5730\u6a21\u677f\u4fdd\u7559'
+      : '\u5df2\u6839\u636e\u672c\u5730\u6a21\u677f\u66f4\u65b0\u8ba2\u9605\u914d\u7f6e';
+    operationFinish(true, message);
+    createToast(message, 'green', 7000);
+    return true;
+  } catch (error) {
+    if (error.name === 'OperationCancelled' || (activeCriticalOperation && activeCriticalOperation.token.cancelled)) return false;
+    const firstFailure = sanitizeSubscriptionSecrets(activeCriticalOperation && activeCriticalOperation.failure || error.message || String(error));
+    createToast(safeTextToHtml(firstFailure) + '<br>\u6b63\u5728\u6062\u590d\u539f\u914d\u7f6e', 'red', 10000);
+    operationStage('\u66f4\u65b0\u5931\u8d25\uff0c\u6062\u590d\u539f\u914d\u7f6e');
+    // Stop a timed-out provider update before restoring cache files it could still replace.
+    let stopped = true;
+    try { if (runtimeAttempted) stopped = await networkRescue({ stopService: true, showOutput: false, reason: '\u8ba2\u9605\u56de\u6eda' }); } catch (_) { stopped = false; }
+    if (!stopped) {
+      operationFinish(false, '\u6838\u5fc3\u672a\u786e\u8ba4\u505c\u6b62\uff0c\u672a\u91cd\u542f\u6216\u8986\u76d6\u7f13\u5b58');
+      createToast('\u56de\u6eda\u5df2\u505c\u6b62\uff0c\u5907\u4efd\u4fdd\u7559\u4e8e ' + escapeHtml(tx), 'red', 15000);
+      return false;
+    }
+    try {
+    const rollback = await runShellWithRoot(`set -e
+TX=${shellQuote(tx)}
+${paths.map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `if [ -f "$TX/${i}.had" ]; then mkdir -p ${shellQuote(path.slice(0, path.lastIndexOf('/')))}; cp "$TX/${i}" ${shellQuote(path + '.kano_restore')} || exit 1; mv -f ${shellQuote(path + '.kano_restore')} ${shellQuote(path)} || exit 1; elif [ -f "$TX/${i}.absent" ]; then rm -f ${shellQuote(path)}; else exit 1; fi`).join('\n')}
+echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+    restored = !!rollback.success && String(rollback.content || '').includes('SUBSCRIPTION_TRANSACTION_RESTORED');
+    invalidateStatusSnapshot();
+    if (restored && runtimeAttempted && wasRunning) restored = await restartClashOk({ skipCheck: true });
+    } catch (_) { restored = false; }
+    if (!restored) await networkRescue({ stopService: true, showOutput: false, reason: '\u8ba2\u9605\u56de\u6eda\u672a\u5b8c\u6210' });
+    const message = firstFailure;
+    operationFinish(false, message + (restored ? '\uff1b\u5df2\u6062\u590d\u66f4\u65b0\u524d\u72b6\u6001' : '\uff1b\u6062\u590d\u672a\u5b8c\u6210'));
+    createToast(safeTextToHtml(message) + '<br>' + (restored ? '\u5df2\u6062\u590d\u539f\u8ba2\u9605\u548c\u914d\u7f6e' : '\u56de\u6eda\u672a\u5b8c\u6210\uff0c\u5907\u4efd\u4fdd\u7559\u4e8e ' + escapeHtml(tx)), 'red', 12000);
+    return false;
+  } finally {
+    if ((committed || restored) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
+      try { await runShellWithRoot('rm -rf ' + shellQuote(tx), 10000); } catch (_) {}
+    }
+  }
+};
 
     const overwriteConfigByTemplate = async ({ confirm = true } = {}) => {
       const configSource = await readConfigSource();
@@ -11569,12 +10008,6 @@ ${expectedProviderChecks}
         createToast(`配置暂存失败，原 config.yaml 未改动<br>${safeTextToHtml(stageRes.content || '')}`, 'red', 9000);
         return false;
       }
-      const stageCheck = await validateConfigFileStructure(stagePath, 'config.yaml');
-      if (!stageCheck.ok) {
-        await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
-        createToast(`配置结构检查失败，原 config.yaml 未改动<br>${safeTextToHtml(stageCheck.message || '')}`, 'red', 10000);
-        return false;
-      }
       const commitRes = await runShellWithRoot(`
         set -e
         mv -f ${shellQuote(stagePath)} ${shellQuote(CLASH_CONFIG)}
@@ -11601,29 +10034,17 @@ ${expectedProviderChecks}
         );
         return false;
       }
-      const committedCheck = await validateConfigFileStructure(CLASH_CONFIG, 'config.yaml');
-      if (!committedCheck.ok) {
-        const restored = await rollbackUploadedConfig('上传配置校验');
-        createToast(
-          `配置结构检查失败，${restored ? '已恢复写入前状态' : '且写入前状态恢复失败'}<br>${safeTextToHtml(committedCheck.message || '')}`,
-          restored ? 'yellow' : 'red',
-          10000,
-        );
-        return false;
-      }
       const reloadRes = await reloadConfigHot(controllerInfo);
       if (reloadRes.success) {
-        const trafficModeOk = await ensureRuntimeTrafficMode(lastSanitizedTrafficMode);
-        const rulesOk = trafficModeOk && await reapplyPolicyRulesSilent();
-        if (trafficModeOk && rulesOk) {
-          createToast('config.yaml 已通过结构检查，运行配置和网络策略已生效', 'green', 7000);
+        const rulesOk = await reapplyPolicyRulesSilent();
+        if (rulesOk) {
+          createToast('config.yaml 已加载，网络策略已应用', 'green', 7000);
           await isMMRunning();
           return true;
         }
         const restored = await rollbackUploadedConfig('上传配置运行态检查');
         const recoveryReload = restored ? await reloadConfigHot(controllerInfo) : { success: false };
         const recoveryOk = recoveryReload.success
-          && await ensureRuntimeTrafficMode(lastSanitizedTrafficMode)
           && await reapplyPolicyRulesSilent();
         if (!recoveryOk) {
           await networkRescue({ stopService: true, showOutput: false, reason: '上传配置回滚失败' });
@@ -11800,6 +10221,7 @@ ${expectedProviderChecks}
 
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
     const importSub = async () => {
+      operationStage('\u8bfb\u53d6\u5df2\u4fdd\u5b58\u7684\u8ba2\u9605');
       const [currentSources, currentConvertMode, currentRuleMode, configSource] = await Promise.all([
         readCurrentSubSources({ includeDisabled: true }),
         readSavedSubConvertMode(),
@@ -11826,6 +10248,7 @@ ${expectedProviderChecks}
                     </label>
                     <div style="font-size:.6rem;opacity:.72;line-height:1.5;">原配置需一个启用的完整 Mihomo YAML/JSON 订阅，保留规则、策略组和节点来源；DNS、IPv6 和流量接管仍按 F50 设置适配。</div>
                     ${configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
+                    <div id="mm_sub_mode_hint" role="status" style="font-size:.64rem;line-height:1.6;color:#a6c8ee"></div>
                     <label id="mm_sub_convert_label" style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
                       <span>节点处理</span>
                       <select id="mm_sub_convert_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
@@ -11853,11 +10276,21 @@ ${expectedProviderChecks}
       const ruleModeSelect = el.querySelector('#mm_sub_rule_mode');
       ruleModeSelect.value = currentRuleMode;
       const syncRuleMode = () => {
+        const sources = Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({ url: row.querySelector('.mm_sub_url_input').value, enabled: row.dataset.enabled !== 'false' }));
+        const stored = normalizeStoredSubSourceList(sources);
+        const allowed = stored.length === 1 && stored[0].enabled;
+        const original = ruleModeSelect.querySelector('option[value="original"]');
+        if (original) original.disabled = !allowed;
+        if (!loadingRows && !allowed && ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL) ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
+        const note = el.querySelector('#mm_sub_mode_hint');
+        setText(note, !allowed ? '\u591a\u6761\u94fe\u63a5\u53ea\u80fd\u4f7f\u7528\u672c\u5730\u6a21\u677f\uff1b\u8ba2\u9605\u539f\u914d\u7f6e\u9700\u4e14\u4ec5\u9700\u4e00\u6761\u5df2\u542f\u7528\u94fe\u63a5'
+          : ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL ? '\u5c06\u7528\u8ba2\u9605\u81ea\u5e26\u7684\u89c4\u5219\u3001\u7b56\u7565\u7ec4\u548c\u8282\u70b9\u8986\u76d6\u8fd0\u884c\u914d\u7f6e\uff0c\u4e0d\u6df7\u5165\u672c\u5730\u6a21\u677f\u89c4\u5219'
+          : '\u4f7f\u7528\u63d2\u4ef6\u672c\u5730\u6a21\u677f\u7684\u89c4\u5219\u548c\u7b56\u7565\u7ec4');
         el.querySelector('#mm_sub_convert_label').style.display = ruleModeSelect.value == SUB_RULE_MODE_ORIGINAL ? 'none' : 'flex';
       };
       ruleModeSelect.onchange = syncRuleMode;
-      syncRuleMode();
 
+      let loadingRows = true;
       const addSubRow = (source = {}, index = rowsEl.children.length) => {
         const row = document.createElement('div');
         row.className = 'mm_sub_row';
@@ -11882,6 +10315,7 @@ ${expectedProviderChecks}
         input.style.background = '#111827';
         input.style.color = '#dbeafe';
         input.value = source.url || '';
+        input.addEventListener('input', syncRuleMode);
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'mm_sub_toggle_btn';
         toggleBtn.style.fontSize = '.64rem';
@@ -11896,6 +10330,7 @@ ${expectedProviderChecks}
         toggleBtn.onclick = () => {
           row.dataset.enabled = row.dataset.enabled == 'false' ? 'true' : 'false';
           syncToggleState();
+          syncRuleMode();
         };
         const removeBtn = document.createElement('button');
         removeBtn.className = 'mm_sub_remove_btn';
@@ -11907,15 +10342,18 @@ ${expectedProviderChecks}
             input.value = '';
             row.dataset.enabled = 'true';
             syncToggleState();
+            syncRuleMode();
             return;
           }
           row.remove();
+          syncRuleMode();
         };
         row.appendChild(input);
         row.appendChild(toggleBtn);
         row.appendChild(removeBtn);
         rowsEl.appendChild(row);
         syncToggleState();
+        syncRuleMode();
       };
 
       if (currentSources.length > 0) {
@@ -11923,6 +10361,9 @@ ${expectedProviderChecks}
       } else {
         addSubRow();
       }
+      loadingRows = false;
+      ruleModeSelect.value = currentRuleMode;
+      syncRuleMode();
       addBtn.onclick = () => addSubRow();
       clearBtn.onclick = async () => {
         const confirmed = await askConfirm(
@@ -11967,10 +10408,12 @@ ${expectedProviderChecks}
             { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked },
           );
 
+          operationFinish(success);
           if (success) {
             close();
           }
         } catch (e) {
+          operationFinish(false, e.message || String(e));
           createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
         } finally {
           setButtonBusy(submitBtn, false);
@@ -11984,26 +10427,31 @@ ${expectedProviderChecks}
     subBtn.classList.add('btn');
     subBtn.textContent = '\u8ba2\u9605\u8bbe\u7f6e';
     subBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
-      importSub();
-    };
+  return runCriticalOperation('\u8bfb\u53d6\u8ba2\u9605\u8bbe\u7f6e', async () => {
+    if (!(await ensureReady({ readOnly: true }))) return false;
+    await importSub();
+    return true;
+  });
+};
 
     const updateSubBtn = document.createElement('button');
     updateSubBtn.classList.add('btn');
     updateSubBtn.textContent = '\u66f4\u65b0\u8ba2\u9605';
     updateSubBtn.onclick = async () => {
-      if (!(await ensureReady())) return;
       const operationToken = acquireCriticalOperation('更新订阅');
       if (!operationToken) return;
       setButtonBusy(updateSubBtn, true, '\u66f4\u65b0\u4e2d\u2026');
       try {
+        operationStage('\u68c0\u67e5\u8ba2\u9605');
+        if (!(await ensureReady({ readOnly: true }))) { operationFinish(false); return; }
         if (await readConfigSource() == 'uploaded_config') {
-          await updateSubProviders([]);
+          operationFinish(await updateSubProviders([]));
           return;
         }
         const storedSources = await readCurrentSubSources({ includeDisabled: true });
         const sources = normalizeSubSourceList(storedSources);
         const ruleMode = await readCurrentSubRuleMode();
+        validateSubscriptionMode(storedSources, ruleMode);
         const convertMode = await readSavedSubConvertMode();
         if (storedSources.length > 0 && sources.length == 0) {
           createToast('所有订阅链接均已禁用，请先启用至少一个订阅。', 'yellow', 7000);
@@ -12017,7 +10465,11 @@ ${expectedProviderChecks}
           }
         }
         createToast('正在检查订阅并选择更新方式...', 'yellow');
-        await updateSubProviders(sources, ruleMode, convertMode);
+        const updated = await updateSubProviders(sources, ruleMode, convertMode);
+        operationFinish(updated);
+      } catch (error) {
+        operationFinish(false, error.message || String(error));
+        createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       } finally {
         setButtonBusy(updateSubBtn, false);
         releaseCriticalOperation(operationToken);
@@ -12344,23 +10796,12 @@ ${expectedProviderChecks}
     const quickRunBtn = document.createElement('button');
     quickRunBtn.classList.add('btn');
     quickRunBtn.textContent = '安装 / 启动';
-    quickRunBtn.onclick = async () => {
-      if (!(await ensureAdvanced())) return;
-      if (!(await checkIsInstalled())) {
-        btn_enabled.click();
-        return;
-      }
-      const operationToken = acquireCriticalOperation('启动核心');
-      if (!operationToken) return;
-      setButtonBusy(quickRunBtn, true, '启动中…');
-      try {
-        await ensureBootstrapConfig();
-        await restartClash({ skipCheck: true });
-      } finally {
-        setButtonBusy(quickRunBtn, false);
-        releaseCriticalOperation(operationToken);
-      }
-    };
+    quickRunBtn.onclick = async ()=>{
+ if(!(await ensureAdvanced()))return false;
+ const r=await runShellWithRoot("test \"$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)\" = '8.0.0-compat.2.3'",4000);
+ if(!r.success)return await installF50PackageFromNetwork();
+ return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
+};
 
     const mmBox = document.querySelector('#mm_action_box');
 
@@ -12381,22 +10822,23 @@ ${expectedProviderChecks}
       return details;
     };
 
-    appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
+    const coreGroup = appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
     appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
     appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, rescueBtn, showLogBtn], false);
-    const componentsGroup = appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [binaryHelperBtn, binaryHelperUploadBtn, clearCacheBtn, btn_disabled], false);
-    let componentProbePending = false;
-    let componentProbeLoaded = false;
-    componentsGroup.addEventListener('toggle', async () => {
-      if (!componentsGroup.open || componentProbePending || componentProbeLoaded) return;
-      componentProbePending = true;
+    const componentsGroup = appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
+    let bootProbeLoaded = false;
+    let bootProbePending = false;
+    coreGroup.addEventListener('toggle', async () => {
+      if (!coreGroup.open || bootProbeLoaded || bootProbePending) return;
+      bootProbePending = true;
       try {
-        const probe = await refreshBinaryHelperButton();
-        componentProbeLoaded = probe.shellSuccess && probe.state != 'unknown';
+        const isBootUp = await checkIsBootUp();
+        boot_on.style.background = isBootUp ? 'var(--dark-btn-color-active)' : '';
+        bootProbeLoaded = true;
       } catch (e) {
-        console.error('辅助内核状态探测失败', e);
+        console.error('猫猫自启状态读取失败', e);
       } finally {
-        componentProbePending = false;
+        bootProbePending = false;
       }
     });
 
@@ -12406,9 +10848,6 @@ ${expectedProviderChecks}
       colTimer && clearTimeout(colTimer);
       colTimer1 && clearTimeout(colTimer1);
       if (e == 'open') {
-        checkIsBootUp().then((isBootUp) => {
-          boot_on.style.background = isBootUp ? 'var(--dark-btn-color-active)' : '';
-        }).catch((e) => console.error('猫猫自启状态读取失败', e));
         colTimer1 = setTimeout(() => {
           if (isWebPanelVisible()) {
             refreshPanel({ forceReload: false }).catch((e) => console.error('猫猫面板加载失败', e));
@@ -12428,8 +10867,10 @@ ${expectedProviderChecks}
         if (localStorage.getItem('#collapse_mm') == 'open' && isWebPanelVisible()) {
           refreshPanel({ forceReload: false }).catch((e) => console.error('猫猫面板加载失败', e));
         }
-        // 页面加载只读状态，不自动写防火墙、不迁移自启、不下载 Go helper。
-        await isMMRunning();
+        // 先完成首屏渲染，再异步读取运行状态；不自动写防火墙、不迁移自启、不下载 Go helper。
+        setTimeout(() => {
+          isMMRunning().catch((e) => console.error('猫猫运行状态读取失败', e));
+        }, 0);
       } catch (e) {
         console.error('猫猫TProxy background initialization failed', e);
       }

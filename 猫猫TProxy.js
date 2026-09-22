@@ -2,7 +2,39 @@
 // 猫猫TProxy v8.0.0-compat.2.3 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
 const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
-const F50_FIXED_PROFILES = {"tproxy4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":7895,"tun":{"enable":false},"secret":"123456"},"tproxy6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":7895,"tun":{"enable":false},"secret":"123456"},"tun4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"mtu":1500,"stack":"mixed","strict-route":false},"secret":"123456"},"tun6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"inet6-address":["fdfe:dcba:9876::1/126"],"mtu":1500,"stack":"mixed","strict-route":false},"secret":"123456"},"off4":{"allow-lan":true,"bind-address":"0.0.0.0","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":false,"listen":"0.0.0.0:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":false,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"enable":false},"secret":"123456"},"off6":{"allow-lan":true,"bind-address":"*","dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","ipv6":true,"listen":"[::]:1053","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":"0.0.0.0:7788","external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"ipv6":true,"log-level":"info","mixed-port":7892,"mode":"rule","port":7890,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":7891,"tproxy-port":0,"tun":{"enable":false},"secret":"123456"}};
+const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, controller:7788};
+const F50_DEFAULT_SECRET = '123456';
+// 深合并：plain object 递归合并，数组直接整体替换；返回全新对象，不修改入参。
+function f50IsPlainObject(v) { return !!v && typeof v === "object" && !Array.isArray(v); }
+function f50DeepClone(v) {
+  if (Array.isArray(v)) return v.map(f50DeepClone);
+  if (f50IsPlainObject(v)) { const o = {}; for (const k of Object.keys(v)) o[k] = f50DeepClone(v[k]); return o; }
+  return v;
+}
+function f50DeepMerge(base, delta) {
+  if (Array.isArray(delta)) return f50DeepClone(delta);
+  if (f50IsPlainObject(delta)) {
+    const out = {};
+    if (f50IsPlainObject(base)) for (const k of Object.keys(base)) out[k] = f50DeepClone(base[k]);
+    for (const k of Object.keys(delta)) {
+      const bv = f50IsPlainObject(base) ? base[k] : undefined;
+      out[k] = (f50IsPlainObject(bv) && f50IsPlainObject(delta[k])) ? f50DeepMerge(bv, delta[k]) : f50DeepClone(delta[k]);
+    }
+    return out;
+  }
+  return f50DeepClone(delta);
+}
+const PROFILE_BASE = {"allow-lan":true,"dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":`0.0.0.0:${F50_PORTS.controller}`,"external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"log-level":"info","mixed-port":F50_PORTS.mixed,"mode":"rule","port":F50_PORTS.http,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":F50_PORTS.socks,"secret":F50_DEFAULT_SECRET};
+const PROFILE_DELTA = {
+  "tproxy4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
+  "tproxy6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
+  "tun4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"mtu":1500,"stack":"mixed","strict-route":false}},
+  "tun6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"inet6-address":["fdfe:dcba:9876::1/126"],"mtu":1500,"stack":"mixed","strict-route":false}},
+  "off4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":0,"tun":{"enable":false}},
+  "off6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":0,"tun":{"enable":false}},
+};
+const F50_FIXED_PROFILES = {};
+for (const name of Object.keys(PROFILE_DELTA)) F50_FIXED_PROFILES[name] = f50DeepMerge(PROFILE_BASE, PROFILE_DELTA[name]);
 for (const profile of Object.values(F50_FIXED_PROFILES)) {
   profile['external-ui'] = 'WebUI/zashboard';
   profile['external-ui-url'] = F50_ZASHBOARD_UI_URL;
@@ -10,7 +42,6 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
   delete profile['external-ui-name'];
 }
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
-const F50_DEFAULT_SECRET = '123456';
 let f50BackendReady = false;
 async function ensureCompatBackend() {
   if (f50BackendReady) return true;
@@ -35,6 +66,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const cause = backend || cleanup || code;
   const labels = {
     zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
+    data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
     unzip_missing: '设备缺少解压程序，安装未执行。',
     archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
     unsafe_archive_path: '安装包含越界路径，已拒绝解压。',
@@ -102,9 +134,17 @@ function f50StartResult(response = {}, fallback = '') {
     summary: ok ? '\u6838\u5fc3\u4e0e\u63a5\u7ba1\u89c4\u5219\u5df2\u542f\u52a8' : diagnostic.summary,
     serviceRc: diagnostic.serviceRc, transportOk: response.success === true};
 }
+const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
+  kano_log_size=$(wc -c < '/data/clash/Proxy/Clash.log' 2>/dev/null || echo 0)
+  case "$kano_log_size" in ''|*[!0-9]*) ;; *) [ "$kano_log_size" -gt 5242880 ] && mv -f '/data/clash/Proxy/Clash.log' '/data/clash/Proxy/Clash.log.1' 2>/dev/null || true ;; esac
+fi
+`;
+const dataSpaceGuardCmd = (onLow = 'exit 1') => `kano_data_avail_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
+case "$kano_data_avail_kb" in ''|*[!0-9]*) ;; *) [ "$kano_data_avail_kb" -ge 51200 ] || { ${onLow}; } ;; esac
+`;
 function buildF50StartScript(action) {
   if (!['start', 'restart'].includes(action)) throw new Error('invalid_start_action');
-  return buildF50MaintenanceFunctions() + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
+  return rotateClashLogCmd() + buildF50MaintenanceFunctions() + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
 }
 function f50UninstallVerdict(response = {}) {
   const detail = f50Diagnostic(response.content || '').details;
@@ -782,6 +822,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1;
 LOCKED=1
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
+${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
 command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
 # No fixed ZIP hash, resource list or template/UI fingerprints.
@@ -2022,7 +2063,13 @@ exit "$kano_task_rc"`;
   };
 
   const isPrivateOrReservedIpv4 = (hostname = '') => {
-    const parts = String(hostname || '').split('.');
+    let normalized = String(hostname || '').trim().toLowerCase();
+    if (/^(0x[0-9a-f]+|[0-9]+)$/.test(normalized)) {
+      const numeric = normalized.startsWith('0x') ? parseInt(normalized, 16) : Number(normalized);
+      if (!Number.isSafeInteger(numeric) || numeric < 0 || numeric > 4294967295) return false;
+      normalized = [(numeric >>> 24) & 255, (numeric >>> 16) & 255, (numeric >>> 8) & 255, numeric & 255].join('.');
+    }
+    const parts = normalized.split('.');
     if (parts.length != 4 || parts.some((part) => !/^\d+$/.test(part) || Number(part) > 255)) return false;
     const [a, b, c] = parts.map(Number);
     return a == 0 || a == 10 || a == 127 || a >= 224
@@ -5752,21 +5799,19 @@ KANO_WRITE_CHECK_EOF
   }
   const info = await buildControllerInfo({fresh:true});
   const pid = await getCorePid();
-  const results = [];
-  for (const name of names) {
+  const results = await mapWithConcurrency(names, 2, async (name) => {
     if (defs[name].type === 'http') {
-      results.push({type:'proxy-provider',name,ok:false,message:'\u65e7 HTTP Provider \u5c1a\u672a\u8fc1\u79fb\uff0c\u8bf7\u91cd\u65b0\u5bfc\u5165\u8ba2\u9605\u6216\u91cd\u542f\u6838\u5fc3',errorType:'legacy_http_provider'});
-      continue;
+      return {type:'proxy-provider',name,ok:false,message:'\u65e7 HTTP Provider \u5c1a\u672a\u8fc1\u79fb\uff0c\u8bf7\u91cd\u65b0\u5bfc\u5165\u8ba2\u9605\u6216\u91cd\u542f\u6838\u5fc3',errorType:'legacy_http_provider'};
     }
-    if (!pid) { results.push({type:'proxy-provider',name,ok:false,message:'\u6838\u5fc3\u672a\u8fd0\u884c'}); continue; }
+    if (!pid) return {type:'proxy-provider',name,ok:false,message:'\u6838\u5fc3\u672a\u8fd0\u884c'};
     const updated = await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'PUT', null, info, 5, {corePid:pid});
     const snap = updated.success ? await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'GET', null, info, 5, {corePid:pid}) : updated;
     let count = 0;
     try { const value = JSON.parse(snap.responseText || '{}'); count = Array.isArray(value.proxies) ? value.proxies.length : 0; } catch (_) {}
     const ok = !!updated.success && !!snap.success && count > 0;
-    results.push({type:'proxy-provider',name,ok,attempts:1,proxyCount:count,statusCode:snap.statusCode || 0,
-      message:ok ? '' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d',errorType:ok ? '' : 'local_reload_failed'});
-  }
+    return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,statusCode:snap.statusCode || 0,
+      message:ok ? '' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d',errorType:ok ? '' : 'local_reload_failed'};
+  });
   const result = buildProviderUpdateResult(results, {controllerInfo:info,corePid:pid,via:'file'});
   if (showToast) createToast(result.failed ? '\u90e8\u5206\u672c\u5730\u8282\u70b9\u672a\u52a0\u8f7d' : '\u672c\u5730\u8282\u70b9\u5df2\u52a0\u8f7d', result.failed ? 'red':'green');
   return result;

@@ -63,6 +63,9 @@ check(source.includes('# KANO_IPV6_NAT_COMPAT=1'), '服务包装器包含 IPv6 N
 check(source.includes('await normalizeIpv6DnsCapability(next)'), '保存网络设置前检查 IPv6 NAT 能力');
 check(source.includes('rotateClashLogCmd() + buildF50MaintenanceFunctions()'), '启动前轮转过大的核心日志');
 check(source.includes("dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')"), '安装前检查设备可用空间');
+check(source.includes("dataSpaceGuardCmd('echo \"ARCHIVE_SPACE_LOW=$kano_data_avail_kb\"; exit 1')"), '在线下载安装包前检查设备可用空间');
+check(source.includes('f50_ensure_install_secret || exit 1'), '安装时补全空控制密钥');
+check(source.includes('f50_ensure_live_secret'), '启动时补全外部替换配置中的空控制密钥');
 check(source.includes('mapWithConcurrency(names, 2'), '节点来源更新限制并发数');
 const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '组件包服务包装器同步包含兼容清理', packageService.stderr.trim());
@@ -102,6 +105,8 @@ const maintenance = runBlock(`${maintenanceSource}; this.build = buildF50Mainten
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
   F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
   KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin',
+  F50_DEFAULT_SECRET: '123456',
+  F50_PORTS: { controller: 7788 },
 });
 const maintenanceShell = maintenance.build();
 const shellSyntax = spawnSync('sh', ['-n'], { input: maintenanceShell, encoding: 'utf8' });
@@ -114,6 +119,17 @@ check(!maintenanceShell.includes('for(i=2;i<=NF;i++)arg($i);'), '不把 ip rule 
 check(maintenanceShell.includes('f50_drop_detached_tun_rules || return 1'), '启动前先清理 detached TUN 规则');
 check(maintenanceShell.includes("grep -Fq 'iif KanoTun [detached] lookup 17667'"), 'detached 标记使用固定字符串匹配');
 check(maintenanceShell.includes('f50_disable_unsupported_ipv6_dns_hijack || return 1'), '启动前降级不受支持的 IPv6 DNS 劫持');
+check(maintenanceShell.includes('F50_START_CODE=secret_ensure_failed'), '控制密钥补全失败时停止启动');
+const installSource = slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath');
+const install = runBlock(`${installSource}; this.build = buildF50InstallScript;`, {
+  shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
+  F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
+  KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin',
+  F50_DEFAULT_SECRET: '123456',
+  F50_PORTS: { controller: 7788 },
+});
+const installSyntax = spawnSync('sh', ['-n'], { input: install.build('/data/upload.zip'), encoding: 'utf8' });
+check(installSyntax.status === 0, '安装事务 Shell 通过 sh -n', installSyntax.stderr && installSyntax.stderr.trim());
 const routePlanDir = fs.mkdtempSync(path.join(ROOT, '.tproxy-route-plan-'));
 try {
   const ruleFile = path.join(routePlanDir, 'rules');
@@ -162,6 +178,13 @@ cat "$3"`, 'sh', compatRoot, compatBin, detachedLog], { encoding: 'utf8' });
 check(source.includes('F50_UNINSTALL_STATE=clean'), '卸载包含最终清洁状态');
 
 console.log('--- subscription sources ---');
+const localUrlCode = slice('const isPrivateOrReservedIpv4', 'const getUploadedPath');
+const localUrl = runBlock(`${localUrlCode}; this.validate = validateLocalSubscriptionUrl;`, { URL }).validate;
+check(localUrl('https://example.com/sub').ok, '本地订阅允许公网 HTTPS 地址');
+check(!localUrl('http://example.com/sub').ok, '本地订阅拒绝 HTTP 地址');
+check(!localUrl('https://127.0.0.1/sub').ok && !localUrl('https://2130706433/sub').ok, '本地订阅拒绝常规和整数形式的回环地址');
+check(source.includes('const subUrlChecks = clean.map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }))'), '本地转换前校验全部订阅地址');
+check(source.includes('const invalidSubSource = cleanSources'), '保存订阅前校验启用地址');
 const subscriptionHelpers = slice('const providerNameFor', 'const normalizeSubRuleModeValue');
 const providerBuilder = slice('const buildManagedProxyProviders', 'const buildManagedRuleProviders');
 const subscriptions = runBlock(`${subscriptionHelpers}\n${providerBuilder}; this.api = { normalizeStoredSubSourceList, normalizeSubSourceList, buildSubUrlsFileText, parseStoredSubSourcesFromText, buildManagedProxyProviders };`, {
@@ -210,6 +233,7 @@ const profiles = profileApi.profiles;
 equal(Object.keys(profiles), ['tproxy4', 'tproxy6', 'tun4', 'tun6', 'off4', 'off6'], '固定配置覆盖三种模式和双栈');
 check(Object.values(profiles).every((profile) => profile['external-ui'] === 'WebUI/zashboard'), '所有固定配置使用同一面板目录');
 check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== profiles.tun4.tun, '固定配置深合并后不共享可变对象');
+check(source.includes("'redir-port': 0") && source.includes("'redir-port: 0'"), '生成模板与引导配置关闭未使用的 Redir 端口');
 const kprSource = slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles }).KPR;
 const baseConfig = {

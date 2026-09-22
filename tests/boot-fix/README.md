@@ -12,7 +12,7 @@ node tests/boot-fix/run_tests.js
 node tests/boot-fix/compat_check.js
 ```
 
-前者是功能回归（33 个用例），后者是可移植性检查（多 shell 语法 + 外部命令参数）。
+前者是功能回归（35 个用例），后者是可移植性检查（多 shell 语法 + 外部命令参数）。
 
 ## 它是怎么工作的
 

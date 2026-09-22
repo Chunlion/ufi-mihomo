@@ -61,6 +61,9 @@ check(!source.includes('F50 后台单文件上传上限为 10 MiB'), '未保留�
 check(source.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '服务包装器包含 detached TUN 规则兼容清理');
 check(source.includes('# KANO_IPV6_NAT_COMPAT=1'), '服务包装器包含 IPv6 NAT 能力降级');
 check(source.includes('await normalizeIpv6DnsCapability(next)'), '保存网络设置前检查 IPv6 NAT 能力');
+check(source.includes('rotateClashLogCmd() + buildF50MaintenanceFunctions()'), '启动前轮转过大的核心日志');
+check(source.includes("dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')"), '安装前检查设备可用空间');
+check(source.includes('mapWithConcurrency(names, 2'), '节点来源更新限制并发数');
 const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '组件包服务包装器同步包含兼容清理', packageService.stderr.trim());
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_IPV6_NAT_COMPAT=1'), '组件包支持缺少 IPv6 NAT 的设备', packageService.stderr.trim());
@@ -199,11 +202,14 @@ const groupConfig = { 'proxy-groups': [{ name: 'Proxy', type: 'select', use: ['O
 groups.normalize(groupConfig, ['Provider1', 'Provider2', 'Provider3', 'Provider4']);
 equal(groupConfig['proxy-groups'][0].use, ['Provider1', 'Provider2', 'Provider3', 'Provider4'], '策略组同时引用全部 Provider');
 
-const profileMatch = source.match(/^const F50_FIXED_PROFILES = (.+);$/m);
-if (!profileMatch) throw new Error('missing F50_FIXED_PROFILES');
-const profiles = JSON.parse(profileMatch[1]);
+const profileSource = slice('const F50_PORTS', 'const F50_COMPAT_VERSION');
+const profileApi = runBlock(`${profileSource}; this.profiles = F50_FIXED_PROFILES; this.base = PROFILE_BASE;`, {
+  F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+});
+const profiles = profileApi.profiles;
 equal(Object.keys(profiles), ['tproxy4', 'tproxy6', 'tun4', 'tun6', 'off4', 'off6'], '固定配置覆盖三种模式和双栈');
 check(Object.values(profiles).every((profile) => profile['external-ui'] === 'WebUI/zashboard'), '所有固定配置使用同一面板目录');
+check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== profiles.tun4.tun, '固定配置深合并后不共享可变对象');
 const kprSource = slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles }).KPR;
 const baseConfig = {
@@ -223,6 +229,10 @@ const privateRoute = kpr.runtime(baseConfig, {
 });
 check(privateRoute.rules[0] === 'IP-CIDR,192.168.11.0/24,Proxy,no-resolve', '私网定向代理规则位于规则首部');
 check(privateRoute['x-kano-private-route']?.policy === 'Proxy', '私网定向代理写入可回滚元数据');
+
+const urlGuardSource = slice('const isPrivateOrReservedIpv4', 'const validateLocalSubscriptionUrl');
+const urlGuard = runBlock(`${urlGuardSource}; this.isPrivateV4 = isPrivateOrReservedIpv4;`).isPrivateV4;
+check(urlGuard('2130706433') && urlGuard('0x7f000001') && !urlGuard('8.8.8.8'), '订阅地址检查识别十进制和十六进制回环地址');
 
 console.log('--- diagnostics and uninstall verdict ---');
 const diagnosticSource = slice('let lastInstallDiagnostic', 'async function performF50Uninstall()');

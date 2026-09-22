@@ -77,6 +77,8 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     controller_not_executable: '控制器无法执行，请检查架构和执行权限。',
     core_not_executable: 'Mihomo 内核无法执行，请检查架构和执行权限。',
     yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
+    secret_write_failed: '控制密钥写入失败，原配置未被替换。',
+    secret_ensure_failed: '控制密钥补全失败，核心未启动。',
     service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
     service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
     controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
@@ -683,7 +685,7 @@ f50_verify_zashboard_endpoint() {
   done
   [ -n "$panel_curl" ] || { echo F50_ERROR=panel_probe_curl_missing; return 1; }
   panel_status=$("$panel_curl" -fsS --noproxy '*' --connect-timeout 3 --max-time 6 \
-    -o "$panel_tmp" -w '%{http_code}' "http://127.0.0.1:7788/ui/?_f50=$$" 2>/dev/null)
+    -o "$panel_tmp" -w '%{http_code}' "http://127.0.0.1:${F50_PORTS.controller}/ui/?_f50=$$" 2>/dev/null)
   panel_rc=$?
   if [ "$panel_rc" != 0 ] || [ "$panel_status" != 200 ]; then
     rm -f "$panel_tmp" 2>/dev/null || true
@@ -694,9 +696,32 @@ f50_verify_zashboard_endpoint() {
   echo F50_PANEL_HTTP_STATUS=200
   return 0
 }
+f50_ensure_live_secret() {
+  live_cfg="$F50_ROOT/Proxy/config.yaml"
+  live_yq="$F50_ROOT/Tools/yq_linux_arm64"
+  [ -s "$live_cfg" ] && [ -x "$live_yq" ] || return 0
+  live_secret=$(f50_limit 5 "$live_yq" e -r '.secret // ""' "$live_cfg" 2>/dev/null)
+  live_rc=$?
+  [ "$live_rc" = 0 ] || return 0
+  case "$live_secret" in ''|*[![:space:]]*) : ;; *) live_secret= ;; esac
+  [ -n "$live_secret" ] && return 0
+  export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
+  f50_limit 5 "$live_yq" e -i '.secret = strenv(F50_FIXED_SECRET)' "$live_cfg" >/dev/null 2>&1
+  live_rc=$?
+  unset F50_FIXED_SECRET
+  [ "$live_rc" = 0 ] || return 1
+  chmod 600 "$live_cfg" 2>/dev/null || true
+}
 f50_start_service() {
   start_action=$1; start_budget=$2
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
+  if ! f50_ensure_live_secret; then
+    F50_START_RC=1; F50_START_DETAIL=F50_ERROR=secret_ensure_failed
+    F50_START_CODE=secret_ensure_failed; F50_START_OK=0
+    printf '%s\n' "$F50_START_DETAIL"
+    printf 'START_SERVICE_RC=%s\nF50_START_CODE=%s\nF50_START_OK=%s\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
+    return 1
+  fi
   start_log="$F50_DATA/kano_clash_start.log"
   log_before=$(cksum "$start_log" 2>/dev/null)
   f50_disable_unsupported_ipv6_dns_hijack || return 1
@@ -903,6 +928,25 @@ CFG="$PKG/Proxy/config.yaml"
 [ -s "$CFG" ] || { f50_install_fail configuration_missing; exit 1; }
 probe=$(f50_limit 5 "$YQ" --version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail yaml_parser_not_executable; exit 1; }
+f50_ensure_install_secret() {
+  f50_install_secret=$(f50_limit 5 "$YQ" e -r '.secret // ""' "$CFG" 2>/dev/null)
+  f50_secret_read_rc=$?
+  if [ "$f50_secret_read_rc" != 0 ]; then
+    [ "$HAD_USER_CONFIG" = 1 ] && return 0
+    f50_install_fail config_probe_failed
+    return 1
+  fi
+  case "$f50_install_secret" in ''|*[![:space:]]*) : ;; *) f50_install_secret= ;; esac
+  if [ "$HAD_USER_CONFIG" = 0 ] || [ -z "$f50_install_secret" ]; then
+    export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
+    f50_secret_write_err=$(f50_limit 5 "$YQ" e -i '.secret = strenv(F50_FIXED_SECRET)' "$CFG" 2>&1)
+    f50_secret_write_rc=$?
+    unset F50_FIXED_SECRET
+    [ "$f50_secret_write_rc" = 0 ] || { f50_install_fail secret_write_failed "$f50_secret_write_err"; return 1; }
+    chmod 600 "$CFG" || { f50_install_fail secret_write_failed; return 1; }
+  fi
+}
+f50_ensure_install_secret || exit 1
 for template_file in "$PKG/Tools/template.yaml" "$PKG/Tools/template.base.yaml"; do
   [ -s "$template_file" ] || { f50_install_fail template_missing "$(basename "$template_file")"; exit 1; }
   "$YQ" e -e 'tag == "!!map"' "$template_file" >/dev/null 2>&1 || {
@@ -951,6 +995,7 @@ if [ "$F50_OLD_FOUND" = 1 ]; then
   f50_clean_environment || { f50_install_fail old_environment_cleanup_failed; exit 1; }
   # Native recovery may repair both the config and cached providers from a prior transaction.
   f50_preserve_user_data || exit 1
+  f50_ensure_install_secret || exit 1
   f50_preflight_config || exit 1
     case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
     if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
@@ -1330,7 +1375,7 @@ function buildPortListenerFunction() {
 // Embedded inside the original plugin closure; no new runtime dependency.
 const KPR = createPrivateRouteLogic();
 
-function readF50TproxyPortCmd() { return 'printf \"tproxy_port=7895\\ndns_port=1053\\n\"'; }
+function readF50TproxyPortCmd() { return `printf \"tproxy_port=${F50_PORTS.tproxy}\\ndns_port=${F50_PORTS.dns}\\n\"`; }
 
 async function kprReadOptions() {
   const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' || exit 1; fi\n' + readF50TproxyPortCmd(), 10000);
@@ -2598,6 +2643,7 @@ exec "$binary" "$@"
         rm -f "$NEW" 2>/dev/null || true
         ${getCurlBinCmd()}
         command -v unzip >/dev/null 2>&1 || { echo "ARCHIVE_VERIFY_FAILED=unzip_missing"; exit 1; }
+        ${dataSpaceGuardCmd('echo "ARCHIVE_SPACE_LOW=$kano_data_avail_kb"; exit 1')}
 
         echo "TRY_PACKAGE_URL=${packageUrl ? shellQuote(packageUrl) : "''"}" > "$LOG"
         "$CURL_BIN" -fsSL --connect-timeout 8 --max-time 60 --retry 0 --speed-time 12 --speed-limit 1024 \
@@ -2638,11 +2684,12 @@ exec "$binary" "$@"
       errors.push(`[${packageUrl}]\n${content || 'download failed'}`);
     }
     const content = errors.join('\n---\n');
+    const spaceLow = /ARCHIVE_SPACE_LOW=/.test(content);
     return {
       ok: false,
-      stage: /ARCHIVE_DOWNLOAD_FAILED/.test(content) ? 'download' : 'archive_verify',
+      stage: spaceLow ? 'space_low' : (/ARCHIVE_DOWNLOAD_FAILED/.test(content) ? 'download' : 'archive_verify'),
       source: '',
-      message: '所有安装包来源均下载或校验失败',
+      message: spaceLow ? '设备 /data 可用空间不足 50 MB，已停止下载' : '所有安装包来源均下载或校验失败',
       content,
     };
   };
@@ -3975,7 +4022,7 @@ EOF_KANO_SERVICE
 
   
 
-  const getPositivePort = (value, fallback = 7895) => {
+  const getPositivePort = (value, fallback = F50_PORTS.tproxy) => {
     const port = Number(value);
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
   };
@@ -4269,7 +4316,7 @@ EOF_KANO_SERVICE
     return { ok: !!res.success, content: res.content || '', shell: res };
   };
 
-  const detectF50TproxyPort = async () => 7895;
+  const detectF50TproxyPort = async () => F50_PORTS.tproxy;
 
   const buildManagedProxyProviders = (
     sources = [],
@@ -4375,7 +4422,7 @@ EOF_KANO_SERVICE
   } = {}) => {
     assertYamlRootMap(config, '配置');
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
-      config['external-controller'] = '0.0.0.0:7788';
+      config['external-controller'] = `0.0.0.0:${F50_PORTS.controller}`;
     }
     if (managedDashboard) {
       applyManagedDashboardFields(config);
@@ -4577,17 +4624,17 @@ EOF_KANO_SERVICE
   };
 
   const buildF50TemplateObject = (sources = [], controllerSettings = {}) => ({
-    port: 7890,
-    'socks-port': 7891,
-    'mixed-port': 7892,
-    'redir-port': 7893,
-    'tproxy-port': 7895,
+    port: F50_PORTS.http,
+    'socks-port': F50_PORTS.socks,
+    'mixed-port': F50_PORTS.mixed,
+    'redir-port': 0,
+    'tproxy-port': F50_PORTS.tproxy,
     'allow-lan': true,
     'bind-address': '*',
     mode: 'rule',
     'log-level': 'info',
     ipv6: false,
-    'external-controller': String(controllerSettings.controller || '0.0.0.0:7788'),
+    'external-controller': String(controllerSettings.controller || `0.0.0.0:${F50_PORTS.controller}`),
     'external-ui': ZASHBOARD_UI_DIR,
     'external-ui-url': ZASHBOARD_UI_URL,
     'unified-delay': true,
@@ -4598,7 +4645,7 @@ EOF_KANO_SERVICE
     },
     dns: {
       enable: true,
-      listen: '0.0.0.0:1053',
+      listen: `0.0.0.0:${F50_PORTS.dns}`,
       ipv6: false,
       'enhanced-mode': 'redir-host',
       'default-nameserver': ['223.5.5.5', '119.29.29.29'],
@@ -4676,7 +4723,7 @@ EOF_KANO_SERVICE
       const info = await buildControllerInfo();
       const adapted = applyRequiredF50Fields(read.value, { managedDashboard: true, preservedSecret: info.secret || '' });
       // The subscription supplies policy, not credentials for the local control plane.
-      adapted['external-controller'] = info.externalController || '0.0.0.0:7788';
+      adapted['external-controller'] = info.externalController || `0.0.0.0:${F50_PORTS.controller}`;
       if (typeof info.secret === 'string') adapted.secret = info.secret;
       for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
       const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original' });
@@ -5157,7 +5204,7 @@ KANO_WRITE_CHECK_EOF
   const getCorePid = async () => (await readStatusSnapshot()).corePid;
 
   const normalizeController = (value = '') => {
-    let controller = String(value || '').trim() || '127.0.0.1:7788';
+    let controller = String(value || '').trim() || `127.0.0.1:${F50_PORTS.controller}`;
     controller = controller.replace(/^['"]|['"]$/g, '').replace(/\/+$/g, '');
     if (controller.startsWith(':')) controller = `127.0.0.1${controller}`;
     if (!/^https?:\/\//i.test(controller)) controller = `http://${controller}`;
@@ -5177,8 +5224,8 @@ KANO_WRITE_CHECK_EOF
     } catch {
       return {
         raw: String(value || '').trim(),
-        apiBase: 'http://127.0.0.1:7788',
-        port: '7788',
+        apiBase: `http://127.0.0.1:${F50_PORTS.controller}`,
+        port: String(F50_PORTS.controller),
       };
     }
   };
@@ -5189,7 +5236,7 @@ KANO_WRITE_CHECK_EOF
 
   const readControllerInfo = async ({ fresh = false } = {}) => {
     const data = await readStatusSnapshot({ fresh });
-    const controller = data.externalController || '127.0.0.1:7788';
+    const controller = data.externalController || `127.0.0.1:${F50_PORTS.controller}`;
     return { ...normalizeController(controller), externalController: controller, secret: data.secret || '', secretSet: !!data.secret,
       usingFallbackController: !data.externalController, usingFallbackSecret: !data.secret, configSource: data.externalController ? 'config' : 'controller_fallback' };
   };
@@ -5822,6 +5869,17 @@ KANO_WRITE_CHECK_EOF
   const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
   const clean = normalizeSubSourceList(sources);
   if (!clean.length) return buildProviderUpdateResult([]);
+  const subUrlChecks = clean.map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }));
+  if (subUrlChecks.some((item) => !item.check.ok)) {
+    return buildProviderUpdateResult(subUrlChecks.map(({ source, check }) => ({
+      type: 'proxy-provider',
+      name: source.name,
+      ok: false,
+      attempts: 1,
+      message: check.ok ? '订阅地址校验未通过，已停止本地转换' : (check.message || '订阅地址无效'),
+      errorType: 'invalid_subscription_url',
+    })));
+  }
   if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'F50_BACKEND_REQUIRED'})));
   const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
   const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent(), rawConfigPath }), 'subscription request');
@@ -5942,11 +6000,11 @@ KANO_WRITE_CHECK_EOF
     const hostPromise = waitForLanHost();
     try {
       const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
-      return `http://${host}:${info.port || '7788'}/ui/?_f50=${Date.now()}#/`;
+      return `http://${host}:${info.port || F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
     } catch (e) {
       console.error(e);
       const host = await hostPromise;
-      return `http://${host}:7788/ui/?_f50=${Date.now()}#/`;
+      return `http://${host}:${F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
     }
   };
 
@@ -5989,7 +6047,7 @@ KANO_WRITE_CHECK_EOF
       Promise.allSettled([refreshRuleModeStatus(), refreshModeBadge()]).catch(() => {});
       let apiOk = snapshot.apiOk === true;
       if (pid && typeof snapshot.apiOk !== 'boolean') {
-        const info = snapshot.externalController !== undefined ? { ...normalizeController(snapshot.externalController || '127.0.0.1:7788'), secret: snapshot.secret || '', secretSet: !!snapshot.secret } : null;
+        const info = snapshot.externalController !== undefined ? { ...normalizeController(snapshot.externalController || `127.0.0.1:${F50_PORTS.controller}`), secret: snapshot.secret || '', secretSet: !!snapshot.secret } : null;
         const version = await callMihomoApi('/version', 'GET', null, info, 3, { corePid: pid });
         apiOk = !!version.success;
       }
@@ -7180,7 +7238,7 @@ const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-
     });
     const trafficMode = runtimeOptions.traffic_mode;
     const ipv6Enabled = runtimeOptions.ipv6 == 'on';
-    const tproxyPort = getPositivePort(runtimeOptions.tproxy_port, 7895);
+    const tproxyPort = getPositivePort(runtimeOptions.tproxy_port, F50_PORTS.tproxy);
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
       if (errorToast) createToast(`配置自检失败<br>${safeTextToHtml(storage.content || '')}`, 'red', 9000);
@@ -7242,17 +7300,17 @@ const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-
   };
 
   const buildBootstrapConfig = (secret = F50_DEFAULT_SECRET) => [
-    'port: 7890',
-    'socks-port: 7891',
-    'mixed-port: 7892',
-    'redir-port: 7893',
-    'tproxy-port: 7895',
+    `port: ${F50_PORTS.http}`,
+    `socks-port: ${F50_PORTS.socks}`,
+    `mixed-port: ${F50_PORTS.mixed}`,
+    'redir-port: 0',
+    `tproxy-port: ${F50_PORTS.tproxy}`,
     'allow-lan: true',
     'bind-address: "*"',
     'mode: rule',
     'log-level: info',
     'ipv6: false',
-    'external-controller: 0.0.0.0:7788',
+    `external-controller: 0.0.0.0:${F50_PORTS.controller}`,
     `external-ui: ${ZASHBOARD_UI_DIR}`,
     `external-ui-url: ${ZASHBOARD_UI_URL}`,
     'unified-delay: true',
@@ -7262,7 +7320,7 @@ const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-
     '  store-fake-ip: false',
     'dns:',
     '  enable: true',
-    '  listen: 0.0.0.0:1053',
+    `  listen: 0.0.0.0:${F50_PORTS.dns}`,
     '  ipv6: false',
     '  enhanced-mode: redir-host',
     '  default-nameserver:',
@@ -7424,10 +7482,10 @@ btn_disabled.onclick = async () => {
   const ensurePolicyToolsScript = async () => await ensureCompatBackend();
 
   const parsePolicyOptionsText = (text='')=>{
- const options={traffic_mode:'',transparent:'on',ipv6:'off',quic_block:'off',dns_hijack:'on',dns_port:'1053',tproxy_port:'7895',proxy_group:'Proxy'};
+ const options={traffic_mode:'',transparent:'on',ipv6:'off',quic_block:'off',dns_hijack:'on',dns_port:String(F50_PORTS.dns),tproxy_port:String(F50_PORTS.tproxy),proxy_group:'Proxy'};
  for(const line of String(text).split(/\r?\n/)){const m=line.match(/^([A-Za-z0-9_]+)=(.*)$/);if(m)options[m[1]]=m[2]}
  if(!['tproxy','tun','off'].includes(options.traffic_mode))options.traffic_mode=options.transparent==='off'?'off':'tproxy';
- options.dns_port='1053';options.tproxy_port='7895';return options;
+ options.dns_port=String(F50_PORTS.dns);options.tproxy_port=String(F50_PORTS.tproxy);return options;
 };
 
   const readPolicyState = async () => {
@@ -7598,7 +7656,7 @@ btn_disabled.onclick = async () => {
     const requestedDnsPort = Number(state.options.dns_port);
     const dnsPort = Number.isInteger(requestedDnsPort) && requestedDnsPort >= 1 && requestedDnsPort <= 65535
       ? String(requestedDnsPort)
-      : '1053';
+      : String(F50_PORTS.dns);
     const proxyGroup = String(state.options.proxy_group || 'Proxy').replace(/[\r\n]/g, '').trim() || 'Proxy';
     const optionsText = [
       `traffic_mode=${trafficMode}`,
@@ -7908,7 +7966,7 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS \u52ab\u6301</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> \u52ab\u6301 53 \u5230 mihomo DNS \u7aef\u53e3 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="1053"></label>
+                    <label><input id="mm_policy_dns" type="checkbox"> \u52ab\u6301 53 \u5230 mihomo DNS \u7aef\u53e3 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
                   </div>
                 </div>
               </section>
@@ -7979,7 +8037,7 @@ btn_disabled.onclick = async () => {
     get('#mm_policy_ipv6').checked = state.options.ipv6 == 'on';
     get('#mm_policy_quic').checked = state.options.quic_block == 'on';
     get('#mm_policy_dns').checked = state.options.dns_hijack == 'on';
-    get('#mm_policy_dns_port').value = state.options.dns_port || '1053';
+    get('#mm_policy_dns_port').value = state.options.dns_port || String(F50_PORTS.dns);
     get('#mm_policy_device').value = state.deviceBypass || '';
     const updateDeviceBypassScope = () => {
       const mode = get('#mm_policy_traffic_mode').value;
@@ -8162,7 +8220,7 @@ btn_disabled.onclick = async () => {
           get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
           get('#mm_policy_quic').checked = state.options.quic_block === 'on';
           get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
-          get('#mm_policy_dns_port').value = '1053';
+          get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
           get('#mm_policy_device').value = state.deviceBypass || '';
           get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
           get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
@@ -9809,6 +9867,15 @@ btn_disabled.onclick = async () => {
   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
   if (!storedSources.length || storedSources.some((source) => !isHttpUrl(source.url))) {
     operationFinish(false, '\u8bf7\u8f93\u5165\u6709\u6548\u8ba2\u9605\u94fe\u63a5');
+    return false;
+  }
+  const invalidSubSource = cleanSources
+    .map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }))
+    .find((item) => !item.check.ok);
+  if (invalidSubSource) {
+    const invalidMessage = invalidSubSource.check.message || '\u8ba2\u9605\u5730\u5740\u65e0\u6548';
+    operationFinish(false, invalidMessage);
+    createToast(safeTextToHtml(invalidMessage), 'red', 9000);
     return false;
   }
   if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }

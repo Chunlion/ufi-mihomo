@@ -390,6 +390,39 @@ f50_ip_snapshot() {
   f50_table_absent "$rt_err" && { : > "$rt_file"; return 0; }
   echo F50_CLEAN_ERROR=route_snapshot_failed; return 1
 }
+f50_drop_detached_tun_rules() {
+  for detached_family in 4 6; do
+    detached_rules=$(ip -"$detached_family" rule show 2>/dev/null) || continue
+    if printf '%s\n' "$detached_rules" | grep -Fq 'iif KanoTun [detached] lookup 17667'; then
+      ip -"$detached_family" rule del pref 1776 iif KanoTun lookup 17667 || {
+        echo "F50_ERROR=detached_tun_rule_cleanup_failed_ipv$detached_family"
+        return 1
+      }
+    fi
+  done
+}
+f50_disable_unsupported_ipv6_dns_hijack() {
+  compat_options="$F50_ROOT/Policy/options.conf"
+  [ -r "$compat_options" ] || return 0
+  grep -qx 'ipv6=on' "$compat_options" || return 0
+  grep -qx 'dns_hijack=on' "$compat_options" || return 0
+  compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
+  [ "$compat_nat_rc" = 0 ] && return 0
+  printf '%s\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
+  compat_tmp="$compat_options.kano_compat.$$"
+  awk '{if($0=="dns_hijack=on") print "dns_hijack=off"; else print}' "$compat_options" > "$compat_tmp" || {
+    rm -f "$compat_tmp" 2>/dev/null || true
+    echo F50_ERROR=ipv6_nat_compat_write_failed
+    return 1
+  }
+  chmod 600 "$compat_tmp" 2>/dev/null || true
+  mv -f "$compat_tmp" "$compat_options" || {
+    rm -f "$compat_tmp" 2>/dev/null || true
+    echo F50_ERROR=ipv6_nat_compat_commit_failed
+    return 1
+  }
+  echo F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled
+}
 f50_routes_plan() {
   awk -v family="$1" '
   function val(k, i){for(i=2;i<NF;i++)if($i==k)return $(i+1);return ""}
@@ -397,8 +430,12 @@ f50_routes_plan() {
   function begin(){print "@";arg("ip");arg(family)}
   FNR==NR{
     t=val("lookup");p=$1;sub(/:$/,"",p);m=val("fwmark");d=val("iif");
-    own=(p=="1777"&&t=="17666"&&(m=="0x10000000/0x10000000"||m=="268435456/268435456")) || (p=="1776"&&t=="17667"&&(d=="lo"||d=="KanoTun"));
-    if(own){begin();arg("rule");arg("del");arg("pref");arg(p);for(i=2;i<=NF;i++)arg($i);print "!"}
+    # ip rule show may append display-only tokens such as [detached]; rebuild commands from owned fields only.
+    if(p=="1777"&&t=="17666"&&(m=="0x10000000/0x10000000"||m=="268435456/268435456")){
+      begin();arg("rule");arg("del");arg("pref");arg(p);arg("fwmark");arg(m);arg("lookup");arg(t);print "!"
+    } else if(p=="1776"&&t=="17667"&&(d=="lo"||d=="KanoTun")){
+      begin();arg("rule");arg("del");arg("pref");arg(p);arg("iif");arg(d);arg("lookup");arg(t);print "!"
+    }
     else if(t=="17666"||t=="17667")foreign[t]=1;
     next
   }
@@ -622,6 +659,8 @@ f50_start_service() {
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
   start_log="$F50_DATA/kano_clash_start.log"
   log_before=$(cksum "$start_log" 2>/dev/null)
+  f50_disable_unsupported_ipv6_dns_hijack || return 1
+  f50_drop_detached_tun_rules || return 1
   start_raw=$(CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
   F50_START_RC=$?
   F50_START_DETAIL=$(printf '%s\\n' "$start_raw" | f50_redact)
@@ -1328,6 +1367,15 @@ function networkStateKey(state, runtimeOnly = false) {
   return JSON.stringify(values);
 }
 
+async function normalizeIpv6DnsCapability(state) {
+  if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
+  const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
+  if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
+  state.options.dns_hijack = 'off';
+  createToast('内核不支持 IPv6 NAT，已关闭 DNS 劫持；IPv6 接管保持启用。', 'yellow', 10000);
+  return true;
+}
+
 async function kprSaveNetworkState(previous, next) {
   let backup = '', saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
   try {
@@ -1339,6 +1387,7 @@ async function kprSaveNetworkState(previous, next) {
     next.options.private_route_policy = feature.policy;
     next.options.transparent = next.options.traffic_mode === 'tproxy' ? 'on' : 'off';
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
+    await normalizeIpv6DnsCapability(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
       createToast('\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green');
       return true;
@@ -2253,7 +2302,50 @@ KANO_YQ_SMOKE_EOF
     return values;
   };
 
-  const buildServiceWrapperScript = () => "#!/system/bin/sh\n# KANO_SERVICE_WRAPPER_VERSION=8.0.0-compat.2.3\n# SPDX-License-Identifier: AGPL-3.0-or-later\n: \"${CLASH_ROOT:=/data/clash}\"\nexport CLASH_ROOT\nexport PATH=/system/bin:/system/xbin:/vendor/bin:/data/kano_tproxy_tools/bin:$PATH\ncase \"$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)\" in\n  *arm64*|*aarch64*|*armv8*) binary=\"$CLASH_ROOT/Scripts/clashctl_arm64\" ;;\n  *armeabi*|*armv7*) binary=\"$CLASH_ROOT/Scripts/clashctl_armv7\" ;;\n  *) binary=\"$CLASH_ROOT/Scripts/clashctl\" ;;\nesac\n[ -x \"$binary\" ] || { echo F50_BACKEND_MISSING; exit 1; }\nexec \"$binary\" \"$@\"\n";
+  const buildServiceWrapperScript = () => `#!/system/bin/sh
+# KANO_SERVICE_WRAPPER_VERSION=8.0.0-compat.2.3
+# KANO_DETACHED_TUN_CLEANUP=1
+# KANO_IPV6_NAT_COMPAT=1
+# SPDX-License-Identifier: AGPL-3.0-or-later
+: "\${CLASH_ROOT:=/data/clash}"
+export CLASH_ROOT
+export PATH=/system/bin:/system/xbin:/vendor/bin:/data/kano_tproxy_tools/bin:$PATH
+case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
+  *arm64*|*aarch64*|*armv8*) binary="$CLASH_ROOT/Scripts/clashctl_arm64" ;;
+  *armeabi*|*armv7*) binary="$CLASH_ROOT/Scripts/clashctl_armv7" ;;
+  *) binary="$CLASH_ROOT/Scripts/clashctl" ;;
+esac
+[ -x "$binary" ] || { echo F50_BACKEND_MISSING; exit 1; }
+case "$1:$2" in
+  start:*|restart:*|policy:apply|policy:boot-apply)
+    compat_options="$CLASH_ROOT/Policy/options.conf"
+    if [ -r "$compat_options" ] && grep -qx 'ipv6=on' "$compat_options" && grep -qx 'dns_hijack=on' "$compat_options"; then
+      compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
+      if [ "$compat_nat_rc" != 0 ] && printf '%s\\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"; then
+        compat_tmp="$compat_options.kano_compat.$$"
+        awk '{if($0=="dns_hijack=on") print "dns_hijack=off"; else print}' "$compat_options" > "$compat_tmp" || exit 1
+        chmod 600 "$compat_tmp" 2>/dev/null || true
+        mv -f "$compat_tmp" "$compat_options" || { rm -f "$compat_tmp" 2>/dev/null || true; exit 1; }
+        echo F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled
+      fi
+    fi
+    ;;
+esac
+case "$1" in
+  start|restart|stop|recover)
+    for detached_family in 4 6; do
+      detached_rules=$(ip -"$detached_family" rule show 2>/dev/null) || continue
+      if printf '%s\\n' "$detached_rules" | grep -Eq '^[[:space:]]*1776:.*[[:space:]]iif[[:space:]]KanoTun[[:space:]]+\\[detached\\][[:space:]]+lookup[[:space:]]+17667([[:space:]]|$)'; then
+        ip -"$detached_family" rule del pref 1776 iif KanoTun lookup 17667 || {
+          echo "F50_ERROR=detached_tun_rule_cleanup_failed_ipv$detached_family"
+          exit 1
+        }
+      fi
+    done
+    ;;
+esac
+exec "$binary" "$@"
+`;
 
   const ensureServiceWrapper = async () => { const ok=await ensureCompatBackend(); return {success:ok,content:ok?'F50_CONTROLLER='+F50_COMPAT_VERSION:'F50_BACKEND_REQUIRED'}; };
 
@@ -3834,7 +3926,7 @@ EOF_KANO_SERVICE
     return value;
   };
 
-
+  
 
   const getPositivePort = (value, fallback = 7895) => {
     const port = Number(value);
@@ -6040,7 +6132,7 @@ KANO_JUMPS_EOF
 const verifyNativeTrafficReleasedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-clean';
 
 
-
+  
 
   const buildOwnedCoreFunctions = () => `
 CORE=${shellQuote(CLASH_CORE)}
@@ -6603,7 +6695,7 @@ const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-
         if (savedSources.length == 0) {
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = '\u5df2\u4ece\u6a21\u677f proxy-providers \u5bfc\u5165\u8ba2\u9605\u94fe\u63a5\uff0c\u5e76\u6309\u987a\u5e8f\u547d\u540d\u4e3a Provider1\u3001Provider2\u2026\u2026\u3002';
+          templateSubSyncMessage = '\u5df2\u4ece\u6a21\u677f proxy-providers \u5bfc\u5165\u8ba2\u9605\u94fe\u63a5\uff0c\u5e76\u7edf\u4e00\u547d\u540d\u4e3a Provider1/Provider2\u3002';
         } else if (savedKey != templateKey) {
           const oldSources = normalizeSubSourceList(savedSources);
           const newSources = normalizeSubSourceList(templateSources);

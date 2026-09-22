@@ -58,6 +58,12 @@ check(source.includes('f50_install_fail panel_candidate_rejected'), '安装前�
 check(source.includes('f50_install_fail panel_postcheck_failed'), '替换后再次校验面板');
 check(source.includes('F50_ROLLBACK=restored'), '安装失败包含回滚确认');
 check(!source.includes('F50 后台单文件上传上限为 10 MiB'), '未保留错误的 10 MiB 组件包提示');
+check(source.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '服务包装器包含 detached TUN 规则兼容清理');
+check(source.includes('# KANO_IPV6_NAT_COMPAT=1'), '服务包装器包含 IPv6 NAT 能力降级');
+check(source.includes('await normalizeIpv6DnsCapability(next)'), '保存网络设置前检查 IPv6 NAT 能力');
+const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
+check(packageService.status === 0 && packageService.stdout.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '组件包服务包装器同步包含兼容清理', packageService.stderr.trim());
+check(packageService.status === 0 && packageService.stdout.includes('# KANO_IPV6_NAT_COMPAT=1'), '组件包支持缺少 IPv6 NAT 的设备', packageService.stderr.trim());
 
 console.log('--- Zashboard identity and routing ---');
 check(source.includes("const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip'"), '面板更新源固定为 Zashboard');
@@ -100,6 +106,56 @@ check(shellSyntax.status === 0, '维护和卸载 Shell 通过 sh -n', shellSynta
 check(maintenanceShell.includes('f50_verify_zashboard_endpoint'), '启动验收包含面板 HTTP 检查');
 check(maintenanceShell.includes('http://127.0.0.1:7788/ui/?_f50=$$'), '面板验收请求实际 /ui/ 服务入口');
 check(maintenanceShell.includes('F50_START_CODE=panel_http_failed'), '面板不可访问会使启动失败');
+check(maintenanceShell.includes('arg("iif");arg(d);arg("lookup");arg(t);print "!"'), 'TUN 规则删除只重建受支持字段');
+check(!maintenanceShell.includes('for(i=2;i<=NF;i++)arg($i);'), '不把 ip rule 展示注释回放到删除命令');
+check(maintenanceShell.includes('f50_drop_detached_tun_rules || return 1'), '启动前先清理 detached TUN 规则');
+check(maintenanceShell.includes("grep -Fq 'iif KanoTun [detached] lookup 17667'"), 'detached 标记使用固定字符串匹配');
+check(maintenanceShell.includes('f50_disable_unsupported_ipv6_dns_hijack || return 1'), '启动前降级不受支持的 IPv6 DNS 劫持');
+const routePlanDir = fs.mkdtempSync(path.join(ROOT, '.tproxy-route-plan-'));
+try {
+  const ruleFile = path.join(routePlanDir, 'rules');
+  const routeFile = path.join(routePlanDir, 'routes');
+  const planFile = path.join(routePlanDir, 'plan');
+  fs.writeFileSync(ruleFile, [
+    '1776: from all iif KanoTun [detached] lookup 17667 proto static',
+    '1777: from all fwmark 0x10000000/0x10000000 lookup 17666 proto static',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(routeFile, '');
+  const routePlan = spawnSync('sh', ['-c', `${maintenanceShell}\nf50_routes_plan -4 "$1" "$2" "$3"\ncat "$3"`, 'sh', ruleFile, routeFile, planFile], { encoding: 'utf8' });
+  check(routePlan.status === 0 && !routePlan.stdout.includes('[detached]') && routePlan.stdout.includes('aiif\naKanoTun\nalookup\na17667'), '含 [detached] 的 TUN 规则生成可执行删除计划', routePlan.stderr.trim());
+  check(!routePlan.stdout.includes('proto') && routePlan.stdout.includes('afwmark\na0x10000000/0x10000000\nalookup\na17666'), 'TProxy 规则同样忽略展示附加字段', routePlan.stderr.trim());
+  const compatRoot = path.join(routePlanDir, 'clash');
+  const compatBin = path.join(routePlanDir, 'bin');
+  fs.mkdirSync(path.join(compatRoot, 'Policy'), { recursive: true });
+  fs.mkdirSync(compatBin, { recursive: true });
+  const detachedLog = path.join(routePlanDir, 'detached.log');
+  fs.writeFileSync(path.join(compatBin, 'ip'), `#!/bin/sh
+case "$*" in
+  "-4 rule show") echo "1776: from all iif KanoTun [detached] lookup 17667" ;;
+  "-6 rule show") ;;
+  "-4 rule del pref 1776 iif KanoTun lookup 17667") echo "$*" > "$F50_IP_LOG" ;;
+  *) exit 9 ;;
+esac
+`);
+  fs.chmodSync(path.join(compatBin, 'ip'), 0o755);
+  const detached = spawnSync('sh', ['-c', `${maintenanceShell}
+export PATH="$2:$PATH" F50_IP_LOG="$3"
+f50_drop_detached_tun_rules
+cat "$3"`, 'sh', compatRoot, compatBin, detachedLog], { encoding: 'utf8' });
+  check(detached.status === 0 && detached.stdout.includes('-4 rule del pref 1776 iif KanoTun lookup 17667'), '启动兜底能删除带 [detached] 的 TUN 规则', detached.stderr.trim());
+  fs.writeFileSync(path.join(compatRoot, 'Policy', 'options.conf'), 'traffic_mode=tproxy\nipv6=on\ndns_hijack=on\n');
+  fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "ip6tables: Table does not exist" >&2\nexit 3\n');
+  fs.chmodSync(path.join(compatBin, 'ip6tables'), 0o755);
+  const compat = spawnSync('sh', ['-c', `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, 'sh', compatRoot, compatBin], { encoding: 'utf8' });
+  check(compat.status === 0 && compat.stdout.includes('F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled') && compat.stdout.includes('dns_hijack=off'), '缺少 IPv6 NAT 时自动关闭 DNS 劫持', compat.stderr.trim());
+  fs.writeFileSync(path.join(compatRoot, 'Policy', 'options.conf'), 'traffic_mode=tproxy\nipv6=on\ndns_hijack=on\n');
+  fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "xtables lock is busy" >&2\nexit 4\n');
+  const transient = spawnSync('sh', ['-c', `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, 'sh', compatRoot, compatBin], { encoding: 'utf8' });
+  check(transient.status === 0 && !transient.stdout.includes('F50_WARNING=') && transient.stdout.includes('dns_hijack=on'), '临时 ip6tables 错误不会关闭 DNS 劫持', transient.stderr.trim());
+} finally {
+  fs.rmSync(routePlanDir, { recursive: true, force: true });
+}
 check(source.includes('F50_UNINSTALL_STATE=clean'), '卸载包含最终清洁状态');
 
 console.log('--- subscription sources ---');

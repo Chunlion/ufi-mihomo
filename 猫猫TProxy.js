@@ -79,6 +79,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
     secret_write_failed: '控制密钥写入失败，原配置未被替换。',
     secret_ensure_failed: '控制密钥补全失败，核心未启动。',
+    panel_config_write_failed: 'Zashboard 配置固定失败，核心未启动。',
     service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
     service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
     controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
@@ -692,6 +693,12 @@ f50_verify_zashboard_endpoint() {
     echo "F50_ERROR=panel_http_status_\${panel_status:-unavailable}"
     return 1
   fi
+  if grep -Eiq '<title>[[:space:]]*metacubexd[[:space:]]*</title>' "$panel_tmp" 2>/dev/null \
+      || ! grep -Eiq '<title>[[:space:]]*zashboard[[:space:]]*</title>' "$panel_tmp" 2>/dev/null; then
+    rm -f "$panel_tmp" 2>/dev/null || true
+    echo F50_ERROR=panel_http_identity_mismatch
+    return 1
+  fi
   rm -f "$panel_tmp" 2>/dev/null || true
   echo F50_PANEL_HTTP_STATUS=200
   return 0
@@ -712,12 +719,31 @@ f50_ensure_live_secret() {
   [ "$live_rc" = 0 ] || return 1
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
+f50_ensure_live_panel_config() {
+  live_cfg="$F50_ROOT/Proxy/config.yaml"
+  live_yq="$F50_ROOT/Tools/yq_linux_arm64"
+  [ -s "$live_cfg" ] && [ -x "$live_yq" ] || return 1
+  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
+  export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
+  f50_limit 8 "$live_yq" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | ."unified-delay" = true' "$live_cfg" >/dev/null 2>&1
+  live_rc=$?
+  unset F50_PANEL_DIR F50_PANEL_URL
+  [ "$live_rc" = 0 ] || return 1
+  chmod 600 "$live_cfg" 2>/dev/null || true
+}
 f50_start_service() {
   start_action=$1; start_budget=$2
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
   if ! f50_ensure_live_secret; then
     F50_START_RC=1; F50_START_DETAIL=F50_ERROR=secret_ensure_failed
     F50_START_CODE=secret_ensure_failed; F50_START_OK=0
+    printf '%s\n' "$F50_START_DETAIL"
+    printf 'START_SERVICE_RC=%s\nF50_START_CODE=%s\nF50_START_OK=%s\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
+    return 1
+  fi
+  if ! f50_ensure_live_panel_config; then
+    F50_START_RC=1; F50_START_DETAIL=F50_ERROR=panel_config_write_failed
+    F50_START_CODE=panel_config_write_failed; F50_START_OK=0
     printf '%s\n' "$F50_START_DETAIL"
     printf 'START_SERVICE_RC=%s\nF50_START_CODE=%s\nF50_START_OK=%s\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
     return 1
@@ -947,6 +973,16 @@ f50_ensure_install_secret() {
   fi
 }
 f50_ensure_install_secret || exit 1
+f50_ensure_install_dashboard() {
+  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
+  export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
+  f50_panel_write_err=$(f50_limit 8 "$YQ" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | ."unified-delay" = true' "$CFG" 2>&1)
+  f50_panel_write_rc=$?
+  unset F50_PANEL_DIR F50_PANEL_URL
+  [ "$f50_panel_write_rc" = 0 ] || { f50_install_fail panel_config_write_failed "$f50_panel_write_err"; return 1; }
+  chmod 600 "$CFG" || { f50_install_fail panel_config_write_failed; return 1; }
+}
+f50_ensure_install_dashboard || exit 1
 for template_file in "$PKG/Tools/template.yaml" "$PKG/Tools/template.base.yaml"; do
   [ -s "$template_file" ] || { f50_install_fail template_missing "$(basename "$template_file")"; exit 1; }
   "$YQ" e -e 'tag == "!!map"' "$template_file" >/dev/null 2>&1 || {
@@ -996,6 +1032,7 @@ if [ "$F50_OLD_FOUND" = 1 ]; then
   # Native recovery may repair both the config and cached providers from a prior transaction.
   f50_preserve_user_data || exit 1
   f50_ensure_install_secret || exit 1
+  f50_ensure_install_dashboard || exit 1
   f50_preflight_config || exit 1
     case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
     if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
@@ -4392,19 +4429,7 @@ EOF_KANO_SERVICE
   const applyManagedDashboardFields = (config) => {
     assertYamlRootMap(config, '配置');
     const externalUi = String(config['external-ui'] || '').trim().replace(/\\/g, '/');
-    const externalUiName = String(config['external-ui-name'] || '').trim().toLowerCase();
     const externalUiUrl = String(config['external-ui-url'] || '').trim();
-    const normalizedUi = externalUi.replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase();
-    const managedUiPaths = new Set([
-      '',
-      'ui',
-      'ui/zashboard',
-      'webui',
-      'webui/zashboard',
-      '/data/clash/proxy/webui/zashboard',
-    ]);
-    if (!managedUiPaths.has(normalizedUi)) return false;
-
     const changed = externalUi != ZASHBOARD_UI_DIR
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
       || externalUiUrl != ZASHBOARD_UI_URL
@@ -4417,16 +4442,13 @@ EOF_KANO_SERVICE
   };
 
   const applyRequiredF50Fields = (config, {
-    managedDashboard = false,
     preservedSecret = '',
   } = {}) => {
     assertYamlRootMap(config, '配置');
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
       config['external-controller'] = `0.0.0.0:${F50_PORTS.controller}`;
     }
-    if (managedDashboard) {
-      applyManagedDashboardFields(config);
-    }
+    applyManagedDashboardFields(config);
     if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = preservedSecret || F50_DEFAULT_SECRET;
     if (!Object.prototype.hasOwnProperty.call(config, 'proxies')) config.proxies = [];
     return config;
@@ -5611,6 +5633,62 @@ KANO_WRITE_CHECK_EOF
       25,
     );
 
+  const inspectZashboardDisk = async () => {
+    const res = await runShellWithRoot(`
+      ${buildF50ZashboardValidationFunction()}
+      f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)}
+    `, 15 * 1000);
+    return {
+      ok: !!(res.success && String(res.content || '').includes('F50_PANEL_VALIDATED=1')),
+      content: String(res.content || ''),
+    };
+  };
+
+  let zashboardGuardPromise = null;
+  let zashboardNormalizedCorePid = '';
+  const ensureZashboardPanelReady = async () => {
+    if (zashboardGuardPromise) return zashboardGuardPromise;
+    zashboardGuardPromise = (async () => {
+      const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+      if (!read.ok) return { ok: false, message: read.message || 'config.yaml 读取失败' };
+
+      const config = cloneJsonValue(read.value);
+      const configChanged = applyManagedDashboardFields(config);
+      const info = await buildControllerInfo();
+      const corePid = await getCorePid();
+      if (configChanged) {
+        const write = await writeYamlObjectAtomic(CLASH_CONFIG, config, {
+          label: 'config.yaml',
+          backup: true,
+          backupTag: 'zashboard_guard',
+        });
+        if (!write.ok) return { ok: false, message: write.content || 'Zashboard 配置写入失败' };
+      }
+      if (corePid && (configChanged || zashboardNormalizedCorePid != corePid)) {
+        const reload = await reloadConfigHot(info);
+        if (!reload.success) return { ok: false, message: reload.message || reload.responseText || 'Zashboard 配置热加载失败' };
+        zashboardNormalizedCorePid = corePid;
+      }
+
+      let disk = await inspectZashboardDisk();
+      if (disk.ok) return { ok: true, repaired: configChanged };
+      if (!corePid) return { ok: false, message: 'Zashboard 文件身份异常，核心未运行，无法在线修复' };
+
+      const upgraded = await callMihomoApi('/upgrade/ui', 'POST', null, info, 60, { corePid });
+      if (!upgraded.success) {
+        return { ok: false, message: upgraded.message || upgraded.responseText || 'Zashboard 在线修复失败' };
+      }
+      disk = await inspectZashboardDisk();
+      if (!disk.ok) return { ok: false, message: '面板更新结果不是 Zashboard，已阻止加载' };
+      return { ok: true, repaired: true };
+    })();
+    try {
+      return await zashboardGuardPromise;
+    } finally {
+      zashboardGuardPromise = null;
+    }
+  };
+
   const parseProviderNamesFromYamlText = (content = '') => {
     const proxyProviders = [];
     const ruleProviders = [];
@@ -5997,6 +6075,9 @@ KANO_WRITE_CHECK_EOF
   };
 
   const buildPanelUrl = async () => {
+    const guard = await ensureZashboardPanelReady();
+    if (!guard.ok) throw new Error(guard.message || 'Zashboard 校验失败');
+    if (guard.repaired) createToast('Zashboard 配置或文件已自动修复', 'yellow', 7000);
     const hostPromise = waitForLanHost();
     try {
       const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);

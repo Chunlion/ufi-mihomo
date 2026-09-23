@@ -268,6 +268,19 @@ const privateRoute = kpr.runtime(baseConfig, {
 });
 check(privateRoute.rules[0] === 'IP-CIDR,192.168.11.0/24,Proxy,no-resolve', '私网定向代理规则位于规则首部');
 check(privateRoute['x-kano-private-route']?.policy === 'Proxy', '私网定向代理写入可回滚元数据');
+const tunPrivateRoute = kpr.runtime(baseConfig, {
+  traffic_mode: 'tun', ipv6: 'off', private_route_enabled: 'on',
+  private_route_cidrs: '192.168.11.0/24', private_route_policy: 'Proxy',
+});
+const tunExcluded = tunPrivateRoute.tun['route-exclude-address'];
+check(tunPrivateRoute['x-kano-private-route']?.mode === 'tun', 'TUN 私网定向代理使用 TUN 整形分支');
+check(Array.isArray(tunExcluded) && tunExcluded.includes('10.0.0.0/8') &&
+  tunExcluded.every((item) => !kpr.overlaps(kpr.cidr(item), kpr.cidr('192.168.11.0/24'))),
+  'TUN 路由排除保留普通私网并放行目标私网');
+check(Array.isArray(tunPrivateRoute.tun['dns-hijack']) && tunPrivateRoute.tun['dns-hijack'].length === 0,
+  'TUN 私网定向代理不启用核心全局 DNS 劫持');
+const backToTproxy = kpr.runtime(tunPrivateRoute, { traffic_mode: 'tproxy', ipv6: 'off' });
+check(backToTproxy.tun.enable === false && !backToTproxy['x-kano-private-route'], '从 TUN 切回 TProxy 清理 TUN 私网整形');
 
 const urlGuardSource = slice('const isPrivateOrReservedIpv4', 'const validateLocalSubscriptionUrl');
 const urlGuard = runBlock(`${urlGuardSource}; this.isPrivateV4 = isPrivateOrReservedIpv4;`).isPrivateV4;

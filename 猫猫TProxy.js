@@ -5644,11 +5644,25 @@ KANO_WRITE_CHECK_EOF
     };
   };
 
+  const probeZashboardGuard = async () => {
+    const res = await runShellWithRoot(`
+      ${buildF50ZashboardValidationFunction()}
+      CFG=${shellQuote(CLASH_CONFIG)}
+      YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
+      [ -s "$CFG" ] && [ -x "$YQ" ] || exit 1
+      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and ."unified-delay" == true' "$CFG" >/dev/null 2>&1 || exit 1
+      f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
+      echo F50_ZASHBOARD_GUARD_OK=1
+    `, 8 * 1000);
+    return !!(res.success && String(res.content || '').includes('F50_ZASHBOARD_GUARD_OK=1'));
+  };
+
   let zashboardGuardPromise = null;
-  let zashboardNormalizedCorePid = '';
   const ensureZashboardPanelReady = async () => {
     if (zashboardGuardPromise) return zashboardGuardPromise;
     zashboardGuardPromise = (async () => {
+      if (await probeZashboardGuard()) return { ok: true, repaired: false };
+
       const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
       if (!read.ok) return { ok: false, message: read.message || 'config.yaml 读取失败' };
 
@@ -5664,10 +5678,9 @@ KANO_WRITE_CHECK_EOF
         });
         if (!write.ok) return { ok: false, message: write.content || 'Zashboard 配置写入失败' };
       }
-      if (corePid && (configChanged || zashboardNormalizedCorePid != corePid)) {
+      if (corePid) {
         const reload = await reloadConfigHot(info);
         if (!reload.success) return { ok: false, message: reload.message || reload.responseText || 'Zashboard 配置热加载失败' };
-        zashboardNormalizedCorePid = corePid;
       }
 
       let disk = await inspectZashboardDisk();

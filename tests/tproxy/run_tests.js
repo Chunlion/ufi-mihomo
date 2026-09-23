@@ -141,6 +141,10 @@ check(installSyntax.status === 0, '安装事务 Shell 通过 sh -n', installSynt
 check(install.build('/data/upload.zip').includes('f50_ensure_install_dashboard || exit 1'), '安装和内核升级前强制固定 Zashboard 配置');
 check(source.includes("callMihomoApi('/upgrade/ui', 'POST'"), '面板打开前可通过固定源修复错误面板');
 check(source.includes("message: '面板更新结果不是 Zashboard，已阻止加载'"), '在线更新结果身份错误时阻止加载');
+const zashboardGuard = slice('const probeZashboardGuard', 'const parseProviderNamesFromYamlText');
+check(zashboardGuard.includes('F50_ZASHBOARD_GUARD_OK=1'), '正常面板使用单次快速探针');
+check(zashboardGuard.indexOf('if (await probeZashboardGuard()) return') < zashboardGuard.indexOf("readYamlObject(CLASH_CONFIG"), '快速探针通过时不读取和重写 YAML');
+check(!zashboardGuard.includes('zashboardNormalizedCorePid'), '新标签页不再因页面内存 PID 为空而热加载配置');
 const routePlanDir = fs.mkdtempSync(path.join(ROOT, '.tproxy-route-plan-'));
 try {
   const ruleFile = path.join(routePlanDir, 'rules');

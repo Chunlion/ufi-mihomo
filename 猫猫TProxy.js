@@ -1365,12 +1365,10 @@ function createPrivateRouteLogic() {
     }
   }
   out['x-f50-profile'] = '8.0.0-compat.2.3';
-  // Only rule content is injected here. All kernel routing belongs to clashctl.
+  // Kernel routing belongs to clashctl; TUN still needs its matching route exclusions.
   const feature = fromOptions(options);
   if (!feature.enabled || mode === 'off') return out;
-  const transformed = transform(out, feature, 'tproxy', connected);
-  transformed[META].mode = mode;
-  return transformed;
+  return transform(out, feature, mode, connected);
 }
   function resolveSelection(proxies, name) {
     const visited = new Set();
@@ -8045,10 +8043,10 @@ btn_disabled.onclick = async () => {
               <section class="kp-panel" data-policy-panel="network">
                 <div class="kp-card">
                   <div class="kp-card-title">\u6d41\u91cf\u6a21\u5f0f</div>
-                  <div class="kp-desc">TProxy \u63a5\u7ba1\u4e0b\u6e38\u8bbe\u5907\u6d41\u91cf\uff1bTUN \u7531 Mihomo \u5efa\u7acb\u8def\u7531\u3002</div>
+                  <div class="kp-desc">TProxy \u63a5\u7ba1\u4e0b\u6e38\u8bbe\u5907\u6d41\u91cf\uff1bTUN \u7531 Mihomo \u521b\u5efa\u63a5\u53e3\uff0c\u63a7\u5236\u5668\u5efa\u7acb\u8def\u7531\u3002</div>
                   <div class="kp-row">
                     <div class="kp-label">\u63a5\u7ba1\u6a21\u5f0f</div>
-                    <select id="mm_policy_traffic_mode"><option value="tproxy">TProxy\uff1a\u63a5\u7ba1 F50 \u8f6c\u53d1\u6d41\u91cf</option><option value="tun">TUN\uff1aMihomo \u81ea\u52a8\u8def\u7531</option><option value="off">\u5173\u95ed\uff1a\u6838\u5fc3\u8fd0\u884c\uff0c\u6d41\u91cf\u4e0d\u63a5\u7ba1</option></select>
+                    <select id="mm_policy_traffic_mode"><option value="tproxy">TProxy\uff1a\u63a5\u7ba1 F50 \u8f6c\u53d1\u6d41\u91cf</option><option value="tun">TUN\uff1a\u72ec\u7acb\u63a5\u53e3\u4e0e\u8def\u7531</option><option value="off">\u5173\u95ed\uff1a\u6838\u5fc3\u8fd0\u884c\uff0c\u6d41\u91cf\u4e0d\u63a5\u7ba1</option></select>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">IPv6</div>

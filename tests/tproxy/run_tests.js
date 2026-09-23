@@ -97,7 +97,10 @@ equal([managedPanel['external-ui'], managedPanel['external-ui-url'], managedPane
 ], '托管面板字段统一');
 check(!Object.hasOwn(managedPanel, 'external-ui-name'), '托管面板不再生成嵌套目录');
 const customPanel = { 'external-ui': '/custom/panel', 'external-ui-url': 'https://example.test/custom.zip' };
-check(!dashboard.apply(customPanel) && customPanel['external-ui'] === '/custom/panel', '自定义面板路径不被误改');
+check(dashboard.apply(customPanel), '自定义面板配置也会被强制修正');
+equal([customPanel['external-ui'], customPanel['external-ui-url']], [
+  'WebUI/zashboard', 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+], '所有配置只允许使用 Zashboard');
 
 console.log('--- generated maintenance shell ---');
 const maintenanceSource = slice('function buildF50ZashboardValidationFunction()', 'function buildF50InspectScript()');
@@ -106,6 +109,7 @@ const maintenance = runBlock(`${maintenanceSource}; this.build = buildF50Mainten
   F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
   KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin',
   F50_DEFAULT_SECRET: '123456',
+  F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
   F50_PORTS: { controller: 7788 },
 });
 const maintenanceShell = maintenance.build();
@@ -120,16 +124,23 @@ check(maintenanceShell.includes('f50_drop_detached_tun_rules || return 1'), '启
 check(maintenanceShell.includes("grep -Fq 'iif KanoTun [detached] lookup 17667'"), 'detached 标记使用固定字符串匹配');
 check(maintenanceShell.includes('f50_disable_unsupported_ipv6_dns_hijack || return 1'), '启动前降级不受支持的 IPv6 DNS 劫持');
 check(maintenanceShell.includes('F50_START_CODE=secret_ensure_failed'), '控制密钥补全失败时停止启动');
+check(maintenanceShell.includes('f50_ensure_live_panel_config'), '每次启动前强制固定 Zashboard 配置');
+check(maintenanceShell.includes('F50_START_CODE=panel_config_write_failed'), '面板配置无法固定时拒绝启动');
+check(maintenanceShell.includes('F50_ERROR=panel_http_identity_mismatch'), '启动验收拒绝 HTTP 返回 MetaCubeXD 或未知面板');
 const installSource = slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath');
 const install = runBlock(`${installSource}; this.build = buildF50InstallScript;`, {
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
   F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
   KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin',
   F50_DEFAULT_SECRET: '123456',
+  F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
   F50_PORTS: { controller: 7788 },
 });
 const installSyntax = spawnSync('sh', ['-n'], { input: install.build('/data/upload.zip'), encoding: 'utf8' });
 check(installSyntax.status === 0, '安装事务 Shell 通过 sh -n', installSyntax.stderr && installSyntax.stderr.trim());
+check(install.build('/data/upload.zip').includes('f50_ensure_install_dashboard || exit 1'), '安装和内核升级前强制固定 Zashboard 配置');
+check(source.includes("callMihomoApi('/upgrade/ui', 'POST'"), '面板打开前可通过固定源修复错误面板');
+check(source.includes("message: '面板更新结果不是 Zashboard，已阻止加载'"), '在线更新结果身份错误时阻止加载');
 const routePlanDir = fs.mkdtempSync(path.join(ROOT, '.tproxy-route-plan-'));
 try {
   const ruleFile = path.join(routePlanDir, 'rules');

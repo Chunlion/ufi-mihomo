@@ -45,7 +45,7 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=2
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=3
 f50_save_original_config() {
   case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
@@ -59,8 +59,20 @@ f50_save_original_config() {
   trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
 }
 f50_restore_original_config() {
-  [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
-  "$CLASH_ROOT/Tools/yq_linux_arm64" eval '
+  if [ -z "$F50_ORIGINAL_CONFIG" ]; then
+    [ "$action" = prepare ] || return 0
+    F50_ORIGINAL_CANDIDATE="$CLASH_ROOT/Proxy/config.yaml.format.$$"
+    "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '.' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || {
+      rm -f "$F50_ORIGINAL_CANDIDATE"
+      echo F50_ERROR=config_format_failed
+      return 1
+    }
+    chmod 600 "$F50_ORIGINAL_CANDIDATE" && mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml"
+    rc=$?
+    rm -f "$F50_ORIGINAL_CANDIDATE"
+    return "$rc"
+  fi
+  "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
     . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
     $original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])})) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
@@ -78,19 +90,20 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=2' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=3' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=1$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[12]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
+  $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
@@ -1508,7 +1521,7 @@ async function kprReadConnected(config = {}, options = {}) {
 async function kprShapeRuntimeConfig(value, options = null, configSource = null) {
   options = options || await kprReadOptions();
   const preserveConfig = (configSource === null ? await readConfigSource() : configSource) === 'subscription_original';
-  if (preserveConfig && !(await ensureOriginalSubscriptionService())) throw new Error('原配置保留组件更新失败，未修改配置');
+  if (!(await ensureOriginalSubscriptionService())) throw new Error('配置处理组件更新失败，未修改配置');
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
   return KPR.runtime(value, options, connected, preserveConfig);

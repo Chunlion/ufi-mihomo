@@ -53,7 +53,7 @@ function buildF50RedactFunction() { return `f50_redact() {
     print
   }'
 }`; }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=5
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=6
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
@@ -82,13 +82,13 @@ f50_restore_original_config() {
   fi
   "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
     . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
-    ((select(strenv(F50_CONFIG_SOURCE) == "subscription_original") |
-    $original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])})) |
+    (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])})) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
     .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))) |
-    del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark")),
-    (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") |
-    .dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"])))))
+    del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
+    select(strenv(F50_CONFIG_SOURCE) == "subscription_original")),
+    (.dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"]))) |
+    select(strenv(F50_CONFIG_SOURCE) != "subscription_original")))
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
   F50_CONFIG_TEST_RC=$?
@@ -107,14 +107,14 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=5' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=6' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[1234]$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[12345]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }

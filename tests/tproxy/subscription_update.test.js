@@ -97,6 +97,7 @@ const originalConfig = {
   'log-level': 'debug', 'unified-delay': false, 'tcp-concurrent': true,
   'geodata-mode': false, 'external-controller-tls': '0.0.0.0:9999',
   'interface-name': 'DesktopEthernet', 'routing-mark': 1234,
+  'x-format-test': { booleanString: 'true', numericString: '00123', booleanValue: false, numberValue: 7 },
   sniffer: { enable: false }, profile: { 'store-selected': false },
   dns: { enable: false, listen: '127.0.0.1:53', ipv6: true,
     nameserver: ['https://example.com/dns-query'], 'enhanced-mode': 'fake-ip',
@@ -189,6 +190,7 @@ test('service preserves original YAML after controller preparation and reloads i
     const originalWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(functions, '')
       .replace('f50_save_original_config "$action" || exit 1\n', '')
       .replace('f50_restore_original_config || exit 1\n', '')
+      .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval ')
       .replace(/    \(select\(strenv\(F50_CONFIG_SOURCE\).*\n/, '    ."unified-delay" = true |\n');
     const service = write('Scripts/Clash.Service', originalWrapper);
     const installer = vm.runInNewContext(`${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
@@ -203,10 +205,13 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=2', 'KANO_ORIGINAL_CONFIG_PRESERVATION=1')
-      .replace('original_config_merge_failed', 'old_original_config_merge_failed'));
-    assert.equal(await installer(), true);
-    assert.equal(fs.readFileSync(service, 'utf8'), installed, 'old preservation functions and hooks are replaced without duplication');
+    for (const version of ['1', '2']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=3', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+        .replace('original_config_merge_failed', 'old_original_config_merge_failed')
+        .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
+      assert.equal(await installer(), true);
+      assert.equal(fs.readFileSync(service, 'utf8'), installed, 'old preservation functions and hooks are replaced without duplication');
+    }
     assert.equal(run(['-n', service]).status, 0);
     write('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
     write('Proxy/Clash.Core', '#!/bin/sh\nexit "${FAIL_VALIDATE:-0}"\n');
@@ -228,6 +233,11 @@ test('service preserves original YAML after controller preparation and reloads i
       const parsed = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
       assert.equal(parsed.status, 0, parsed.stderr);
       const config = JSON.parse(parsed.stdout);
+      const text = fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8');
+      assert.match(text, /^log-level: debug$/m);
+      assert.match(text, /^dns:\r?\n/m);
+      assert.match(text, /^\s+- https:\/\/example.com\/dns-query$/m);
+      assert.deepEqual(config['x-format-test'], originalConfig['x-format-test'], 'formatting preserves scalar types');
       assert.equal(config['log-level'], 'debug');
       assert.equal(config.sniffer.enable, false);
       assert.equal(config['unified-delay'], false);
@@ -270,7 +280,10 @@ test('service preserves original YAML after controller preparation and reloads i
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
     write('Proxy/config.yaml', JSON.stringify(originalConfig));
     assert.equal(run([service, 'prepare'], env).status, 0);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'))['log-level'], 'info');
+    const templateRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+    assert.equal(templateRead.status, 0, templateRead.stderr);
+    assert.equal(JSON.parse(templateRead.stdout)['log-level'], 'info');
+    assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /^log-level: info$/m);
     assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

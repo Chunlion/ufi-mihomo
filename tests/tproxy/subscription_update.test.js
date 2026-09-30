@@ -181,6 +181,13 @@ test('first original config write and later network changes select preservation'
 });
 
 const yq = process.env.F50_TEST_YQ;
+const uniqueYamlKeys = '[.. | select(tag == "!!map") | ((keys | length) == (keys | unique | length))] | all';
+test('YAML validation rejects duplicate mapping keys', { skip: !yq }, () => {
+  for (const input of ['allow-lan: true\nallow-lan: false\n', 'dns:\n  enable: true\n  enable: false\n']) {
+    const result = spawnSync(yq, ['eval', '-e', uniqueYamlKeys, '-'], { input, encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+  }
+});
 test('restored config validation failures include the core reason in diagnostics', () => {
   const diagnostic = vm.runInNewContext(`${slice('function f50Diagnostic', 'function f50Error')}\nf50Diagnostic`, {
     sanitizeSubscriptionSecrets: (value) => String(value),
@@ -226,8 +233,8 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3', '4']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=5', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3', '4', '5']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=6', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
       assert.equal(await installer(), true);
@@ -237,7 +244,14 @@ test('service preserves original YAML after controller preparation and reloads i
     write('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(shellPath(yq))} "$@"\n`);
     write('Proxy/Clash.Core', `#!/bin/sh\nif [ "\${FAIL_VALIDATE:-0}" != 0 ]; then
   printf '%s\\n' 'level=error msg="Parse config error: invalid DNS server"' 'https://example.com/private?key=test-secret' 'password=test-password' 'uuid=test-uuid' 'private-key=test-private-key' >&2
-fi\nexit "\${FAIL_VALIDATE:-0}"\n`);
+fi
+[ "\${FAIL_VALIDATE:-0}" = 0 ] || exit "$FAIL_VALIDATE"
+while [ "$#" -gt 0 ]; do
+  case "$1" in -f) shift; config=$1 ;; esac
+  shift
+done
+"$CLASH_ROOT/Tools/yq_linux_arm64" eval -e ${quote(uniqueYamlKeys)} "$config" >/dev/null || { echo 'yaml: duplicate mapping key' >&2; exit 1; }
+`);
     write('Scripts/clashctl', '#!/bin/sh\ncp "$CLASH_ROOT/fixed.json" "$CLASH_ROOT/Proxy/config.yaml"\nexit "${FAIL_CONTROLLER:-0}"\n');
     write('bin/curl', '#!/bin/sh\ncp "$CLASH_ROOT/Proxy/config.yaml" "$CLASH_ROOT/reloaded.json"\nprintf 204\n');
     write('Proxy/WebUI/zashboard/index.html', '<title>zashboard</title>');

@@ -181,10 +181,20 @@ test('first original config write and later network changes select preservation'
 });
 
 const yq = process.env.F50_TEST_YQ;
+test('restored config validation failures include the core reason in diagnostics', () => {
+  const diagnostic = vm.runInNewContext(`${slice('function f50Diagnostic', 'function f50Error')}\nf50Diagnostic`, {
+    sanitizeSubscriptionSecrets: (value) => String(value),
+  });
+  const markers = 'F50_ERROR=original_config_invalid\nSTART_SERVICE_RC=0\nF50_START_CODE=service_failed\nF50_START_OK=0';
+  assert.match(diagnostic(markers).summary, /用户配置恢复后未通过核心校验/);
+  const detailed = diagnostic(markers + '\nF50_CONFIG_TEST_DETAIL=level=info msg="Initial configuration"\nF50_CONFIG_TEST_DETAIL=level=error msg="Parse config error: invalid DNS server"');
+  assert.match(detailed.summary, /invalid DNS server/);
+  assert.ok(!detailed.summary.includes('Initial configuration'));
+});
 test('service preserves original YAML after controller preparation and reloads it', { skip: !yq }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-original-config-'));
   const shellPath = (value) => value.replace(/\\/g, '/');
-  const quote = (value) => `'${shellPath(value).replace(/'/g, `'"'"'`)}'`;
+  const quote = (value) => `'${value.replace(/'/g, `'"'"'`)}'`;
   const run = (args, extraEnv = {}) => spawnSync('sh', args, { encoding: 'utf8',
     env: { ...process.env, CLASH_ROOT: shellPath(root), ...extraEnv } });
   const write = (relative, content) => {
@@ -216,16 +226,18 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=4', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3', '4']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=5', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
       assert.equal(await installer(), true);
       assert.equal(fs.readFileSync(service, 'utf8'), installed, 'old preservation functions and hooks are replaced without duplication');
     }
     assert.equal(run(['-n', service]).status, 0);
-    write('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
-    write('Proxy/Clash.Core', '#!/bin/sh\nexit "${FAIL_VALIDATE:-0}"\n');
+    write('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(shellPath(yq))} "$@"\n`);
+    write('Proxy/Clash.Core', `#!/bin/sh\nif [ "\${FAIL_VALIDATE:-0}" != 0 ]; then
+  printf '%s\\n' 'level=error msg="Parse config error: invalid DNS server"' 'https://example.com/private?key=test-secret' 'password=test-password' 'uuid=test-uuid' 'private-key=test-private-key' >&2
+fi\nexit "\${FAIL_VALIDATE:-0}"\n`);
     write('Scripts/clashctl', '#!/bin/sh\ncp "$CLASH_ROOT/fixed.json" "$CLASH_ROOT/Proxy/config.yaml"\nexit "${FAIL_CONTROLLER:-0}"\n');
     write('bin/curl', '#!/bin/sh\ncp "$CLASH_ROOT/Proxy/config.yaml" "$CLASH_ROOT/reloaded.json"\nprintf 204\n');
     write('Proxy/WebUI/zashboard/index.html', '<title>zashboard</title>');
@@ -288,6 +300,13 @@ test('service preserves original YAML after controller preparation and reloads i
         : run([service, 'prepare'], { ...env, [failure]: '1' });
       assert.notEqual(result.status, 0, failure);
       assert.equal(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), before);
+      if (failure === 'FAIL_VALIDATE') {
+        assert.match(result.stdout, /^F50_ERROR=original_config_invalid$/m);
+        assert.match(result.stdout, /^F50_CONFIG_TEST_DETAIL=.*Parse config error: invalid DNS server/m);
+        assert.match(result.stdout, /F50_CONFIG_TEST_DETAIL=\[URL_REDACTED\]/);
+        assert.match(result.stdout, /F50_CONFIG_TEST_DETAIL=\[SENSITIVE_ERROR_REDACTED\]/);
+        assert.ok(!/test-secret|test-password|test-uuid|test-private-key|https:\/\/example.com\/private/.test(result.stdout));
+      }
     }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
     for (const action of ['prepare', 'start', 'restart']) {

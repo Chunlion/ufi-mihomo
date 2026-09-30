@@ -103,7 +103,8 @@ equal([customPanel['external-ui'], customPanel['external-ui-url']], [
 ], '所有配置只允许使用 Zashboard');
 
 console.log('--- generated maintenance shell ---');
-const maintenanceSource = slice('function buildF50ZashboardValidationFunction()', 'function buildF50InspectScript()');
+const maintenanceSource = slice('function buildF50RedactFunction()', 'function buildF50OriginalConfigFunctions()')
+  + slice('function buildF50ZashboardValidationFunction()', 'function buildF50InspectScript()');
 const maintenance = runBlock(`${maintenanceSource}; this.build = buildF50MaintenanceFunctions;`, {
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
   F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
@@ -127,7 +128,8 @@ check(maintenanceShell.includes('F50_START_CODE=secret_ensure_failed'), '控制�
 check(maintenanceShell.includes('f50_ensure_live_panel_config'), '每次启动前强制固定 Zashboard 配置');
 check(maintenanceShell.includes('F50_START_CODE=panel_config_write_failed'), '面板配置无法固定时拒绝启动');
 check(maintenanceShell.includes('F50_ERROR=panel_http_identity_mismatch'), '启动验收拒绝 HTTP 返回 MetaCubeXD 或未知面板');
-const installSource = slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath');
+const installSource = slice('function buildF50RedactFunction()', 'function buildF50OriginalConfigFunctions()')
+  + slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath');
 const install = runBlock(`${installSource}; this.build = buildF50InstallScript;`, {
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
   F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',

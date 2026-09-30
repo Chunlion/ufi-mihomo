@@ -45,7 +45,16 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=4
+function buildF50RedactFunction() { return `f50_redact() {
+  awk '{
+    low=tolower($0)
+    if(low ~ /bearer[ \\t]|["\\047]?(secret|password|passwd|token|authorization|access_token|uuid|private[-_]key)["\\047]?[ \\t]*[:=]/){print "[SENSITIVE_ERROR_REDACTED]";next}
+    gsub(/(https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\\/\\/[^ \\t"<>]+/,"[URL_REDACTED]")
+    print
+  }'
+}`; }
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=5
+${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
@@ -81,7 +90,13 @@ f50_restore_original_config() {
     (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") |
     .dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"])))))
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
-  "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" >/dev/null 2>&1 || { echo F50_ERROR=original_config_invalid; return 1; }
+  F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
+  F50_CONFIG_TEST_RC=$?
+  if [ "$F50_CONFIG_TEST_RC" != 0 ]; then
+    echo F50_ERROR=original_config_invalid
+    printf '%s\\n' "$F50_CONFIG_TEST_OUTPUT" | f50_redact | tail -n 12 | sed 's/^/F50_CONFIG_TEST_DETAIL=/'
+    return 1
+  fi
   chmod 600 "$F50_ORIGINAL_CANDIDATE" || return 1
   mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
   rm -f "$F50_ORIGINAL_CONFIG"
@@ -92,14 +107,14 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=4' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=5' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[123]$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[1234]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -188,6 +203,10 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
   if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';
   if (/subscription URL must be HTTPS without userinfo|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
+  else if (cause === 'original_config_invalid') {
+    const detail = lines.find(line => /^F50_CONFIG_TEST_DETAIL=.*(?:level=["']?(?:error|fatal)|parse config|yaml:)/i.test(line)) || lines.find(line => line.startsWith('F50_CONFIG_TEST_DETAIL='));
+    summary = '用户配置恢复后未通过核心校验' + (detail ? '：' + detail.slice('F50_CONFIG_TEST_DETAIL='.length).trim() : '，请查看校验详情。');
+  }
   else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过，请检查配置格式和策略引用。';
   else if (/policy|iptables|ip6tables|route|downstream|network|TUN|listener/i.test(cause) && code === 'activation_failed') summary = '网络接管规则应用失败：' + cause;
   else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '\u542f\u52a8\u672a\u5b8c\u6210\uff1a' + backend;
@@ -317,14 +336,7 @@ f50_limit() {
     return "$f50_rc"
   fi
 }
-f50_redact() {
-  awk '{
-    low=tolower($0)
-    if(low ~ /bearer[ \\t]|["\\047]?(secret|password|passwd|token|authorization|access_token)["\\047]?[ \\t]*[:=]/){print "[SENSITIVE_ERROR_REDACTED]";next}
-    gsub(/(https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\\/\\/[^ \\t"<>]+/,"[URL_REDACTED]")
-    print
-  }'
-}
+${buildF50RedactFunction()}
 f50_stat() {
   F50_STAT_START=; F50_STAT_PARENT=; F50_STAT_STATE=
   { IFS= read -r ps_stat < "$F50_PROC/$1/stat"; } 2>/dev/null || return 1
@@ -844,7 +856,7 @@ $log_detail"
   F50_START_CODE=service_failed; F50_START_OK=0
   case "$start_cause" in
     *'subscription URL must be HTTPS without userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
-    *CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
+    *original_config_invalid*|*CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
     *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
     *) case "$F50_START_RC" in 124|137) F50_START_CODE=start_timeout ;; esac ;;
   esac

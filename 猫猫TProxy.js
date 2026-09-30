@@ -10740,13 +10740,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       try {
         operationStage('\u68c0\u67e5\u8ba2\u9605');
         if (!(await ensureReady({ readOnly: true }))) { operationFinish(false); return; }
-        if (await readConfigSource() == 'uploaded_config') {
+        const ruleMode = await readCurrentSubRuleMode();
+        if (await readConfigSource() == 'uploaded_config' && ruleMode != SUB_RULE_MODE_ORIGINAL) {
           operationFinish(await updateSubProviders([]));
           return;
         }
         const storedSources = await readCurrentSubSources({ includeDisabled: true });
         const sources = normalizeSubSourceList(storedSources);
-        const ruleMode = await readCurrentSubRuleMode();
         validateSubscriptionMode(storedSources, ruleMode);
         const convertMode = await readSavedSubConvertMode();
         if (storedSources.length > 0 && sources.length == 0) {

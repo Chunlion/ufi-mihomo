@@ -42,6 +42,62 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
   delete profile['external-ui-name'];
 }
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
+const F50_ORIGINAL_MANAGED_KEYS = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
+const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=1
+f50_save_original_config() {
+  case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
+  F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
+  export F50_CONFIG_SOURCE
+  [ "$F50_CONFIG_SOURCE" = subscription_original ] || return 0
+  F50_ORIGINAL_CONFIG="$CLASH_ROOT/Proxy/config.yaml.original.$$"
+  F50_ORIGINAL_CANDIDATE="$F50_ORIGINAL_CONFIG.new"
+  umask 077
+  cp "$CLASH_ROOT/Proxy/config.yaml" "$F50_ORIGINAL_CONFIG" || return 1
+  export F50_ORIGINAL_CONFIG
+  trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
+}
+f50_restore_original_config() {
+  [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
+  "$CLASH_ROOT/Tools/yq_linux_arm64" eval '
+    . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
+    $original * ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile'])})) |
+    .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
+    .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))) |
+    del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name")
+  ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
+  "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" >/dev/null 2>&1 || { echo F50_ERROR=original_config_invalid; return 1; }
+  chmod 600 "$F50_ORIGINAL_CANDIDATE" || return 1
+  mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
+  rm -f "$F50_ORIGINAL_CONFIG"
+  trap - EXIT
+}
+`; }
+async function ensureOriginalSubscriptionService() {
+  const functions = buildF50OriginalConfigFunctions();
+  const res = await runShellWithRoot(`set -e
+SERVICE=${shellQuote(CLASH_SERVICE)}
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=1' "$SERVICE" && exit 0
+TMP="$SERVICE.original.$$"
+FUNCTIONS="$TMP.functions"
+umask 077
+trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
+awk -v functions="$FUNCTIONS" '
+  $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
+  $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
+  $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
+  { print }
+  $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
+  END { if (helpers != 1 || saved != 1 || restored != 1) exit 1 }
+' "$SERVICE" > "$TMP"
+sh -n "$TMP"
+chmod 755 "$TMP"
+mv -f "$TMP" "$SERVICE"
+`, 10000);
+  return !!res.success;
+}
 let f50BackendReady = false;
 async function ensureCompatBackend() {
   if (f50BackendReady) return true;
@@ -725,9 +781,10 @@ f50_ensure_live_panel_config() {
   [ -s "$live_cfg" ] && [ -x "$live_yq" ] || return 1
   export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
   export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
-  f50_limit 8 "$live_yq" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | ."unified-delay" = true' "$live_cfg" >/dev/null 2>&1
+  export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$F50_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
+  f50_limit 8 "$live_yq" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | ."unified-delay" = true))' "$live_cfg" >/dev/null 2>&1
   live_rc=$?
-  unset F50_PANEL_DIR F50_PANEL_URL
+  unset F50_PANEL_DIR F50_PANEL_URL F50_CONFIG_SOURCE
   [ "$live_rc" = 0 ] || return 1
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
@@ -1336,13 +1393,26 @@ function createPrivateRouteLogic() {
     out[META] = meta;
     return out;
   }
-  function runtime(config, options = {}, connected = []) {
+  function runtime(config, options = {}, connected = [], preserveConfig = false) {
   const source = strip(config);
   const mode = options.traffic_mode || 'tproxy';
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
-  const out = clone(F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')]);
-  for (const key of ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
-    if (own(source, key)) out[key] = clone(source[key]);
+  const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
+  const out = clone(preserveConfig ? source : profile);
+  for (const key of preserveConfig ? F50_ORIGINAL_MANAGED_KEYS : ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
+    if (preserveConfig) out[key] = clone(profile[key]);
+    else if (own(source, key)) out[key] = clone(source[key]);
+  }
+  if (preserveConfig) {
+    out.dns = clone(source.dns || profile.dns);
+    out.tun = clone(source.tun || {});
+    if (!f50IsPlainObject(out.dns) || !f50IsPlainObject(out.tun)) throw new Error('dns and tun must be mappings');
+    for (const key of F50_ORIGINAL_DNS_KEYS) out.dns[key] = clone(profile.dns[key]);
+    for (const key of F50_ORIGINAL_TUN_KEYS) {
+      if (own(profile.tun, key)) out.tun[key] = clone(profile.tun[key]);
+      else delete out.tun[key];
+    }
+    for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name']) delete out[key];
   }
   if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
   if (!own(out,'proxies')) out.proxies = [];
@@ -1356,11 +1426,11 @@ function createPrivateRouteLogic() {
   for(const key of ['proxy-providers','rule-providers']) for(const provider of Object.values(out[key]||{})) {
     if(provider && typeof provider==='object'){
       if(provider.override){delete provider.override['interface-name'];delete provider.override['routing-mark'];}
-      if(key==='rule-providers' && provider.type==='http')provider.proxy='DIRECT';
+      if(!preserveConfig && key==='rule-providers' && provider.type==='http')provider.proxy='DIRECT';
     }
   }
   for (const name of ['cn_domain', 'private_domain', 'add_direct_domain']) {
-    if (out['rule-providers']?.[name]?.behavior === 'domain') {
+    if (!preserveConfig && out['rule-providers']?.[name]?.behavior === 'domain') {
       out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
     }
   }
@@ -1431,16 +1501,18 @@ async function kprReadConnected(config = {}, options = {}) {
   return addresses;
 }
 
-async function kprShapeRuntimeConfig(value, options = null) {
+async function kprShapeRuntimeConfig(value, options = null, configSource = null) {
   options = options || await kprReadOptions();
+  const preserveConfig = (configSource === null ? await readConfigSource() : configSource) === 'subscription_original';
+  if (preserveConfig && !(await ensureOriginalSubscriptionService())) throw new Error('原配置保留组件更新失败，未修改配置');
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
-  return KPR.runtime(value, options, connected);
+  return KPR.runtime(value, options, connected, preserveConfig);
 }
 
 async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {
   try {
-    const value = yamlPath === CLASH_CONFIG ? await kprShapeRuntimeConfig(objectValue, options.runtimeOptions) : objectValue;
+    const value = yamlPath === CLASH_CONFIG ? await kprShapeRuntimeConfig(objectValue, options.runtimeOptions, options.configSource ?? null) : objectValue;
     return await kprBaseWriteYamlObjectAtomic(yamlPath, value, options);
   } catch (error) {
     return { ok: false, content: String(error && error.message || error), shell: null };
@@ -1520,8 +1592,7 @@ async function kprSaveNetworkState(previous, next) {
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!source.ok) throw new Error(source.message || '\u65e0\u6cd5\u8bfb\u53d6\u8fd0\u884c\u914d\u7f6e');
-    const connected = feature.enabled && next.options.traffic_mode !== 'off' ? await kprReadConnected(source.value, next.options) : [];
-    const prepared = KPR.runtime(source.value, next.options, connected);
+    const prepared = await kprShapeRuntimeConfig(source.value, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
     if (configChanged) {
@@ -4424,29 +4495,30 @@ EOF_KANO_SERVICE
     `MATCH,${proxyGroup}`,
   ];
 
-  const applyManagedDashboardFields = (config) => {
+  const applyManagedDashboardFields = (config, { preserveConfig = false } = {}) => {
     assertYamlRootMap(config, '配置');
     const externalUi = String(config['external-ui'] || '').trim().replace(/\\/g, '/');
     const externalUiUrl = String(config['external-ui-url'] || '').trim();
     const changed = externalUi != ZASHBOARD_UI_DIR
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
       || externalUiUrl != ZASHBOARD_UI_URL
-      || config['unified-delay'] !== true;
+      || (!preserveConfig && config['unified-delay'] !== true);
     config['external-ui'] = ZASHBOARD_UI_DIR;
     config['external-ui-url'] = ZASHBOARD_UI_URL;
-    config['unified-delay'] = true;
+    if (!preserveConfig) config['unified-delay'] = true;
     delete config['external-ui-name'];
     return changed;
   };
 
   const applyRequiredF50Fields = (config, {
     preservedSecret = '',
+    preserveConfig = false,
   } = {}) => {
     assertYamlRootMap(config, '配置');
     if (typeof config['external-controller'] != 'string' || !config['external-controller'].trim()) {
       config['external-controller'] = `0.0.0.0:${F50_PORTS.controller}`;
     }
-    applyManagedDashboardFields(config);
+    applyManagedDashboardFields(config, { preserveConfig });
     if (typeof config.secret != 'string' || !config.secret.trim()) config.secret = preservedSecret || F50_DEFAULT_SECRET;
     if (!Object.prototype.hasOwnProperty.call(config, 'proxies')) config.proxies = [];
     return config;
@@ -4741,12 +4813,12 @@ EOF_KANO_SERVICE
       if (!read.ok) throw new Error('订阅不是有效的 YAML/JSON 完整配置，请检查返回格式');
       validateOriginalSubscriptionConfig(read.value);
       const info = await buildControllerInfo();
-      const adapted = applyRequiredF50Fields(read.value, { managedDashboard: true, preservedSecret: info.secret || '' });
+      const adapted = applyRequiredF50Fields(read.value, { preserveConfig: true, preservedSecret: info.secret || '' });
       // The subscription supplies policy, not credentials for the local control plane.
       adapted['external-controller'] = info.externalController || `0.0.0.0:${F50_PORTS.controller}`;
       if (typeof info.secret === 'string') adapted.secret = info.secret;
       for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
-      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original' });
+      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original', configSource: 'subscription_original' });
       if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
       const marked = await runShellWithRoot(`
         ${setConfigSourceCmd('subscription_original')}
@@ -5120,6 +5192,7 @@ KANO_WRITE_CHECK_EOF
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
       backup,
       backupTag: 'runtime',
+      configSource: 'template.yaml',
     });
     if (!write.ok) return fail('validate_or_commit_runtime', write.content || '运行配置验证或提交失败');
 
@@ -5648,7 +5721,8 @@ KANO_WRITE_CHECK_EOF
       CFG=${shellQuote(CLASH_CONFIG)}
       YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
       [ -s "$CFG" ] && [ -x "$YQ" ] || exit 1
-      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and ."unified-delay" == true' "$CFG" >/dev/null 2>&1 || exit 1
+      export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)
+      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
       f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
       echo F50_ZASHBOARD_GUARD_OK=1
     `, 8 * 1000);
@@ -5665,7 +5739,7 @@ KANO_WRITE_CHECK_EOF
       if (!read.ok) return { ok: false, message: read.message || 'config.yaml 读取失败' };
 
       const config = cloneJsonValue(read.value);
-      const configChanged = applyManagedDashboardFields(config);
+      const configChanged = applyManagedDashboardFields(config, { preserveConfig: await readConfigSource() === 'subscription_original' });
       const info = await buildControllerInfo();
       const corePid = await getCorePid();
       if (configChanged) {
@@ -7346,7 +7420,7 @@ const verifyCoreStoppedCmd = () => 'sh ' + shellQuote(CLASH_SERVICE) + ' verify-
     let config;
     try {
       config = cloneJsonValue(read.value);
-      applyRequiredF50Fields(config);
+      applyRequiredF50Fields(config, { preserveConfig: values.config_source === 'subscription_original' });
 
       const preserveUserRules = ['subscription_original', 'uploaded_config'].includes(values.config_source);
       if (!preserveUserRules && Array.isArray(config.rules)) {

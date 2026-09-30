@@ -45,7 +45,7 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=1
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=2
 f50_save_original_config() {
   case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
@@ -54,7 +54,7 @@ f50_save_original_config() {
   F50_ORIGINAL_CONFIG="$CLASH_ROOT/Proxy/config.yaml.original.$$"
   F50_ORIGINAL_CANDIDATE="$F50_ORIGINAL_CONFIG.new"
   umask 077
-  cp "$CLASH_ROOT/Proxy/config.yaml" "$F50_ORIGINAL_CONFIG" || return 1
+  cp "$CLASH_ROOT/Proxy/config.yaml" "$F50_ORIGINAL_CONFIG" || { rm -f "$F50_ORIGINAL_CONFIG"; return 1; }
   export F50_ORIGINAL_CONFIG
   trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
 }
@@ -62,10 +62,10 @@ f50_restore_original_config() {
   [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
   "$CLASH_ROOT/Tools/yq_linux_arm64" eval '
     . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
-    $original * ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile'])})) |
+    $original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])})) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
     .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))) |
-    del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name")
+    del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark")
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" >/dev/null 2>&1 || { echo F50_ERROR=original_config_invalid; return 1; }
   chmod 600 "$F50_ORIGINAL_CANDIDATE" || return 1
@@ -78,13 +78,17 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=1' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=2' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=1$/ { skipping=1 }
+  skipping && $0 != "action=$1" { next }
+  $0 == "action=$1" { skipping=0 }
+  $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
@@ -1412,7 +1416,7 @@ function createPrivateRouteLogic() {
       if (own(profile.tun, key)) out.tun[key] = clone(profile.tun[key]);
       else delete out.tun[key];
     }
-    for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name']) delete out[key];
+    for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name', 'interface-name', 'routing-mark']) delete out[key];
   }
   if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
   if (!own(out,'proxies')) out.proxies = [];

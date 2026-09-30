@@ -96,6 +96,7 @@ const configApi = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_COMP
 const originalConfig = {
   'log-level': 'debug', 'unified-delay': false, 'tcp-concurrent': true,
   'geodata-mode': false, 'external-controller-tls': '0.0.0.0:9999',
+  'interface-name': 'DesktopEthernet', 'routing-mark': 1234,
   sniffer: { enable: false }, profile: { 'store-selected': false },
   dns: { enable: false, listen: '127.0.0.1:53', ipv6: true,
     nameserver: ['https://example.com/dns-query'], 'enhanced-mode': 'fake-ip',
@@ -122,6 +123,8 @@ for (const mode of ['tproxy', 'tun', 'off']) {
     assert.equal(result['tproxy-port'], mode === 'tproxy' ? 7895 : 0);
     assert.equal(result['external-controller'], '0.0.0.0:7788');
     assert.equal(result['external-controller-tls'], undefined);
+    assert.equal(result['interface-name'], undefined);
+    assert.equal(result['routing-mark'], undefined);
     assert.deepEqual(original, originalConfig, 'input remains unchanged');
     const updated = { ...original, 'log-level': 'warning', sniffer: { enable: true } };
     assert.equal(configApi.runtime(updated, { traffic_mode: mode }, [], true)['log-level'], 'warning');
@@ -200,6 +203,10 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
+    write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=2', 'KANO_ORIGINAL_CONFIG_PRESERVATION=1')
+      .replace('original_config_merge_failed', 'old_original_config_merge_failed'));
+    assert.equal(await installer(), true);
+    assert.equal(fs.readFileSync(service, 'utf8'), installed, 'old preservation functions and hooks are replaced without duplication');
     assert.equal(run(['-n', service]).status, 0);
     write('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
     write('Proxy/Clash.Core', '#!/bin/sh\nexit "${FAIL_VALIDATE:-0}"\n');
@@ -224,17 +231,40 @@ test('service preserves original YAML after controller preparation and reloads i
       assert.equal(config['log-level'], 'debug');
       assert.equal(config.sniffer.enable, false);
       assert.equal(config['unified-delay'], false);
+      assert.equal(config['interface-name'], undefined);
+      assert.equal(config['routing-mark'], undefined);
       assert.deepEqual(config.dns.nameserver, originalConfig.dns.nameserver);
       assert.equal(config.dns.listen, '0.0.0.0:1053');
       assert.deepEqual(config['rule-providers'], originalConfig['rule-providers']);
       if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
         fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload uses preserved config');
     }
-    for (const failure of ['FAIL_VALIDATE', 'FAIL_CONTROLLER']) {
+    const remoteUrl = 'https://example.com/nodes.yaml';
+    const converted = { ...plain(configApi.profiles.tproxy4),
+      'proxy-providers': { Remote: { type: 'file', path: './proxies/Remote.yaml' } },
+      'x-f50-provider-sources': { Remote: remoteUrl },
+    };
+    write('fixed.json', JSON.stringify(converted));
+    write('Proxy/config.yaml', JSON.stringify({ ...originalConfig,
+      'proxy-providers': { Remote: { type: 'http', url: remoteUrl, path: './old.yaml' } },
+      'x-f50-provider-sources': { Removed: 'https://example.com/removed.yaml' },
+    }));
+    const providerRun = run([service, 'restart'], env);
+    assert.equal(providerRun.status, 0, providerRun.stdout + providerRun.stderr);
+    const providerRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+    assert.equal(providerRead.status, 0, providerRead.stderr);
+    const providerConfig = JSON.parse(providerRead.stdout);
+    assert.deepEqual(providerConfig['proxy-providers'], converted['proxy-providers'], 'converted file providers keep their current type and cache path');
+    assert.deepEqual(providerConfig['x-f50-provider-sources'], converted['x-f50-provider-sources'], 'remote metadata is replaced without retaining removed sources');
+    assert.deepEqual(providerConfig.dns.nameserver, originalConfig.dns.nameserver);
+    assert.equal(providerConfig['log-level'], 'debug');
+    for (const failure of ['FAIL_BACKUP', 'FAIL_VALIDATE', 'FAIL_CONTROLLER']) {
       const before = JSON.stringify(originalConfig);
       write('Proxy/config.yaml', before);
-      const result = run([service, 'prepare'], { ...env, [failure]: '1' });
-      assert.notEqual(result.status, 0);
+      const result = failure === 'FAIL_BACKUP'
+        ? run(['-c', 'cp() { printf partial > "$2"; return 1; }; . "$1" prepare', 'sh', shellPath(service)], env)
+        : run([service, 'prepare'], { ...env, [failure]: '1' });
+      assert.notEqual(result.status, 0, failure);
       assert.equal(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), before);
     }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');

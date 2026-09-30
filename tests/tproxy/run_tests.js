@@ -58,8 +58,9 @@ check(source.includes('f50_install_fail panel_candidate_rejected'), '安装前�
 check(source.includes('f50_install_fail panel_postcheck_failed'), '替换后再次校验面板');
 check(source.includes('F50_ROLLBACK=restored'), '安装失败包含回滚确认');
 check(!source.includes('F50 后台单文件上传上限为 10 MiB'), '未保留错误的 10 MiB 组件包提示');
-check(source.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '服务包装器包含 detached TUN 规则兼容清理');
-check(source.includes('# KANO_IPV6_NAT_COMPAT=1'), '服务包装器包含 IPv6 NAT 能力降级');
+const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
+check(packageService.status === 0 && packageService.stdout.includes('drop_detached_tun_rules "$action" || exit 1'), '服务包装器启动前执行 detached TUN 规则兼容清理');
+check(packageService.status === 0 && packageService.stdout.includes('disable_unsupported_ipv6_dns_hijack "$@" || exit 1'), '服务包装器启动前执行 IPv6 NAT 能力降级');
 check(source.includes('await normalizeIpv6DnsCapability(next)'), '保存网络设置前检查 IPv6 NAT 能力');
 check(source.includes('rotateClashLogCmd() + buildF50MaintenanceFunctions()'), '启动前轮转过大的核心日志');
 check(source.includes("dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')"), '安装前检查设备可用空间');
@@ -67,7 +68,6 @@ check(source.includes("dataSpaceGuardCmd('echo \"ARCHIVE_SPACE_LOW=$kano_data_av
 check(source.includes('f50_ensure_install_secret || exit 1'), '安装时补全空控制密钥');
 check(source.includes('f50_ensure_live_secret'), '启动时补全外部替换配置中的空控制密钥');
 check(source.includes('mapWithConcurrency(names, 2'), '节点来源更新限制并发数');
-const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '组件包服务包装器同步包含兼容清理', packageService.stderr.trim());
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_IPV6_NAT_COMPAT=1'), '组件包支持缺少 IPv6 NAT 的设备', packageService.stderr.trim());
 
@@ -143,7 +143,7 @@ check(installSyntax.status === 0, '安装事务 Shell 通过 sh -n', installSynt
 check(install.build('/data/upload.zip').includes('f50_ensure_install_dashboard || exit 1'), '安装和内核升级前强制固定 Zashboard 配置');
 check(source.includes("callMihomoApi('/upgrade/ui', 'POST'"), '面板打开前可通过固定源修复错误面板');
 check(source.includes("message: '面板更新结果不是 Zashboard，已阻止加载'"), '在线更新结果身份错误时阻止加载');
-const zashboardGuard = slice('const probeZashboardGuard', 'const parseProviderNamesFromYamlText');
+const zashboardGuard = slice('const probeZashboardGuard', 'const buildProviderUpdateResult');
 check(zashboardGuard.includes('F50_ZASHBOARD_GUARD_OK=1'), '正常面板使用单次快速探针');
 check(zashboardGuard.indexOf('if (await probeZashboardGuard()) return') < zashboardGuard.indexOf("readYamlObject(CLASH_CONFIG"), '快速探针通过时不读取和重写 YAML');
 check(!zashboardGuard.includes('zashboardNormalizedCorePid'), '新标签页不再因页面内存 PID 为空而热加载配置');
@@ -250,7 +250,8 @@ const profiles = profileApi.profiles;
 equal(Object.keys(profiles), ['tproxy4', 'tproxy6', 'tun4', 'tun6', 'off4', 'off6'], '固定配置覆盖三种模式和双栈');
 check(Object.values(profiles).every((profile) => profile['external-ui'] === 'WebUI/zashboard'), '所有固定配置使用同一面板目录');
 check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== profiles.tun4.tun, '固定配置深合并后不共享可变对象');
-check(source.includes("'redir-port': 0") && source.includes("'redir-port: 0'"), '生成模板与引导配置关闭未使用的 Redir 端口');
+const templateSource = slice('const buildF50TemplateObject', 'const readRuleOverrideConfig');
+check(templateSource.includes("'redir-port': 0") && Object.values(profiles).every(profile => profile['redir-port'] === 0), '生成模板与全部运行配置关闭未使用的 Redir 端口');
 const kprSource = slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles }).KPR;
 const baseConfig = {

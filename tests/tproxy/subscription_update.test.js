@@ -101,7 +101,11 @@ const originalConfig = {
   sniffer: { enable: false }, profile: { 'store-selected': false },
   dns: { enable: false, listen: '127.0.0.1:53', ipv6: true,
     nameserver: ['https://example.com/dns-query'], 'enhanced-mode': 'fake-ip',
-    'nameserver-policy': { 'rule-set:cn_domain': ['1.1.1.1'] } },
+    'nameserver-policy': { 'rule-set:cn_domain': ['1.1.1.1'] },
+    'proxy-server-nameserver-policy': {
+      'cdn-hk.example.com': ['dns-hk.example.com:1066', 'dns-jp.example.com:1066', 'https://dns-jp.example.com/dns-query'],
+      'cdn-jp.example.com': ['dns-hk.example.com:1066', 'dns-jp.example.com:1066', 'https://dns-jp.example.com/dns-query'],
+    } },
   tun: { enable: true, mtu: 9000, 'route-exclude-address': ['203.0.113.0/24'] },
   proxies: [{ name: 'Test', type: 'socks5', server: 'example.com', port: 1080 }],
   'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['Test'] }],
@@ -118,6 +122,7 @@ for (const mode of ['tproxy', 'tun', 'off']) {
       'proxies', 'proxy-groups', 'rules', 'rule-providers']) assert.deepEqual(result[key], original[key], key);
     assert.deepEqual(result.dns.nameserver, original.dns.nameserver);
     assert.deepEqual(result.dns['nameserver-policy'], original.dns['nameserver-policy']);
+    assert.deepEqual(result.dns['proxy-server-nameserver-policy'], original.dns['proxy-server-nameserver-policy']);
     assert.equal(result.dns['enhanced-mode'], 'fake-ip');
     assert.deepEqual([result.dns.enable, result.dns.listen, result.dns.ipv6], [true, '0.0.0.0:1053', false]);
     assert.equal(result.tun.enable, mode === 'tun');
@@ -133,12 +138,18 @@ for (const mode of ['tproxy', 'tun', 'off']) {
   });
 }
 
-test('template mode retains its fixed defaults', () => {
+test('template mode retains node DNS policies alongside its fixed defaults', () => {
   const result = configApi.runtime(originalConfig, { traffic_mode: 'tproxy', ipv6: 'off' });
   assert.equal(result['log-level'], 'info');
   assert.equal(result.sniffer.enable, true);
   assert.equal(result['unified-delay'], true);
   assert.equal(result['rule-providers'].cn_domain.proxy, 'DIRECT');
+  assert.deepEqual(plain(result.dns['proxy-server-nameserver-policy']), originalConfig.dns['proxy-server-nameserver-policy']);
+  const updated = plain(originalConfig);
+  updated.dns['proxy-server-nameserver-policy'] = { 'new.example.com': ['dns-new.example.com:1066'] };
+  assert.deepEqual(plain(configApi.runtime(updated).dns['proxy-server-nameserver-policy']), updated.dns['proxy-server-nameserver-policy']);
+  delete updated.dns['proxy-server-nameserver-policy'];
+  assert.equal(configApi.runtime(updated).dns['proxy-server-nameserver-policy'], undefined);
 });
 
 test('switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses', () => {
@@ -205,8 +216,8 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=3', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=4', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
       assert.equal(await installer(), true);
@@ -244,6 +255,7 @@ test('service preserves original YAML after controller preparation and reloads i
       assert.equal(config['interface-name'], undefined);
       assert.equal(config['routing-mark'], undefined);
       assert.deepEqual(config.dns.nameserver, originalConfig.dns.nameserver);
+      assert.deepEqual(config.dns['proxy-server-nameserver-policy'], originalConfig.dns['proxy-server-nameserver-policy']);
       assert.equal(config.dns.listen, '0.0.0.0:1053');
       assert.deepEqual(config['rule-providers'], originalConfig['rule-providers']);
       if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
@@ -278,12 +290,20 @@ test('service preserves original YAML after controller preparation and reloads i
       assert.equal(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), before);
     }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
-    write('Proxy/config.yaml', JSON.stringify(originalConfig));
-    assert.equal(run([service, 'prepare'], env).status, 0);
-    const templateRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
-    assert.equal(templateRead.status, 0, templateRead.stderr);
-    assert.equal(JSON.parse(templateRead.stdout)['log-level'], 'info');
-    assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /^log-level: info$/m);
+    for (const action of ['prepare', 'start', 'restart']) {
+      write('Proxy/config.yaml', `dns:\n  proxy-server-nameserver-policy:\n    cdn-hk.example.com: &airport_dns\n      - dns-hk.example.com:1066\n      - dns-jp.example.com:1066\n      - https://dns-jp.example.com/dns-query\n    cdn-jp.example.com: *airport_dns\n`);
+      const result = run([service, action], env);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const templateRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+      assert.equal(templateRead.status, 0, templateRead.stderr);
+      const config = JSON.parse(templateRead.stdout);
+      assert.equal(config['log-level'], 'info');
+      assert.equal(config.dns['enhanced-mode'], 'redir-host');
+      assert.deepEqual(config.dns['proxy-server-nameserver-policy'], originalConfig.dns['proxy-server-nameserver-policy']);
+      assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /^log-level: info$/m);
+      if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
+        fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload retains node DNS policies');
+    }
     assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

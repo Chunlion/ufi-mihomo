@@ -53,10 +53,10 @@ function buildF50RedactFunction() { return `f50_redact() {
     print
   }'
 }`; }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=7
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=8
 ${buildF50RedactFunction()}
 f50_save_original_config() {
-  case "$1" in start|restart|prepare) ;; *) return 0 ;; esac
+  case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
   export F50_CONFIG_SOURCE
   F50_ORIGINAL_CONFIG="$CLASH_ROOT/Proxy/config.yaml.original.$$"
@@ -95,20 +95,21 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=7' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=8' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[123456]$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[1234567]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
   $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
+  $0 == "  start|restart)" { $0 = "  start|restart|boot)" }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }

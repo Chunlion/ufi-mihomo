@@ -218,6 +218,7 @@ test('service preserves original YAML after controller preparation and reloads i
     const originalWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(functions, '')
       .replace('f50_save_original_config "$action" || exit 1\n', '')
       .replace('f50_restore_original_config || exit 1\n', '')
+      .replace('  start|restart|boot)', '  start|restart)')
       .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval ')
       .replace(/    \(select\(strenv\(F50_CONFIG_SOURCE\).*\n/, '    ."unified-delay" = true |\n');
     const service = write('Scripts/Clash.Service', originalWrapper);
@@ -233,8 +234,9 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3', '4', '5', '6']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=7', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3', '4', '5', '6', '7']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=8', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+        .replace('  start|restart|boot)', '  start|restart)')
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
       assert.equal(await installer(), true);
@@ -262,9 +264,10 @@ done
     const chmod = run(['-c', 'chmod +x "$CLASH_ROOT/Tools/yq_linux_arm64" "$CLASH_ROOT/Proxy/Clash.Core" "$CLASH_ROOT/Scripts/clashctl" "$CLASH_ROOT/bin/curl"']);
     assert.equal(chmod.status, 0, chmod.stderr);
     const env = { PATH: `${shellPath(path.join(root, 'bin'))}:${process.env.PATH}` };
-    for (const action of ['prepare', 'start', 'restart']) {
+    for (const action of ['prepare', 'start', 'restart', 'boot']) {
       write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=subscription_original\n');
       write('Proxy/config.yaml', JSON.stringify(originalConfig));
+      fs.rmSync(path.join(root, 'reloaded.json'), { force: true });
       const result = run([service, action], env);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const parsed = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
@@ -306,12 +309,12 @@ done
     assert.deepEqual(providerConfig['x-f50-provider-sources'], converted['x-f50-provider-sources'], 'remote metadata is replaced without retaining removed sources');
     assert.deepEqual(providerConfig.dns.nameserver, originalConfig.dns.nameserver);
     assert.equal(providerConfig['log-level'], 'debug');
-    for (const failure of ['FAIL_BACKUP', 'FAIL_VALIDATE', 'FAIL_CONTROLLER']) {
+    for (const action of ['prepare', 'boot']) for (const failure of ['FAIL_BACKUP', 'FAIL_VALIDATE', 'FAIL_CONTROLLER']) {
       const before = JSON.stringify(originalConfig);
       write('Proxy/config.yaml', before);
       const result = failure === 'FAIL_BACKUP'
-        ? run(['-c', 'cp() { printf partial > "$2"; return 1; }; . "$1" prepare', 'sh', shellPath(service)], env)
-        : run([service, 'prepare'], { ...env, [failure]: '1' });
+        ? run(['-c', 'cp() { printf partial > "$2"; return 1; }; . "$1" "$2"', 'sh', shellPath(service), action], env)
+        : run([service, action], { ...env, [failure]: '1' });
       assert.notEqual(result.status, 0, failure);
       assert.equal(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), before);
       if (failure === 'FAIL_VALIDATE') {
@@ -323,8 +326,9 @@ done
       }
     }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
-    for (const action of ['prepare', 'start', 'restart']) {
+    for (const action of ['prepare', 'start', 'restart', 'boot']) {
       write('Proxy/config.yaml', `dns:\n  proxy-server-nameserver-policy:\n    cdn-hk.example.com: &airport_dns\n      - dns-hk.example.com:1066\n      - dns-jp.example.com:1066\n      - https://dns-jp.example.com/dns-query\n    cdn-jp.example.com: *airport_dns\n`);
+      fs.rmSync(path.join(root, 'reloaded.json'), { force: true });
       const result = run([service, action], env);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const templateRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });

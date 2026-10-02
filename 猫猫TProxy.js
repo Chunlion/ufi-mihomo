@@ -42,7 +42,7 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
   delete profile['external-ui-name'];
 }
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
-const F50_ORIGINAL_MANAGED_KEYS = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
+const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
 function buildF50RedactFunction() { return `f50_redact() {
@@ -53,7 +53,7 @@ function buildF50RedactFunction() { return `f50_redact() {
     print
   }'
 }`; }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=8
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=9
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -95,14 +95,14 @@ async function ensureOriginalSubscriptionService() {
   const functions = buildF50OriginalConfigFunctions();
   const res = await runShellWithRoot(`set -e
 SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=8' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=9' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[1234567]$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[12345678]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -1600,6 +1600,7 @@ async function kprSaveNetworkState(previous, next) {
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!source.ok) throw new Error(source.message || '\u65e0\u6cd5\u8bfb\u53d6\u8fd0\u884c\u914d\u7f6e');
+    configChanged = configChanged || source.value.mode !== 'rule';
     const prepared = await kprShapeRuntimeConfig(source.value, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
@@ -6836,7 +6837,10 @@ btn_disabled.onclick = async () => {
 
   const reapplyPolicyRulesSilent = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
-    const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply 2>&1`);
+    const mode = await callMihomoApi('/configs', 'PATCH', { mode: 'rule' });
+    const res = mode.success
+      ? await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply 2>&1`)
+      : { success: false, content: mode.message || mode.responseText };
     const ok = !!res.success && String(res.content || '').includes('POLICY_APPLY_OK');
     if (!ok) {
       const detail = sanitizeSubscriptionSecrets(String(res.content || '策略脚本未返回成功结果')).slice(-1800);

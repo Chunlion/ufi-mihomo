@@ -94,6 +94,7 @@ const configApi = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_COMP
   F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
 });
 const originalConfig = {
+  mode: 'global',
   'log-level': 'debug', 'unified-delay': false, 'tcp-concurrent': true,
   'geodata-mode': false, 'external-controller-tls': '0.0.0.0:9999',
   'interface-name': 'DesktopEthernet', 'routing-mark': 1234,
@@ -128,6 +129,7 @@ for (const mode of ['tproxy', 'tun', 'off']) {
     assert.equal(result.tun.enable, mode === 'tun');
     assert.equal(result['tproxy-port'], mode === 'tproxy' ? 7895 : 0);
     assert.equal(result['external-controller'], '0.0.0.0:7788');
+    assert.equal(result.mode, 'rule');
     assert.equal(result['external-controller-tls'], undefined);
     assert.equal(result['interface-name'], undefined);
     assert.equal(result['routing-mark'], undefined);
@@ -150,6 +152,32 @@ test('template mode retains node DNS policies alongside its fixed defaults', () 
   assert.deepEqual(plain(configApi.runtime(updated).dns['proxy-server-nameserver-policy']), updated.dns['proxy-server-nameserver-policy']);
   delete updated.dns['proxy-server-nameserver-policy'];
   assert.equal(configApi.runtime(updated).dns['proxy-server-nameserver-policy'], undefined);
+});
+
+test('original config uses rule mode regardless of its source mode', () => {
+  for (const mode of ['global', 'direct', 'Rule', undefined]) {
+    const original = { ...originalConfig, mode };
+    assert.equal(configApi.runtime(original, {}, [], true).mode, 'rule');
+    assert.equal(original.mode, mode);
+  }
+});
+
+test('policy reapplication synchronizes core mode and stops on API failure', async () => {
+  for (const success of [true, false]) {
+    const calls = [];
+    const sandbox = {
+      ensurePolicyToolsScript: async () => true,
+      callMihomoApi: async (...args) => { calls.push(plain(args)); return { success, message: 'API failed' }; },
+      runShellWithRoot: async () => { calls.push('policy'); return { success: true, content: 'POLICY_APPLY_OK' }; },
+      shellQuote: (value) => value, CLASH_POLICY_SCRIPT: 'policy', activeCriticalOperation: {},
+      sanitizeSubscriptionSecrets: (value) => value, safeTextToHtml: (value) => value,
+      createToast() {},
+    };
+    const apply = vm.runInNewContext(`${slice('const reapplyPolicyRulesSilent = async', 'const readClientListText = async')} reapplyPolicyRulesSilent`, sandbox);
+    assert.equal(await apply(), success);
+    assert.deepEqual(calls, success ? [['/configs', 'PATCH', { mode: 'rule' }], 'policy'] : [['/configs', 'PATCH', { mode: 'rule' }]]);
+    if (!success) assert.match(sandbox.activeCriticalOperation.failure, /API failed/);
+  }
 });
 
 test('switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses', () => {
@@ -234,8 +262,8 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3', '4', '5', '6', '7']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=8', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3', '4', '5', '6', '7', '8']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=9', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('  start|restart|boot)', '  start|restart)')
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
@@ -279,6 +307,7 @@ done
       assert.match(text, /^\s+- https:\/\/example.com\/dns-query$/m);
       assert.deepEqual(config['x-format-test'], originalConfig['x-format-test'], 'formatting preserves scalar types');
       assert.equal(config['log-level'], 'debug');
+      assert.equal(config.mode, 'rule');
       assert.equal(config.sniffer.enable, false);
       assert.equal(config['unified-delay'], false);
       assert.equal(config['interface-name'], undefined);

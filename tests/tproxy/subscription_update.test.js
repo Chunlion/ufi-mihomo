@@ -180,6 +180,28 @@ test('policy reapplication synchronizes core mode and stops on API failure', asy
   }
 });
 
+test('panel guard detects runtime delay settings that differ from the saved config', async () => {
+  for (const [saved, live, running, expected] of [
+    [true, false, true, false], [true, true, true, true],
+    [false, false, true, true], [false, true, true, false],
+    [true, false, false, true],
+  ]) {
+    const sandbox = {
+      CLASH_CONFIG: 'config.yaml', CLASH_DIR: '/data/clash', CLASH_PROXY_DIR: '/data/clash/Proxy',
+      CLASH_CONFIG_SOURCE_FILE: 'source.conf', ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.com/ui.zip',
+      buildF50ZashboardValidationFunction: () => '', shellQuote: (value) => value,
+      runShellWithRoot: async () => ({ success: true, content: `F50_ZASHBOARD_GUARD_OK=1\nF50_UNIFIED_DELAY=${saved}\n` }),
+      getCorePid: async () => running ? '1234' : '',
+      callMihomoApi: async () => {
+        assert.ok(running, 'stopped core does not require an API probe');
+        return { success: true, responseText: JSON.stringify({ 'unified-delay': live }) };
+      },
+    };
+    const probe = vm.runInNewContext(`${slice('const probeZashboardGuard = async', 'let zashboardGuardPromise')} probeZashboardGuard`, sandbox);
+    assert.equal(await probe(), expected);
+  }
+});
+
 test('switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses', () => {
   const v6 = configApi.runtime(originalConfig, { traffic_mode: 'tun', ipv6: 'on' }, [], true);
   assert.equal(v6.dns.ipv6, true);

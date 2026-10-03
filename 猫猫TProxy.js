@@ -5153,8 +5153,17 @@ KANO_WRITE_CHECK_EOF
       "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
       f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
       echo F50_ZASHBOARD_GUARD_OK=1
+      echo "F50_UNIFIED_DELAY=$(\"$YQ\" e -r '.\"unified-delay\" // false' \"$CFG\")"
     `, 8 * 1000);
-    return !!(res.success && String(res.content || '').includes('F50_ZASHBOARD_GUARD_OK=1'));
+    if (!res.success || !String(res.content || '').includes('F50_ZASHBOARD_GUARD_OK=1')) return false;
+    const corePid = await getCorePid();
+    if (!corePid) return true;
+    const runtime = await callMihomoApi('/configs', 'GET', null, null, 5, { corePid });
+    if (!runtime.success) return false;
+    try {
+      return JSON.parse(runtime.responseText || '{}')['unified-delay']
+        === /^F50_UNIFIED_DELAY=true$/m.test(String(res.content || ''));
+    } catch (_) { return false; }
   };
 
   let zashboardGuardPromise = null;
@@ -5184,7 +5193,7 @@ KANO_WRITE_CHECK_EOF
       }
 
       let disk = await inspectZashboardDisk();
-      if (disk.ok) return { ok: true, repaired: configChanged };
+      if (disk.ok) return { ok: true, repaired: configChanged || !!corePid };
       if (!corePid) return { ok: false, message: 'Zashboard 文件身份异常，核心未运行，无法在线修复' };
 
       const upgraded = await callMihomoApi('/upgrade/ui', 'POST', null, info, 60, { corePid });

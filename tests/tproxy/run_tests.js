@@ -103,7 +103,9 @@ equal([customPanel['external-ui'], customPanel['external-ui-url']], [
 ], '所有配置只允许使用 Zashboard');
 
 console.log('--- generated maintenance shell ---');
-const maintenanceSource = slice('function buildF50RedactFunction()', 'function buildF50OriginalConfigFunctions()')
+const originalServiceSource = slice('const F50_PORTS', 'const F50_COMPAT_VERSION')
+  + slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady');
+const maintenanceSource = originalServiceSource
   + slice('function buildF50ZashboardValidationFunction()', 'function buildF50InspectScript()');
 const maintenance = runBlock(`${maintenanceSource}; this.build = buildF50MaintenanceFunctions;`, {
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
@@ -128,7 +130,7 @@ check(maintenanceShell.includes('F50_START_CODE=secret_ensure_failed'), '控制�
 check(maintenanceShell.includes('f50_ensure_live_panel_config'), '每次启动前强制固定 Zashboard 配置');
 check(maintenanceShell.includes('F50_START_CODE=panel_config_write_failed'), '面板配置无法固定时拒绝启动');
 check(maintenanceShell.includes('F50_ERROR=panel_http_identity_mismatch'), '启动验收拒绝 HTTP 返回 MetaCubeXD 或未知面板');
-const installSource = slice('function buildF50RedactFunction()', 'function buildF50OriginalConfigFunctions()')
+const installSource = originalServiceSource
   + slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath');
 const install = runBlock(`${installSource}; this.build = buildF50InstallScript;`, {
   shellQuote: (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`,
@@ -141,6 +143,48 @@ const install = runBlock(`${installSource}; this.build = buildF50InstallScript;`
 const installSyntax = spawnSync('sh', ['-n'], { input: install.build('/data/upload.zip'), encoding: 'utf8' });
 check(installSyntax.status === 0, '安装事务 Shell 通过 sh -n', installSyntax.stderr && installSyntax.stderr.trim());
 check(install.build('/data/upload.zip').includes('f50_ensure_install_dashboard || exit 1'), '安装和内核升级前强制固定 Zashboard 配置');
+const reinstallDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'f50-reinstall-'));
+const quotePath = (value) => `'${String(value).replaceAll(String.fromCharCode(92), '/').replace(/'/g, `'"'"'`)}'`;
+try {
+  const oldRoot = path.join(reinstallDir, 'clash');
+  const stagedRoot = path.join(reinstallDir, 'staged');
+  fs.mkdirSync(path.join(oldRoot, 'Tools'), { recursive: true });
+  fs.mkdirSync(path.join(oldRoot, 'Proxy'), { recursive: true });
+  const original = 'KANO_CONFIG_SOURCE=subscription_original\n';
+  fs.writeFileSync(path.join(oldRoot, 'Tools/config_source.conf'), original);
+  fs.writeFileSync(path.join(oldRoot, 'Proxy/config.yaml'), 'dns:\n  nameserver: [1.1.1.1]\n');
+  const installShell = install.build('/data/upload.zip');
+  const from = installShell.indexOf('f50_preserve_user_data() {');
+  const to = installShell.indexOf('YQ="$PKG/Tools/yq_linux_arm64"', from);
+  const preserved = spawnSync('sh', ['-c', `F50_ROOT=${quotePath(oldRoot)}\nPKG=${quotePath(stagedRoot)}\nf50_install_fail() { return 1; }\n${installShell.slice(from, to)}`], { encoding: 'utf8' });
+  check(preserved.status === 0 && fs.readFileSync(path.join(stagedRoot, 'Tools/config_source.conf'), 'utf8') === original,
+    '重装同时保留原配置和配置来源标记', preserved.stderr.trim());
+  fs.mkdirSync(path.join(oldRoot, 'Scripts'), { recursive: true });
+  const service = path.join(oldRoot, 'Scripts/Clash.Service');
+  const startLog = path.join(reinstallDir, 'kano_clash_start.log');
+  for (const scenario of ['preflight', 'controller', 'success', 'patch']) {
+    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : `#!/bin/sh\n# KANO_ORIGINAL_CONFIG_PRESERVATION=10\n${scenario === 'controller'
+      ? "echo F50_ERROR=core_start_failed; echo password=test-start-password; exit 7"
+      : 'echo START_STATE=started_verified_process; exit 0'}\n`);
+    const command = `F50_ROOT=${quotePath(oldRoot)}\n${maintenanceShell}
+f50_ensure_live_secret() { ${scenario === 'preflight' ? 'echo password=test-start-password; return 1' : 'return 0'}; }
+f50_ensure_live_panel_config() { return 0; }
+f50_disable_unsupported_ipv6_dns_hijack() { return 0; }
+f50_drop_detached_tun_rules() { return 0; }
+f50_verify_zashboard_endpoint() { return 0; }
+f50_start_service restart 5`;
+    const result = spawnSync('sh', ['-s'], { input: command, encoding: 'utf8' });
+    const logged = fs.existsSync(startLog) ? fs.readFileSync(startLog, 'utf8') : '';
+    check(result.status === (scenario === 'success' ? 0 : 1) && logged === result.stdout &&
+      logged.includes(scenario === 'success' ? 'F50_START_OK=1' : 'F50_START_OK=0') &&
+      !logged.includes('test-start-password'), `启动 ${scenario} 保留返回状态并保存脱敏日志`, result.stderr.trim());
+    if (scenario === 'patch') check(logged.includes('F50_START_CODE=service_patch_failed') &&
+      fs.readFileSync(service, 'utf8') === '#!/bin/sh\nexit 0\n', '包装器补丁失败不覆盖原文件或继续启动');
+  }
+} finally {
+  fs.rmSync(reinstallDir, { recursive: true, force: true });
+}
+
 check(source.includes("callMihomoApi('/upgrade/ui', 'POST'"), '面板打开前可通过固定源修复错误面板');
 check(source.includes("message: '面板更新结果不是 Zashboard，已阻止加载'"), '在线更新结果身份错误时阻止加载');
 const zashboardGuard = slice('const probeZashboardGuard', 'const buildProviderUpdateResult');
@@ -158,7 +202,7 @@ try {
     '',
   ].join('\n'));
   fs.writeFileSync(routeFile, '');
-  const routePlan = spawnSync('sh', ['-c', `${maintenanceShell}\nf50_routes_plan -4 "$1" "$2" "$3"\ncat "$3"`, 'sh', ruleFile, routeFile, planFile], { encoding: 'utf8' });
+  const routePlan = spawnSync('sh', ['-s', '--', ruleFile, routeFile, planFile], { input: `${maintenanceShell}\nf50_routes_plan -4 "$1" "$2" "$3"\ncat "$3"`, encoding: 'utf8' });
   check(routePlan.status === 0 && !routePlan.stdout.includes('[detached]') && routePlan.stdout.includes('aiif\naKanoTun\nalookup\na17667'), '含 [detached] 的 TUN 规则生成可执行删除计划', routePlan.stderr.trim());
   check(!routePlan.stdout.includes('proto') && routePlan.stdout.includes('afwmark\na0x10000000/0x10000000\nalookup\na17666'), 'TProxy 规则同样忽略展示附加字段', routePlan.stderr.trim());
   const compatRoot = path.join(routePlanDir, 'clash');
@@ -175,19 +219,19 @@ case "$*" in
 esac
 `);
   fs.chmodSync(path.join(compatBin, 'ip'), 0o755);
-  const detached = spawnSync('sh', ['-c', `${maintenanceShell}
+  const detached = spawnSync('sh', ['-s', '--', compatRoot, compatBin, detachedLog], { input: `${maintenanceShell}
 export PATH="$2:$PATH" F50_IP_LOG="$3"
 f50_drop_detached_tun_rules
-cat "$3"`, 'sh', compatRoot, compatBin, detachedLog], { encoding: 'utf8' });
+cat "$3"`, encoding: 'utf8' });
   check(detached.status === 0 && detached.stdout.includes('-4 rule del pref 1776 iif KanoTun lookup 17667'), '启动兜底能删除带 [detached] 的 TUN 规则', detached.stderr.trim());
   fs.writeFileSync(path.join(compatRoot, 'Policy', 'options.conf'), 'traffic_mode=tproxy\nipv6=on\ndns_hijack=on\n');
   fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "ip6tables: Table does not exist" >&2\nexit 3\n');
   fs.chmodSync(path.join(compatBin, 'ip6tables'), 0o755);
-  const compat = spawnSync('sh', ['-c', `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, 'sh', compatRoot, compatBin], { encoding: 'utf8' });
+  const compat = spawnSync('sh', ['-s', '--', compatRoot, compatBin], { input: `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, encoding: 'utf8' });
   check(compat.status === 0 && compat.stdout.includes('F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled') && compat.stdout.includes('dns_hijack=off'), '缺少 IPv6 NAT 时自动关闭 DNS 劫持', compat.stderr.trim());
   fs.writeFileSync(path.join(compatRoot, 'Policy', 'options.conf'), 'traffic_mode=tproxy\nipv6=on\ndns_hijack=on\n');
   fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "xtables lock is busy" >&2\nexit 4\n');
-  const transient = spawnSync('sh', ['-c', `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, 'sh', compatRoot, compatBin], { encoding: 'utf8' });
+  const transient = spawnSync('sh', ['-s', '--', compatRoot, compatBin], { input: `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, encoding: 'utf8' });
   check(transient.status === 0 && !transient.stdout.includes('F50_WARNING=') && transient.stdout.includes('dns_hijack=on'), '临时 ip6tables 错误不会关闭 DNS 劫持', transient.stderr.trim());
 } finally {
   fs.rmSync(routePlanDir, { recursive: true, force: true });

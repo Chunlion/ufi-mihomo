@@ -53,7 +53,7 @@ function buildF50RedactFunction() { return `f50_redact() {
     print
   }'
 }`; }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=9
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=10
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -90,19 +90,30 @@ f50_restore_original_config() {
   rm -f "$F50_ORIGINAL_CONFIG"
   trap - EXIT
 }
+case "$1" in start|restart|boot)
+  if [ "\${F50_SERVICE_CAPTURED:-0}" != 1 ]; then
+    f50_service_output=$(F50_SERVICE_CAPTURED=1 sh "$0" "$@" 2>&1)
+    f50_service_rc=$?
+    f50_service_output=$(printf '%s\\n' "$f50_service_output" | f50_redact)
+    (umask 077; printf '%s\\n' "$f50_service_output" > "\${CLASH_ROOT%/*}/kano_clash_start.log" && chmod 600 "\${CLASH_ROOT%/*}/kano_clash_start.log") || echo F50_START_LOG_WRITE_FAILED=1
+    printf '%s\\n' "$f50_service_output"
+    exit "$f50_service_rc"
+  fi
+  ;;
+esac
 `; }
-async function ensureOriginalSubscriptionService() {
+function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE)) {
   const functions = buildF50OriginalConfigFunctions();
-  const res = await runShellWithRoot(`set -e
-SERVICE=${shellQuote(CLASH_SERVICE)}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=9' "$SERVICE" && exit 0
+  return `(set -e
+SERVICE=${service}
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=10' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
-printf '%s' ${shellQuote(functions)} > "$FUNCTIONS"
+printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[12345678]$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[123456789]$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -114,11 +125,14 @@ awk -v functions="$FUNCTIONS" '
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
   END { if (helpers != 1 || saved != 1 || restored != 1) exit 1 }
-' "$SERVICE" > "$TMP"
-sh -n "$TMP"
-chmod 755 "$TMP"
-mv -f "$TMP" "$SERVICE"
-`, 10000);
+' "$SERVICE" > "$TMP" || exit 1
+sh -n "$TMP" || exit 1
+chmod 755 "$TMP" || exit 1
+mv -f "$TMP" "$SERVICE" || exit 1
+)`;
+}
+async function ensureOriginalSubscriptionService() {
+  const res = await runShellWithRoot(buildF50OriginalServicePatchScript(), 10000);
   return !!res.success;
 }
 let f50BackendReady = false;
@@ -166,6 +180,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     panel_candidate_rejected: '组件包中的面板不是有效 Zashboard，已保留原面板。',
     panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
     missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
+    service_patch_failed: '启动组件更新失败，请重新安装组件包。',
     invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTPS 订阅地址。',
     invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
     configuration_missing: '组件包没有初始配置，原安装保持不变。',
@@ -809,8 +824,15 @@ f50_ensure_live_panel_config() {
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
 f50_start_service() {
+  service_output=$(
   start_action=$1; start_budget=$2
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
+  if ! ${buildF50OriginalServicePatchScript('"$F50_ROOT/Scripts/Clash.Service"')}; then
+    echo F50_ERROR=service_patch_failed
+    echo F50_START_CODE=service_patch_failed
+    echo F50_START_OK=0
+    return 1
+  fi
   if ! f50_ensure_live_secret; then
     F50_START_RC=1; F50_START_DETAIL=F50_ERROR=secret_ensure_failed
     F50_START_CODE=secret_ensure_failed; F50_START_OK=0
@@ -862,6 +884,12 @@ $log_detail"
   printf '%s\\n' "$F50_START_DETAIL"
   printf 'START_SERVICE_RC=%s\\nF50_START_CODE=%s\\nF50_START_OK=%s\\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
   [ "$F50_START_OK" = 1 ]
+  )
+  service_output_rc=$?
+  service_output=$(printf '%s\\n' "$service_output" | f50_redact)
+  (umask 077; printf '%s\\n' "$service_output" > "$F50_DATA/kano_clash_start.log" && chmod 600 "$F50_DATA/kano_clash_start.log") || echo F50_START_LOG_WRITE_FAILED=1
+  printf '%s\\n' "$service_output"
+  return "$service_output_rc"
 }
 `; }
 function buildF50InspectScript() {
@@ -1009,7 +1037,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -6258,10 +6286,10 @@ kano_stop_watchers() (
         START_LOG=${shellQuote('/data/kano_clash_start.log')}
         RUN_LOG=${shellQuote(LOG_FILE)}
         echo "[Clash.Service 启动输出]"
-        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null; else echo "（暂无启动输出）"; fi
+        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null || echo "（启动日志读取失败）"; else echo "（暂无启动输出）"; fi
         echo
         echo "[Clash 内核运行日志]"
-        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null; else echo "（暂无内核日志）"; fi
+        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（内核日志读取失败）"; else echo "（暂无内核日志）"; fi
         `);
     const versionPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
       callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid }));

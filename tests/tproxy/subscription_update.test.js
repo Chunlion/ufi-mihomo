@@ -249,7 +249,8 @@ test('restored config validation failures include the core reason in diagnostics
   assert.ok(!detailed.summary.includes('Initial configuration'));
 });
 test('service preserves original YAML after controller preparation and reloads it', { skip: !yq }, async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-original-config-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-original-config-'));
+  const root = path.join(work, 'clash');
   const shellPath = (value) => value.replace(/\\/g, '/');
   const quote = (value) => `'${value.replace(/'/g, `'"'"'`)}'`;
   const run = (args, extraEnv = {}) => spawnSync('sh', args, { encoding: 'utf8',
@@ -284,8 +285,8 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3', '4', '5', '6', '7', '8']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=9', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    for (const version of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=10', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('  start|restart|boot)', '  start|restart)')
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
@@ -338,8 +339,11 @@ done
       assert.deepEqual(config.dns['proxy-server-nameserver-policy'], originalConfig.dns['proxy-server-nameserver-policy']);
       assert.equal(config.dns.listen, '0.0.0.0:1053');
       assert.deepEqual(config['rule-providers'], originalConfig['rule-providers']);
-      if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
-        fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload uses preserved config');
+      if (action !== 'prepare') {
+        assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
+          fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload uses preserved config');
+        assert.equal(fs.readFileSync(path.join(work, 'kano_clash_start.log'), 'utf8'), result.stdout, 'manual and boot output persists');
+      }
     }
     const remoteUrl = 'https://example.com/nodes.yaml';
     const converted = { ...plain(configApi.profiles.tproxy4),
@@ -374,6 +378,7 @@ done
         assert.match(result.stdout, /F50_CONFIG_TEST_DETAIL=\[URL_REDACTED\]/);
         assert.match(result.stdout, /F50_CONFIG_TEST_DETAIL=\[SENSITIVE_ERROR_REDACTED\]/);
         assert.ok(!/test-secret|test-password|test-uuid|test-private-key|https:\/\/example.com\/private/.test(result.stdout));
+        if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(work, 'kano_clash_start.log'), 'utf8'), result.stdout, 'failed starts persist only redacted output');
       }
     }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
@@ -394,6 +399,6 @@ done
     }
     assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(work, { recursive: true, force: true });
   }
 });

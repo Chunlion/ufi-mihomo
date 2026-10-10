@@ -9,7 +9,6 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
 const source = fs.readFileSync(path.resolve(__dirname, '..', '..', process.env.F50_PLUGIN || '猫猫TProxy.js'), 'utf8');
-const baselineSource = fs.readFileSync(path.resolve(__dirname, '..', '..', '猫猫TProxy.js'), 'utf8');
 const slice = (start, end, text = source) => {
   const from = text.indexOf(start);
   const to = text.indexOf(end, from + start.length);
@@ -269,10 +268,12 @@ test('service preserves original YAML after controller preparation and reloads i
     const archive = spawnSync('tar', ['-xOf', path.join(__dirname, '..', '..', 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
     assert.equal(archive.status, 0, archive.stderr);
     const functions = configApi.functions();
-    const packageFunctions = vm.runInNewContext(slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady', baselineSource)
-      + '\nbuildF50OriginalConfigFunctions()', { PROFILE_DELTA: configApi.delta });
-    assert.ok(archive.stdout.replace(/\r\n/g, '\n').includes(packageFunctions), 'package contains baseline preservation functions');
-    const originalWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(packageFunctions, '')
+    const packaged = archive.stdout.replace(/\r\n/g, '\n');
+    const functionsStart = packaged.indexOf('# KANO_ORIGINAL_CONFIG_PRESERVATION=');
+    const functionsEnd = packaged.indexOf('action=$1\n', functionsStart);
+    assert.ok(functionsStart >= 0 && functionsEnd > functionsStart, 'package contains preservation functions');
+    const packageFunctions = packaged.slice(functionsStart, functionsEnd);
+    const originalWrapper = packaged.replace(packageFunctions, '')
       .replace('f50_save_original_config "$action" || exit 1\n', '')
       .replace('f50_restore_original_config || exit 1\n', '')
       .replace('  start|restart|boot)', '  start|restart)')
@@ -289,16 +290,24 @@ test('service preserves original YAML after controller preparation and reloads i
     });
     assert.equal(await installer(), true);
     const installed = fs.readFileSync(service, 'utf8');
-    let expectedWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(packageFunctions, () => functions);
+    let expectedWrapper = packaged.replace(packageFunctions, () => functions);
     if (configApi.panelCheck) {
-      const guard = `  # KANO_PANEL_WRITE_GUARD=1\n  if "$yq" eval -e '${configApi.panelCheck}' "$cfg" >/dev/null 2>&1; then\n    "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$cfg" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }\n  else\n`;
+      const guard = `  # KANO_PANEL_WRITE_GUARD=2\n  if "$yq" eval -e '${configApi.panelCheck}' "$cfg" >/dev/null 2>&1; then\n    "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$cfg" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }\n    if [ "\${F50_CONFIG_RELOAD_REQUIRED:-0}" != 1 ]; then echo F50_PANEL_CONFIG_UNCHANGED=1; return 0; fi\n  else\n`;
       expectedWrapper = expectedWrapper.replace('  "$yq" eval -P -o=yaml -I=2 ', match => guard + match)
-        .replace('  auth=', '  fi\n  auth=');
+        .replace('  auth=', '  fi\n  auth=')
+        .replace('curl -sS --max-time 20', "curl -sS --noproxy '*' --connect-timeout 3 --max-time 20")
+        .replace('  echo F50_PANEL_CONFIG_RELOADED=1', '  F50_CONFIG_RELOAD_REQUIRED=0\n  echo F50_PANEL_CONFIG_RELOADED=1');
     }
     assert.equal(installed, expectedWrapper, 'installed patch preserves packaged service and updates its preservation functions');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
     const currentVersion = (functions.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];
+    write('Scripts/Clash.Service', installed.replace(`KANO_ORIGINAL_CONFIG_PRESERVATION=${currentVersion}`, 'KANO_ORIGINAL_CONFIG_PRESERVATION=11')
+      .replace('KANO_PANEL_WRITE_GUARD=2', 'KANO_PANEL_WRITE_GUARD=1')
+      .replace('    if [ "${F50_CONFIG_RELOAD_REQUIRED:-0}" != 1 ]; then echo F50_PANEL_CONFIG_UNCHANGED=1; return 0; fi\n', '')
+      .replace('  F50_CONFIG_RELOAD_REQUIRED=0\n  echo F50_PANEL_CONFIG_RELOADED=1', '  echo F50_PANEL_CONFIG_RELOADED=1'));
+    assert.equal(await installer(), true);
+    assert.equal(fs.readFileSync(service, 'utf8'), installed, 'version 11 panel guard upgrades without duplication');
     for (let version = 1; version < Number(currentVersion); version++) {
       write('Scripts/Clash.Service', installed.replace(`KANO_ORIGINAL_CONFIG_PRESERVATION=${currentVersion}`, `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('  start|restart|boot)', '  start|restart)')
@@ -320,7 +329,7 @@ done
 "$CLASH_ROOT/Tools/yq_linux_arm64" eval -e ${quote(uniqueYamlKeys)} "$config" >/dev/null || { echo 'yaml: duplicate mapping key' >&2; exit 1; }
 `);
     write('Scripts/clashctl', '#!/bin/sh\ncp "$CLASH_ROOT/fixed.json" "$CLASH_ROOT/Proxy/config.yaml"\nexit "${FAIL_CONTROLLER:-0}"\n');
-    write('bin/curl', '#!/bin/sh\ncp "$CLASH_ROOT/Proxy/config.yaml" "$CLASH_ROOT/reloaded.json"\nprintf 204\n');
+    write('bin/curl', '#!/bin/sh\nprintf "%s\\n" "$@" > "$CLASH_ROOT/reload.args"\nif [ "${FAIL_RELOAD:-0}" != 0 ]; then printf 000; exit "$FAIL_RELOAD"; fi\ncp "$CLASH_ROOT/Proxy/config.yaml" "$CLASH_ROOT/reloaded.json"\nprintf 204\n');
     write('Proxy/WebUI/zashboard/index.html', '<title>zashboard</title>');
     write('Proxy/WebUI/zashboard/manifest.webmanifest', '{}');
     write('Proxy/WebUI/zashboard/registerSW.js', 'void 0');
@@ -357,12 +366,22 @@ done
         assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
           fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload uses preserved config');
         assert.equal(fs.readFileSync(path.join(work, 'kano_clash_start.log'), 'utf8'), result.stdout, 'manual and boot output persists');
+        const reloadArgs = fs.readFileSync(path.join(root, 'reload.args'), 'utf8').trim().split(/\r?\n/);
+        assert.equal(reloadArgs[reloadArgs.indexOf('--noproxy') + 1], '*', 'local reload bypasses environment proxies');
       }
     }
+    write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
+    write('Proxy/config.yaml', JSON.stringify(plain(configApi.profiles.tproxy4)));
+    fs.rmSync(path.join(root, 'reloaded.json'), { force: true });
+    const formattingOnly = run([service, 'restart'], env);
+    assert.equal(formattingOnly.status, 0, formattingOnly.stdout + formattingOnly.stderr);
+    assert.match(formattingOnly.stdout, /F50_PANEL_CONFIG_UNCHANGED=1/);
+    assert.ok(!fs.existsSync(path.join(root, 'reloaded.json')), 'JSON to YAML formatting alone does not require a reload');
     if (configApi.panelCheck) {
       write('Proxy/config.yaml', JSON.stringify(configApi.profiles.tproxy4));
       const configFile = path.join(root, 'Proxy/config.yaml');
       const beforePanel = fs.statSync(configFile);
+      fs.rmSync(path.join(root, 'reloaded.json'), { force: true });
       const panelFunction = installed.slice(installed.indexOf('repair_panel_config() {'), installed.indexOf('disable_unsupported_ipv6_dns_hijack() {'));
       const checkPanel = (extraEnv = {}) => spawnSync('sh', ['-s'], { input: functions + panelFunction + '\nrepair_panel_config && repair_panel_config\n', encoding: 'utf8',
         env: { ...process.env, CLASH_ROOT: shellPath(root), ...env, F50_CONFIG_SOURCE: 'template.yaml', ...extraEnv } });
@@ -370,10 +389,16 @@ done
       assert.equal(unchangedPanel.status, 0, unchangedPanel.stderr + unchangedPanel.stdout);
       assert.equal(fs.statSync(configFile).ino, beforePanel.ino);
       assert.equal(fs.statSync(configFile).mtimeMs, beforePanel.mtimeMs, 'matching native panel config is not rewritten');
+      assert.ok(!fs.existsSync(path.join(root, 'reloaded.json')), 'unchanged config does not trigger a forced reload');
+      assert.match(unchangedPanel.stdout, /F50_PANEL_CONFIG_UNCHANGED=1/);
       const invalidPanel = checkPanel({ FAIL_VALIDATE: '1' });
       assert.equal(invalidPanel.status, 1, 'core validation is still required for unchanged panel fields');
       assert.match(invalidPanel.stdout, /F50_ERROR=panel_config_invalid/);
+      const reloadFailure = checkPanel({ F50_CONFIG_RELOAD_REQUIRED: '1', FAIL_RELOAD: '28' });
+      assert.equal(reloadFailure.status, 1, 'a required reload timeout still fails');
+      assert.match(reloadFailure.stdout, /F50_ERROR=panel_config_reload_failed:http_000:curl_28/);
     }
+    write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=subscription_original\n');
     const remoteUrl = 'https://example.com/nodes.yaml';
     const converted = { ...plain(configApi.profiles.tproxy4),
       'proxy-providers': { Remote: { type: 'file', path: './proxies/Remote.yaml' } },

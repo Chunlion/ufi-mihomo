@@ -24,39 +24,39 @@ function downloader(responses) {
   return { download, calls };
 }
 
-test('repository package succeeds without contacting broken mirrors', async () => {
+test('Gitee package succeeds without contacting the fallback', async () => {
   const { download, calls } = downloader([{ success: true, content: 'ARCHIVE_READY=downloaded' }]);
   const result = await download();
   assert.equal(result.ok, true);
-  assert.match(result.source, /^https:\/\/raw\.githubusercontent\.com\/Chunlion\/ufi-mihomo\//);
+  assert.match(result.source, /^https:\/\/gitee\.com\//);
   assert.equal(calls.length, 1);
   assert.match(calls[0], /unzip -t "\$NEW"/);
   assert.match(calls[0], /mv -f "\$NEW" "\$ZIP"/);
 });
 
-test('transport failure and invalid ZIP fall back to the next source', async () => {
-  const { download, calls } = downloader([
-    { success: false, content: 'Load failed' },
-    { success: false, content: 'ARCHIVE_VERIFY_FAILED=zip' },
-    { success: true, content: 'ARCHIVE_READY=downloaded' },
-  ]);
-  const result = await download();
-  assert.equal(result.ok, true);
-  assert.match(calls[1], /https:\/\/gitee\.com\//);
-  assert.match(result.source, /^https:\/\/pan\.kanokano\.cn\//);
-});
+for (const content of ['Load failed', 'ARCHIVE_VERIFY_FAILED=zip']) {
+  test(`Gitee failure (${content}) falls back to the repository`, async () => {
+    const { download, calls } = downloader([
+      { success: false, content },
+      { success: true, content: 'ARCHIVE_READY=downloaded' },
+    ]);
+    const result = await download();
+    assert.equal(result.ok, true);
+    assert.match(calls[0], /https:\/\/gitee\.com\//);
+    assert.match(result.source, /^https:\/\/raw\.githubusercontent\.com\/Chunlion\/ufi-mihomo\//);
+    assert.equal(calls.length, 2);
+  });
+}
 
 test('all download failures retain diagnostics and report failure', async () => {
   const { download, calls } = downloader([
     { success: false, content: 'ARCHIVE_DOWNLOAD_FAILED=28' },
-    { success: false, content: 'Load failed' },
     { success: false, content: 'ARCHIVE_DOWNLOAD_FAILED=22\nHTTP 500' },
   ]);
   const result = await download();
   assert.equal(result.ok, false);
   assert.equal(result.stage, 'download');
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.match(result.content, /ARCHIVE_DOWNLOAD_FAILED=28/);
-  assert.match(result.content, /Load failed/);
   assert.match(result.content, /HTTP 500/);
 });

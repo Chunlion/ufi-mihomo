@@ -2095,8 +2095,7 @@ exit "$delete_rc"
   const LOG_FILE = '/data/clash/Proxy/Clash.log';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
-  const CLASH_PACKAGE_URL = 'https://pan.kanokano.cn/d/UFI-TOOLS-UPDATE/plugins/mihomo-tproxy.zip';
-  const CLASH_PACKAGE_FALLBACK_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
+  const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
   const CLASH_PACKAGE_REPO_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
@@ -2739,7 +2738,7 @@ KANO_YQ_SMOKE_EOF
       }
     }
 
-    const sources = [CLASH_PACKAGE_REPO_URL, CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_URL].filter(Boolean);
+    const sources = [CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
       operationStage('\u4e0b\u8f7d\u5e76\u6821\u9a8c\u5b89\u88c5\u5305\uff1a\u6765\u6e90 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);

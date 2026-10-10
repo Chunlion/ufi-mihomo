@@ -53,6 +53,16 @@
 
 原 `_Go` 版用户先停用旧插件，再上传 `猫猫TProxy.js`。完整卸载使用猫猫面板中的“完整卸载”；开机修复插件需要在自己的面板中单独卸载。
 
+## 源码
+
+辅助程序 Go 源码在 `binary-helper/`，构建脚本为 `scripts/build_helper.py`。`clashctl` 的完整原始 Go 源码尚未取得；本次 ARM64 HTTP 兼容修复的生成代码保存在 `scripts/patch_controller_http.js`，可从仓库组件包重建修复后的控制器：
+
+```sh
+node scripts/patch_controller_http.js tproxy-yq.zip clashctl_arm64.http
+```
+
+输出文件必须不存在。设备端修复和写入校验代码在 `猫猫TProxy.js` 中。
+
 ## License
 
 AGPL-3.0

@@ -16,6 +16,17 @@ const api = vm.runInNewContext(source.slice(start, end) + '\n({specs:F50_HTTP_CO
 const extracted = spawnSync('tar', ['-xOf', path.join(root, 'tproxy-yq.zip'), 'Scripts/clashctl_arm64'], { maxBuffer: 16 * 1024 * 1024 });
 assert.equal(extracted.status, 0, String(extracted.stderr));
 const original = extracted.stdout;
+const { generatePatches } = require('../../scripts/patch_controller_http');
+
+test('retained ARM64 patch source reproduces the embedded byte ranges', () => {
+  assert.deepEqual(generatePatches(original), JSON.parse(JSON.stringify(api.specs)));
+});
+
+test('retained patch source rejects an unsupported controller', () => {
+  const unsupported = Buffer.from(original);
+  unsupported[api.specs[0].offset] ^= 1;
+  assert.throws(() => generatePatches(unsupported), /Unsupported controller bytes/);
+});
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-http-'));

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, '猫猫TProxy.js'), 'utf8');
 const quote = value => `'${String(value).replace(/\\/g, '/').replace(/'/g, `'"'"'`)}'`;
@@ -25,8 +25,8 @@ function fixture() {
   return { dir, binary };
 }
 
-function patch(dir) {
-  const script = api.script(quote(dir));
+function patch(dir, prefix = '') {
+  const script = prefix + '\n' + api.script(quote(dir));
   const syntax = spawnSync('sh', ['-n'], { input: script, encoding: 'utf8' });
   assert.equal(syntax.status, 0, syntax.stderr);
   return spawnSync('sh', ['-s'], { input: script, encoding: 'utf8' });
@@ -50,18 +50,91 @@ test('controller patch changes only the declared ranges and is idempotent', () =
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('an unsupported second controller leaves both binaries untouched', () => {
+test('an unsupported controller remains untouched', () => {
   const { dir, binary } = fixture();
   try {
     const unsupported = Buffer.from(original);
     unsupported[api.specs[0].offset] ^= 1;
-    const second = path.join(dir, 'Scripts/clashctl_armv7');
-    fs.writeFileSync(second, unsupported);
+    fs.writeFileSync(binary, unsupported);
     const result = patch(dir);
     assert.equal(result.status, 1);
     assert.match(result.stdout, /F50_ERROR=controller_http_patch_unsupported/);
+    assert.deepEqual(fs.readFileSync(binary), unsupported);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the bundled ARMv7 payload does not block the ARM64 patch', () => {
+  const { dir, binary } = fixture();
+  try {
+    const extracted = spawnSync('tar', ['-xOf', path.join(root, 'tproxy-yq.zip'), 'Scripts/clashctl_armv7'], { maxBuffer: 16 * 1024 * 1024 });
+    assert.equal(extracted.status, 0, String(extracted.stderr));
+    const second = path.join(dir, 'Scripts/clashctl_armv7');
+    fs.writeFileSync(second, extracted.stdout);
+    const result = patch(dir);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const patched = fs.readFileSync(binary);
+    for (const spec of api.specs) assert.deepEqual(patched.subarray(spec.offset, spec.offset + spec.size), Buffer.from(spec.after, 'base64'));
+    assert.deepEqual(fs.readFileSync(second), extracted.stdout);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an incomplete patch is rejected without changing the controller', () => {
+  const { dir, binary } = fixture();
+  try {
+    const incomplete = Buffer.from(original);
+    Buffer.from(api.specs[0].after, 'base64').copy(incomplete, api.specs[0].offset);
+    fs.writeFileSync(binary, incomplete);
+    const result = patch(dir);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /F50_ERROR=controller_http_patch_incomplete/);
+    assert.deepEqual(fs.readFileSync(binary), incomplete);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a failed decoder cannot replace the original controller', () => {
+  const { dir, binary } = fixture();
+  try {
+    const result = patch(dir, `base64() {
+  if [ "\${1:-}" = -d ]; then printf broken; return 1; fi
+  command base64 "$@"
+}`);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /F50_ERROR=controller_http_patch_verify_failed/);
     assert.deepEqual(fs.readFileSync(binary), original);
-    assert.deepEqual(fs.readFileSync(second), unsupported);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('simultaneous patch processes use separate temporary files', async () => {
+  const { dir, binary } = fixture();
+  try {
+    fs.mkdirSync(path.join(dir, 'gate'));
+    const script = `cp() {
+  command cp "$@" || return 1
+  printf '%s\\n' "$3" > ${quote(dir)}/gate/waiting.$$
+  attempts=0
+  while [ "$(find ${quote(dir)}/gate -name 'waiting.*' | wc -l)" -lt 2 ]; do
+    attempts=$((attempts + 1))
+    [ "$attempts" -lt 100 ] || return 1
+    sleep 0.05
+  done
+}
+` + api.script(quote(dir));
+    const run = () => new Promise((resolve, reject) => {
+      const child = spawn('sh', ['-s'], { timeout: 15000 });
+      let output = '';
+      child.stdout.on('data', data => { output += data; });
+      child.stderr.on('data', data => { output += data; });
+      child.on('error', reject);
+      child.on('close', status => resolve({ status, output }));
+      child.stdin.end(script);
+    });
+    const results = await Promise.all([run(), run()]);
+    for (const result of results) assert.equal(result.status, 0, result.output);
+    const destinations = fs.readdirSync(path.join(dir, 'gate')).map(name => fs.readFileSync(path.join(dir, 'gate', name), 'utf8').trim());
+    assert.equal(new Set(destinations).size, 2);
+    for (const spec of api.specs) assert.deepEqual(fs.readFileSync(binary).subarray(spec.offset, spec.offset + spec.size), Buffer.from(spec.after, 'base64'));
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -115,7 +115,8 @@ FOUND=0
 NEW=''
 trap 'rm -f "$NEW"' EXIT
 command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
-for BIN in "$ROOT/Scripts/clashctl_arm64" "$ROOT/Scripts/clashctl_armv7" "$ROOT/Scripts/clashctl"; do
+# F50 uses ARM64; the bundled ARMv7 controller has a different binary layout.
+for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
   FOUND=1
   OLD=0; CURRENT=0
@@ -132,9 +133,9 @@ EOF_F50_HTTP_SPEC
   [ "$OLD" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || [ "$CURRENT" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
 done
 [ "$FOUND" = 1 ] || { echo F50_BACKEND_MISSING; exit 1; }
-for BIN in "$ROOT/Scripts/clashctl_arm64" "$ROOT/Scripts/clashctl_armv7" "$ROOT/Scripts/clashctl"; do
+for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
-  NEW="$BIN.http.$"
+  NEW="$BIN.http.$$"
   cp -p "$BIN" "$NEW" || exit 1
   for SPEC in ${specs}; do
     IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
@@ -142,6 +143,8 @@ $SPEC
 EOF_F50_HTTP_SPEC
     ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
     [ "$ACTUAL" != "$BEFORE" ] || printf '%s' "$AFTER" | base64 -d | dd of="$NEW" bs=1 seek="$OFFSET" conv=notrunc 2>/dev/null || exit 1
+    ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+    [ "$ACTUAL" = "$AFTER" ] || { echo F50_ERROR=controller_http_patch_verify_failed; exit 1; }
   done
   chmod 755 "$NEW" || exit 1
   if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
@@ -258,7 +261,7 @@ async function ensureCompatBackend() {
   const r = await runShellWithRoot(`set -e
 [ "$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }
 ${buildF50HttpSubscriptionPatchScript()} || exit 1
-sh /data/clash/Scripts/Clash.Service version`, 5000);
+sh /data/clash/Scripts/Clash.Service version`, 15000);
   f50BackendReady = !!r.success && String(r.content || '').includes('F50_CONTROLLER=8.0.0-compat.2.3');
   if (!f50BackendReady) createToast(/controller_http_patch_/.test(String(r.content || '')) ? 'HTTP 订阅兼容修复失败，请使用配套组件包。' : '请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
   return f50BackendReady;

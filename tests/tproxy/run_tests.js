@@ -6,7 +6,7 @@ const vm = require('vm');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const PLUGIN = path.join(ROOT, '猫猫TProxy.js');
+const PLUGIN = path.resolve(ROOT, process.env.F50_PLUGIN || '猫猫TProxy.js');
 const source = fs.readFileSync(PLUGIN, 'utf8').replace(/\r\n/g, '\n');
 let pass = 0;
 let fail = 0;
@@ -62,7 +62,7 @@ const packageService = spawnSync('tar', ['-xOf', path.join(ROOT, 'tproxy-yq.zip'
 check(packageService.status === 0 && packageService.stdout.includes('drop_detached_tun_rules "$action" || exit 1'), '服务包装器启动前执行 detached TUN 规则兼容清理');
 check(packageService.status === 0 && packageService.stdout.includes('disable_unsupported_ipv6_dns_hijack "$@" || exit 1'), '服务包装器启动前执行 IPv6 NAT 能力降级');
 check(source.includes('await normalizeIpv6DnsCapability(next)'), '保存网络设置前检查 IPv6 NAT 能力');
-check(source.includes('rotateClashLogCmd() + buildF50MaintenanceFunctions()'), '启动前轮转过大的核心日志');
+check(/rotateClashLogCmd\(\) \+ buildF50MaintenanceFunctions\((?:'start')?\)/.test(source), '启动前轮转过大的核心日志');
 check(source.includes("dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')"), '安装前检查设备可用空间');
 check(source.includes("dataSpaceGuardCmd('echo \"ARCHIVE_SPACE_LOW=$kano_data_avail_kb\"; exit 1')"), '在线下载安装包前检查设备可用空间');
 check(source.includes('f50_ensure_install_secret || exit 1'), '安装时补全空控制密钥');
@@ -79,7 +79,7 @@ check(source.includes("delete profile['external-ui-name']"), '固定运行配置
 check(source.includes("/ui/?_f50=${Date.now()}#/"), '面板缓存参数位于 Hash 路由之前');
 check(!source.includes('/ui/#/?t='), '旧的无效缓存参数路径已移除');
 check(!source.includes('/settings?section=generalSettings'), '没有 MetaCubeXD settings 路由');
-const panelValidator = slice('function buildF50ZashboardValidationFunction()', 'function buildF50MaintenanceFunctions()');
+const panelValidator = slice('function buildF50ZashboardValidationFunction()', 'function buildF50MaintenanceFunctions(');
 check(panelValidator.includes("<title>[[:space:]]*zashboard"), '面板校验要求 Zashboard 标题');
 check(panelValidator.includes("<title>[[:space:]]*metacubexd"), '面板校验拒绝 MetaCubeXD');
 check(panelValidator.includes('manifest.webmanifest') && panelValidator.includes('registerSW.js') && panelValidator.includes('missing_main_asset'), '面板校验覆盖入口、PWA 和主资源');
@@ -162,8 +162,9 @@ try {
   fs.mkdirSync(path.join(oldRoot, 'Scripts'), { recursive: true });
   const service = path.join(oldRoot, 'Scripts/Clash.Service');
   const startLog = path.join(reinstallDir, 'kano_clash_start.log');
+  const preservationVersion = (source.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];
   for (const scenario of ['preflight', 'controller', 'success', 'patch']) {
-    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : `#!/bin/sh\n# KANO_ORIGINAL_CONFIG_PRESERVATION=10\n${scenario === 'controller'
+    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : `#!/bin/sh\n# KANO_ORIGINAL_CONFIG_PRESERVATION=${preservationVersion}\n${scenario === 'controller'
       ? "echo F50_ERROR=core_start_failed; echo password=test-start-password; exit 7"
       : 'echo START_STATE=started_verified_process; exit 0'}\n`);
     const command = `F50_ROOT=${quotePath(oldRoot)}\n${maintenanceShell}

@@ -8,12 +8,13 @@ const vm = require('node:vm');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
-const source = fs.readFileSync(path.join(__dirname, '..', '..', '猫猫TProxy.js'), 'utf8');
-const slice = (start, end) => {
-  const from = source.indexOf(start);
-  const to = source.indexOf(end, from + start.length);
+const source = fs.readFileSync(path.resolve(__dirname, '..', '..', process.env.F50_PLUGIN || '猫猫TProxy.js'), 'utf8');
+const baselineSource = fs.readFileSync(path.resolve(__dirname, '..', '..', '猫猫TProxy.js'), 'utf8');
+const slice = (start, end, text = source) => {
+  const from = text.indexOf(start);
+  const to = text.indexOf(end, from + start.length);
   assert.ok(from >= 0 && to > from, `missing source: ${start}`);
-  return source.slice(from, to);
+  return text.slice(from, to);
 };
 const updateFunction = slice('const updateSubProviders = async', 'const readCurrentSubSources = async');
 const clickHandler = slice('updateSubBtn.onclick = async', 'const applySavedOverrides = async');
@@ -28,6 +29,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
         SUB_RULE_MODE_TEMPLATE: 'template',
         SUB_RULE_MODE_ORIGINAL: 'original',
         SUB_CONVERT_MODE_LOCAL: 'local',
+        SUB_CONVERT_MODE_PROVIDER: 'provider',
         CLASH_CONFIG: '/data/clash/Proxy/config.yaml',
         updateSubBtn: {},
         acquireCriticalOperation: () => ({}),
@@ -43,6 +45,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
         readCurrentSubSources: async () => sources,
         normalizeSubSourceList: (value) => value,
         normalizeSubRuleModeValue: (value) => value,
+        normalizeSubConvertModeValue: (value) => value,
         validateSubscriptionMode() {},
         createToast() {},
         safeTextToHtml: (value) => value,
@@ -90,7 +93,8 @@ const configApi = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_COMP
   ${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
   ${slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later')}
   ({ runtime: createPrivateRouteLogic().runtime, profiles: F50_FIXED_PROFILES, delta: PROFILE_DELTA,
-     functions: buildF50OriginalConfigFunctions, install: ensureOriginalSubscriptionService })`, {
+     functions: buildF50OriginalConfigFunctions, install: ensureOriginalSubscriptionService,
+     panelCheck: typeof buildF50PanelConfigCheck === 'function' ? buildF50PanelConfigCheck() : null })`, {
   F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
 });
 const originalConfig = {
@@ -265,8 +269,10 @@ test('service preserves original YAML after controller preparation and reloads i
     const archive = spawnSync('tar', ['-xOf', path.join(__dirname, '..', '..', 'tproxy-yq.zip'), 'Scripts/Clash.Service'], { encoding: 'utf8' });
     assert.equal(archive.status, 0, archive.stderr);
     const functions = configApi.functions();
-    assert.ok(archive.stdout.replace(/\r\n/g, '\n').includes(functions), 'package contains current preservation functions');
-    const originalWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(functions, '')
+    const packageFunctions = vm.runInNewContext(slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady', baselineSource)
+      + '\nbuildF50OriginalConfigFunctions()', { PROFILE_DELTA: configApi.delta });
+    assert.ok(archive.stdout.replace(/\r\n/g, '\n').includes(packageFunctions), 'package contains baseline preservation functions');
+    const originalWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(packageFunctions, '')
       .replace('f50_save_original_config "$action" || exit 1\n', '')
       .replace('f50_restore_original_config || exit 1\n', '')
       .replace('  start|restart|boot)', '  start|restart)')
@@ -276,17 +282,25 @@ test('service preserves original YAML after controller preparation and reloads i
     const installer = vm.runInNewContext(`${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
       ensureOriginalSubscriptionService`, {
       PROFILE_DELTA: configApi.delta,
+      F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
       CLASH_SERVICE: shellPath(service), shellQuote: quote,
       runShellWithRoot: async (script) => { const result = run(['-c', script]);
         assert.equal(result.status, 0, result.stderr); return { success: true }; },
     });
     assert.equal(await installer(), true);
     const installed = fs.readFileSync(service, 'utf8');
-    assert.equal(installed, archive.stdout.replace(/\r\n/g, '\n'), 'installed patch matches packaged service');
+    let expectedWrapper = archive.stdout.replace(/\r\n/g, '\n').replace(packageFunctions, () => functions);
+    if (configApi.panelCheck) {
+      const guard = `  # KANO_PANEL_WRITE_GUARD=1\n  if "$yq" eval -e '${configApi.panelCheck}' "$cfg" >/dev/null 2>&1; then\n    "$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$cfg" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }\n  else\n`;
+      expectedWrapper = expectedWrapper.replace('  "$yq" eval -P -o=yaml -I=2 ', match => guard + match)
+        .replace('  auth=', '  fi\n  auth=');
+    }
+    assert.equal(installed, expectedWrapper, 'installed patch preserves packaged service and updates its preservation functions');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
-    for (const version of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) {
-      write('Scripts/Clash.Service', installed.replace('KANO_ORIGINAL_CONFIG_PRESERVATION=10', `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
+    const currentVersion = (functions.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];
+    for (let version = 1; version < Number(currentVersion); version++) {
+      write('Scripts/Clash.Service', installed.replace(`KANO_ORIGINAL_CONFIG_PRESERVATION=${currentVersion}`, `KANO_ORIGINAL_CONFIG_PRESERVATION=${version}`)
         .replace('  start|restart|boot)', '  start|restart)')
         .replace('original_config_merge_failed', 'old_original_config_merge_failed')
         .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval '));
@@ -345,6 +359,21 @@ done
         assert.equal(fs.readFileSync(path.join(work, 'kano_clash_start.log'), 'utf8'), result.stdout, 'manual and boot output persists');
       }
     }
+    if (configApi.panelCheck) {
+      write('Proxy/config.yaml', JSON.stringify(configApi.profiles.tproxy4));
+      const configFile = path.join(root, 'Proxy/config.yaml');
+      const beforePanel = fs.statSync(configFile);
+      const panelFunction = installed.slice(installed.indexOf('repair_panel_config() {'), installed.indexOf('disable_unsupported_ipv6_dns_hijack() {'));
+      const checkPanel = (extraEnv = {}) => spawnSync('sh', ['-s'], { input: functions + panelFunction + '\nrepair_panel_config && repair_panel_config\n', encoding: 'utf8',
+        env: { ...process.env, CLASH_ROOT: shellPath(root), ...env, F50_CONFIG_SOURCE: 'template.yaml', ...extraEnv } });
+      const unchangedPanel = checkPanel();
+      assert.equal(unchangedPanel.status, 0, unchangedPanel.stderr + unchangedPanel.stdout);
+      assert.equal(fs.statSync(configFile).ino, beforePanel.ino);
+      assert.equal(fs.statSync(configFile).mtimeMs, beforePanel.mtimeMs, 'matching native panel config is not rewritten');
+      const invalidPanel = checkPanel({ FAIL_VALIDATE: '1' });
+      assert.equal(invalidPanel.status, 1, 'core validation is still required for unchanged panel fields');
+      assert.match(invalidPanel.stdout, /F50_ERROR=panel_config_invalid/);
+    }
     const remoteUrl = 'https://example.com/nodes.yaml';
     const converted = { ...plain(configApi.profiles.tproxy4),
       'proxy-providers': { Remote: { type: 'file', path: './proxies/Remote.yaml' } },
@@ -364,6 +393,24 @@ done
     assert.deepEqual(providerConfig['x-f50-provider-sources'], converted['x-f50-provider-sources'], 'remote metadata is replaced without retaining removed sources');
     assert.deepEqual(providerConfig.dns.nameserver, originalConfig.dns.nameserver);
     assert.equal(providerConfig['log-level'], 'debug');
+    if (source.includes('F50_PRESERVE_HTTP_PROVIDER')) {
+      write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
+      write('Proxy/subscription_urls.txt', '# KANO_SUB_CONVERT_MODE=provider\n');
+      const httpProviders = { Remote: { type: 'http', url: remoteUrl, path: './proxies/Remote.yaml', header: { 'User-Agent': ['custom-agent'] } } };
+      for (const action of ['prepare', 'start', 'restart', 'boot']) {
+        write('Proxy/config.yaml', JSON.stringify({ ...plain(configApi.profiles.tproxy4), 'proxy-providers': httpProviders }));
+        const httpRun = run([service, action], env);
+        assert.equal(httpRun.status, 0, httpRun.stdout + httpRun.stderr);
+        const parsed = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+        assert.equal(parsed.status, 0, parsed.stderr);
+        const httpConfig = JSON.parse(parsed.stdout);
+        assert.deepEqual(httpConfig['proxy-providers'], httpProviders, action + ': saved HTTP mode survives controller preparation');
+        assert.equal(httpConfig['x-f50-provider-sources'], undefined);
+        if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'), fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'));
+      }
+      write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=subscription_original\n');
+      fs.rmSync(path.join(root, 'Proxy/subscription_urls.txt'));
+    }
     for (const action of ['prepare', 'boot']) for (const failure of ['FAIL_BACKUP', 'FAIL_VALIDATE', 'FAIL_CONTROLLER']) {
       const before = JSON.stringify(originalConfig);
       write('Proxy/config.yaml', before);

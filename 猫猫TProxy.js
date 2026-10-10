@@ -56,6 +56,99 @@ function buildF50RedactFunction() { return `f50_redact() {
 function buildF50PanelConfigCheck() {
   return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
 }
+// These byte ranges target the bundled ARM64 controller; unknown builds remain untouched.
+const F50_HTTP_CONTROLLER_PATCHES = [
+  {
+    "offset": 2580116,
+    "before": "BARA+Z8UAPFgAABU4gNAshUAABQEAED5hQBAuQaNjtKGDq7yvwAGa2AAAFTiA0CyDQAAFIQQQDmfzAFxYAAAVA==",
+    "after": "BARA+Z8QAPFgAABUnxQA8YEBAFQHAED55QBAuQaNjtKGDq7yvwAGa8EAAFSfEADxwAAAVOUQQDm/zAFxYAAAVA==",
+    "size": 64
+  },
+  {
+    "offset": 2589324,
+    "before": "fwAA8Q==",
+    "after": "+aIAFA==",
+    "size": 4
+  },
+  {
+    "offset": 2756208,
+    "before": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "after": "o6HrteTDQPmEBED5nxAA8cAAAFRjAIDSogQA0EJUJ5EFXf8XHyAD1UMAgNICFwCQQmwEkQBd/xc=",
+    "size": 56
+  },
+  {
+    "offset": 208,
+    "before": "ZA4qAAAAAAA=",
+    "after": "qA4qAAAAAAA=",
+    "size": 8
+  },
+  {
+    "offset": 216,
+    "before": "ZA4qAAAAAAA=",
+    "after": "qA4qAAAAAAA=",
+    "size": 8
+  },
+  {
+    "offset": 5767440,
+    "before": "AAAAAAAAAAAAAAAAAA==",
+    "after": "PWh0dHAsaHR0cHM4MA==",
+    "size": 13
+  },
+  {
+    "offset": 4016104,
+    "before": "sHA0AAAAAAAGAAAAAAAAAA==",
+    "after": "EAFZAAAAAAALAAAAAAAAAA==",
+    "size": 16
+  },
+  {
+    "offset": 3448114,
+    "before": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IGJlIEhUVFBTIHdpdGhvdXQgdXNlcmluZm8=",
+    "after": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IHVzZSBIVFRQKFMpLCBubyB1c2VyaW5mby4=",
+    "size": 47
+  }
+];
+function buildF50HttpSubscriptionPatchScript(root = "'/data/clash'") {
+  const specs = F50_HTTP_CONTROLLER_PATCHES.map(p => shellQuote([p.offset, p.size, p.before, p.after].join('|'))).join(' ');
+  return `(set -e
+ROOT=${root}
+FOUND=0
+NEW=''
+trap 'rm -f "$NEW"' EXIT
+command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
+for BIN in "$ROOT/Scripts/clashctl_arm64" "$ROOT/Scripts/clashctl_armv7" "$ROOT/Scripts/clashctl"; do
+  [ -f "$BIN" ] || continue
+  FOUND=1
+  OLD=0; CURRENT=0
+  for SPEC in ${specs}; do
+    IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
+$SPEC
+EOF_F50_HTTP_SPEC
+    ACTUAL=$(dd if="$BIN" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+    if [ "$ACTUAL" = "$BEFORE" ]; then OLD=$((OLD + 1))
+    elif [ "$ACTUAL" = "$AFTER" ]; then CURRENT=$((CURRENT + 1))
+    else echo F50_ERROR=controller_http_patch_unsupported; exit 1
+    fi
+  done
+  [ "$OLD" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || [ "$CURRENT" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
+done
+[ "$FOUND" = 1 ] || { echo F50_BACKEND_MISSING; exit 1; }
+for BIN in "$ROOT/Scripts/clashctl_arm64" "$ROOT/Scripts/clashctl_armv7" "$ROOT/Scripts/clashctl"; do
+  [ -f "$BIN" ] || continue
+  NEW="$BIN.http.$"
+  cp -p "$BIN" "$NEW" || exit 1
+  for SPEC in ${specs}; do
+    IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
+$SPEC
+EOF_F50_HTTP_SPEC
+    ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+    [ "$ACTUAL" != "$BEFORE" ] || printf '%s' "$AFTER" | base64 -d | dd of="$NEW" bs=1 seek="$OFFSET" conv=notrunc 2>/dev/null || exit 1
+  done
+  chmod 755 "$NEW" || exit 1
+  if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
+  NEW=''
+done
+)`;
+}
 function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=11
 ${buildF50RedactFunction()}
 f50_save_original_config() {
@@ -164,9 +257,10 @@ async function ensureCompatBackend() {
   if (f50BackendReady) return true;
   const r = await runShellWithRoot(`set -e
 [ "$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }
+${buildF50HttpSubscriptionPatchScript()} || exit 1
 sh /data/clash/Scripts/Clash.Service version`, 5000);
   f50BackendReady = !!r.success && String(r.content || '').includes('F50_CONTROLLER=8.0.0-compat.2.3');
-  if (!f50BackendReady) createToast('请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
+  if (!f50BackendReady) createToast(/controller_http_patch_/.test(String(r.content || '')) ? 'HTTP 订阅兼容修复失败，请使用配套组件包。' : '请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
   return f50BackendReady;
 }
 
@@ -205,7 +299,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
     missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
     service_patch_failed: '启动组件更新失败，请重新安装组件包。',
-    invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTPS 订阅地址。',
+    invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
     invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
     configuration_missing: '组件包没有初始配置，原安装保持不变。',
     old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
@@ -230,7 +324,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   let summary = labels[code] || cause || lines.find(line => line.trim()) || fallback;
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
   if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';
-  if (/subscription URL must be HTTPS without userinfo|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
+  if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
   else if (cause === 'original_config_invalid') {
     const detail = lines.find(line => /^F50_CONFIG_TEST_DETAIL=.*(?:level=["']?(?:error|fatal)|parse config|yaml:)/i.test(line)) || lines.find(line => line.startsWith('F50_CONFIG_TEST_DETAIL='));
     summary = '用户配置恢复后未通过核心校验' + (detail ? '：' + detail.slice('F50_CONFIG_TEST_DETAIL='.length).trim() : '，请查看校验详情。');
@@ -953,7 +1047,7 @@ $log_detail"
   start_cause=$(printf '%s\\n' "$F50_START_DETAIL" | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"");print;exit}')
   F50_START_CODE=service_failed; F50_START_OK=0
   case "$start_cause" in
-    *'subscription URL must be HTTPS without userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
+    *'subscription URL must be HTTPS without userinfo'*|*'subscription URL must use HTTP(S), no userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
     *original_config_invalid*|*CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
     *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
     *) case "$F50_START_RC" in 124|137) F50_START_CODE=start_timeout ;; esac ;;
@@ -1113,6 +1207,7 @@ mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install
 for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
   [ ! -f "$file" ] || chmod 755 "$file" || { f50_install_fail executable_permission_failed; exit 1; }
 done
+${buildF50HttpSubscriptionPatchScript('"$PKG"')} || { f50_install_fail controller_http_patch_failed; exit 1; }
 probe=$(CLASH_ROOT="$PKG" f50_limit 5 "$PKG/Scripts/clashctl_arm64" version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail controller_not_executable "$probe"; exit 1; }
 case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
@@ -1209,7 +1304,7 @@ f50_preflight_config() {
   if [ "$http_count" != 0 ]; then
     while IFS= read -r url; do
       case "$url" in
-        https://*) authority=\${url#https://}; authority=\${authority%%[/?#]*}
+        http://*|https://*) authority=\${url#*://}; authority=\${authority%%[/?#]*}
           case "$authority" in ''|*@*|*[[:space:]]*) NEEDS_CONFIG=invalid_subscription ;; esac ;;
         *) NEEDS_CONFIG=invalid_subscription ;;
       esac
@@ -1225,7 +1320,7 @@ EOF_F50_URLS
   fi
 }
 f50_preflight_config || exit 1
-# URL syntax is preflighted here; the unchanged Controller remains authoritative (HTTPS + no userinfo).
+# URL syntax is preflighted here; the Controller performs the final validation.
 case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
   if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
 esac
@@ -1300,7 +1395,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     const configState = (output.match(/^F50_CONFIG_STATE=(.+)$/m) || [])[1];
     let message = state === 'installed_running' ? '组件已安装，核心与接管规则已启动'
       : state === 'installed_stopped' ? '组件已更新，保持原来的停止状态'
-      : configState === 'invalid_subscription' ? '组件已安装；订阅地址无效，请配置无账号信息的 HTTPS 地址'
+      : configState === 'invalid_subscription' ? '组件已安装；订阅地址无效，请配置无账号信息的 HTTP 或 HTTPS 地址'
       : configState === 'invalid_config' ? '组件已安装；请修正原配置格式后启动'
       : '组件已安装，请先配置订阅（核心未启动）';
     const warning = (output.match(/^F50_INSTALL_WARNING=(.+)$/m) || [])[1];
@@ -2305,8 +2400,8 @@ exit "$kano_task_rc"`;
     } catch {
       return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u7684\u8ba2\u9605\u5730\u5740\u65e0\u6548' };
     }
-    if (url.protocol != 'https:') {
-      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u53ea\u5141\u8bb8 HTTPS \u8ba2\u9605\u5730\u5740' };
+    if (url.protocol != 'http:' && url.protocol != 'https:') {
+      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u53ea\u5141\u8bb8 HTTP \u6216 HTTPS' };
     }
     if (url.username || url.password) {
       return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u4e0d\u5f97\u5728 URL \u4e2d\u643a\u5e26\u7528\u6237\u540d\u6216\u5bc6\u7801' };
@@ -2330,7 +2425,7 @@ exit "$kano_task_rc"`;
       ok: true,
       url: url.toString(),
       hostname,
-      port: url.port || '443',
+      port: url.port || (url.protocol == 'https:' ? '443' : '80'),
       addressFamily: hostname.includes(':') ? 'ipv6' : 'auto',
       message: '',
     };

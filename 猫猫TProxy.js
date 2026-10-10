@@ -53,12 +53,19 @@ function buildF50RedactFunction() { return `f50_redact() {
     print
   }'
 }`; }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=10
+function buildF50PanelConfigCheck() {
+  return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
+}
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=11
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
   export F50_CONFIG_SOURCE
+  F50_SUB_CONVERT_MODE=$(sed -n 's/^# KANO_SUB_CONVERT_MODE=//p' "$CLASH_ROOT/Proxy/subscription_urls.txt" 2>/dev/null | tr -d '\\r' | head -n 1)
+  F50_PRESERVE_HTTP_PROVIDER=0
+  [ "$F50_CONFIG_SOURCE:$F50_SUB_CONVERT_MODE" != template.yaml:provider ] || F50_PRESERVE_HTTP_PROVIDER=1
+  export F50_PRESERVE_HTTP_PROVIDER
   F50_ORIGINAL_CONFIG="$CLASH_ROOT/Proxy/config.yaml.original.$$"
   F50_ORIGINAL_CANDIDATE="$F50_ORIGINAL_CONFIG.new"
   umask 077
@@ -76,6 +83,8 @@ f50_restore_original_config() {
     del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
     select(strenv(F50_CONFIG_SOURCE) == "subscription_original")),
     (.dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"]))) |
+    (select(strenv(F50_PRESERVE_HTTP_PROVIDER) != "1"),
+      (select(strenv(F50_PRESERVE_HTTP_PROVIDER) == "1") | ."proxy-providers" = $original."proxy-providers" | del(."x-f50-provider-sources"))) |
     select(strenv(F50_CONFIG_SOURCE) != "subscription_original")))
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
@@ -86,7 +95,11 @@ f50_restore_original_config() {
     return 1
   fi
   chmod 600 "$F50_ORIGINAL_CANDIDATE" || return 1
-  mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
+  if cmp -s "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" 2>/dev/null; then
+    rm -f "$F50_ORIGINAL_CANDIDATE" || return 1
+  else
+    mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
+  fi
   rm -f "$F50_ORIGINAL_CONFIG"
   trap - EXIT
 }
@@ -106,25 +119,36 @@ function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE))
   const functions = buildF50OriginalConfigFunctions();
   return `(set -e
 SERVICE=${service}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=10' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=11' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
-awk -v functions="$FUNCTIONS" '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=[123456789]$/ { skipping=1 }
+panel_guarded=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=1$' "$SERVICE" || true)
+awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
+  $0 == "repair_panel_config() {" { panel=1 }
+  panel && !panel_guarded && ($0 == "  \\"$yq\\" eval " sprintf("%c",39) || $0 == "  \\"$yq\\" eval -P -o=yaml -I=2 " sprintf("%c",39)) {
+    print "  # KANO_PANEL_WRITE_GUARD=1"
+    print "  if \\"$yq\\" eval -e " sprintf("%c",39) panel_check sprintf("%c",39) " \\"$cfg\\" >/dev/null 2>&1; then"
+    print "    \\"$CLASH_ROOT/Proxy/Clash.Core\\" -t -d \\"$CLASH_ROOT/Proxy\\" -f \\"$cfg\\" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }"
+    print "  else"
+    panel_open=1
+  }
+  panel && panel_open && $0 ~ /^  auth=/ { print "  fi"; panel_open=0 }
+  panel && $0 == "}" { panel=0 }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
   $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
   $0 == "  start|restart)" { $0 = "  start|restart|boot)" }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
-  END { if (helpers != 1 || saved != 1 || restored != 1) exit 1 }
+  END { if (helpers != 1 || saved != 1 || restored != 1 || panel_open) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
 sh -n "$TMP" || exit 1
 chmod 755 "$TMP" || exit 1
@@ -245,7 +269,7 @@ case "$kano_data_avail_kb" in ''|*[!0-9]*) ;; *) [ "$kano_data_avail_kb" -ge 512
 `;
 function buildF50StartScript(action) {
   if (!['start', 'restart'].includes(action)) throw new Error('invalid_start_action');
-  return rotateClashLogCmd() + buildF50MaintenanceFunctions() + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
+  return rotateClashLogCmd() + buildF50MaintenanceFunctions('start') + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
 }
 function f50UninstallVerdict(response = {}) {
   const detail = f50Diagnostic(response.content || '').details;
@@ -319,7 +343,37 @@ f50_validate_zashboard() {
   return 0
 }
 `; }
-function buildF50MaintenanceFunctions() { return `# Shared bootstrap maintenance: no installed helper is required.
+function buildF50MaintenanceFunctions(operation = 'all') {
+  const sections = {
+    base: { build: buildF50ShellBase, requires: [] },
+    process: { build: buildF50ProcessHelpers, requires: ["base"] },
+    network: { build: buildF50NetworkHelpers, requires: ["base"] },
+    compat: { build: buildF50NetworkCompatHelpers, requires: ["base"] },
+    inspect: { build: buildF50InspectHelpers, requires: ["process","network"] },
+    cleanup: { build: buildF50CleanupHelpers, requires: ["process","network"] },
+    artifacts: { build: buildF50ArtifactHelpers, requires: ["base"] },
+    install: { build: buildF50InstallHelpers, requires: ["base"] },
+    remove: { build: buildF50RemovalHelpers, requires: ["process","network","artifacts"] },
+    final: { build: buildF50FinalProbeHelpers, requires: ["process","network","artifacts"] },
+    panel: { build: buildF50PanelHelpers, requires: ["base"] },
+    start: { build: buildF50StartHelpers, requires: ["panel","compat"] },
+  };
+  const operations = {
+    all: Object.keys(sections), start: ['start'], inspect: ['inspect'],
+    install: ['inspect', 'cleanup', 'start', 'install'],
+    cleanup: ['inspect', 'cleanup'], final: ['final'], remove: ['remove'],
+  };
+  if (!operations[operation]) throw new Error('invalid_maintenance_operation');
+  const selected = new Set();
+  const include = (name) => {
+    if (selected.has(name)) return;
+    for (const dependency of sections[name].requires) include(dependency);
+    selected.add(name);
+  };
+  operations[operation].forEach(include);
+  return [...selected].map((name) => sections[name].build()).join('\n');
+}
+function buildF50ShellBase() { return `# Shared bootstrap maintenance: no installed helper is required.
 F50_ROOT=\${F50_ROOT:-/data/clash}
 F50_PROC=\${F50_PROC:-/proc}
 F50_SYSNET=\${F50_SYSNET:-/sys/class/net}
@@ -327,7 +381,6 @@ F50_DATA=\${F50_ROOT%/*}
 F50_BOOT=\${F50_BOOT:-/sdcard/ufi_tools_boot.sh}
 F50_TASK=\${KANO_TPROXY_TASK:-}
 umask 077
-${buildF50ZashboardValidationFunction()}
 f50_limit() {
   f50_seconds=$1; shift
   if command -v timeout >/dev/null 2>&1; then
@@ -341,7 +394,8 @@ f50_limit() {
   fi
 }
 ${buildF50RedactFunction()}
-f50_stat() {
+`; }
+function buildF50ProcessHelpers() { return `f50_stat() {
   F50_STAT_START=; F50_STAT_PARENT=; F50_STAT_STATE=
   { IFS= read -r ps_stat < "$F50_PROC/$1/stat"; } 2>/dev/null || return 1
   ps_stat=\${ps_stat##*) }
@@ -458,7 +512,8 @@ f50_stop_recorded() {
   [ "$ps_remaining" = 0 ] || return 1
   echo PROCESSES_STOPPED
 }
-f50_table_absent() {
+`; }
+function buildF50NetworkHelpers() { return `f50_table_absent() {
   case "$1" in *'Table does not exist'*|*'table does not exist'*|*'Address family not supported'*|*'address family not supported'*|*'FIB table does not exist'*) return 0 ;; esac
   return 1
 }
@@ -524,39 +579,6 @@ f50_ip_snapshot() {
   f50_table_absent "$rt_err" && { : > "$rt_file"; return 0; }
   echo F50_CLEAN_ERROR=route_snapshot_failed; return 1
 }
-f50_drop_detached_tun_rules() {
-  for detached_family in 4 6; do
-    detached_rules=$(ip -"$detached_family" rule show 2>/dev/null) || continue
-    if printf '%s\n' "$detached_rules" | grep -Fq 'iif KanoTun [detached] lookup 17667'; then
-      ip -"$detached_family" rule del pref 1776 iif KanoTun lookup 17667 || {
-        echo "F50_ERROR=detached_tun_rule_cleanup_failed_ipv$detached_family"
-        return 1
-      }
-    fi
-  done
-}
-f50_disable_unsupported_ipv6_dns_hijack() {
-  compat_options="$F50_ROOT/Policy/options.conf"
-  [ -r "$compat_options" ] || return 0
-  grep -qx 'ipv6=on' "$compat_options" || return 0
-  grep -qx 'dns_hijack=on' "$compat_options" || return 0
-  compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
-  [ "$compat_nat_rc" = 0 ] && return 0
-  printf '%s\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
-  compat_tmp="$compat_options.kano_compat.$$"
-  awk '{if($0=="dns_hijack=on") print "dns_hijack=off"; else print}' "$compat_options" > "$compat_tmp" || {
-    rm -f "$compat_tmp" 2>/dev/null || true
-    echo F50_ERROR=ipv6_nat_compat_write_failed
-    return 1
-  }
-  chmod 600 "$compat_tmp" 2>/dev/null || true
-  mv -f "$compat_tmp" "$compat_options" || {
-    rm -f "$compat_tmp" 2>/dev/null || true
-    echo F50_ERROR=ipv6_nat_compat_commit_failed
-    return 1
-  }
-  echo F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled
-}
 f50_routes_plan() {
   awk -v family="$1" '
   function val(k, i){for(i=2;i<NF;i++)if($i==k)return $(i+1);return ""}
@@ -616,7 +638,42 @@ f50_execute_plan() {
   done < "$plan_file"
   [ "$plan_bad" = 0 ]
 }
-f50_inspect() {
+`; }
+function buildF50NetworkCompatHelpers() { return `f50_drop_detached_tun_rules() {
+  for detached_family in 4 6; do
+    detached_rules=$(ip -"$detached_family" rule show 2>/dev/null) || continue
+    if printf '%s\n' "$detached_rules" | grep -Fq 'iif KanoTun [detached] lookup 17667'; then
+      ip -"$detached_family" rule del pref 1776 iif KanoTun lookup 17667 || {
+        echo "F50_ERROR=detached_tun_rule_cleanup_failed_ipv$detached_family"
+        return 1
+      }
+    fi
+  done
+}
+f50_disable_unsupported_ipv6_dns_hijack() {
+  compat_options="$F50_ROOT/Policy/options.conf"
+  [ -r "$compat_options" ] || return 0
+  grep -qx 'ipv6=on' "$compat_options" || return 0
+  grep -qx 'dns_hijack=on' "$compat_options" || return 0
+  compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
+  [ "$compat_nat_rc" = 0 ] && return 0
+  printf '%s\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
+  compat_tmp="$compat_options.kano_compat.$$"
+  awk '{if($0=="dns_hijack=on") print "dns_hijack=off"; else print}' "$compat_options" > "$compat_tmp" || {
+    rm -f "$compat_tmp" 2>/dev/null || true
+    echo F50_ERROR=ipv6_nat_compat_write_failed
+    return 1
+  }
+  chmod 600 "$compat_tmp" 2>/dev/null || true
+  mv -f "$compat_tmp" "$compat_options" || {
+    rm -f "$compat_tmp" 2>/dev/null || true
+    echo F50_ERROR=ipv6_nat_compat_commit_failed
+    return 1
+  }
+  echo F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled
+}
+`; }
+function buildF50InspectHelpers() { return `f50_inspect() {
   f50_scan "$F50_WORK/pids" || return 1
   f50_network_snapshot "$F50_WORK/net" || return 1
   F50_OLD_INSTALL=0; F50_OLD_BOOT=0; F50_OLD_RUNNING=0; F50_OLD_FOUND=0
@@ -629,7 +686,8 @@ f50_inspect() {
   printf 'F50_OLD_FOUND=%s\\nF50_OLD_INSTALL=%s\\nF50_OLD_RUNNING=%s\\nF50_OLD_BOOT=%s\\n' "$F50_OLD_FOUND" "$F50_OLD_INSTALL" "$F50_OLD_RUNNING" "$F50_OLD_BOOT"
   echo F50_INSPECT_OK=1
 }
-f50_clean_environment() {
+`; }
+function buildF50CleanupHelpers() { return `f50_clean_environment() {
   clean_recover=missing; clean_detail=
   # Never invoke a missing installation on a clean device: recover itself creates Policy/.
   if [ -s "$F50_ROOT/Scripts/Clash.Service" ]; then
@@ -661,7 +719,8 @@ f50_clean_environment() {
   [ "$clean_recover" != failed ] || echo F50_CLEAN_WARNING=native_recovery_failed_fallback_verified
   echo F50_CLEAN_OK=1
 }
-f50_artifact_paths() {
+`; }
+function buildF50ArtifactHelpers() { return `f50_artifact_paths() {
   # Bounded plugin paths only. Never enumerate or remove the shared UFI uploads folder.
   for artifact in \\
     "$F50_ROOT" "$F50_ROOT".rollback-* "$F50_ROOT".rollback.* \\
@@ -701,13 +760,15 @@ f50_artifact_paths() {
     if [ -e "$artifact" ] || [ -L "$artifact" ]; then printf '%s\\n' "$artifact"; fi
   done
 }
-f50_root_has_data() {
+`; }
+function buildF50InstallHelpers() { return `f50_root_has_data() {
   [ -d "$F50_ROOT" ] || return 1
   # A latch left by an old uninstaller is not an installation worth backing up.
   root_files=$(find "$F50_ROOT" \\( -type f -o -type l \\) ! -path "$F50_ROOT/Policy/stopped" -print 2>/dev/null)
   [ -n "$root_files" ]
 }
-f50_runtime_guard() {
+`; }
+function buildF50RemovalHelpers() { return `f50_runtime_guard() {
   f50_scan "$F50_WORK/guard.pids" || return 1
   f50_network_snapshot "$F50_WORK/guard.net" || return 1
   if [ -s "$F50_WORK/guard.pids" ]; then echo F50_DELETE_BLOCKED=owned_process_alive; return 1; fi
@@ -724,7 +785,8 @@ f50_remove_artifacts() {
   done < "$F50_WORK/artifacts"
   [ "$delete_failed" = 0 ]
 }
-f50_final_probe() {
+`; }
+function buildF50FinalProbeHelpers() { return `f50_final_probe() {
   F50_FINAL_REMAINS=0; F50_FINAL_UNKNOWN=0
   if f50_scan "$F50_WORK/final.pids"; then
     while read -r final_pid final_start final_kind; do
@@ -760,6 +822,8 @@ f50_final_probe() {
     fi
   fi
 }
+`; }
+function buildF50PanelHelpers() { return `${buildF50ZashboardValidationFunction()}
 f50_verify_zashboard_endpoint() {
   panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1)
   panel_rc=$?
@@ -804,26 +868,49 @@ f50_ensure_live_secret() {
   case "$live_secret" in ''|*[![:space:]]*) : ;; *) live_secret= ;; esac
   [ -n "$live_secret" ] && return 0
   export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
-  f50_limit 5 "$live_yq" e -i '.secret = strenv(F50_FIXED_SECRET)' "$live_cfg" >/dev/null 2>&1
+  f50_update_yaml "$live_cfg" "$live_yq" '.secret = strenv(F50_FIXED_SECRET)' 5
   live_rc=$?
   unset F50_FIXED_SECRET
   [ "$live_rc" = 0 ] || return 1
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
+f50_update_yaml() {
+  update_cfg=$1; update_yq=$2; update_expr=$3; update_budget=$4
+  update_tmp="$update_cfg.kano_update.$$"
+  if ! f50_limit "$update_budget" "$update_yq" e "$update_expr" "$update_cfg" > "$update_tmp" \
+      || ! f50_limit 5 "$update_yq" e -e 'tag == "!!map"' "$update_tmp" >/dev/null 2>&1 \
+      || ! chmod 600 "$update_tmp" || ! mv -f "$update_tmp" "$update_cfg"; then
+    rm -f "$update_tmp" 2>/dev/null || true
+    return 1
+  fi
+}
+f50_update_panel_config() {
+  panel_cfg=$1; panel_yq=$2
+  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
+  export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
+  panel_check=${shellQuote(buildF50PanelConfigCheck())}
+  if f50_limit 5 "$panel_yq" e -e "$panel_check" "$panel_cfg" >/dev/null 2>&1; then
+    panel_rc=0
+  else
+    f50_update_yaml "$panel_cfg" "$panel_yq" '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | ."unified-delay" = true))' 8
+    panel_rc=$?
+  fi
+  unset F50_PANEL_DIR F50_PANEL_URL
+  return "$panel_rc"
+}
 f50_ensure_live_panel_config() {
   live_cfg="$F50_ROOT/Proxy/config.yaml"
   live_yq="$F50_ROOT/Tools/yq_linux_arm64"
   [ -s "$live_cfg" ] && [ -x "$live_yq" ] || return 1
-  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
-  export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
   export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$F50_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
-  f50_limit 8 "$live_yq" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | ."unified-delay" = true))' "$live_cfg" >/dev/null 2>&1
+  f50_update_panel_config "$live_cfg" "$live_yq"
   live_rc=$?
-  unset F50_PANEL_DIR F50_PANEL_URL F50_CONFIG_SOURCE
+  unset F50_CONFIG_SOURCE
   [ "$live_rc" = 0 ] || return 1
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
-f50_start_service() {
+`; }
+function buildF50StartHelpers() { return `f50_start_service() {
   service_output=$(
   start_action=$1; start_budget=$2
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
@@ -887,20 +974,32 @@ $log_detail"
   )
   service_output_rc=$?
   service_output=$(printf '%s\\n' "$service_output" | f50_redact)
+  # Command substitution isolates assignments; restore only anchored, validated final markers.
+  service_status=$(printf '%s\\n' "$service_output" | awk -v rc="$service_output_rc" '
+    BEGIN {code="service_failed";ok=0}
+    /^F50_START_CODE=[A-Za-z0-9_]+$/ {code=substr($0,16)}
+    /^F50_START_OK=[01]$/ {ok=substr($0,14)}
+    /^START_SERVICE_RC=[0-9]+$/ {rc=substr($0,18)}
+    END {printf "%s:%s:%s\\n",code,ok,rc}')
+  IFS=: read -r F50_START_CODE F50_START_OK F50_START_RC <<EOF_F50_START_STATUS
+$service_status
+EOF_F50_START_STATUS
+  START_SERVICE_RC=$F50_START_RC
+  F50_START_DETAIL=$service_output
   (umask 077; printf '%s\\n' "$service_output" > "$F50_DATA/kano_clash_start.log" && chmod 600 "$F50_DATA/kano_clash_start.log") || echo F50_START_LOG_WRITE_FAILED=1
   printf '%s\\n' "$service_output"
   return "$service_output_rc"
 }
 `; }
 function buildF50InspectScript() {
-  return buildF50MaintenanceFunctions() + `
+  return buildF50MaintenanceFunctions('inspect') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-check.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 f50_inspect
 `;
 }
 function buildF50InstallScript(uploaded) {
-  return buildF50MaintenanceFunctions() + '\nZIP=' + shellQuote(uploaded) + '\n' + `# The transaction owns staging, backup, activation and rollback until a terminal result.
+  return buildF50MaintenanceFunctions('install') + '\nZIP=' + shellQuote(uploaded) + '\n' + `# The transaction owns staging, backup, activation and rollback until a terminal result.
 set +e
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-install.XXXXXX") || { echo F50_INSTALL_CODE=stage_create_failed; exit 1; }
 STAGE="$F50_WORK/unpacked"; PKG=; BACKUP=; HAD_OLD=0; MOVED_OLD=0; COMMITTED=0; SUCCESS=0
@@ -1068,9 +1167,9 @@ f50_ensure_install_secret() {
     return 1
   fi
   case "$f50_install_secret" in ''|*[![:space:]]*) : ;; *) f50_install_secret= ;; esac
-  if [ "$HAD_USER_CONFIG" = 0 ] || [ -z "$f50_install_secret" ]; then
+  if [ -z "$f50_install_secret" ]; then
     export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
-    f50_secret_write_err=$(f50_limit 5 "$YQ" e -i '.secret = strenv(F50_FIXED_SECRET)' "$CFG" 2>&1)
+    f50_secret_write_err=$(f50_update_yaml "$CFG" "$YQ" '.secret = strenv(F50_FIXED_SECRET)' 5 2>&1)
     f50_secret_write_rc=$?
     unset F50_FIXED_SECRET
     [ "$f50_secret_write_rc" = 0 ] || { f50_install_fail secret_write_failed "$f50_secret_write_err"; return 1; }
@@ -1079,11 +1178,10 @@ f50_ensure_install_secret() {
 }
 f50_ensure_install_secret || exit 1
 f50_ensure_install_dashboard() {
-  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
-  export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
-  f50_panel_write_err=$(f50_limit 8 "$YQ" e -i '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | ."unified-delay" = true' "$CFG" 2>&1)
+  export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$PKG/Tools/config_source.conf" 2>/dev/null | head -n 1)
+  f50_panel_write_err=$(f50_update_panel_config "$CFG" "$YQ" 2>&1)
   f50_panel_write_rc=$?
-  unset F50_PANEL_DIR F50_PANEL_URL
+  unset F50_CONFIG_SOURCE
   [ "$f50_panel_write_rc" = 0 ] || { f50_install_fail panel_config_write_failed "$f50_panel_write_err"; return 1; }
   chmod 600 "$CFG" || { f50_install_fail panel_config_write_failed; return 1; }
 }
@@ -1165,7 +1263,9 @@ COMMITTED=1
 panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
 printf '%s\\n' "$panel_probe"
 [ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
-if f50_start_service start 85; then
+if [ "$HAD_OLD:$OLD_LATCH:$OLD_RUNNING" = 1:1:0 ]; then
+  status=installed_stopped
+elif f50_start_service start 85; then
   status=installed_running
 else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
@@ -1212,6 +1312,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
     return true;
   } catch (error) {
+    if (error?.name === 'OperationCancelled') return false;
     lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装未完成');
     operationFinish(false, lastInstallDiagnostic.summary);
     if (error?.name !== 'OperationCancelled') createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细信息见“状态与日志”。', 'red', 15000);
@@ -1901,7 +2002,7 @@ exit 0`;
 
 
 function buildF50CleanupScript() {
-  return buildF50MaintenanceFunctions() + `
+  return buildF50MaintenanceFunctions('cleanup') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 f50_inspect || exit 1
@@ -1914,7 +2015,7 @@ echo F50_CLEAN_OK=1
 `;
 }
 function buildF50FinalCheckScript() {
-  return buildF50MaintenanceFunctions() + `
+  return buildF50MaintenanceFunctions('final') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-verify.XXXXXX") || { echo F50_CHECK_UNKNOWN=verify_workdir; echo F50_UNINSTALL_STATE=unknown; exit 1; }
 trap 'rm -rf "$F50_WORK"' EXIT
 f50_final_probe
@@ -1935,7 +2036,7 @@ fi
 if [ -f /data/f50_boot_fix/clash_boot.sh ]; then rm -f /data/f50_boot_fix/clash_boot.sh; fi
 echo F50_BOOT_REMOVED
 `},
-  {title:'\u5220\u9664\u732b\u732b\u7ec4\u4ef6\u548c\u6570\u636e', timeout:45000, script:buildF50MaintenanceFunctions() + `
+  {title:'\u5220\u9664\u732b\u732b\u7ec4\u4ef6\u548c\u6570\u636e', timeout:45000, script:buildF50MaintenanceFunctions('remove') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-delete.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 # Do not erase recoverable runtime files while owned processes or interception are demonstrably active.
@@ -2773,6 +2874,18 @@ KANO_YQ_SMOKE_EOF
     }
   };
 
+  const runCriticalButtonOperation = async (label, button, busyText, action) => {
+    const token = acquireCriticalOperation(label);
+    if (!token) return;
+    try {
+      setButtonBusy(button, true, busyText);
+      return await action();
+    } finally {
+      try { setButtonBusy(button, false); }
+      finally { releaseCriticalOperation(token); }
+    }
+  };
+
   let advancedAccessCache = null;
   let advancedAccessCacheExpiresAt = 0;
   let advancedAccessLoadPromise = null;
@@ -2910,20 +3023,29 @@ KANO_YQ_SMOKE_EOF
     });
 
   const runShellWithRootRetry = async (script = '', timeout = 20 * 1000, attempts = 3) => {
+    const operation = activeCriticalOperation;
+    const checkCancelled = () => {
+      if (operation && operation.token.cancelled) throw operationCancelled();
+    };
     let lastResult = { success: false, content: '' };
     const maxAttempts = Math.max(1, Math.floor(Number(attempts) || 1));
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      checkCancelled();
       try {
         lastResult = await runShellWithRoot(script, timeout);
       } catch (e) {
+        if (e?.name === 'OperationCancelled') throw e;
         lastResult = { success: false, content: e && e.message ? e.message : String(e || '') };
       }
+      checkCancelled();
       if (lastResult && lastResult.success) return lastResult;
       const detail = String((lastResult && lastResult.content) || '');
       if (!/(failed to fetch|networkerror|load failed|aborterror|request.*timeout|\u8bf7\u6c42\u8d85\u65f6)/i.test(detail) || attempt >= maxAttempts) {
         return lastResult;
       }
+      checkCancelled();
       await wait(attempt * 800);
+      checkCancelled();
     }
     return lastResult;
   };
@@ -3115,16 +3237,33 @@ KANO_YQ_SMOKE_EOF
     if (!res.success) throw new Error('读取配置来源失败，未修改配置');
     return String(res.content || '').trim();
   };
-  const normalizeSubConvertModeValue = () => SUB_CONVERT_MODE_LOCAL;
+  const normalizeSubConvertModeValue = (value = '') =>
+    String(value || '').trim().toLowerCase() === SUB_CONVERT_MODE_LOCAL
+      ? SUB_CONVERT_MODE_LOCAL : SUB_CONVERT_MODE_PROVIDER;
 
   const parseSubConvertModeFromText = (content = '') => {
     const match = String(content || '').match(/^# KANO_SUB_CONVERT_MODE=(\S+)\s*$/m);
     return normalizeSubConvertModeValue(match ? match[1] : '');
   };
 
-  const readSavedSubConvertMode = async () => SUB_CONVERT_MODE_LOCAL;
+  const readSavedSubConvertMode = async () => {
+    const res = await runShellWithRoot(`
+      if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then cat ${shellQuote(CLASH_SUB_URLS)} || exit 1; fi
+      if [ -s ${shellQuote(CLASH_CONFIG)} ]; then printf '\\nKANO_CONFIG_PRESENT=1\\n'; fi
+    `, 10 * 1000);
+    if (!res.success) throw new Error('读取订阅转换模式失败，未修改配置');
+    const text = String(res.content || '');
+    const match = text.match(/^# KANO_SUB_CONVERT_MODE=(provider|local)\s*$/im);
+    if (match) return normalizeSubConvertModeValue(match[1]);
+    if (!/^KANO_CONFIG_PRESENT=1$/m.test(text)) return SUB_CONVERT_MODE_PROVIDER;
+    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!read.ok) throw new Error(read.message || '读取历史订阅模式失败，未修改配置');
+    const types = Object.values(read.value['proxy-providers'] || {}).map((provider) => provider?.type);
+    return types.length > 0 && types.every((type) => type === 'file')
+      ? SUB_CONVERT_MODE_LOCAL : SUB_CONVERT_MODE_PROVIDER;
+  };
 
-  const fileTransactionHelpersCmd = () => `
+  const fileSnapshotHelpersCmd = () => `
         snapshot_transaction_file() {
           name="$1"
           path="$2"
@@ -3150,6 +3289,9 @@ KANO_YQ_SMOKE_EOF
           fi
           return 0
         }
+`;
+
+  const fileTransactionHelpersCmd = () => fileSnapshotHelpersCmd() + `
         recover_stale_transactions() {
           tx_prefix="$1"
           restore_callback="$2"
@@ -3289,7 +3431,7 @@ KANO_YQ_SMOKE_EOF
       return false;
     }
     const storedSources = parseStoredSubSourcesFromText(current.content || '');
-    const convertMode = parseSubConvertModeFromText(current.content || '');
+    const convertMode = await readSavedSubConvertMode();
     const saved = await persistSubSourceState(storedSources, cleanMode, convertMode, { allowEmpty: true });
     if (!saved) {
       createToast('\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25', 'red', 9000);
@@ -3586,7 +3728,7 @@ KANO_YQ_SMOKE_EOF
     return value;
   };
 
-  
+
 
   const getPositivePort = (value, fallback = F50_PORTS.tproxy) => {
     const port = Number(value);
@@ -3606,15 +3748,22 @@ KANO_YQ_SMOKE_EOF
 
   // yq is an advanced-feature dependency, not a prerequisite for installing/starting Mihomo.
   // On a clean UFI environment, repair it lazily only when a YAML-backed feature is actually used.
+  const yqVersionCheckCmd = () => `
+    [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
+    version="$(timeout -k 1 3 "$YQ" --version 2>&1)" || { echo "YQ_EXEC_FAILED: $version"; exit 1; }
+    echo "$version" | grep -Eiq 'mikefarah/yq.*version[[:space:]]+v?4\\.' || {
+      echo "YQ_VERSION_UNSUPPORTED: $version"; exit 1;
+    }
+  `;
   const ensureYqRuntime = async ({quiet=false}={}) => {
  if (!(await ensureCompatBackend())) return false;
- const r=await runShellWithRoot('test -x /data/clash/Tools/yq_linux_arm64 && /data/clash/Tools/yq_linux_arm64 --version',5000);
- const ok=!!r.success && /version\s+v?4\./i.test(r.content||'');
+ const r=await runShellWithRoot(`YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}\n${yqVersionCheckCmd()}`,5000);
+ const ok=!!r.success;
  if(!ok&&!quiet)createToast('YAML 组件不可用，请重新安装本版组件包','red');return ok;
 };
 
   const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
-    if (!(await ensureYqRuntime({ quiet: true, allowDownload }))) {
+    if (!(await ensureCompatBackend())) {
       return { ok: false, value: null, message: `${label} \u9700\u8981 yq v4\uff0c\u8bf7\u5148\u4fee\u590d YAML \u7ec4\u4ef6`, shell: null };
     }
     const res = await runShellWithRoot(`
@@ -3622,13 +3771,8 @@ KANO_YQ_SMOKE_EOF
         FILE=${shellQuote(yamlPath)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
+        ${yqVersionCheckCmd()}
         [ -s "$FILE" ] || { echo "YAML_FILE_MISSING: $FILE"; exit 1; }
-        [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
-        version="$(timeout -k 1 3 "$YQ" --version 2>&1)"
-        echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
-          echo "YQ_VERSION_UNSUPPORTED: $version"
-          exit 1
-        }
         size="$(wc -c < "$FILE" 2>/dev/null || echo 0)"
         echo "$size" | grep -Eq '^[0-9]+$' || size=0
         [ "$size" -le ${YAML_BRIDGE_MAX_BYTES} ] || {
@@ -3767,12 +3911,7 @@ KANO_YQ_SMOKE_EOF
         trap cleanup_yaml_bridge EXIT
         [ -s "$STAGE" ] || { echo "YAML_STAGE_MISSING: $STAGE"; exit 1; }
         [ ! -L "$TARGET" ] || { echo "YAML_TARGET_SYMLINK_REJECTED: $TARGET"; exit 1; }
-        [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
-        version="$(timeout -k 1 3 "$YQ" --version 2>&1)"
-        echo "$version" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
-          echo "YQ_VERSION_UNSUPPORTED: $version"
-          exit 1
-        }
+        ${yqVersionCheckCmd()}
         "$YQ" e '.' "$STAGE" >/dev/null 2>"$PARSE_OUT" || {
           echo "YAML_STAGE_PARSE_FAILED: $LABEL"
           cat "$PARSE_OUT" 2>/dev/null || true
@@ -3787,8 +3926,6 @@ KANO_YQ_SMOKE_EOF
         }
         old_hash="$(hash_file "$TARGET")"
         old_size="$(wc -c < "$TARGET" 2>/dev/null || echo 0)"
-        stage_hash="$(hash_file "$STAGE")"
-        stage_size="$(wc -c < "$STAGE" 2>/dev/null || echo 0)"
         if [ -f "$TARGET" ] && cmp -s "$TARGET" "$STAGE" 2>/dev/null; then
           rm -f "$STAGE"
           echo "YAML_COMMIT_UNCHANGED=1"
@@ -3798,6 +3935,8 @@ KANO_YQ_SMOKE_EOF
           echo "YAML_NEW_SIZE=$old_size"
           exit 0
         fi
+        stage_hash="$(hash_file "$STAGE")"
+        stage_size="$(wc -c < "$STAGE" 2>/dev/null || echo 0)"
         stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
         [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
         backup_path=""
@@ -5333,19 +5472,21 @@ KANO_WRITE_CHECK_EOF
   const info = await buildControllerInfo({fresh:true});
   const pid = await getCorePid();
   const results = await mapWithConcurrency(names, 2, async (name) => {
-    if (defs[name].type === 'http') {
-      return {type:'proxy-provider',name,ok:false,message:'\u65e7 HTTP Provider \u5c1a\u672a\u8fc1\u79fb\uff0c\u8bf7\u91cd\u65b0\u5bfc\u5165\u8ba2\u9605\u6216\u91cd\u542f\u6838\u5fc3',errorType:'legacy_http_provider'};
-    }
     if (!pid) return {type:'proxy-provider',name,ok:false,message:'\u6838\u5fc3\u672a\u8fd0\u884c'};
     const updated = await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'PUT', null, info, 5, {corePid:pid});
     const snap = updated.success ? await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'GET', null, info, 5, {corePid:pid}) : updated;
     let count = 0;
     try { const value = JSON.parse(snap.responseText || '{}'); count = Array.isArray(value.proxies) ? value.proxies.length : 0; } catch (_) {}
     const ok = !!updated.success && !!snap.success && count > 0;
+    const rawMessage = snap.responseText || snap.message || snap.content || '';
+    const http = defs[name].type === 'http';
+    const upstream390 = http && (snap.statusCode === 390 || /(?:HTTP|status(?: code)?)\s*[:=]?\s*390\b/i.test(rawMessage));
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,statusCode:snap.statusCode || 0,
-      message:ok ? '' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d',errorType:ok ? '' : 'local_reload_failed'};
+      message:ok ? '' : sanitizeSubscriptionSecrets(rawMessage || (http ? 'HTTP Provider 更新失败' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d')),
+      errorType:ok ? '' : upstream390 ? 'upstream_390' : (snap.errorType || (http ? 'provider_update_failed' : 'local_reload_failed'))};
   });
-  const result = buildProviderUpdateResult(results, {controllerInfo:info,corePid:pid,via:'file'});
+  const result = buildProviderUpdateResult(results, {controllerInfo:info,corePid:pid,
+    via:names.some(name => defs[name].type === 'http') ? 'http' : 'file'});
   if (showToast) createToast(result.failed ? '\u90e8\u5206\u672c\u5730\u8282\u70b9\u672a\u52a0\u8f7d' : '\u672c\u5730\u8282\u70b9\u5df2\u52a0\u8f7d', result.failed ? 'red':'green');
   return result;
 };
@@ -5611,7 +5752,7 @@ KANO_WRITE_CHECK_EOF
 
 
 
-  
+
 
   const buildOwnedCoreFunctions = () => `
 CORE=${shellQuote(CLASH_CORE)}
@@ -5809,7 +5950,7 @@ kano_stop_watchers() (
         }
         trap cleanup_restore EXIT
         cp "$BACKUP" "$RESTORE_NEW" || exit 1
-        chmod 644 "$RESTORE_NEW" 2>/dev/null || true
+        chmod 600 "$RESTORE_NEW" || exit 1
         mv -f "$RESTORE_NEW" "$CONFIG" || exit 1
         if [ -f "$BACKUP.source" ]; then
           cp "$BACKUP.source" ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} || exit 1
@@ -6188,10 +6329,7 @@ kano_stop_watchers() (
     };
 
     saveBtn.onclick = async () => {
-      const operationToken = acquireCriticalOperation('保存面板连接');
-      if (!operationToken) return;
-      setButtonBusy(saveBtn, true, '\u4fdd\u5b58\u4e2d\u2026');
-      try {
+      return runCriticalButtonOperation('保存面板连接', saveBtn, '\u4fdd\u5b58\u4e2d\u2026', async () => {
         const res = await saveControllerSettings(controllerInput.value, secretInput.value);
         if (!res.ok) {
           setStatus(res.message || '\u4fdd\u5b58\u5931\u8d25', '#fecaca');
@@ -6203,10 +6341,7 @@ kano_stop_watchers() (
         setStatus(`\u5df2\u4fdd\u5b58\n${checkText}`, res.connectivity && res.connectivity.success ? '#bbf7d0' : '#fde68a');
         createToast(res.connectivity && res.connectivity.success ? 'Web \u9762\u677f\u8fde\u63a5\u5df2\u4fdd\u5b58' : 'Web \u9762\u677f\u8fde\u63a5\u5df2\u4fdd\u5b58\uff0c\u4f46\u6d4b\u8bd5\u5931\u8d25', res.connectivity && res.connectivity.success ? 'green' : 'yellow', 6000);
         if (afterSave) await afterSave();
-      } finally {
-        setButtonBusy(saveBtn, false);
-        releaseCriticalOperation(operationToken);
-      }
+      });
     };
   };
 
@@ -7169,28 +7304,16 @@ btn_disabled.onclick = async () => {
 
     get('#mm_policy_fix_runtime_config').onclick = async () => {
       const btn = get('#mm_policy_fix_runtime_config');
-      const operationToken = acquireCriticalOperation('修复代理配置');
-      if (!operationToken) return;
-      setButtonBusy(btn, true, '\u4fee\u590d\u4e2d\u2026');
-      try {
+      return runCriticalButtonOperation('修复代理配置', btn, '\u4fee\u590d\u4e2d\u2026', async () => {
         await restartClashOk({ skipCheck: true });
-      } finally {
-        setButtonBusy(btn, false);
-        releaseCriticalOperation(operationToken);
-      }
+      });
     };
 
     get('#mm_policy_repair').onclick = async () => {
       const btn = get('#mm_policy_repair');
-      const operationToken = acquireCriticalOperation('修复策略规则');
-      if (!operationToken) return;
-      setButtonBusy(btn, true, '应用中…');
-      try {
+      return runCriticalButtonOperation('修复策略规则', btn, '应用中…', async () => {
         if (await ensurePolicyToolsScript()) await applyPolicyToolsRules({ ensureScript: false });
-      } finally {
-        setButtonBusy(btn, false);
-        releaseCriticalOperation(operationToken);
-      }
+      });
     };
     get('#mm_policy_status_btn').onclick = async () => {
       const btn = get('#mm_policy_status_btn');
@@ -7995,10 +8118,7 @@ btn_disabled.onclick = async () => {
     };
     boot_on.addEventListener('click', async () => {
       if (!(await ensureReady({ readOnly: true }))) return;
-      const operationToken = acquireCriticalOperation('修改开机自启');
-      if (!operationToken) return;
-      setButtonBusy(boot_on, true, '处理中…');
-      try {
+      return runCriticalButtonOperation('修改开机自启', boot_on, '处理中…', async () => {
         const before = await inspectBootIntegration();
         const disable = before.enabled && before.state != 'incomplete' && before.state != 'manager_damaged';
         if (!disable && (!(await ensureServiceWrapper()).success || !(await ensurePolicyToolsScript()))) {
@@ -8020,10 +8140,7 @@ btn_disabled.onclick = async () => {
           color,
           8000,
         );
-      } finally {
-        setButtonBusy(boot_on, false);
-        releaseCriticalOperation(operationToken);
-      }
+      });
     });
 
     inspectBootIntegration()
@@ -8079,10 +8196,7 @@ btn_disabled.onclick = async () => {
       const saveBtn = el.querySelector('#mm_provider_user_agent_save');
       el.querySelector('#mm_provider_user_agent_close').onclick = close;
       saveBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('保存订阅 User-Agent');
-        if (!operationToken) return;
-        setButtonBusy(saveBtn, true, '保存中…');
-        try {
+        return runCriticalButtonOperation('保存订阅 User-Agent', saveBtn, '保存中…', async () => {
           const result = await persistProviderUserAgent(input.value);
           if (!result.ok) {
             createToast(`订阅 User-Agent 保存失败<br>${safeTextToHtml(result.message || '')}`, 'red', 8000);
@@ -8096,10 +8210,7 @@ btn_disabled.onclick = async () => {
             6000,
           );
           close();
-        } finally {
-          setButtonBusy(saveBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
       input.focus();
     };
@@ -8140,10 +8251,7 @@ btn_disabled.onclick = async () => {
         '\u53d6\u6d88',
       );
       if (!confirmed) return;
-      const operationToken = acquireCriticalOperation('清理缓存');
-      if (!operationToken) return;
-      setButtonBusy(clearCacheBtn, true, '\u6e05\u7406\u4e2d\u2026');
-      try {
+      return runCriticalButtonOperation('清理缓存', clearCacheBtn, '\u6e05\u7406\u4e2d\u2026', async () => {
         const runtimeResults = await flushMihomoRuntimeCaches();
         const res = await runDangerousShellWithRoot(`
           set +e
@@ -8192,10 +8300,7 @@ btn_disabled.onclick = async () => {
           allOk ? 'green' : 'yellow',
           8000,
         );
-      } finally {
-        setButtonBusy(clearCacheBtn, false);
-        releaseCriticalOperation(operationToken);
-      }
+      });
     };
 
     const parseLegacySubConfig = (content = '') => {
@@ -8313,60 +8418,20 @@ btn_disabled.onclick = async () => {
       if (sources.length == 0) return { ok: false, conversion: buildProviderUpdateResult([]) };
       createToast(`HTTP Provider 更新失败（${escapeHtml(reason)}），正在改用设备本地下载/转换...`, 'yellow', 10000);
       appendTemplateFlowDebug(`provider_auto_local_fallback enter reason=${reason} sources=${sources.length}`);
-
-      const conversion = await convertSubscriptionsLocally(sources);
-      if (conversion.failed > 0) {
-        const failed = conversion.providers.find((item) => !item.ok);
-        createToast(`自动本地转换失败：${escapeHtml(failed && failed.message || '未知错误')}；保持原 HTTP Provider 配置。`, 'red', 10000);
-        appendTemplateFlowDebug(`provider_auto_local_fallback convert_failed reason=${failed && failed.message || ''}`);
-        return { ok: false, conversion };
-      }
-
       const storedSources = await readCurrentSubSources({ includeDisabled: true });
       const stored = storedSources.length > 0 ? storedSources : sources;
-      const rollbackPath = await createConfigRollbackPoint('provider_auto_local_fallback');
-      if (rollbackPath === null) {
-        createToast('无法创建 config.yaml 回滚点，未切换本地转换模式。', 'red', 9000);
-        return { ok: false, conversion };
+      let conversion = buildProviderUpdateResult([]);
+      // Reuse the subscription transaction: it snapshots settings, config, caches and runtime state.
+      const ok = await saveSubSources(stored, cleanMode, SUB_CONVERT_MODE_LOCAL, {
+        applyToCustom: true,
+        onProviderUpdate: (result) => { conversion = result; },
+      });
+      if (ok) {
+        appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
+        createToast('已自动切换为设备本地转换并恢复可用节点。', 'green', 10000);
+        await showSubscriptionUpdateSelfCheck(sources, cleanMode, conversion, null, SUB_CONVERT_MODE_LOCAL);
       }
-      if (!(await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_LOCAL))) {
-        createToast('本地转换已完成，但保存本地转换模式失败；运行配置未切换。', 'red', 9000);
-        return { ok: false, conversion };
-      }
-      if (!(await writeSubConfigByMode(sources, cleanMode, {
-        backup: true,
-        convertMode: SUB_CONVERT_MODE_LOCAL,
-      }))) {
-        const modeRestored = await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
-        const configRestored = rollbackPath
-          ? await restoreConfigRollbackPoint(rollbackPath, 'HTTP Provider 自动本地降级写入失败', { showToast: false })
-          : false;
-        createToast(
-          modeRestored && configRestored
-            ? '本地转换配置生成失败，已恢复 HTTP Provider 模式和原配置。'
-            : '本地转换配置生成失败，且 HTTP Provider 模式或原配置未能完整恢复。',
-          modeRestored && configRestored ? 'yellow' : 'red',
-          10000,
-        );
-        return { ok: false, conversion };
-      }
-      const restarted = await restartClashWithConfigRollback(rollbackPath, 'HTTP Provider 390 自动切换本地转换');
-      if (!restarted) {
-        const modeRestored = await persistSubSourceState(stored, cleanMode, SUB_CONVERT_MODE_PROVIDER);
-        if (!modeRestored) createToast('原配置已回滚，但 HTTP Provider 模式标记恢复失败。', 'red', 10000);
-        return { ok: false, conversion };
-      }
-      const appliedConversion = await reloadLocalSubscriptionProviders(sources, conversion);
-      appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
-      createToast(
-        appliedConversion.failed == 0
-          ? '已自动切换为设备本地转换并恢复节点。'
-          : '已切换为设备本地转换，但运行节点刷新未确认。',
-        appliedConversion.failed == 0 ? 'green' : 'yellow',
-        10000,
-      );
-      await showSubscriptionUpdateSelfCheck(sources, cleanMode, appliedConversion, null, SUB_CONVERT_MODE_LOCAL);
-      return { ok: appliedConversion.failed == 0, conversion: appliedConversion };
+      return { ok, conversion };
     };
 
     const readLegacySubscriptionSources = async () => {
@@ -8670,25 +8735,16 @@ btn_disabled.onclick = async () => {
       if (repairBtn) {
         repairBtn.onclick = async () => {
           if (!(await ensureReady())) return;
-          const operationToken = acquireCriticalOperation('修复订阅配置');
-          if (!operationToken) return;
-          setButtonBusy(repairBtn, true, '修复中…');
-          try {
+          return runCriticalButtonOperation('修复订阅配置', repairBtn, '修复中…', async () => {
             await overwriteConfigByTemplate({ confirm: false });
             safeClose();
-          } finally {
-            setButtonBusy(repairBtn, false);
-            releaseCriticalOperation(operationToken);
-          }
+          });
         };
       }
       if (retryBtn) {
         retryBtn.onclick = async () => {
           if (!(await ensureReady())) return;
-          const operationToken = acquireCriticalOperation('重新更新失败节点来源');
-          if (!operationToken) return;
-          setButtonBusy(retryBtn, true, '重试中…');
-          try {
+          return runCriticalButtonOperation('重新更新失败节点来源', retryBtn, '重试中…', async () => {
             if (providerNotRun && !(await restartClashOk())) return;
             const retryResult = await forceUpdateProvidersFromConfig({
               showToast: false,
@@ -8697,10 +8753,7 @@ btn_disabled.onclick = async () => {
             const mergedResult = mergeProviderUpdateResults(providerResult, retryResult);
             safeClose();
             await showSubscriptionUpdateSelfCheck(sources, mode, mergedResult, null, convertMode);
-          } finally {
-            setButtonBusy(retryBtn, false);
-            releaseCriticalOperation(operationToken);
-          }
+          });
         };
       }
       return { allOk, providerOk, configOk: outcome.configOk, color };
@@ -8790,33 +8843,35 @@ btn_disabled.onclick = async () => {
         }
         return;
       }
-      let providerUpdate;
-      if (convertMode == SUB_CONVERT_MODE_LOCAL) {
-        const conversion = await convertSubscriptionsLocally(sources);
-        providerUpdate = await reloadLocalSubscriptionProviders(sources, conversion);
-      } else {
-        providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
-      }
-      if (convertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
-        await switchHttpProviderToLocal(sources, mode, { reason: 'HTTP 390' });
-        return;
-      }
-      await showSubscriptionUpdateSelfCheck(sources, mode, providerUpdate, null, convertMode);
+      await updateSubProviders(sources, mode, convertMode);
     };
 
-    const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_LOCAL) => {
+    const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
   if (!(await ensureCompatBackend())) return false;
   const cleanMode = normalizeSubRuleModeValue(mode);
+  const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const cleanSources = normalizeSubSourceList(sources);
-  if (!cleanSources.length && await readConfigSource() === 'uploaded_config') {
+  const configSource = await readConfigSource();
+  if (cleanMode === SUB_RULE_MODE_ORIGINAL || configSource === 'subscription_original') {
+    return saveSubSources(await readCurrentSubSources({ includeDisabled: true }), SUB_RULE_MODE_ORIGINAL, cleanConvertMode, { applyToCustom: true });
+  }
+  if (configSource === 'uploaded_config') {
     const refreshed=await forceUpdateProvidersFromConfig({showToast:true,refreshRemote:true});return refreshed.failed===0;
   }
   if (!cleanSources.length) { createToast('\u6ca1\u6709\u5df2\u542f\u7528\u7684\u8ba2\u9605', 'red'); return false; }
   const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
   if (!read.ok) { createToast(safeTextToHtml(read.message || '\u8bfb\u53d6\u914d\u7f6e\u5931\u8d25'), 'red'); return false; }
   const definitions = read.value['proxy-providers'] || {};
-  const localReady = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanSources.every(s => definitions[s.name] && definitions[s.name].type === 'file') && await readConfigSource() !== 'subscription_original';
-  if (!localReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, SUB_CONVERT_MODE_LOCAL, {applyToCustom:true});
+  const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
+  const modeReady = cleanSources.every(s => definitions[s.name]?.type === expectedType);
+  if (!modeReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
+  if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {
+    const updated = await forceUpdateProvidersFromConfig({ showToast: false, config: read.value });
+    if (providerUpdateNeedsLocalFallback(updated)) {
+      return (await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' })).ok;
+    }
+    return showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, updated, null, cleanConvertMode);
+  }
   // Download first. A failed request never enters the restart/rollback path.
   const converted = await convertSubscriptionsLocally(cleanSources);
   if (converted.failed || !converted.ok) {
@@ -8855,7 +8910,7 @@ btn_disabled.onclick = async () => {
       const legacySources = parseLegacySubConfig(res.content);
       if (legacySources.length > 0) {
         if (showLegacySuspiciousSubSourcesError(legacySources, 'legacy entrypoint')) return [];
-        if (!(await persistSubSourceState(legacySources))) {
+        if (!(await persistSubSourceState(legacySources, SUB_RULE_MODE_TEMPLATE, await readSavedSubConvertMode()))) {
           createToast('\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u8fc1\u79fb\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u4f7f\u7528\u672a\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\u3002', 'red', 9000);
           appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
           return [];
@@ -8899,7 +8954,7 @@ btn_disabled.onclick = async () => {
       return ok;
     };
 
-    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false } = {}) => {
+    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, onProviderUpdate = null } = {}) => {
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   let storedSources, cleanSources;
@@ -8933,7 +8988,8 @@ btn_disabled.onclick = async () => {
 umask 077
 TX=${shellQuote(tx)}
 mkdir -p "$TX"
-${paths.map((path, i) => `if [ -f ${shellQuote(path)} ]; then cp ${shellQuote(path)} "$TX/${i}"; touch "$TX/${i}.had"; else touch "$TX/${i}.absent"; fi`).join('\n')}
+${fileSnapshotHelpersCmd()}
+${paths.map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
   if (!snapshot.success || !String(snapshot.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
     operationFinish(false, '\u65e0\u6cd5\u521b\u5efa\u56de\u6eda\u70b9\uff0c\u672a\u66f4\u6539\u8ba2\u9605');
@@ -8947,6 +9003,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     let conversion = null;
     if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
       conversion = await convertSubscriptionsLocally(cleanSources);
+      if (onProviderUpdate) onProviderUpdate(conversion);
       if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '\u672c\u5730\u8ba2\u9605\u8f6c\u6362\u5931\u8d25');
     }
     if (!(await writeSubConfigByMode(cleanSources, cleanMode, { backup: false, convertMode: cleanConvertMode }))) {
@@ -8960,6 +9017,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     const providers = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL
       ? await reloadLocalSubscriptionProviders(cleanSources, conversion)
       : await forceUpdateProvidersFromConfig({ showToast: false });
+    if (onProviderUpdate) onProviderUpdate(providers);
     if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
       const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
       if (!fallback.ok) throw new Error('\u8282\u70b9\u66f4\u65b0\u548c\u672c\u5730\u8f6c\u6362\u56de\u9000\u5747\u5931\u8d25');
@@ -8991,7 +9049,8 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     try {
     const rollback = await runShellWithRoot(`set -e
 TX=${shellQuote(tx)}
-${paths.map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `if [ -f "$TX/${i}.had" ]; then mkdir -p ${shellQuote(path.slice(0, path.lastIndexOf('/')))}; cp "$TX/${i}" ${shellQuote(path + '.kano_restore')} || exit 1; mv -f ${shellQuote(path + '.kano_restore')} ${shellQuote(path)} || exit 1; elif [ -f "$TX/${i}.absent" ]; then rm -f ${shellQuote(path)}; else exit 1; fi`).join('\n')}
+${fileSnapshotHelpersCmd()}
+${paths.map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `restore_transaction_file ${i} ${shellQuote(path)} || exit 1`).join('\n')}
 echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     restored = !!rollback.success && String(rollback.content || '').includes('SUBSCRIPTION_TRANSACTION_RESTORED');
     invalidateStatusSnapshot();
@@ -9352,7 +9411,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         return await saveSubSources(
           sources,
           parseSubRuleModeFromText(content),
-          parseSubConvertModeFromText(content),
+          /^# KANO_SUB_CONVERT_MODE=/m.test(content)
+            ? parseSubConvertModeFromText(content) : await readSavedSubConvertMode(),
         );
       }
       if ([CLASH_RULE_OVERRIDE_JSON, CLASH_RULE_OVERRIDE_APPLIED_JSON].includes(allowedFile.path) && content.trim()) {
@@ -9442,15 +9502,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       saveBtn.onclick = async () => {
         const fileInfo = findEditableLocalFile(select.value);
         if (!fileInfo) return;
-        const operationToken = acquireCriticalOperation(`保存 ${fileInfo.label}`);
-        if (!operationToken) return;
-        setButtonBusy(saveBtn, true, '保存中…');
-        try {
+        return runCriticalButtonOperation(`保存 ${fileInfo.label}`, saveBtn, '保存中…', async () => {
           if (await writeEditableLocalFile(fileInfo, textarea.value)) await loadSelected();
-        } finally {
-          setButtonBusy(saveBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
       await loadSelected();
     };
@@ -9657,6 +9711,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             close();
           }
         } catch (e) {
+          if (e?.name === 'OperationCancelled') return;
           operationFinish(false, e.message || String(e));
           createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
         } finally {
@@ -9712,6 +9767,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const updated = await updateSubProviders(sources, ruleMode, convertMode);
         operationFinish(updated);
       } catch (error) {
+        if (error?.name === 'OperationCancelled') return;
         operationFinish(false, error.message || String(error));
         createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       } finally {
@@ -9879,27 +9935,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
       const saveCurrent = async () => saveRuleOverrideConfig(syncConfig());
       saveBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('保存图形规则');
-        if (!operationToken) return;
-        setButtonBusy(saveBtn, true, '保存中…');
-        try {
+        return runCriticalButtonOperation('保存图形规则', saveBtn, '保存中…', async () => {
           if (await saveCurrent()) createToast('图形规则已保存', 'green');
-        } finally {
-          setButtonBusy(saveBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
       applyBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('应用图形规则');
-        if (!operationToken) return;
-        setButtonBusy(applyBtn, true, '应用中…');
-        try {
+        return runCriticalButtonOperation('应用图形规则', applyBtn, '应用中…', async () => {
           if (!(await saveCurrent())) return;
           if (await applySavedOverrides()) close();
-        } finally {
-          setButtonBusy(applyBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
       renderRules();
     };
@@ -9933,27 +9977,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         textarea.value = buildDefaultOverrideJs();
       };
       saveBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('保存 JS 覆写');
-        if (!operationToken) return;
-        setButtonBusy(saveBtn, true, '保存中…');
-        try {
+        return runCriticalButtonOperation('保存 JS 覆写', saveBtn, '保存中…', async () => {
           if (await saveJsOverrideText(textarea.value)) createToast('JS 覆写已保存', 'green');
-        } finally {
-          setButtonBusy(saveBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
       applyBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('应用 JS 覆写');
-        if (!operationToken) return;
-        setButtonBusy(applyBtn, true, '应用中…');
-        try {
+        return runCriticalButtonOperation('应用 JS 覆写', applyBtn, '应用中…', async () => {
           if (!(await saveJsOverrideText(textarea.value))) return;
           if (await applySavedOverrides()) close();
-        } finally {
-          setButtonBusy(applyBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
     };
 
@@ -10017,15 +10049,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         await showJsOverrideDialog();
       };
       rebuildBtn.onclick = async () => {
-        const operationToken = acquireCriticalOperation('应用模板');
-        if (!operationToken) return;
-        setButtonBusy(rebuildBtn, true, '\u5e94\u7528\u4e2d\u2026');
-        try {
+        return runCriticalButtonOperation('应用模板', rebuildBtn, '\u5e94\u7528\u4e2d\u2026', async () => {
           await overwriteConfigByTemplate();
-        } finally {
-          setButtonBusy(rebuildBtn, false);
-          releaseCriticalOperation(operationToken);
-        }
+        });
       };
     };
 

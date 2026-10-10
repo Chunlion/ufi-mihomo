@@ -152,10 +152,11 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=11
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=12
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
+  F50_CONFIG_RELOAD_REQUIRED=0
   F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
   export F50_CONFIG_SOURCE
   F50_SUB_CONVERT_MODE=$(sed -n 's/^# KANO_SUB_CONVERT_MODE=//p' "$CLASH_ROOT/Proxy/subscription_urls.txt" 2>/dev/null | tr -d '\\r' | head -n 1)
@@ -194,7 +195,11 @@ f50_restore_original_config() {
   if cmp -s "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" 2>/dev/null; then
     rm -f "$F50_ORIGINAL_CANDIDATE" || return 1
   else
+    runtime_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval -o=json -I=0 'sort_keys(..)' "$CLASH_ROOT/Proxy/config.yaml") || return 1
+    restored_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval -o=json -I=0 'sort_keys(..)' "$F50_ORIGINAL_CANDIDATE") || return 1
     mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
+    [ "$runtime_json" = "$restored_json" ] || F50_CONFIG_RELOAD_REQUIRED=1
+    unset runtime_json restored_json
   fi
   rm -f "$F50_ORIGINAL_CONFIG"
   trap - EXIT
@@ -215,27 +220,37 @@ function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE))
   const functions = buildF50OriginalConfigFunctions();
   return `(set -e
 SERVICE=${service}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=11' "$SERVICE" && exit 0
+grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=12' "$SERVICE" && exit 0
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
 trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
-panel_guarded=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=1$' "$SERVICE" || true)
-awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10)$/ { skipping=1 }
+panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
+panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
+awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "repair_panel_config() {" { panel=1 }
   panel && !panel_guarded && ($0 == "  \\"$yq\\" eval " sprintf("%c",39) || $0 == "  \\"$yq\\" eval -P -o=yaml -I=2 " sprintf("%c",39)) {
-    print "  # KANO_PANEL_WRITE_GUARD=1"
+    print "  # KANO_PANEL_WRITE_GUARD=2"
     print "  if \\"$yq\\" eval -e " sprintf("%c",39) panel_check sprintf("%c",39) " \\"$cfg\\" >/dev/null 2>&1; then"
     print "    \\"$CLASH_ROOT/Proxy/Clash.Core\\" -t -d \\"$CLASH_ROOT/Proxy\\" -f \\"$cfg\\" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }"
+    print "    if [ \\"\${F50_CONFIG_RELOAD_REQUIRED:-0}\\" != 1 ]; then echo F50_PANEL_CONFIG_UNCHANGED=1; return 0; fi"
     print "  else"
     panel_open=1
   }
+  panel && $0 == "  # KANO_PANEL_WRITE_GUARD=1" { $0 = "  # KANO_PANEL_WRITE_GUARD=2" }
+  panel && !panel_skip && $0 == "    \\"$CLASH_ROOT/Proxy/Clash.Core\\" -t -d \\"$CLASH_ROOT/Proxy\\" -f \\"$cfg\\" >/dev/null 2>&1 || { echo F50_ERROR=panel_config_invalid; return 1; }" {
+    print
+    print "    if [ \\"\${F50_CONFIG_RELOAD_REQUIRED:-0}\\" != 1 ]; then echo F50_PANEL_CONFIG_UNCHANGED=1; return 0; fi"
+    next
+  }
+  panel && $0 ~ /^  code=\\$\\(curl -sS --max-time 20 -K / { sub(/curl -sS --max-time 20/, "curl -sS --noproxy " sprintf("%c",39) "*" sprintf("%c",39) " --connect-timeout 3 --max-time 20") }
+  panel && !panel_skip && $0 == "  echo F50_PANEL_CONFIG_RELOADED=1" { print "  F50_CONFIG_RELOAD_REQUIRED=0" }
   panel && panel_open && $0 ~ /^  auth=/ { print "  fi"; panel_open=0 }
   panel && $0 == "}" { panel=0 }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }

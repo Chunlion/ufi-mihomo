@@ -1,6 +1,6 @@
 //<script>
 // Boot curl, final lease status and recovery concurrency fixes audit.5, 2026-10-11; based on audit.4; controller protocol unchanged.
-// 猫猫TProxy v8.0.0-compat.2.3 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
+// 猫猫TProxy v9.0.0 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
 const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
 const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, controller:7788};

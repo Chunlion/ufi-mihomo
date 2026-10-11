@@ -1,4 +1,5 @@
 //<script>
+// Boot curl, final lease status and recovery concurrency fixes audit.5, 2026-10-11; based on audit.4; controller protocol unchanged.
 // 猫猫TProxy v8.0.0-compat.2.3 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
 const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
@@ -8,17 +9,17 @@ const F50_DEFAULT_SECRET = '123456';
 function f50IsPlainObject(v) { return !!v && typeof v === "object" && !Array.isArray(v); }
 function f50DeepClone(v) {
   if (Array.isArray(v)) return v.map(f50DeepClone);
-  if (f50IsPlainObject(v)) { const o = {}; for (const k of Object.keys(v)) o[k] = f50DeepClone(v[k]); return o; }
+  if (f50IsPlainObject(v)) { const o = {}; for (const k of Object.keys(v)) Object.defineProperty(o, k, {value:f50DeepClone(v[k]),enumerable:true,writable:true,configurable:true}); return o; }
   return v;
 }
 function f50DeepMerge(base, delta) {
   if (Array.isArray(delta)) return f50DeepClone(delta);
   if (f50IsPlainObject(delta)) {
     const out = {};
-    if (f50IsPlainObject(base)) for (const k of Object.keys(base)) out[k] = f50DeepClone(base[k]);
+    if (f50IsPlainObject(base)) for (const k of Object.keys(base)) Object.defineProperty(out, k, {value:f50DeepClone(base[k]),enumerable:true,writable:true,configurable:true});
     for (const k of Object.keys(delta)) {
       const bv = f50IsPlainObject(base) ? base[k] : undefined;
-      out[k] = (f50IsPlainObject(bv) && f50IsPlainObject(delta[k])) ? f50DeepMerge(bv, delta[k]) : f50DeepClone(delta[k]);
+      Object.defineProperty(out, k, {value:(f50IsPlainObject(bv) && f50IsPlainObject(delta[k])) ? f50DeepMerge(bv, delta[k]) : f50DeepClone(delta[k]),enumerable:true,writable:true,configurable:true});
     }
     return out;
   }
@@ -45,6 +46,337 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
+function buildF50EmergencyScript(resumeTag = '', requireIdle = false) {
+  return buildF50MaintenanceFunctions('cleanup') + (requireIdle ? buildF50RecoveryEligibilityFunctions() : '') + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
+F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
+F50_RECOVERY_LOCK=\${F50_RECOVERY_LOCK:-/dev/kano_tproxy_recovery.lock}
+F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
+F50_RECOVERY_BODY_OK=0
+f50_emergency_finish() {
+  emergency_rc=$?
+  trap - EXIT HUP INT TERM
+  if ! rm -rf "$F50_WORK" || [ -e "$F50_WORK" ] || [ -L "$F50_WORK" ]; then
+    echo F50_CLEAN_ERROR=recovery_work_cleanup_failed
+    [ "$emergency_rc" != 0 ] || emergency_rc=1
+  fi
+  if [ "\${emergency_locked:-0}" = 1 ]; then
+    if ! rm -f "$F50_RECOVERY_LOCK/owner" || ! rmdir "$F50_RECOVERY_LOCK" || [ -e "$F50_RECOVERY_LOCK" ] || [ -L "$F50_RECOVERY_LOCK" ]; then
+      echo F50_CLEAN_ERROR=recovery_lock_cleanup_failed
+      [ "$emergency_rc" != 0 ] || emergency_rc=1
+    fi
+  fi
+  if [ "$F50_RECOVERY_BODY_OK" = 1 ]; then
+    if [ "$emergency_rc" = 0 ]; then echo RECOVERY_VERIFIED
+    else echo F50_RECOVERY_PARTIAL=1; fi
+  fi
+  exit "$emergency_rc"
+}
+trap f50_emergency_finish EXIT
+trap 'exit 130' HUP INT TERM
+[ ! -L "$F50_ROOT" ] && [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_RECOVERY_LOCK" ] || { echo F50_CLEAN_ERROR=recovery_symlink; exit 1; }
+if ! mkdir "$F50_RECOVERY_LOCK" 2>/dev/null; then
+  read -r emergency_pid emergency_start < "$F50_RECOVERY_LOCK/owner" 2>/dev/null || { echo F50_CLEAN_ERROR=recovery_busy; exit 1; }
+  case "$emergency_pid:$emergency_start" in *[!0-9:]*|:*) echo F50_CLEAN_ERROR=recovery_busy; exit 1 ;; esac
+  if f50_same_process "$emergency_pid" "$emergency_start"; then echo F50_CLEAN_ERROR=recovery_busy; exit 1; fi
+  rm -f "$F50_RECOVERY_LOCK/owner" && rmdir "$F50_RECOVERY_LOCK" && mkdir "$F50_RECOVERY_LOCK" || { echo F50_CLEAN_ERROR=recovery_busy; exit 1; }
+fi
+emergency_locked=1
+${requireIdle ? 'f50_recovery_eligible || exit 1' : ''}
+f50_stat "$$" || { echo F50_CLEAN_ERROR=recovery_identity_failed; exit 1; }
+printf '%s %s\\n' "$$" "$F50_STAT_START" > "$F50_RECOVERY_LOCK/owner" || exit 1
+if [ -n "$F50_RESUME_TAG" ]; then
+  [ -d "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
+    [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$F50_RESUME_TAG" ] || { echo F50_CLEAN_ERROR=resume_lease_owner_changed; exit 1; }
+fi
+if mkdir "$F50_OPERATION_LOCK" 2>/dev/null; then
+  printf 'rescue_%s\\n' "$$" > "$F50_OPERATION_LOCK/owner" || exit 1
+fi
+[ -d "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] && [ ! -L "$F50_OPERATION_LOCK/cancelled" ] || exit 1
+printf 'recovery\\n' > "$F50_OPERATION_LOCK/cancelled" || exit 1
+${requireIdle ? 'f50_recovery_eligible || exit 1' : ''}
+# The fence is visible before any process is stopped. A cancelled browser is not a stopped worker.
+if [ -d "$F50_ROOT/Policy" ] || [ -s "$F50_ROOT/Scripts/Clash.Service" ] || [ -s "$F50_ROOT/Proxy/Clash.Core" ]; then
+  mkdir -p "$F50_ROOT/Policy" && printf 'emergency recovery\\n' > "$F50_ROOT/Policy/stopped" || { echo F50_CLEAN_ERROR=stop_latch_failed; exit 1; }
+fi
+f50_scan "$F50_WORK/pids" || exit 1
+f50_stop_recorded "$F50_WORK/pids" || exit 1
+f50_scan "$F50_WORK/after.pids" || exit 1
+[ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; exit 1; }
+config_recovery_failed=0
+for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
+  f50_config_tx_recover "$config_target" "$F50_ROOT/Tools/config_source.conf" || config_recovery_failed=1
+done
+if f50_clean_environment && [ "$config_recovery_failed" = 0 ]; then
+  # Only the known lease files are removed; an unexpected file prevents release.
+  emergency_owner=$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)
+  if [ -n "$F50_RESUME_TAG" ] && [ "$emergency_owner" = "$F50_RESUME_TAG" ]; then
+    rm -f "$F50_OPERATION_LOCK/cancelled" || exit 1
+  else
+    rm -f "$F50_OPERATION_LOCK/frontend" "$F50_OPERATION_LOCK/owner" "$F50_OPERATION_LOCK/cancelled" || exit 1
+    rmdir "$F50_OPERATION_LOCK" || { echo F50_CLEAN_ERROR=operation_lease_not_empty; exit 1; }
+  fi
+  F50_RECOVERY_BODY_OK=1
+  exit 0
+fi
+f50_scan "$F50_WORK/partial.pids" || exit 1
+[ ! -s "$F50_WORK/partial.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; exit 1; }
+# One unreadable family must not prevent removing verified hooks in the other.
+# This is deliberately partial recovery: it never claims restored journals or unverified routes.
+for emergency_bin in iptables ip6tables; do
+  emergency_save="$F50_WORK/$emergency_bin.partial"
+  emergency_plan="$emergency_save.plan"
+  if f50_save "$emergency_bin" "$emergency_save" && f50_firewall_plan "$emergency_bin" "$emergency_save" "$emergency_plan"; then
+    f50_execute_plan "$emergency_plan" || true
+    if f50_save "$emergency_bin" "$emergency_save" && f50_firewall_plan "$emergency_bin" "$emergency_save" "$emergency_plan" && [ ! -s "$emergency_plan" ]; then
+      printf 'F50_RECOVERY_FIREWALL_%s=clean\\n' "$emergency_bin"
+    fi
+  fi
+done
+for emergency_family in 4 6; do
+  emergency_rules="$F50_WORK/partial.rules$emergency_family"
+  emergency_routes="$F50_WORK/partial.routes$emergency_family"
+  if f50_ip_snapshot "$emergency_rules" -"$emergency_family" rule show && f50_ip_snapshot "$emergency_routes" -"$emergency_family" route show table all; then
+    printf '\\n' >> "$emergency_rules"
+    if f50_routes_plan -"$emergency_family" "$emergency_rules" "$emergency_routes" "$F50_WORK/partial.routes.plan"; then
+      f50_execute_plan "$F50_WORK/partial.routes.plan" || true
+    fi
+  fi
+done
+echo F50_RECOVERY_PARTIAL=1
+echo F50_CLEAN_ERROR=recovery_requires_review
+exit 1
+`;
+}
+
+function buildF50RecoveryEligibilityFunctions() { return `F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
+F50_TASK_DIR=\${F50_TASK_DIR:-/dev/kano_tproxy_tasks}
+f50_recovery_block() { echo "F50_RECOVERY_STATE=$1"; echo F50_RECOVERY_ELIGIBLE=0; return 1; }
+f50_recovery_eligible() {
+  [ -r "$F50_PROC" ] && [ -x "$F50_PROC" ] || { f50_recovery_block process_table_unreadable; return 1; }
+  for recovery_path in "$F50_OPERATION_LOCK" "$F50_TASK_DIR" "$F50_OPERATION_LOCK/owner" "$F50_OPERATION_LOCK/cancelled" "$F50_OPERATION_LOCK/frontend"; do
+    [ ! -L "$recovery_path" ] || { f50_recovery_block unsafe_path; return 1; }
+  done
+  if [ -e "$F50_TASK_DIR" ]; then
+    [ -d "$F50_TASK_DIR" ] && [ -r "$F50_TASK_DIR" ] && [ -x "$F50_TASK_DIR" ] || { f50_recovery_block unknown_task_directory; return 1; }
+  fi
+  [ ! -e "$F50_DATA/clash.install.lock.d" ] || { f50_recovery_block install_transaction_unresolved; return 1; }
+  recovery_owner=
+  if [ -e "$F50_OPERATION_LOCK" ]; then
+    [ -d "$F50_OPERATION_LOCK" ] && [ -r "$F50_OPERATION_LOCK/owner" ] || { f50_recovery_block unknown_owner; return 1; }
+    recovery_owner=$(cat "$F50_OPERATION_LOCK/owner") || { f50_recovery_block unknown_owner; return 1; }
+    case "$recovery_owner" in
+      mm_*) case "$recovery_owner" in *[!A-Za-z0-9_-]*) f50_recovery_block unknown_owner; return 1;; esac;;
+      "rescue_$$") :;;
+      *) f50_recovery_block unknown_owner; return 1;;
+    esac
+    for recovery_entry in "$F50_OPERATION_LOCK"/* "$F50_OPERATION_LOCK"/.[!.]* "$F50_OPERATION_LOCK"/..?*; do
+      [ -e "$recovery_entry" ] || [ -L "$recovery_entry" ] || continue
+      case "$recovery_entry" in "$F50_OPERATION_LOCK/owner"|"$F50_OPERATION_LOCK/cancelled"|"$F50_OPERATION_LOCK/frontend") [ -f "$recovery_entry" ] || { f50_recovery_block unknown_lease_entry; return 1; };;
+        *) f50_recovery_block unknown_lease_entry; return 1;; esac
+    done
+    case "$recovery_owner" in mm_service_*)
+      recovery_pid=\${recovery_owner#mm_service_}
+      case "$recovery_pid" in ''|*[!0-9]*) f50_recovery_block unknown_owner; return 1;; esac
+      [ ! -d "$F50_PROC/$recovery_pid" ] || { f50_recovery_block active_service; return 1; };; esac
+  fi
+  for recovery_entry in "$F50_TASK_DIR"/* "$F50_TASK_DIR"/.[!.]* "$F50_TASK_DIR"/..?*; do
+    [ -e "$recovery_entry" ] || [ -L "$recovery_entry" ] || continue
+    [ -f "$recovery_entry" ] && [ ! -L "$recovery_entry" ] || { f50_recovery_block unknown_task; return 1; }
+    recovery_pid=$(cat "$recovery_entry") || { f50_recovery_block unknown_task; return 1; }
+    case "$recovery_pid" in ''|*[!0-9]*) f50_recovery_block unknown_task; return 1;; esac
+    if [ -d "$F50_PROC/$recovery_pid" ]; then
+      f50_stat "$recovery_pid" || { f50_recovery_block unknown_task; return 1; }
+      recovery_env=$(tr '\\000' '\\n' < "$F50_PROC/$recovery_pid/environ" 2>/dev/null) || { f50_recovery_block unknown_task; return 1; }
+      printf '%s\\n' "$recovery_env" | grep -qxF "KANO_TPROXY_TASK=$recovery_owner" || { f50_recovery_block task_owner_mismatch; return 1; }
+      f50_recovery_block active_task; return 1
+    fi
+    # A PID-only stale registry cannot prove the request result or be silently discarded.
+    f50_recovery_block stale_task_record; return 1
+  done
+  for recovery_proc in "$F50_PROC"/[0-9]*; do
+    [ -d "$recovery_proc" ] || continue
+    recovery_pid=\${recovery_proc##*/}
+    { IFS= read -r recovery_comm < "$recovery_proc/comm"; } 2>/dev/null || continue
+    case "$recovery_comm" in sh|bash|dash|mksh|toybox|busybox|timeout)
+      [ "$recovery_pid" != "$$" ] || continue
+      f50_stat "$recovery_pid" || { f50_recovery_block process_identity_unknown; return 1; }
+      case "$F50_STAT_STATE" in Z|X) continue;; esac
+      recovery_env=$(tr '\\000' '\\n' < "$recovery_proc/environ" 2>/dev/null) || { f50_recovery_block process_identity_unknown; return 1; }
+      if printf '%s\\n' "$recovery_env" | grep -q '^KANO_TPROXY_TASK=mm_'; then f50_recovery_block unreceipted_active_task; return 1; fi;;
+    esac
+  done
+  case "$recovery_owner" in mm_service_*|"rescue_$$"|'') ;; mm_*)
+    if [ ! -f "$F50_OPERATION_LOCK/frontend" ]; then
+      f50_recovery_block frontend_activity_unknown; return 1
+    else
+      read -r recovery_frontend_owner recovery_deadline recovery_extra < "$F50_OPERATION_LOCK/frontend" || { f50_recovery_block frontend_record_invalid; return 1; }
+      [ "$recovery_frontend_owner" = "$recovery_owner" ] && [ -z "$recovery_extra" ] || { f50_recovery_block frontend_owner_mismatch; return 1; }
+      case "$recovery_deadline" in ''|*[!0-9]*) f50_recovery_block frontend_record_invalid; return 1;; esac
+      read -r recovery_uptime recovery_idle < /proc/uptime || { f50_recovery_block frontend_clock_unknown; return 1; }
+      [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || { f50_recovery_block active_frontend; return 1; }
+    fi;; esac
+  [ -z "$recovery_owner" ] && echo F50_RECOVERY_STATE=idle || echo F50_RECOVERY_STATE=quiescent_lease
+  echo F50_RECOVERY_ELIGIBLE=1
+}
+`; }
+
+function buildF50LeaseFunctions(includeFrontend = true) { return `umask 077
+F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
+F50_TASK_DIR=\${F50_TASK_DIR:-/dev/kano_tproxy_tasks}
+${includeFrontend ? `F50_RECOVERY_LOCK=\${F50_RECOVERY_LOCK:-/dev/kano_tproxy_recovery.lock}
+f50_writer_enter() {
+  [ ! -L "$F50_RECOVERY_LOCK" ] || { echo F50_OPERATION_UNSAFE_PATH; return 1; }
+  writer_tries=0
+  until mkdir "$F50_RECOVERY_LOCK" 2>/dev/null; do
+    writer_tries=$((writer_tries + 1))
+    [ "$writer_tries" -lt 20 ] || { echo F50_OPERATION_RECOVERY_BUSY; return 1; }
+    sleep 0.1
+  done
+  writer_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$$/stat) || return 1
+  case "$writer_start" in ''|*[!0-9]*) rmdir "$F50_RECOVERY_LOCK"; return 1;; esac
+  printf '%s %s\\n' "$$" "$writer_start" > "$F50_RECOVERY_LOCK/owner" || { rmdir "$F50_RECOVERY_LOCK"; return 1; }
+  trap 'f50_writer_leave' EXIT
+}
+f50_writer_leave() {
+  trap - EXIT
+  read -r writer_pid writer_start < "$F50_RECOVERY_LOCK/owner" || return 1
+  [ "$writer_pid" = "$$" ] && [ "$writer_start" = "$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$$/stat)" ] || return 1
+  rm -f "$F50_RECOVERY_LOCK/owner" && rmdir "$F50_RECOVERY_LOCK"
+}
+f50_frontend_write() {
+  [ ! -L "$F50_OPERATION_LOCK/frontend" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
+    [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$1" ] || { echo F50_OPERATION_OWNER_CHANGED; return 1; }
+  frontend_deadline=0
+  if [ "$2" != ended ]; then
+    read -r frontend_uptime frontend_idle < /proc/uptime || return 1
+    frontend_now=\${frontend_uptime%%.*}
+    case "$frontend_now" in ''|*[!0-9]*) return 1;; esac
+    frontend_deadline=$((frontend_now + 120))
+  fi
+  printf '%s %s\\n' "$1" "$frontend_deadline" > "$F50_OPERATION_LOCK/frontend.$$" &&
+    mv -f "$F50_OPERATION_LOCK/frontend.$$" "$F50_OPERATION_LOCK/frontend" || return 1
+  return 0
+}
+f50_frontend_touch() {
+  f50_writer_enter || return 1
+  f50_frontend_write "$@"; frontend_rc=$?
+  f50_writer_leave || return 1
+  [ "$frontend_rc" != 0 ] || echo F50_FRONTEND_RECORDED=1
+  return "$frontend_rc"
+}
+` : ''}f50_lease_acquire() {
+  lease_tag=$1
+  case "$lease_tag" in mm_*) ;; *) echo F50_OPERATION_INVALID_OWNER; return 1 ;; esac
+  [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_TASK_DIR" ] || { echo F50_OPERATION_UNSAFE_PATH; return 1; }
+${includeFrontend ? '  if [ "$2" = browser ]; then f50_writer_enter || return 1; fi\n' : ''}  if mkdir "$F50_OPERATION_LOCK" 2>/dev/null; then
+    chmod 700 "$F50_OPERATION_LOCK" || return 1
+    printf '%s\\n' "$lease_tag" > "$F50_OPERATION_LOCK/owner" || return 1
+  fi
+  [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
+  [ ! -e "$F50_OPERATION_LOCK/cancelled" ] && [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_BUSY; return 1; }
+${includeFrontend ? '  if [ "$2" = browser ]; then f50_frontend_write "$lease_tag" running && f50_writer_leave || return 1; fi\n' : ''}  echo F50_LEASE_ACQUIRED=1
+}
+f50_lease_release() {
+  lease_tag=$1
+  if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1; return 0; fi
+  [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
+  [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_OWNER_CHANGED; return 1; }
+  [ ! -e "$F50_OPERATION_LOCK/cancelled" ] || { echo F50_OPERATION_RECOVERY_REQUIRED; return 1; }
+  for lease_task in "$F50_TASK_DIR/$lease_tag."*; do
+    [ ! -e "$lease_task" ] || { echo F50_OPERATION_WORKER_REMAINS; return 1; }
+  done
+${includeFrontend ? '  [ ! -L "$F50_OPERATION_LOCK/frontend" ] || return 1\n  rm -f "$F50_OPERATION_LOCK/frontend" ' : '  rm -f '}"$F50_OPERATION_LOCK/owner" && rmdir "$F50_OPERATION_LOCK" || return 1
+  echo F50_LEASE_RELEASED=1
+}
+`; }
+
+function buildF50ServiceLeaseGate() { return buildF50LeaseFunctions(false) + "\n" + `# Serialize direct boot/CLI mutations with browser operations; no stale lock is stolen.
+case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped) ;;
+*)
+  if [ "\${F50_SERVICE_LEASED:-0}" != 1 ]; then
+    case "\${KANO_TPROXY_TASK:-}" in
+      mm_*)
+        [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] &&
+          [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
+          [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$KANO_TPROXY_TASK" ] || { echo F50_ERROR=operation_busy; exit 1; }
+        export F50_SERVICE_LEASED=1
+        ;;
+      *)
+        direct_tag=mm_service_$$
+        f50_lease_acquire "$direct_tag" || { echo F50_ERROR=operation_busy; exit 1; }
+        KANO_TPROXY_TASK="$direct_tag" F50_SERVICE_LEASED=1 sh "$0" "$@"
+        direct_rc=$?
+        f50_lease_release "$direct_tag" || { echo F50_ERROR=operation_release_unverified; exit 1; }
+        exit "$direct_rc"
+        ;;
+    esac
+  fi
+  # An inherited recursion flag is not evidence of a current lease.
+  [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] &&
+    [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
+    [ -n "$KANO_TPROXY_TASK" ] &&
+    [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$KANO_TPROXY_TASK" ] || { echo F50_ERROR=operation_busy; exit 1; }
+  if [ -d "\${CLASH_ROOT%/*}/clash.install.lock.d" ] && [ -z "\${F50_INSTALL_TRANSACTION:-}" ]; then
+    echo F50_ERROR=install_transaction_pending; exit 1
+  fi
+  for pending_config in "$CLASH_ROOT/Proxy/config.yaml.kano_tx" "$CLASH_ROOT/Tools/template.yaml.kano_tx" "$CLASH_ROOT/Tools/template.base.yaml.kano_tx"; do
+    [ ! -d "$pending_config" ] || { echo F50_ERROR=config_transaction_pending; exit 1; }
+  done
+  ;;
+esac
+`; }
+
+function buildF50ConfigTransactionFunctions() { return `f50_config_tx_recover() (
+  target=$1; source_file=$2; tx="$target.kano_tx"
+  [ -e "$tx" ] || [ -L "$tx" ] || exit 0
+  [ -d "$tx" ] && [ ! -L "$tx" ] && [ ! -L "$target" ] && [ ! -L "$source_file" ] || { echo F50_ERROR=config_transaction_unsafe_path; exit 1; }
+  [ "$(cat "$tx/format" 2>/dev/null)" = F50_CONFIG_TX_V1 ] || { echo F50_ERROR=config_transaction_unknown; exit 1; }
+  if [ -f "$tx/ready" ] && [ ! -f "$tx/committed" ]; then
+    f50_restore_pair_file() {
+      name=$1; dest=$2
+      [ ! -L "$tx/$name" ] && [ ! -L "$dest" ] || return 1
+      if [ -f "$tx/$name.had" ] && [ -f "$tx/$name" ]; then
+        cp -p "$tx/$name" "$dest.kano_recover.$$" && chmod 600 "$dest.kano_recover.$$" && mv -f "$dest.kano_recover.$$" "$dest" || return 1
+      elif [ -f "$tx/$name.absent" ]; then rm -f "$dest" || return 1
+      else return 1
+      fi
+    }
+    restore_ok=1
+    f50_restore_pair_file config "$target" || restore_ok=0
+    if [ -f "$tx/with_source" ]; then f50_restore_pair_file source "$source_file" || restore_ok=0; fi
+    [ "$restore_ok" = 1 ] || { echo "F50_RECOVERY_CONFIG=$tx"; echo F50_ERROR=config_transaction_restore_failed; exit 1; }
+    echo F50_CONFIG_TRANSACTION_RESTORED=1
+  fi
+  rm -rf "$tx" || exit 1
+)
+`; }
+
+function f50AssertSafeJsonNumbers(value) {
+  if (typeof value === 'number' && (!Number.isFinite(value) || Number.isInteger(value) && !Number.isSafeInteger(value))) throw new Error('YAML number exceeds safe JSON precision; use a quoted string');
+  if (Array.isArray(value)) value.forEach(f50AssertSafeJsonNumbers);
+  else if (value && typeof value === 'object') Object.values(value).forEach(f50AssertSafeJsonNumbers);
+}
+
+function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
+  let providers='\u672a\u786e\u8ba4';
+  if (provider.success) {
+    try {
+      const value=JSON.parse(provider.responseText || '');
+      if (!value.providers || typeof value.providers!=='object') throw Error('invalid provider snapshot');
+      const entries=Object.values(value.providers);
+      const known=entries.filter(item=>Array.isArray(item?.proxies));
+      providers=known.length===entries.length ? `${entries.length} \u4e2a\u6765\u6e90\uff0c${known.reduce((n,item)=>n+item.proxies.length,0)} \u4e2a\u5df2\u52a0\u8f7d\u8282\u70b9` : '\u90e8\u5206\u6765\u6e90\u72b6\u6001\u672a\u786e\u8ba4';
+    } catch (_) { providers='\u54cd\u5e94\u683c\u5f0f\u65e0\u6cd5\u786e\u8ba4'; }
+  }
+  return {core:pid?'\u8fdb\u7a0b\u5b58\u5728':'\u672a\u786e\u8ba4\u8fd0\u884c',
+    api:api.success?'\u53ef\u8bbf\u95ee':'\u4e0d\u53ef\u8bbf\u95ee\u6216\u672a\u786e\u8ba4',
+    takeover:'\u672a\u505a\u6570\u636e\u9762\u5b9e\u6d4b\uff08\u4e0d\u4ee5\u8fdb\u7a0b\u6216 API \u53d6\u4ee3\uff09',
+    panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'\u53ef\u8bbf\u95ee':'\u4e0d\u53ef\u8bbf\u95ee\u6216\u672a\u786e\u8ba4',providers,
+    connectivity:'\u672a\u6d4b\u8bd5\uff08\u5df2\u52a0\u8f7d\u8282\u70b9\u4e0d\u4ee3\u8868\u53ef\u8fde\u901a\uff09'};
+}
+
+const F50_TRUSTED_SERVICE_HASHES = ["5cff3c10fc2f556fa1ac7c5ba204ab2168b143da1ffcb6c82a444700c5a7dd25","08a32d4aed30e4dceb32cc8bc3d8df33d2ae70e0e9b203f816db7fdf71edf3ab","84bf02d2dc8f6e391415a4b0c2f59c462b2fa974711dd795eb6b69005405e1ec","8ac8749f149c3d5aae7e49ecd192ae8894e2a3a48af8ed56086fc16c0e473dfc"];
+
 function buildF50RedactFunction() { return `f50_redact() {
   awk '{
     low=tolower($0)
@@ -118,6 +450,15 @@ command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50
 # F50 uses ARM64; the bundled ARMv7 controller has a different binary layout.
 for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
+  [ ! -L "$BIN" ] || { echo F50_ERROR=controller_http_patch_symlink; exit 1; }
+  command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_hash_tool_missing; exit 1; }
+  [ "$(cat "$ROOT/Tools/f50-controller.version" 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_ERROR=controller_http_patch_version_mismatch; exit 1; }
+  PATCH_HASH=$(sha256sum "$BIN" | awk '{print $1}')
+  case "$PATCH_HASH" in
+    0880e42c78dea90ce7dc3e946df0174308388c126b1eab17a643d85a145744c7) ;;
+    532fdfa4901aa31906a25b7b3f7fa96c92ce6b530df297ba4d8f4ab9c5a2ad07) ;;
+    *) echo F50_ERROR=controller_http_patch_unknown_build; exit 1 ;;
+  esac
   FOUND=1
   OLD=0; CURRENT=0
   for SPEC in ${specs}; do
@@ -133,8 +474,17 @@ EOF_F50_HTTP_SPEC
   [ "$OLD" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || [ "$CURRENT" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
 done
 [ "$FOUND" = 1 ] || { echo F50_BACKEND_MISSING; exit 1; }
+if [ "$CURRENT" = 8 ]; then echo F50_CONTROLLER_HTTP_PATCH=already_current; exit 0; fi
 for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
+  ORIGINAL="$BIN.http.original"
+  [ ! -L "$ORIGINAL" ] || { echo F50_ERROR=controller_http_patch_backup_symlink; exit 1; }
+  if [ -e "$ORIGINAL" ]; then
+    [ "$(sha256sum "$ORIGINAL" | awk '{print $1}')" = 0880e42c78dea90ce7dc3e946df0174308388c126b1eab17a643d85a145744c7 ] || { echo F50_ERROR=controller_http_patch_backup_mismatch; exit 1; }
+  else
+    NEW="$BIN.http.$$"
+    cp -p "$BIN" "$NEW" && chmod 600 "$NEW" && mv "$NEW" "$ORIGINAL" || { echo F50_ERROR=controller_http_patch_backup_failed; exit 1; }
+  fi
   NEW="$BIN.http.$$"
   cp -p "$BIN" "$NEW" || exit 1
   for SPEC in ${specs}; do
@@ -146,13 +496,14 @@ EOF_F50_HTTP_SPEC
     ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
     [ "$ACTUAL" = "$AFTER" ] || { echo F50_ERROR=controller_http_patch_verify_failed; exit 1; }
   done
+  [ "$(sha256sum "$NEW" | awk '{print $1}')" = 532fdfa4901aa31906a25b7b3f7fa96c92ce6b530df297ba4d8f4ab9c5a2ad07 ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
   chmod 755 "$NEW" || exit 1
   if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
   NEW=''
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=12
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=13
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -182,7 +533,8 @@ f50_restore_original_config() {
     (.dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"]))) |
     (select(strenv(F50_PRESERVE_HTTP_PROVIDER) != "1"),
       (select(strenv(F50_PRESERVE_HTTP_PROVIDER) == "1") | ."proxy-providers" = $original."proxy-providers" | del(."x-f50-provider-sources"))) |
-    select(strenv(F50_CONFIG_SOURCE) != "subscription_original")))
+    select(strenv(F50_CONFIG_SOURCE) != "subscription_original"))) |
+    .secret = ($original.secret // .secret)
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
   F50_CONFIG_TEST_RC=$?
@@ -204,6 +556,7 @@ f50_restore_original_config() {
   rm -f "$F50_ORIGINAL_CONFIG"
   trap - EXIT
 }
+${buildF50ServiceLeaseGate()}
 case "$1" in start|restart|boot)
   if [ "\${F50_SERVICE_CAPTURED:-0}" != 1 ]; then
     f50_service_output=$(F50_SERVICE_CAPTURED=1 sh "$0" "$@" 2>&1)
@@ -216,11 +569,102 @@ case "$1" in start|restart|boot)
   ;;
 esac
 `; }
+function buildF50CurlLocator() { return `# KANO_CURL_ABSOLUTE=1
+f50_find_curl() {
+  F50_CURL_BIN=
+  for curl_candidate in /data/data/com.minikano.f50_sms/files/curl /data/kano_tproxy_tools/bin/curl "$(command -v curl 2>/dev/null)"; do
+    case "$curl_candidate" in /*) ;; *) continue;; esac
+    [ -f "$curl_candidate" ] && [ -x "$curl_candidate" ] || continue
+    "$curl_candidate" --version >/dev/null 2>&1 || continue
+    F50_CURL_BIN=$curl_candidate
+    return 0
+  done
+  echo F50_ERROR=curl_executable_unavailable
+  return 1
+}
+`; }
+
+function buildF50ServiceCurlPatchScript(service) { return `(set -e
+SERVICE=${service}
+[ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
+TMP="$SERVICE.audit5.$$"; BACKUP="$SERVICE.audit5-backup.$$"; FUNCTIONS="$TMP.functions"
+umask 077
+patch_committed=0
+patch_finish() {
+  patch_rc=$?
+  trap - EXIT HUP INT TERM
+  if [ "$patch_rc" != 0 ] && [ "$patch_committed" = 1 ]; then
+    if mv -f "$BACKUP" "$SERVICE" && [ "$(sha256sum "$SERVICE" | awk '{print $1}')" = "$old_hash" ]; then echo F50_SERVICE_PATCH_ROLLBACK=verified
+    else echo F50_ERROR=service_patch_rollback_failed; echo "F50_SERVICE_PATCH_BACKUP=$BACKUP"; exit 1; fi
+  fi
+  rm -f "$TMP" "$FUNCTIONS" || patch_rc=1
+  if [ "$patch_rc" = 0 ]; then rm -f "$BACKUP" || patch_rc=1; fi
+  exit "$patch_rc"
+}
+trap patch_finish EXIT
+trap 'exit 130' HUP INT TERM
+printf '%s' ${shellQuote(buildF50CurlLocator())} > "$FUNCTIONS"
+if grep -qx '# KANO_CURL_ABSOLUTE=1' "$SERVICE"; then
+  # A marker alone cannot certify a partially edited Service.
+  awk '/^# KANO_CURL_ABSOLUTE=1$/ {copy=1} copy {print} copy && /^}$/ {exit}' "$SERVICE" > "$TMP"
+  cmp -s "$TMP" "$FUNCTIONS" && grep -qF 'code=$("$F50_CURL_BIN" -sS --noproxy' "$SERVICE" &&
+    grep -qx '  f50_find_curl || return 1' "$SERVICE" && grep -qF 'F50_SERVICE_FINALIZED=0' "$SERVICE" && sh -n "$SERVICE" || { echo F50_ERROR=service_curl_patch_mismatch; exit 1; }
+else
+  awk -v functions="$FUNCTIONS" '
+    /^repair_panel_config\\(\\) \\{/ {while((getline line < functions)>0) print line; close(functions); helpers++}
+    /^  auth=/ {print "  f50_find_curl || return 1"; locators++}
+    /^  code=\\$\\(curl -sS --noproxy / {sub(/\\$\\(curl /,"$(\\"$F50_CURL_BIN\\" "); calls++}
+    /^  reload_rc=\\$\\?/ {print; print "  if [ \\"$reload_rc\\" = 0 ] && [ \\"$code\\" != 000 ]; then echo F50_API_AVAILABLE=1; else echo F50_API_AVAILABLE=0; fi"; next}
+    /^    echo "F50_ERROR=panel_config_reload_failed/ {print "    echo F50_PANEL_RELOAD_OK=0"}
+    /^  echo F50_PANEL_CONFIG_RELOADED=1$/ {print "  echo F50_PANEL_RELOAD_OK=1"}
+    /^    repair_panel_config \\|\\| exit 1$/ {print "    echo F50_CORE_STARTED=1"; print "    repair_panel_config || { echo F50_SERVICE_FINALIZED=0; exit 1; }"; finalizers++; next}
+    /^exit 0$/ {print "case \\"$action\\" in start|restart|boot) echo F50_SERVICE_BODY_FINALIZED=1;; esac"}
+    {print}
+    END {if(helpers!=1 || calls!=1 || locators!=1 || finalizers!=1) exit 1}
+  ' "$SERVICE" > "$TMP" || { echo F50_ERROR=service_curl_patch_shape; exit 1; }
+  sh -n "$TMP" || exit 1
+  service_mode=$(stat -c '%a' "$SERVICE") || exit 1
+  case "$service_mode" in ''|*[!0-7]*) exit 1;; esac
+  chmod "$service_mode" "$TMP" || exit 1
+  old_hash=$(sha256sum "$SERVICE" | awk '{print $1}')
+  cp -p "$SERVICE" "$BACKUP" && [ "$(sha256sum "$BACKUP" | awk '{print $1}')" = "$old_hash" ] || exit 1
+  expected_hash=$(sha256sum "$TMP" | awk '{print $1}')
+  # Set before rename so a post-commit signal restores the original.
+  patch_committed=1
+  mv -f "$TMP" "$SERVICE" || exit 1
+  [ "$(sha256sum "$SERVICE" | awk '{print $1}')" = "$expected_hash" ] && sh -n "$SERVICE" || { echo F50_ERROR=service_curl_patch_verify; exit 1; }
+fi
+echo F50_SERVICE_CURL_PATCH_OK=1
+)`; }
+
 function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE)) {
   const functions = buildF50OriginalConfigFunctions();
+  const tunCleanup = buildF50NetworkCompatHelpers().split('f50_disable_unsupported_ipv6_dns_hijack() {')[0]
+    .replace('f50_drop_detached_tun_rules()', 'drop_detached_tun_rules()');
   return `(set -e
 SERVICE=${service}
-grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=12' "$SERVICE" && exit 0
+if ! grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$SERVICE"; then
+  TMP="$SERVICE.tun.$$"
+  FUNCTIONS="$TMP.functions"
+  umask 077
+  trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+  printf '%s' ${shellQuote(tunCleanup)} > "$FUNCTIONS" || exit 1
+  awk -v functions="$FUNCTIONS" '
+    /^drop_detached_tun_rules\\(\\) \\{/ {
+      while ((getline line < functions) > 0) print line
+      close(functions); replaced++; skipping=1; next
+    }
+    skipping { if($0=="}") skipping=0; next }
+    { print }
+    END { if(replaced!=1 || skipping) exit 1 }
+  ' "$SERVICE" > "$TMP" || exit 1
+  sh -n "$TMP" || exit 1
+  chmod 755 "$TMP" || exit 1
+  mv -f "$TMP" "$SERVICE" || exit 1
+  rm -f "$FUNCTIONS"
+  trap - EXIT
+fi
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=13' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
@@ -229,7 +673,7 @@ printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -257,6 +701,15 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
   $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
   $0 == "  start|restart)" { $0 = "  start|restart|boot)" }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
+  $0 == "    validate_zashboard || restore_zashboard || exit 1" {
+    print "    if ! validate_zashboard; then"
+    print "      panel_restore_output=$(restore_zashboard 2>&1); panel_restore_rc=$?"
+    print "      printf \\"%s\\\\n\\" \\"$panel_restore_output\\" | sed " sprintf("%c",39) "s/^F50_ERROR=/F50_WARNING=/" sprintf("%c",39)
+    print "      [ \\"$panel_restore_rc\\" = 0 ] || echo F50_WARNING=panel_files_unavailable"
+    print "    fi"
+    next
+  }
+  index($0,"start:*|restart:*|policy:apply") { sub(/start:/,"boot:*|start:") }
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
   END { if (helpers != 1 || saved != 1 || restored != 1 || panel_open) exit 1 }
@@ -264,6 +717,10 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
 sh -n "$TMP" || exit 1
 chmod 755 "$TMP" || exit 1
 mv -f "$TMP" "$SERVICE" || exit 1
+rm -f "$FUNCTIONS"
+trap - EXIT
+fi
+${buildF50ServiceCurlPatchScript(service)} || exit 1
 )`;
 }
 async function ensureOriginalSubscriptionService() {
@@ -295,6 +752,11 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const cause = backend || cleanup || code;
   const labels = {
     zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
+    archive_size_unknown: '\u65e0\u6cd5\u786e\u8ba4 ZIP \u89e3\u538b\u540e\u5927\u5c0f\uff0c\u672a\u5b89\u88c5\u3002',
+    data_space_insufficient_for_archive: '\u5b58\u50a8\u7a7a\u95f4\u4e0d\u8db3\u4ee5\u5b8c\u6210\u89e3\u538b\u548c\u56de\u6eda\uff0c\u672a\u66ff\u6362\u7ec4\u4ef6\u3002',
+    controller_http_patch_unknown_build: '\u63a7\u5236\u5668\u6574\u4f53\u54c8\u5e0c\u4e0d\u5339\u914d\uff0c\u5df2\u62d2\u7edd\u5b9a\u4f4d\u8865\u4e01\u3002',
+    config_transaction_pending: '\u5b58\u5728\u672a\u5b8c\u6210\u7684\u914d\u7f6e\u4e8b\u52a1\uff0c\u8bf7\u5148\u6062\u590d\u7f51\u7edc\u3002',
+    install_transaction_pending: '\u5b89\u88c5\u4e8b\u52a1\u672a\u5b8c\u6210\uff0c\u5df2\u963b\u6b62\u542f\u52a8\uff1b\u4fdd\u7559\u7684\u4e8b\u52a1\u65e5\u5fd7\u53ef\u7528\u4e8e\u56de\u6eda\u3002',
     data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
     unzip_missing: '设备缺少解压程序，安装未执行。',
     archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
@@ -322,10 +784,12 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     configuration_missing: '组件包没有初始配置，原安装保持不变。',
     old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
     old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
+    finalization_failed: '\u5b89\u88c5\u4e8b\u52a1\u6536\u5c3e\u672a\u5b8c\u6210\u3002',
     installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
     preserve_user_data_failed: '保留用户配置失败，已取消安装。',
     commit_failed: '组件目录替换失败，请查看回滚结果。',
     network_apply_failed: '\u7f51\u7edc\u63a5\u7ba1\u5e94\u7528\u5931\u8d25\uff0c\u8bf7\u67e5\u770b\u5177\u4f53\u9632\u706b\u5899\u6216\u8def\u7531\u9519\u8bef\u3002',
+    service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
     service_failed: '\u670d\u52a1\u811a\u672c\u6267\u884c\u5931\u8d25\u3002',
     start_timeout: '\u6838\u5fc3\u542f\u52a8\u8d85\u65f6\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
     activation_unverified: '\u670d\u52a1\u672a\u8fd4\u56de\u542f\u52a8\u786e\u8ba4\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
@@ -339,7 +803,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
     owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
   };
-  let summary = labels[code] || cause || lines.find(line => line.trim()) || fallback;
+  let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
   if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';
   if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
@@ -355,21 +819,31 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const rollback = get('F50_ROLLBACK');
   if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚未完成：' + rollback;
   else if (rollback === 'restored') summary += ' 已恢复安装前状态。';
-  const keyLines = lines.filter(line => /^(F50_(?:INSTALL_(?:CODE|CAUSE)|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|START_SERVICE_RC|START_STATE)=/.test(line));
+  const componentsInstalled = get('F50_INSTALL_COMPONENTS_OK') === '1';
+  const transactionState = get('F50_INSTALL_TRANSACTION_STATE') || 'unknown';
+  if (componentsInstalled && transactionState !== 'complete') {
+    const installed = get('F50_INSTALL_STATUS') === 'installed_running'
+      ? '\u7ec4\u4ef6\u5df2\u5b89\u88c5\u5e76\u542f\u52a8' : '\u7ec4\u4ef6\u5df2\u5b89\u88c5\uff0c\u4fdd\u6301\u505c\u6b62';
+    const warning = lines.filter(line => /^F50_INSTALL_WARNING=(?!previous_components_retained$)/.test(line)).pop() || '';
+    const reason = warning.slice('F50_INSTALL_WARNING='.length) || code || transactionState;
+    summary = installed + '\uff1b\u4e8b\u52a1\u6536\u5c3e\u672a\u5b8c\u6210\uff08' + reason + '\uff09\uff0c\u672a\u6267\u884c\u7ec4\u4ef6\u56de\u6eda\u3002';
+  }
+  const keyLines = lines.filter(line => /^(F50_(?:INSTALL_[A-Z_]+|CONFIG_STATE|BACKUP_LEFT|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|KANO_INSTALL_OK|START_SERVICE_RC|START_STATE)=/.test(line));
   const details = safe.length <= 6000 ? safe : keyLines.slice(0, 12).join('\n').slice(0, 2500) + '\n[OUTPUT_TRUNCATED]\n' + safe.slice(-3500);
-  return {code, summary: summary.slice(0, 280), details, serviceRc, rollback, ok: false};
+  return {code, summary: summary.slice(0, 280), details, serviceRc, rollback, componentsInstalled, transactionState, ok: false};
 }
 function f50Error(content) { return f50Diagnostic(content).summary; }
 
 function f50StartResult(response = {}, fallback = '') {
-  const diagnostic = f50Diagnostic(response.content || fallback, '\u670d\u52a1\u672a\u8fd4\u56de\u542f\u52a8\u786e\u8ba4');
-  const text = diagnostic.details;
-  const marked = /^F50_START_OK=1$/m.test(text) && /^START_STATE=started_verified_process$/m.test(text);
-  const ok = marked && !/^F50_ERROR=|^F50_START_OK=0$/m.test(text);
-  const code = (text.match(/^F50_START_CODE=(.+)$/m) || [])[1] || diagnostic.code || (ok ? 'started' : 'start_result_unknown');
-  return {...response, ok, success: ok, code, detail: text, content: text,
-    summary: ok ? '\u6838\u5fc3\u4e0e\u63a5\u7ba1\u89c4\u5219\u5df2\u542f\u52a8' : diagnostic.summary,
-    serviceRc: diagnostic.serviceRc, transportOk: response.success === true};
+  const diagnostic=f50Diagnostic(response.content || fallback);
+  const text=diagnostic.details, lines=text.split(/\r?\n/);
+  const last=(name)=>{const value=lines.filter(line=>line.startsWith(name+'=')).pop();return value?value.slice(name.length+1):'';};
+  const ok=response.success===true && last('F50_START_OK')==='1' && last('START_STATE')==='started_verified_process' && !/^F50_ERROR=/m.test(text);
+  const panelFailed=last('F50_HEALTH_PANEL')==='failed';
+  const coreStarted=last('START_STATE')==='started_verified_process';
+  return {...response,ok,success:ok,code:last('F50_START_CODE') || diagnostic.code || (ok?'started':'start_result_unknown'),
+    detail:text,content:text,panelFailed,coreStarted,finalized:ok,summary:ok ? (panelFailed?'\u6838\u5fc3\u5df2\u542f\u52a8\uff1bZashboard \u6682\u4e0d\u53ef\u7528':'\u6838\u5fc3\u542f\u52a8\u5df2\u786e\u8ba4\uff1b\u5b9e\u9645\u4ee3\u7406\u8fde\u901a\u6027\u672a\u6d4b\u8bd5') : diagnostic.summary,
+    serviceRc:diagnostic.serviceRc,transportOk:response.success===true};
 }
 const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
   kano_log_size=$(wc -c < '/data/clash/Proxy/Clash.log' 2>/dev/null || echo 0)
@@ -427,6 +901,9 @@ async function performF50Uninstall() {
 
 async function f50Command(action, timeout = 60000) {
   if (!(await ensureCompatBackend())) return { success: false, content: 'F50_BACKEND_REQUIRED' };
+  if (/^(?:stop|recover|restart)$/.test(action) && !(await ensureOriginalSubscriptionService())) {
+    return { success: false, content: 'F50_ERROR=tun_rule_cleanup_patch_failed' };
+  }
   return runShellWithRoot("[ \"$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)\" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }\nsh " + shellQuote(CLASH_SERVICE) + ' ' + action, timeout);
 }
 let f50PackageInput = null;
@@ -555,6 +1032,7 @@ f50_scan() {
               ps_args=$(tr '\\000' '\\n' < "$ps_dir/cmdline" 2>/dev/null)
               ps_index=0; ps_script=0; ps_action=
               while IFS= read -r ps_arg; do
+                if [ "$ps_kind" = core ]; then case "$ps_arg" in -t|--test) ps_kind=config_test ;; esac; fi
                 if [ "$ps_index" = 1 ]; then
                   case "\${ps_exe##*/}" in clashctl*) ps_action=$ps_arg ;; esac
                 fi
@@ -654,7 +1132,7 @@ f50_save() {
 f50_firewall_plan() {
   # Tokenize save/-S output without eval; comments can contain spaces, quotes and fake '-j' text.
   awk -v bin="$1" '
-  function owned(c){return c ~ /^KANO_F50_[A-Za-z0-9_]+$/ || c ~ /^KANO_(POLICY_PRE|POLICY|DNS_HIJACK|DNS|QUIC_BLOCK|QUIC|MAC_BYPASS|PR_FWD)(_A|_B)?$/}
+  function owned(c){return c ~ /^KANO_F50_(PRE|DNS|FWD|POST|INPUT)$/ || c ~ /^KANO_(POLICY_PRE|POLICY|DNS_HIJACK|DNS|QUIC_BLOCK|QUIC|MAC_BYPASS|PR_FWD)(_A|_B)?$/}
   function words(s,a, i,c,q,esc,k,v,started){
     for(i in a)delete a[i]; k=0;v="";q="";esc=0;started=0;
     for(i=1;i<=length(s);i++){c=substr(s,i,1);
@@ -675,8 +1153,7 @@ f50_firewall_plan() {
   /^-A /{
     n=words($0,a);if(n<2){bad=1;next};target="";mark="";port="";
     for(i=3;i<n;i++){if(a[i]=="--comment"){i++;continue};if(a[i]=="-j"||a[i]=="-g")target=a[i+1];if(a[i]=="--on-port")port=a[i+1];if(a[i]=="--tproxy-mark")mark=a[i+1]}
-    native=(target=="TPROXY"&&port=="7895"&&(mark=="0x10000000/0x10000000"||mark=="268435456/268435456"));
-    if(!owned(a[2])&&(owned(target)||native)){begin();arg("-D");for(i=2;i<=n;i++)arg(a[i]);print "!"}
+    if(!owned(a[2])&&owned(target)){begin();arg("-D");for(i=2;i<=n;i++)arg(a[i]);print "!"}
   }
   END{
     for(c in chains){split(c,p,SUBSEP);table=p[1];begin();arg("-F");arg(p[2]);print "!"}
@@ -694,14 +1171,25 @@ f50_ip_snapshot() {
 f50_routes_plan() {
   awk -v family="$1" '
   function val(k, i){for(i=2;i<NF;i++)if($i==k)return $(i+1);return ""}
+  function canonical( i,k){
+    if(val("from")!="all")return 0;
+    for(i=2;i<=NF;i++){
+      k=$i;
+      if(k ~ /^\\[.*\\]$/)continue;
+      if(k=="proto"||k=="protocol"){i++;continue}
+      if(k=="from"||k=="fwmark"||k=="iif"||k=="lookup"){i++;continue}
+      return 0
+    }
+    return 1
+  }
   function arg(s){print "a" s}
   function begin(){print "@";arg("ip");arg(family)}
   FNR==NR{
     t=val("lookup");p=$1;sub(/:$/,"",p);m=val("fwmark");d=val("iif");
     # ip rule show may append display-only tokens such as [detached]; rebuild commands from owned fields only.
-    if(p=="1777"&&t=="17666"&&(m=="0x10000000/0x10000000"||m=="268435456/268435456")){
+    if(canonical()&&d==""&&p=="1777"&&t=="17666"&&(m=="0x10000000/0x10000000"||m=="268435456/268435456")){
       begin();arg("rule");arg("del");arg("pref");arg(p);arg("fwmark");arg(m);arg("lookup");arg(t);print "!"
-    } else if(p=="1776"&&t=="17667"&&(d=="lo"||d=="KanoTun")){
+    } else if(canonical()&&m==""&&p=="1776"&&t=="17667"&&(d=="lo"||d=="KanoTun")){
       begin();arg("rule");arg("del");arg("pref");arg(p);arg("iif");arg(d);arg("lookup");arg(t);print "!"
     }
     else if(t=="17666"||t=="17667")foreign[t]=1;
@@ -729,7 +1217,17 @@ f50_network_snapshot() {
     cat "$nw_dir/ip$nw_family.plan" >> "$nw_dir/plan" || return 1
   done
   f50_ip_snapshot "$nw_dir/links" -o link show || return 1
-  awk '$2 ~ /^KanoTun(:|@)/{print "@\\naip\\nalink\\nadelete\\naKanoTun\\n!"}' "$nw_dir/links" >> "$nw_dir/plan"
+  if awk '$2 ~ /^KanoTun(:|@)/{found=1} END{exit !found}' "$nw_dir/links"; then
+    if [ -r "$F50_SYSNET/KanoTun/tun_flags" ] && awk '
+      {dev="";tab="";proto="";for(i=1;i<NF;i++){if($i=="dev")dev=$(i+1);if($i=="table")tab=$(i+1);if($i=="proto")proto=$(i+1)}
+       if(dev=="KanoTun"&&(tab=="17666"||tab=="17667")&&proto=="242")found=1}
+      END{exit !found}' "$nw_dir/routes4" "$nw_dir/routes6"; then
+      printf '@\\naip\\nalink\\nadelete\\naKanoTun\\n!\\n' >> "$nw_dir/plan"
+    else
+      echo F50_CLEAN_ERROR=tun_ownership_unverified
+      return 1
+    fi
+  fi
 }
 f50_execute_plan() {
   plan_file=$1; plan_bad=0; set --
@@ -751,16 +1249,36 @@ f50_execute_plan() {
   [ "$plan_bad" = 0 ]
 }
 `; }
-function buildF50NetworkCompatHelpers() { return `f50_drop_detached_tun_rules() {
+function buildF50NetworkCompatHelpers() { return `# KANO_TUN_RULE_CLEANUP=2
+f50_drop_detached_tun_rules() {
+  case "$1" in stop|recover|restart) tun_cleanup_active=1 ;; *) tun_cleanup_active=0 ;; esac
   for detached_family in 4 6; do
     detached_rules=$(ip -"$detached_family" rule show 2>/dev/null) || continue
-    if printf '%s\n' "$detached_rules" | grep -Fq 'iif KanoTun [detached] lookup 17667'; then
-      ip -"$detached_family" rule del pref 1776 iif KanoTun lookup 17667 || {
+    tun_rule_fields=$(printf '%s\\n' "$detached_rules" | awk -v active="$tun_cleanup_active" '
+      {
+        p=$1; sub(/:$/, "", p); src=""; dev=""; table=""; detached=0; foreign=0
+        for(i=2;i<=NF;i++) {
+          k=$i
+          if(k=="[detached]") { detached=1; continue }
+          if(k ~ /^\\[.*\\]$/) continue
+          if(k=="from") { src=$(++i); continue }
+          if(k=="iif") { dev=$(++i); continue }
+          if(k=="lookup") { table=$(++i); continue }
+          if(k=="proto" || k=="protocol") { i++; continue }
+          foreign=1
+        }
+        if(!foreign && p=="1776" && src=="all" && dev=="KanoTun" && table=="17667" && (active==1 || detached))
+          print p, dev, table
+      }') || return 1
+    [ -n "$tun_rule_fields" ] || continue
+    printf '%s\\n' "$tun_rule_fields" | while read -r tun_pref tun_iif tun_table; do
+      ip -"$detached_family" rule del pref "$tun_pref" iif "$tun_iif" lookup "$tun_table" || {
         echo "F50_ERROR=detached_tun_rule_cleanup_failed_ipv$detached_family"
-        return 1
+        exit 1
       }
-    fi
+    done || return 1
   done
+  return 0
 }
 f50_disable_unsupported_ipv6_dns_hijack() {
   compat_options="$F50_ROOT/Policy/options.conf"
@@ -802,14 +1320,13 @@ function buildF50InspectHelpers() { return `f50_inspect() {
 function buildF50CleanupHelpers() { return `f50_clean_environment() {
   clean_recover=missing; clean_detail=
   # Never invoke a missing installation on a clean device: recover itself creates Policy/.
-  if [ -s "$F50_ROOT/Scripts/Clash.Service" ]; then
+  if [ "\${F50_SKIP_NATIVE_RECOVERY:-0}" != 1 ] && [ -s "$F50_ROOT/Scripts/Clash.Service" ]; then
     clean_detail=$(CLASH_ROOT="$F50_ROOT" f50_limit 35 sh "$F50_ROOT/Scripts/Clash.Service" recover 2>&1); clean_rc=$?
     if [ "$clean_rc" = 0 ]; then clean_recover=ok; else clean_recover=failed; fi
     printf 'F50_RECOVER_RC=%s\\n' "$clean_rc"
     [ "$clean_recover" = ok ] || printf '%s\\n' "$clean_detail" | f50_redact
   fi
   f50_scan "$F50_WORK/pids" || return 1
-  f50_network_snapshot "$F50_WORK/net" || return 1
   # Native recovery failed or left evidence: only the captured candidates/rules are touched.
   if [ -s "$F50_WORK/pids" ]; then
     if [ -s "$F50_ROOT/Scripts/Clash.Service" ] || [ -s "$F50_ROOT/Proxy/Clash.Core" ]; then
@@ -817,6 +1334,9 @@ function buildF50CleanupHelpers() { return `f50_clean_environment() {
     fi
     f50_stop_recorded "$F50_WORK/pids" || return 1
   fi
+  f50_scan "$F50_WORK/after.pids" || return 1
+  [ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; return 1; }
+  f50_network_snapshot "$F50_WORK/net" || return 1
   if [ -s "$F50_WORK/net/plan" ]; then
     clean_plan_rc=0
     f50_execute_plan "$F50_WORK/net/plan" || clean_plan_rc=$?
@@ -824,6 +1344,7 @@ function buildF50CleanupHelpers() { return `f50_clean_environment() {
     [ ! -s "$F50_WORK/check/plan" ] || { echo F50_CLEAN_ERROR=network_rules_remain; return 1; }
     [ "$clean_plan_rc" = 0 ] || echo F50_CLEAN_WARNING=delete_error_final_network_clean
   fi
+  echo F50_NETWORK_RELEASED=1
   # A failed native recovery may include journal/sysctl restoration beyond the firewall.
   for clean_journal in download.transaction.json rp-filter.json legacy-policy.json; do
       if [ -s "$F50_ROOT/Policy/$clean_journal" ]; then echo F50_CLEAN_ERROR=journal_restore_incomplete; return 1; fi
@@ -881,12 +1402,18 @@ function buildF50InstallHelpers() { return `f50_root_has_data() {
 }
 `; }
 function buildF50RemovalHelpers() { return `f50_runtime_guard() {
+  for guard_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+    [ ! -s "$F50_ROOT/Policy/$guard_journal" ] || { echo F50_DELETE_BLOCKED=unresolved_journal; return 1; }
+  done
   f50_scan "$F50_WORK/guard.pids" || return 1
   f50_network_snapshot "$F50_WORK/guard.net" || return 1
   if [ -s "$F50_WORK/guard.pids" ]; then echo F50_DELETE_BLOCKED=owned_process_alive; return 1; fi
   if [ -s "$F50_WORK/guard.net/plan" ]; then echo F50_DELETE_BLOCKED=owned_network_active; return 1; fi
 }
 f50_remove_artifacts() {
+  for recovery_tx in "$F50_ROOT"/Proxy/config.yaml.kano_tx "$F50_ROOT"/Tools/template.yaml.kano_tx "$F50_ROOT"/Tools/template.base.yaml.kano_tx "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_config_package_restore_*_rollback "$F50_DATA"/.f50-install.*/install.journal; do
+    [ ! -e "$recovery_tx" ] || { echo "F50_DELETE_BLOCKED=recovery_data:$recovery_tx"; return 1; }
+  done
   delete_failed=0
   f50_artifact_paths > "$F50_WORK/artifacts" || return 1
   while IFS= read -r artifact; do
@@ -935,7 +1462,7 @@ function buildF50FinalProbeHelpers() { return `f50_final_probe() {
   fi
 }
 `; }
-function buildF50PanelHelpers() { return `${buildF50ZashboardValidationFunction()}
+function buildF50PanelHelpers() { return `${buildF50ZashboardValidationFunction()}${buildF50CurlLocator()}
 f50_verify_zashboard_endpoint() {
   panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1)
   panel_rc=$?
@@ -945,13 +1472,8 @@ f50_verify_zashboard_endpoint() {
     return 1
   fi
   panel_tmp="$F50_DATA/kano_f50_panel_probe.$$"
-  panel_curl=
-  for panel_curl_candidate in ${shellQuote(`${F50_FILES_DIR}/curl`)} ${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)} "$(command -v curl 2>/dev/null)"; do
-    [ -n "$panel_curl_candidate" ] && [ -x "$panel_curl_candidate" ] || continue
-    panel_curl="$panel_curl_candidate"
-    break
-  done
-  [ -n "$panel_curl" ] || { echo F50_ERROR=panel_probe_curl_missing; return 1; }
+  f50_find_curl || { echo F50_ERROR=panel_probe_curl_missing; return 1; }
+  panel_curl=$F50_CURL_BIN
   panel_status=$("$panel_curl" -fsS --noproxy '*' --connect-timeout 3 --max-time 6 \
     -o "$panel_tmp" -w '%{http_code}' "http://127.0.0.1:${F50_PORTS.controller}/ui/?_f50=$$" 2>/dev/null)
   panel_rc=$?
@@ -1049,7 +1571,7 @@ function buildF50StartHelpers() { return `f50_start_service() {
   start_log="$F50_DATA/kano_clash_start.log"
   log_before=$(cksum "$start_log" 2>/dev/null)
   f50_disable_unsupported_ipv6_dns_hijack || return 1
-  f50_drop_detached_tun_rules || return 1
+  f50_drop_detached_tun_rules "$start_action" || return 1
   start_raw=$(CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
   F50_START_RC=$?
   F50_START_DETAIL=$(printf '%s\\n' "$start_raw" | f50_redact)
@@ -1066,6 +1588,7 @@ $log_detail"
   F50_START_CODE=service_failed; F50_START_OK=0
   case "$start_cause" in
     *'subscription URL must be HTTPS without userinfo'*|*'subscription URL must use HTTP(S), no userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
+    panel_config_reload_failed:*|curl_executable_unavailable) F50_START_CODE=service_finalize_failed ;;
     *original_config_invalid*|*CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
     *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
     *) case "$F50_START_RC" in 124|137) F50_START_CODE=start_timeout ;; esac ;;
@@ -1076,9 +1599,25 @@ $log_detail"
       *) F50_START_CODE=activation_unverified ;;
     esac
   fi
-  if [ "$F50_START_OK" = 1 ] && ! f50_verify_zashboard_endpoint; then
-    F50_START_OK=0
-    F50_START_CODE=panel_http_failed
+  case "$F50_START_DETAIL" in *START_STATE=started_verified_process*)
+    echo F50_HEALTH_CORE=controller_confirmed
+    [ "$F50_START_CODE" != service_finalize_failed ] || { echo F50_HEALTH_API=unverified; echo F50_HEALTH_PANEL_RELOAD=failed; echo F50_SERVICE_FINALIZED=0; }
+    ;; esac
+  if [ "$F50_START_OK" = 1 ]; then
+    echo F50_SERVICE_FINALIZED=1
+    panel_check_output=$(f50_verify_zashboard_endpoint 2>&1); panel_check_rc=$?
+    if [ "$panel_check_rc" = 0 ]; then
+      printf '%s\\n' "$panel_check_output"
+      echo F50_HEALTH_PANEL=ok
+    else
+      printf '%s\\n' "$panel_check_output" | sed 's/^F50_ERROR=/F50_WARNING=/'
+      echo F50_HEALTH_PANEL=failed
+    fi
+    echo F50_HEALTH_CORE=controller_confirmed
+    echo F50_HEALTH_TAKEOVER=controller_reported
+    echo F50_HEALTH_API=unverified
+    echo F50_HEALTH_PROVIDERS=unverified
+    echo F50_HEALTH_CONNECTIVITY=unverified
   fi
   printf '%s\\n' "$F50_START_DETAIL"
   printf 'START_SERVICE_RC=%s\\nF50_START_CODE=%s\\nF50_START_OK=%s\\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
@@ -1117,8 +1656,16 @@ F50_WORK=$(mktemp -d "$F50_DATA/.f50-install.XXXXXX") || { echo F50_INSTALL_CODE
 STAGE="$F50_WORK/unpacked"; PKG=; BACKUP=; HAD_OLD=0; MOVED_OLD=0; COMMITTED=0; SUCCESS=0
 OLD_RUNNING=0; OLD_LATCH=0; CLEAN_ATTEMPTED=0; NEEDS_CONFIG=; HAD_USER_CONFIG=0
 F50_INSTALL_CODE=; F50_INSTALL_DETAIL=; KEEP_WORK=0; LOCKED=0
+INSTALL_PHASE=created
 LOCK="$F50_DATA/clash.install.lock.d"
 
+f50_install_record() {
+  INSTALL_PHASE=$1
+  record_tmp="$F50_WORK/install.journal.new"
+  printf 'format=F50_INSTALL_JOURNAL_V1\\nphase=%s\\nroot=%s\\nbackup=%s\\nstage=%s\\nold_running=%s\\nold_latch=%s\\n' "$INSTALL_PHASE" "$F50_ROOT" "$BACKUP" "$PKG" "$OLD_RUNNING" "$OLD_LATCH" > "$record_tmp" &&
+    chmod 600 "$record_tmp" && mv -f "$record_tmp" "$F50_WORK/install.journal" || return 1
+  sync
+}
 f50_install_fail() {
   F50_INSTALL_CODE=$1; F50_INSTALL_DETAIL=\${2:-}; return 1
 }
@@ -1162,24 +1709,38 @@ f50_install_finish() {
       printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact
     fi
     if [ "$COMMITTED" = 1 ] || [ "$MOVED_OLD" = 1 ] || [ "$CLEAN_ATTEMPTED" = 1 ]; then
-      f50_restore_previous || finish_rc=1
+      if f50_restore_previous; then f50_install_record restored || KEEP_WORK=1; else finish_rc=1; KEEP_WORK=1; fi
     fi
     [ -z "$BACKUP" ] || printf 'F50_RECOVERY_BACKUP=%s\\n' "$BACKUP"
     finish_rc=1
   fi
-  if [ "$KEEP_WORK" = 0 ]; then
-    rm -rf "$F50_WORK" || { echo F50_INSTALL_WARNING=staging_cleanup_failed; finish_rc=1; }
-  else
-    printf 'F50_RECOVERY_WORK=%s\\n' "$F50_WORK"
-  fi
+  # Release only our known lock entry; unknown files keep the lock and journal for review.
   if [ "$LOCKED" = 1 ]; then
-    rm -f "$LOCK/pid"
-    rmdir "$LOCK" || { echo F50_INSTALL_WARNING=lock_cleanup_failed; finish_rc=1; }
+    if ! rm -f "$LOCK/pid" || ! rmdir "$LOCK" || [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+      echo F50_INSTALL_WARNING=lock_cleanup_failed
+      printf 'F50_RECOVERY_LOCK=%s\n' "$LOCK"
+      [ "$finish_rc" != 0 ] || finish_rc=1
+      KEEP_WORK=1
+    fi
   fi
+  if [ "$KEEP_WORK" = 0 ]; then
+    if ! rm -rf "$F50_WORK" || [ -e "$F50_WORK" ] || [ -L "$F50_WORK" ]; then
+      echo F50_INSTALL_WARNING=staging_cleanup_failed
+      [ "$finish_rc" != 0 ] || finish_rc=1
+      KEEP_WORK=1
+    fi
+  fi
+  [ "$KEEP_WORK" = 0 ] || printf 'F50_RECOVERY_WORK=%s\n' "$F50_WORK"
   if [ "$SUCCESS" = 1 ]; then
-    printf 'F50_INSTALL_STATUS=%s\nF50_CONFIG_STATE=%s\nKANO_INSTALL_OK=1\n' "$status" "$NEEDS_CONFIG"
+    printf 'F50_INSTALL_COMPONENTS_OK=1\nF50_INSTALL_STATUS=%s\nF50_CONFIG_STATE=%s\n' "$status" "$NEEDS_CONFIG"
     [ -z "$BACKUP" ] || printf 'F50_BACKUP_LEFT=%s\n' "$BACKUP"
-    finish_rc=0
+    if [ "$finish_rc" = 0 ]; then
+      printf 'F50_INSTALL_TRANSACTION_STATE=complete\nKANO_INSTALL_OK=1\n'
+    else
+      printf 'F50_INSTALL_CODE=%s\nF50_INSTALL_TRANSACTION_STATE=finalize_failed\nKANO_INSTALL_OK=0\n' "\${F50_INSTALL_CODE:-finalization_failed}"
+    fi
+  else
+    printf 'F50_INSTALL_COMPONENTS_OK=0\nF50_INSTALL_TRANSACTION_STATE=failed\nKANO_INSTALL_OK=0\n'
   fi
   exit "$finish_rc"
 }
@@ -1187,7 +1748,9 @@ trap f50_install_finish EXIT
 trap 'F50_INSTALL_CODE=interrupted; exit 130' HUP INT TERM
 if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1; fi
 LOCKED=1
+export F50_INSTALL_TRANSACTION="$F50_WORK"
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
+f50_install_record preflight || { f50_install_fail journal_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
 ${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
@@ -1205,6 +1768,21 @@ while IFS= read -r member; do
 done <<EOF_F50_MEMBERS
 $names
 EOF_F50_MEMBERS
+archive_listing=$(unzip -l "$ZIP" 2>/dev/null)
+archive_bytes=$(printf '%s\\n' "$archive_listing" | awk '$1 ~ /^[0-9]+$/ && $NF ~ /^files?$/ && NF <= 4 {n=$1} END {print n}')
+case "$archive_bytes" in ''|*[!0-9]*) f50_install_fail archive_size_unknown; exit 1 ;; esac
+[ "$archive_bytes" -le 536870912 ] || { f50_install_fail archive_too_large; exit 1; }
+required_kb=$(( (archive_bytes + 1023) / 1024 + 51200 ))
+case "$names" in *Proxy/Clash.Core*) ;; *)
+  if [ -d "$F50_ROOT" ]; then
+    old_kb=$(du -sk "$F50_ROOT" 2>/dev/null | awk '{print $1}')
+    case "$old_kb" in ''|*[!0-9]*) f50_install_fail data_size_unknown; exit 1 ;; esac
+    required_kb=$((required_kb + old_kb))
+  fi ;;
+esac
+avail_kb=$(df -k "$F50_DATA" 2>/dev/null | awk 'NR==2{print $4}')
+case "$avail_kb" in ''|*[!0-9]*) f50_install_fail data_space_unknown; exit 1 ;; esac
+[ "$avail_kb" -ge "$required_kb" ] || { f50_install_fail data_space_insufficient_for_archive; exit 1; }
 mkdir -p "$STAGE" || { f50_install_fail stage_create_failed; exit 1; }
 unzip_output=$(f50_limit 35 unzip -q "$ZIP" -d "$STAGE" 2>&1); unzip_rc=$?
 [ "$unzip_rc" = 0 ] || { f50_install_fail unzip_failed "$unzip_output"; exit 1; }
@@ -1343,6 +1921,7 @@ case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
   if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
 esac
 if [ "$F50_OLD_FOUND" = 1 ]; then
+  f50_install_record cleanup_intent || { f50_install_fail journal_write_failed; exit 1; }
   CLEAN_ATTEMPTED=1
   f50_clean_environment || { f50_install_fail old_environment_cleanup_failed; exit 1; }
   # Native recovery may repair both the config and cached providers from a prior transaction.
@@ -1366,28 +1945,36 @@ fi
 if [ "$HAD_OLD" = 1 ]; then
   BACKUP="$F50_ROOT.rollback.install.\${F50_WORK##*.}"
   [ ! -e "$BACKUP" ] || { f50_install_fail backup_already_exists; exit 1; }
+  f50_install_record backup_rename_intent || { f50_install_fail journal_write_failed; exit 1; }
   mv "$F50_ROOT" "$BACKUP" || { BACKUP=; f50_install_fail backup_rename_failed; exit 1; }
   MOVED_OLD=1
 fi
+f50_install_record commit_intent || { f50_install_fail journal_write_failed; exit 1; }
 if ! mv "$PKG" "$F50_ROOT"; then
   f50_install_fail commit_failed; exit 1
 fi
 COMMITTED=1
+f50_install_record activation_intent || { f50_install_fail journal_write_failed; exit 1; }
 panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
 printf '%s\\n' "$panel_probe"
 [ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
 if [ "$HAD_OLD:$OLD_LATCH:$OLD_RUNNING" = 1:1:0 ]; then
   status=installed_stopped
+elif [ "$NEEDS_CONFIG" != ready ]; then
+  status=installed_needs_configuration
 elif f50_start_service start 85; then
   status=installed_running
 else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
   exit 1
 fi
-if [ -n "$BACKUP" ]; then
-  if rm -rf "$BACKUP"; then BACKUP=; else echo F50_INSTALL_WARNING=backup_cleanup_failed; fi
-fi
+# Component completion is independent of journal, receipt and lock finalization.
 SUCCESS=1
+f50_install_record complete || { KEEP_WORK=1; f50_install_fail journal_write_failed; exit 1; }
+if [ -n "$BACKUP" ]; then
+  cp "$F50_WORK/install.journal" "$BACKUP/.f50-install-receipt" || { KEEP_WORK=1; f50_install_fail backup_receipt_failed; exit 1; }
+  echo F50_INSTALL_WARNING=previous_components_retained
+fi
 exit 0
 `;
 }
@@ -1404,11 +1991,15 @@ async function installF50PackageAtDevicePath(uploaded) {
     operationStage(hasOld ? '安装组件并清理已检测到的旧环境' : '解压、验证并安装组件');
     const result = await runShellWithRoot(buildF50InstallScript(uploaded), 150000);
     const output = String(result?.content || '');
-    if (!result?.success || !/^KANO_INSTALL_OK=1$/m.test(output)) {
+    if (/^F50_INSTALL_COMPONENTS_OK=1$/m.test(output)) {
+      pluginArtifactsRemoved = false; f50BackendReady = false;
+      invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
+    }
+    if (!result?.success || result.deviceCompleted !== true || result.deviceExitCode !== 0 ||
+        !/^F50_INSTALL_COMPONENTS_OK=1$/m.test(output) || !/^F50_INSTALL_TRANSACTION_STATE=complete$/m.test(output) ||
+        !/^KANO_INSTALL_OK=1$/m.test(output) || /^KANO_INSTALL_OK=0$|^F50_INSTALL_TRANSACTION_STATE=(?:failed|finalize_failed)$/m.test(output)) {
       throw new Error(output || 'F50_INSTALL_CODE=transaction_interrupted');
     }
-    pluginArtifactsRemoved = false; f50BackendReady = false;
-    invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
     const state = (output.match(/^F50_INSTALL_STATUS=(.+)$/m) || [])[1];
     const configState = (output.match(/^F50_CONFIG_STATE=(.+)$/m) || [])[1];
     let message = state === 'installed_running' ? '组件已安装，核心与接管规则已启动'
@@ -1419,7 +2010,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     const warning = (output.match(/^F50_INSTALL_WARNING=(.+)$/m) || [])[1];
     const recoveredWithFallback = /^F50_CLEAN_WARNING=/m.test(output);
     if (recoveredWithFallback) message += '；旧恢复报错后已通过兜底清理复查';
-    if (warning) message += '；临时文件清理警告：' + warning;
+    if (warning) message += warning === 'previous_components_retained' ? '；已保留旧组件回滚目录' : '；安装告警：' + warning;
     lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
     operationFinish(true, message);
     createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
@@ -1642,7 +2233,8 @@ function createPrivateRouteLogic() {
         meta.tun[key] = { present: own(tun, key), ...(own(tun, key) ? { before: clone(tun[key]) } : {}), applied: clone(value) };
         tun[key] = value;
       };
-      const excluded = [...PRIVATE, ...list(tun, 'route-exclude-address')];
+      const excluded = [...PRIVATE, ...list(tun, 'route-exclude-address'),
+        ...list(tun, 'inet4-route-exclude-address'), ...list(tun, 'inet6-route-exclude-address')];
       set('route-exclude-address', subtract(excluded, state.cidrs));
       for (const key of ['inet4-route-exclude-address', 'inet6-route-exclude-address']) if (own(tun, key)) set(key, []);
       const included = [...list(tun, 'route-address'), ...list(tun, 'inet4-route-address'), ...list(tun, 'inet6-route-address')];
@@ -1661,6 +2253,9 @@ function createPrivateRouteLogic() {
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
   const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
   const out = clone(preserveConfig ? source : profile);
+  for (const key of Object.keys(source)) {
+    if (key.startsWith('x-') && !own(out, key)) out[key] = clone(source[key]);
+  }
   for (const key of preserveConfig ? F50_ORIGINAL_MANAGED_KEYS : ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
     if (preserveConfig) out[key] = clone(profile[key]);
     else if (own(source, key)) out[key] = clone(source[key]);
@@ -1819,8 +2414,24 @@ async function normalizeIpv6DnsCapability(state) {
   return true;
 }
 
+const policyTransactionFiles = () => [
+  CLASH_DEVICE_BYPASS_FILE,
+  CLASH_MAC_BYPASS_FILE,
+  BOOT_FILE,
+  CLASH_DIRECT_DOMAIN_FILE,
+  CLASH_DIRECT_IP_FILE,
+  CLASH_PROXY_DOMAIN_FILE,
+  CLASH_REJECT_DOMAIN_FILE,
+  CLASH_SAFE_DIRECT_DOMAIN_FILE,
+  CLASH_SAFE_DIRECT_IP_FILE,
+  CLASH_SAFE_PROXY_DOMAIN_FILE,
+  CLASH_SAFE_REJECT_DOMAIN_FILE,
+  CLASH_POLICY_OPTIONS_FILE,
+  CLASH_SUB_RULE_MODE_FILE,
+];
+
 async function kprSaveNetworkState(previous, next) {
-  let backup = '', saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
+  let backup = '', policySnapshot = '', snapshotCommitted = false, snapshotRestored = false, saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
   try {
     operationStage('\u68c0\u67e5\u6a21\u5f0f\u548c\u7f51\u7edc\u8bbe\u7f6e', 0, 4);
     next = { ...next, options: { ...next.options } };
@@ -1832,7 +2443,9 @@ async function kprSaveNetworkState(previous, next) {
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
     await normalizeIpv6DnsCapability(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
-      createToast('\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green');
+      operationFinish(true, '\u8bbe\u7f6e\u672a\u53d8\u66f4');
+      if (activeCriticalOperation) activeCriticalOperation.finalToast = ['\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green'];
+      else createToast('\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green');
       return true;
     }
     configChanged = networkStateKey(previous, true) !== networkStateKey(next, true);
@@ -1850,9 +2463,18 @@ async function kprSaveNetworkState(previous, next) {
       backup = await createConfigRollbackPoint('network');
       if (!backup) throw new Error('\u65e0\u6cd5\u521b\u5efa\u914d\u7f6e\u56de\u6eda\u70b9');
     }
+    policySnapshot = `/data/kano_network_save_${Date.now()}_${createRandomString(6)}`;
+    const snapshot = await runShellWithRoot(`set -e
+umask 077
+TX=${shellQuote(policySnapshot)}
+mkdir "$TX"
+${fileSnapshotHelpersCmd()}
+${policyTransactionFiles().map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
+echo NETWORK_SNAPSHOT_READY`, 20000);
+    if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照未确认，未保存新设置');
     operationStage('\u5199\u5165\u8bbe\u7f6e\u4e0e\u8fd0\u884c\u914d\u7f6e', 1, 4);
-    if (!(await savePolicyState(next, { apply: false }))) throw new Error('\u7f51\u7edc\u8bbe\u7f6e\u672a\u4fdd\u5b58');
     saved = true;
+    if (!(await savePolicyState(next, { apply: false }))) throw new Error('\u7f51\u7edc\u8bbe\u7f6e\u672a\u4fdd\u5b58');
     if (configChanged) {
       const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, prepared, { label: 'config.yaml', backup: false });
       if (!written.ok) throw new Error(written.content || '\u914d\u7f6e\u5199\u5165\u5931\u8d25');
@@ -1868,21 +2490,31 @@ async function kprSaveNetworkState(previous, next) {
     }
     operationStage('\u786e\u8ba4\u6a21\u5f0f\u5df2\u751f\u6548', 3, 4);
     invalidateStatusSnapshot();
+    snapshotCommitted = true;
     Object.assign(previous, JSON.parse(JSON.stringify(next)));
     if (wasRunning && typeof refreshDashboardAfterModeChange === 'function') {
       try { await refreshDashboardAfterModeChange(); } catch (_) {}
     }
     if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN \u5df2\u6682\u505c\u8bbe\u5907\u7ed5\u8fc7\uff0c\u540d\u5355\u4fdd\u7559\uff1b\u5207\u56de TProxy \u81ea\u52a8\u6062\u590d', 'yellow', 8000);
     operationFinish(true, wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u5df2\u4fdd\u5b58\uff0c\u6838\u5fc3\u4fdd\u6301\u505c\u6b62');
-    createToast(wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62', 'green', 8000);
+    const successToast = [wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62', 'green', 8000];
+    if (activeCriticalOperation) activeCriticalOperation.finalToast = successToast;
+    else createToast(...successToast);
     return true;
   } catch (error) {
-    if (error.name === 'OperationCancelled') return false;
+    if (error.name === 'OperationCancelled' || activeCriticalOperation?.token.cancelled) return false;
     operationStage('\u5e94\u7528\u5931\u8d25\uff0c\u6062\u590d\u539f\u8bbe\u7f6e');
     let recovered = !saved;
     if (saved) {
       let restoredSettings = false, restoredConfig = !backup;
-      try { restoredSettings = await savePolicyState(previous, { apply: false, replaceOptions: true }); } catch (_) {}
+      try {
+        const rollback = await runShellWithRoot(`set -e
+TX=${shellQuote(policySnapshot)}
+${fileSnapshotHelpersCmd()}
+${policyTransactionFiles().map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `restore_transaction_file ${i} ${shellQuote(path)} || exit 1`).join('\n')}
+echo NETWORK_SETTINGS_RESTORED`, 20000);
+        restoredSettings = snapshotRestored = !!rollback.success && /^NETWORK_SETTINGS_RESTORED$/m.test(String(rollback.content || ''));
+      } catch (_) {}
       try { if (backup) restoredConfig = await restoreConfigRollbackPoint(backup, '\u7f51\u7edc\u8bbe\u7f6e', { showToast: false }); } catch (_) {}
       recovered = restoredSettings && restoredConfig;
       if (recovered && wasRunning && restartAttempted) {
@@ -1900,6 +2532,13 @@ async function kprSaveNetworkState(previous, next) {
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
       (recovered ? (saved ? '\u5df2\u6062\u590d\u539f\u8bbe\u7f6e\u548c\u914d\u7f6e' : '\u672a\u5e94\u7528\u65b0\u8bbe\u7f6e') : '\u56de\u6eda\u672a\u5b8c\u6210\uff0c\u5df2\u5c1d\u8bd5\u505c\u6b62\u6838\u5fc3\u5e76\u6e05\u7406\u89c4\u5219'), recovered ? 'yellow' : 'red', 14000);
     return false;
+  } finally {
+    if (policySnapshot && (snapshotCommitted || snapshotRestored || !saved) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
+      try {
+        const cleaned = await runShellWithRoot('rm -rf ' + shellQuote(policySnapshot), 10000);
+        if (!cleaned.success) createToast('网络设置快照清理未确认：' + escapeHtml(policySnapshot), 'yellow', 10000);
+      } catch (_) {}
+    }
   }
 }
 
@@ -1999,9 +2638,10 @@ async function kprSaveNetworkState(previous, next) {
         else if (pending) arm();
       },
       finish(ok, message) {
-        if (disposed || terminal) return;
+        // Final lease errors may downgrade a body success, never the reverse.
+        if (disposed || (terminal && (ok !== false || element.dataset.result === 'failed'))) return;
         terminal = true;
-        clearInterval(timer); clearTimeout(revealTimer); revealTimer = null;
+        clearInterval(timer); clearTimeout(revealTimer); clearTimeout(closeTimer); revealTimer = null;
         if (!shown) {
           if (ok === false && message) createToast(safeTextToHtml(message), 'red', 7000);
           return;
@@ -2038,7 +2678,10 @@ async function kprSaveNetworkState(previous, next) {
   }
   function operationFinish(ok, detail = '') {
     const op = activeCriticalOperation;
-    if (op && !op.token.cancelled && op.progress) op.progress.finish(ok, detail);
+    if (op && !op.token.cancelled && op.progress) {
+      if (op.finalResult?.ok === false && ok !== false) return;
+      op.finalResult = { ok, detail };
+    }
   }
   function operationCancelled() {
     const error = new Error('\u5df2\u88ab\u6062\u590d\u7f51\u7edc\u4e2d\u6b62\uff0c\u4e0d\u518d\u7ee7\u7eed\u5b89\u88c5\u6216\u91cd\u542f');
@@ -2058,18 +2701,22 @@ async function kprSaveNetworkState(previous, next) {
 
 
   function buildStatusSnapshotCommand() {
-    return `set +e
+  return `set +e
 if [ -r /data/clash/Scripts/Clash.Service ]; then
-  sh /data/clash/Scripts/Clash.Service snapshot
+  if command -v timeout >/dev/null 2>&1; then snapshot=$(timeout -k 1 6 sh /data/clash/Scripts/Clash.Service snapshot 2>&1)
+  else snapshot=$(sh /data/clash/Scripts/Clash.Service snapshot 2>&1); fi
   rc=$?
-  printf '\nF50_SNAPSHOT_RC=%s\n' "$rc"
-  exit 0
+  if [ "$rc" = 0 ] && printf '%s\\n' "$snapshot" | grep -q '^F50_SNAPSHOT='; then
+    printf '%s\\nF50_SNAPSHOT_RC=%s\\n' "$snapshot" "$rc"
+    exit 0
+  fi
+  printf 'F50_SNAPSHOT_BACKEND_RC=%s\\n' "$rc"
 fi
 ${buildOwnedCoreFunctions()}
-printf 'F50_SNAPSHOT_FALLBACK=1\nF50_CORE_PID=%s\n' "$(find_runtime_pid)"
+printf 'F50_SNAPSHOT_FALLBACK=1\\nF50_CORE_PID=%s\\n' "$(find_runtime_pid)"
 if [ -d /data/clash ]; then echo F50_INSTALL_STATE=damaged; else echo F50_INSTALL_STATE=missing; fi
 exit 0`;
-  }
+}
   async function readStatusSnapshot({fresh=false} = {}) {
     if (!fresh && statusSnapshotCache && statusSnapshotCache.expires > Date.now()) return statusSnapshotCache.value;
     if (statusSnapshotPromise) return statusSnapshotPromise;
@@ -2097,7 +2744,10 @@ exit 0`;
     statusSnapshotPromise = pending;
     try {
       const value = await pending;
-      if (generation !== statusSnapshotGeneration) return readStatusSnapshot({fresh:true});
+      if (generation !== statusSnapshotGeneration) {
+        if (statusSnapshotPromise === pending) statusSnapshotPromise = null;
+        return readStatusSnapshot({fresh:true});
+      }
       statusSnapshotCache = {value, expires: Date.now()+2000};
       return value;
     } finally { if (statusSnapshotPromise === pending) statusSnapshotPromise = null; }
@@ -2154,8 +2804,8 @@ F50_WORK=$(mktemp -d "$F50_DATA/.f50-delete.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 # Do not erase recoverable runtime files while owned processes or interception are demonstrably active.
 f50_runtime_guard || exit 1
-f50_remove_artifacts
-delete_rc=$?
+f50_remove_artifacts || exit 1
+delete_rc=0
 ${removePluginOwnedArtifactsCmd()} || delete_rc=1
 [ "$delete_rc" = 0 ] && echo UNINSTALL_NO_BACKUP_DONE
 exit "$delete_rc"
@@ -2249,35 +2899,142 @@ exit "$delete_rc"
   const KANO_HELPER_SNAPSHOT_TTL = 1500;
 
   // ===== Basic helpers =====
+    let transientShellOperation = null;
+  let deviceTaskUncertain = false;
+  const f50TaskTag = (token) => 'mm_' + String(token.id).replace(/[^A-Za-z0-9_-]/g, '_');
+  const f50UnknownCompletion = (op, cause = '') => {
+    op.uncertain = true;
+    op.token.cancelled = true;
+    deviceTaskUncertain = true;
+    const error = operationCancelled();
+    error.message = '\u8bbe\u5907\u4efb\u52a1\u662f\u5426\u7ed3\u675f\u672a\u77e5\uff0c\u5df2\u4fdd\u7559\u9501\u548c\u56de\u6eda\u70b9\u3002\u8bf7\u5148\u6267\u884c\u201c\u6062\u590d\u7f51\u7edc\u201d\u3002';
+    error.code = 'device_completion_unknown';
+    lastInstallDiagnostic = f50Diagnostic('F50_ERROR=device_completion_unknown\n' + String(cause));
+    lastInstallDiagnostic.summary = error.message;
+    if (op.progress) op.progress.finish(false, error.message);
+    createToast(safeTextToHtml(error.message), 'red', 12000);
+    return error;
+  };
+  const f50ReleaseLease = async (op) => {
+    clearInterval(op.heartbeat);
+    if (op.heartbeatPending) await op.heartbeatPending;
+    if (!op.leaseOwned) return;
+    try {
+      const ended = await hostRunShellWithRoot.call(globalThis,
+        buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(f50TaskTag(op.token)) + ' ended', 6000);
+      if (!ended?.success || !/^F50_FRONTEND_RECORDED=1$/m.test(String(ended.content || ''))) {
+        throw f50UnknownCompletion(op, ended?.content || 'frontend_end_unconfirmed');
+      }
+      if (op.uncertain) return;
+      const result = await hostRunShellWithRoot.call(globalThis,
+        buildF50LeaseFunctions() + '\nf50_lease_release ' + shellQuote(f50TaskTag(op.token)), 6000);
+      if (!result?.success || !/^F50_LEASE_RELEASED=1$/m.test(String(result.content || ''))) {
+        throw f50UnknownCompletion(op, result?.content || 'lease_release_unconfirmed');
+      }
+      op.leaseOwned = false;
+    } catch (error) {
+      deviceTaskUncertain = true;
+      op.uncertain = true;
+      if (error?.name !== 'OperationCancelled') f50UnknownCompletion(op, error?.message || error);
+    }
+  };
   const runShellWithRoot = async (script = '', timeout) => {
-  if (typeof script !== 'string' || script.includes(String.fromCharCode(0))) {
-    return { success: false, content: 'SHELL_INVALID_TEXT: command contains NUL or is not a string' };
-  }
-  const op = activeCriticalOperation;
-  if (op && op.token.cancelled) throw operationCancelled();
-  const base = `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${script}`;
-  let command = base;
-  if (op) {
-    const tag = 'mm_' + String(op.token.id).replace(/[^A-Za-z0-9_-]/g, '_');
-    const file = '/dev/kano_tproxy_tasks/' + tag + '.' + (++taskCommandSequence);
-    command = `set +e
-mkdir -p /dev/kano_tproxy_tasks || exit 1
+    if (typeof script !== 'string' || script.includes(String.fromCharCode(0))) {
+      return { success: false, content: 'SHELL_INVALID_TEXT: command contains NUL or is not a string' };
+    }
+    if (deviceTaskUncertain) throw operationCancelled();
+    const critical = activeCriticalOperation;
+    if (!critical && !transientShellOperation) {
+      transientShellOperation = { token: { id: `${Date.now()}_${createRandomString(10)}` }, requests: 0 };
+    }
+    const op = critical || transientShellOperation;
+    if (op.token.cancelled || op.closing) throw operationCancelled();
+    op.requests = (op.requests || 0) + 1;
+    if (op.progress) op.progress.request(1);
+    try {
+      const tag = f50TaskTag(op.token);
+      if (!op.leasePromise) {
+        op.leasePromise = (async () => {
+          let result;
+          try {
+            result = await hostRunShellWithRoot.call(globalThis,
+              buildF50LeaseFunctions() + '\nf50_lease_acquire ' + shellQuote(tag) + ' browser', 6000);
+          } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
+          const text = String(result?.content || '');
+          if (result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) { op.leaseOwned = true;
+            op.heartbeat = setInterval(() => {
+              if (op.closing || op.uncertain || op.heartbeatPending) return;
+              op.heartbeatPending = hostRunShellWithRoot.call(globalThis,
+                buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(tag) + ' running', 6000)
+                .then(r => { if (!(r?.success && /^F50_FRONTEND_RECORDED=1$/m.test(String(r?.content || ''))) && !/F50_OPERATION_RECOVERY_BUSY/.test(r?.content || '')) f50UnknownCompletion(op, r?.content || 'frontend_touch_unconfirmed'); })
+                .catch(e => f50UnknownCompletion(op, e?.message || e)).finally(() => { op.heartbeatPending = null; });
+            }, 20000);
+            return true; }
+          if (/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return false;
+          throw f50UnknownCompletion(op, text);
+        })();
+      }
+      if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
+      if (op.token.cancelled || op.closing) throw operationCancelled();
+      const request = tag + '.' + (++taskCommandSequence);
+      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${script}`;
+      const command = `set +e
+exec 2>&1
+umask 077
+${buildF50LeaseFunctions()}
+if [ -e "$F50_OPERATION_LOCK/cancelled" ] || [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" != ${shellQuote(tag)} ]; then
+  echo F50_TASK_NOT_STARTED=${request}
+  exit 1
+fi
+f50_writer_enter || { echo F50_TASK_NOT_STARTED=${request}; exit 1; }
+if [ -e "$F50_OPERATION_LOCK/cancelled" ] || [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" != ${shellQuote(tag)} ]; then
+  f50_writer_leave
+  echo F50_TASK_NOT_STARTED=${request}
+  exit 1
+fi
+f50_frontend_write ${shellQuote(tag)} running || exit 1
+mkdir -p "$F50_TASK_DIR" && chmod 700 "$F50_TASK_DIR" || exit 1
 env KANO_TPROXY_TASK=${shellQuote(tag)} sh -c ${shellQuote(base)} &
 kano_task_pid=$!
-printf '%s\\n' "$kano_task_pid" > ${shellQuote(file)}
+printf '%s\\n' "$kano_task_pid" > "$F50_TASK_DIR/${request}" || { wait "$kano_task_pid"; exit 1; }
+f50_writer_leave || { wait "$kano_task_pid"; exit 1; }
 wait "$kano_task_pid"
 kano_task_rc=$?
-rm -f ${shellQuote(file)}
-rmdir /dev/kano_tproxy_tasks 2>/dev/null || true
+f50_writer_enter || exit 1
+rm -f "$F50_TASK_DIR/${request}"
+rmdir "$F50_TASK_DIR" 2>/dev/null || true
+f50_writer_leave || kano_task_rc=1
+printf '\\nF50_TASK_FINISHED=${request}:%s\\n' "$kano_task_rc"
 exit "$kano_task_rc"`;
-    if (op.progress) op.progress.request(1);
-  }
-  try {
-    const result = await hostRunShellWithRoot.call(globalThis, command, timeout);
-    if (op && op.token.cancelled) throw operationCancelled();
-    return result;
-  } finally { if (op && op.progress) op.progress.request(-1); }
-};
+      let result;
+      try { result = await hostRunShellWithRoot.call(globalThis, command, timeout); }
+      catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
+      const text = String(result?.content || '');
+      if (text.trim() === 'F50_TASK_NOT_STARTED=' + request) {
+        op.token.cancelled = true;
+        throw operationCancelled();
+      }
+      const tail = text.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+      if (!tail || tail[1] !== request) throw f50UnknownCompletion(op, text);
+      if (op.token.cancelled) throw operationCancelled();
+      return { ...result, success: result?.success === true && Number(tail[2]) === 0,
+        content: text.slice(0, tail.index), deviceCompleted: true, deviceExitCode: Number(tail[2]) };
+    } finally {
+      op.requests--;
+      if (op.progress) op.progress.request(-1);
+      if (!op.requests) {
+        if (op.drained) { op.drained(); op.drained = null; }
+        if (!critical) {
+          op.closing = true;
+          const alreadyUncertain = op.uncertain;
+          await f50ReleaseLease(op);
+          if (transientShellOperation === op) transientShellOperation = null;
+          if (!alreadyUncertain && op.uncertain) throw operationCancelled();
+        }
+      }
+    }
+  };
+
 
 
   const shellQuote = (value) =>
@@ -2490,6 +3247,11 @@ exit "$kano_task_rc"`;
     { label: 'config_source.conf', path: CLASH_CONFIG_SOURCE_FILE },
     { label: 'options.conf', path: CLASH_POLICY_OPTIONS_FILE },
     { label: 'mac_bypass.txt', path: CLASH_MAC_BYPASS_FILE },
+    { label: 'device_bypass.txt', path: CLASH_DEVICE_BYPASS_FILE, optional: true },
+    { label: 'direct_domain.list', path: CLASH_DIRECT_DOMAIN_FILE, optional: true },
+    { label: 'direct_ip.list', path: CLASH_DIRECT_IP_FILE, optional: true },
+    { label: 'proxy_domain.list', path: CLASH_PROXY_DOMAIN_FILE, optional: true },
+    { label: 'reject_domain.list', path: CLASH_REJECT_DOMAIN_FILE, optional: true },
   ];
 
   const editableLocalFiles = () => [
@@ -2564,19 +3326,20 @@ exit "$kano_task_rc"`;
   const addPolicyToolsBootLineCmd = () => addBootLinesCmd();
 
   const syncSafePolicyFilesCmd = () => `
-        mkdir -p ${shellQuote(CLASH_POLICY_DIR)} ${shellQuote(CLASH_SAFE_POLICY_DIR)}
+        mkdir -p ${shellQuote(CLASH_POLICY_DIR)} ${shellQuote(CLASH_SAFE_POLICY_DIR)} || exit 1
         sync_policy_file() {
-          src="$1"
-          dst="$2"
-          [ -f "$src" ] || printf '# empty\\n' > "$src"
-          cp "$src" "$dst" 2>/dev/null || printf '# empty\\n' > "$dst"
-          chmod 600 "$src" 2>/dev/null || true
-          chmod 644 "$dst" 2>/dev/null || true
+          src="$1"; dst="$2"; staged="$dst.kano_sync.$$"
+          [ ! -L "$src" ] && [ ! -L "$dst" ] || return 1
+          [ -f "$src" ] || printf '# empty\\n' > "$src" || return 1
+          if ! cp "$src" "$staged" || ! chmod 600 "$staged" || ! mv -f "$staged" "$dst"; then
+            rm -f "$staged"; echo F50_ERROR=policy_copy_failed; return 1
+          fi
+          chmod 600 "$src" || return 1
         }
-        sync_policy_file ${shellQuote(CLASH_REJECT_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_REJECT_DOMAIN_FILE)}
-        sync_policy_file ${shellQuote(CLASH_DIRECT_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_DIRECT_DOMAIN_FILE)}
-        sync_policy_file ${shellQuote(CLASH_DIRECT_IP_FILE)} ${shellQuote(CLASH_SAFE_DIRECT_IP_FILE)}
-        sync_policy_file ${shellQuote(CLASH_PROXY_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_PROXY_DOMAIN_FILE)}
+        sync_policy_file ${shellQuote(CLASH_REJECT_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_REJECT_DOMAIN_FILE)} || exit 1
+        sync_policy_file ${shellQuote(CLASH_DIRECT_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_DIRECT_DOMAIN_FILE)} || exit 1
+        sync_policy_file ${shellQuote(CLASH_DIRECT_IP_FILE)} ${shellQuote(CLASH_SAFE_DIRECT_IP_FILE)} || exit 1
+        sync_policy_file ${shellQuote(CLASH_PROXY_DOMAIN_FILE)} ${shellQuote(CLASH_SAFE_PROXY_DOMAIN_FILE)} || exit 1
         `;
 
 
@@ -2921,15 +3684,19 @@ KANO_YQ_SMOKE_EOF
   const setButtonBusy = (button, busy, busyText = '') => {
     if (!button) return;
     if (busy) {
-      button.dataset.rawText = button.textContent || '';
+      if (button.dataset.kanoBusy !== '1') {
+        button.dataset.rawText = button.textContent || '';
+        button.dataset.rawDisabled = button.disabled ? '1' : '0';
+      }
+      button.dataset.kanoBusy = '1';
       button.disabled = true;
       if (busyText) button.textContent = busyText;
-    } else {
-      button.disabled = false;
-      if (button.dataset.rawText) {
-        button.textContent = button.dataset.rawText;
-        delete button.dataset.rawText;
-      }
+    } else if (button.dataset.kanoBusy === '1') {
+      button.disabled = button.dataset.rawDisabled === '1';
+      button.textContent = button.dataset.rawText;
+      delete button.dataset.rawText;
+      delete button.dataset.rawDisabled;
+      delete button.dataset.kanoBusy;
     }
   };
 
@@ -2945,6 +3712,10 @@ KANO_YQ_SMOKE_EOF
     statusEl.textContent = label ? `任务：${label}` : '任务：空闲';
   };
   const acquireCriticalOperation = (label = '关键操作', token = null) => {
+    if (deviceTaskUncertain || transientShellOperation) {
+      createToast(deviceTaskUncertain ? '\u8bf7\u5148\u6062\u590d\u7f51\u7edc\u4ee5\u786e\u8ba4\u540e\u53f0\u4efb\u52a1\u5df2\u7ed3\u675f' : '\u8bbe\u5907\u8bfb\u53d6\u5c1a\u672a\u7ed3\u675f\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5', 'yellow');
+      return null;
+    }
     if (recoveryInProgress) {
       createToast('\u7f51\u7edc\u6062\u590d\u6b63\u5728\u6267\u884c', 'yellow');
       return null;
@@ -2961,9 +3732,18 @@ KANO_YQ_SMOKE_EOF
     return operationToken;
   };
 
-  const releaseCriticalOperation = (token) => {
-    if (activeCriticalOperation && activeCriticalOperation.token === token) {
-      if (activeCriticalOperation.progress && !token.cancelled) activeCriticalOperation.progress.finish(null);
+  const releaseCriticalOperation = async (token) => {
+    const op = activeCriticalOperation;
+    if (!op || op.token !== token) return;
+    op.closing = true;
+    if (op.requests) await new Promise(resolve => { op.drained = resolve; });
+    await f50ReleaseLease(op);
+    if (activeCriticalOperation === op) {
+      if (op.progress && !token.cancelled) {
+        const final = op.finalResult || { ok: null, detail: '' };
+        op.progress.finish(final.ok, final.detail);
+        if (final.ok !== false && op.finalToast) createToast(...op.finalToast);
+      }
       activeCriticalOperation = null;
       invalidateStatusSnapshot();
       syncCriticalOperationStatus();
@@ -2975,29 +3755,32 @@ KANO_YQ_SMOKE_EOF
     const operationToken = acquireCriticalOperation(label, token);
     if (!operationToken) return false;
     const ownsLock = !reentrant;
+    let result = false;
     try {
-      const result = await action(operationToken);
+      result = await action(operationToken);
       if (ownsLock) operationFinish(typeof result === 'boolean' ? result : null);
-      return result;
     } catch (error) {
       if (ownsLock) operationFinish(false, sanitizeSubscriptionSecrets(error.message || String(error)));
       if (error.name !== 'OperationCancelled') throw error;
-      return false;
+      result = false;
     } finally {
-      if (ownsLock) releaseCriticalOperation(operationToken);
+      if (ownsLock) await releaseCriticalOperation(operationToken);
     }
+    return operationToken.cancelled ? false : result;
   };
 
   const runCriticalButtonOperation = async (label, button, busyText, action) => {
     const token = acquireCriticalOperation(label);
     if (!token) return;
+    let result;
     try {
       setButtonBusy(button, true, busyText);
-      return await action();
+      result = await action();
     } finally {
       try { setButtonBusy(button, false); }
-      finally { releaseCriticalOperation(token); }
+      finally { await releaseCriticalOperation(token); }
     }
+    return token.cancelled ? false : result;
   };
 
   let advancedAccessCache = null;
@@ -3012,7 +3795,7 @@ KANO_YQ_SMOKE_EOF
     if (!fresh && advancedAccessLoadPromise) return advancedAccessLoadPromise;
     const loadPromise = (async () => {
       try {
-        const res = await runShellWithRoot('whoami');
+        const res = await hostRunShellWithRoot.call(globalThis, 'whoami', 5000);
         return !!(res.success && String(res.content || '').includes('root'));
       } catch (e) {
         console.error(e);
@@ -3137,31 +3920,7 @@ KANO_YQ_SMOKE_EOF
     });
 
   const runShellWithRootRetry = async (script = '', timeout = 20 * 1000, attempts = 3) => {
-    const operation = activeCriticalOperation;
-    const checkCancelled = () => {
-      if (operation && operation.token.cancelled) throw operationCancelled();
-    };
-    let lastResult = { success: false, content: '' };
-    const maxAttempts = Math.max(1, Math.floor(Number(attempts) || 1));
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      checkCancelled();
-      try {
-        lastResult = await runShellWithRoot(script, timeout);
-      } catch (e) {
-        if (e?.name === 'OperationCancelled') throw e;
-        lastResult = { success: false, content: e && e.message ? e.message : String(e || '') };
-      }
-      checkCancelled();
-      if (lastResult && lastResult.success) return lastResult;
-      const detail = String((lastResult && lastResult.content) || '');
-      if (!/(failed to fetch|networkerror|load failed|aborterror|request.*timeout|\u8bf7\u6c42\u8d85\u65f6)/i.test(detail) || attempt >= maxAttempts) {
-        return lastResult;
-      }
-      checkCancelled();
-      await wait(attempt * 800);
-      checkCancelled();
-    }
-    return lastResult;
+    return runShellWithRoot(script, timeout);
   };
 
   let binarySnapshotCache = null;
@@ -3337,6 +4096,16 @@ KANO_YQ_SMOKE_EOF
   const normalizeSubRuleModeValue = (value = '') =>
     String(value || '').trim().toLowerCase() == SUB_RULE_MODE_ORIGINAL
       ? SUB_RULE_MODE_ORIGINAL : SUB_RULE_MODE_TEMPLATE;
+  const readCurrentSubRuleMode = async () => {
+    const res = await runShellWithRoot(`
+      if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
+        sed -n '/^# KANO_SUB_RULE_MODE=/p' ${shellQuote(CLASH_SUB_URLS)} | head -n 1
+      fi
+    `, 10 * 1000);
+    if (!res.success) throw new Error('读取订阅模式失败，未修改配置');
+    return parseSubRuleModeFromText(res.content || '');
+  };
+
   const parseSubRuleModeFromText = (content = '') => {
     const match = String(content || '').match(/^# KANO_SUB_RULE_MODE=(\S+)\s*$/m);
     return normalizeSubRuleModeValue(match ? match[1] : '');
@@ -3489,7 +4258,7 @@ KANO_YQ_SMOKE_EOF
           trap - EXIT
           if [ "$rc" -ne 0 ]; then
             set +e
-            restore_sub_transaction || rc=1
+            restore_sub_transaction || { echo "F50_RECOVERY_SUB=$TX"; exit 1; }
           fi
           rm -f "$SUB.kano_new.$$" 2>/dev/null || true
           rm -rf "$TX" 2>/dev/null || true
@@ -3906,6 +4675,7 @@ KANO_YQ_SMOKE_EOF
     try {
       const value = JSON.parse(String(res.content || '').trim());
       assertYamlRootMap(value, label);
+      f50AssertSafeJsonNumbers(value);
       return { ok: true, value, message: '', shell: res };
     } catch (e) {
       return {
@@ -3999,110 +4769,144 @@ KANO_YQ_SMOKE_EOF
     return { ok: true, stagePath, message: stageRes.content || '' };
   };
 
-  const commitStagedYaml = async ({
-    targetPath,
-    stagePath,
-    label = 'YAML',
-    backup = true,
-    backupTag = 'yaml_bridge',
-  }) => {
-    const safeTag = String(backupTag || 'yaml_bridge').replace(/[^A-Za-z0-9_.-]+/g, '_');
-    const res = await runShellWithRoot(`
-        set -e
-        TARGET=${shellQuote(targetPath)}
-        STAGE=${shellQuote(stagePath)}
-        LABEL=${shellQuote(label)}
-        YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-        PARSE_OUT="$STAGE.kano_parse.$$"
-        ${prepareYqRuntimeCmd()}
-        cleanup_yaml_bridge() {
-          rc=$?
-          rm -f "$PARSE_OUT" 2>/dev/null || true
-          if [ "$rc" -ne 0 ]; then rm -f "$STAGE" 2>/dev/null || true; fi
-          trap - EXIT
-          exit "$rc"
-        }
-        trap cleanup_yaml_bridge EXIT
-        [ -s "$STAGE" ] || { echo "YAML_STAGE_MISSING: $STAGE"; exit 1; }
-        [ ! -L "$TARGET" ] || { echo "YAML_TARGET_SYMLINK_REJECTED: $TARGET"; exit 1; }
-        ${yqVersionCheckCmd()}
-        "$YQ" e '.' "$STAGE" >/dev/null 2>"$PARSE_OUT" || {
-          echo "YAML_STAGE_PARSE_FAILED: $LABEL"
-          cat "$PARSE_OUT" 2>/dev/null || true
-          exit 1
-        }
-        hash_file() {
-          file="$1"
-          if command -v sha256sum >/dev/null 2>&1; then sha256sum "$file" 2>/dev/null | awk '{print $1}'
-          elif command -v md5sum >/dev/null 2>&1; then md5sum "$file" 2>/dev/null | awk '{print $1}'
-          else cksum "$file" 2>/dev/null | awk '{print $1 ":" $2}'
-          fi
-        }
-        old_hash="$(hash_file "$TARGET")"
-        old_size="$(wc -c < "$TARGET" 2>/dev/null || echo 0)"
-        if [ -f "$TARGET" ] && cmp -s "$TARGET" "$STAGE" 2>/dev/null; then
-          rm -f "$STAGE"
-          echo "YAML_COMMIT_UNCHANGED=1"
-          echo "YAML_OLD_HASH=$old_hash"
-          echo "YAML_NEW_HASH=$old_hash"
-          echo "YAML_OLD_SIZE=$old_size"
-          echo "YAML_NEW_SIZE=$old_size"
-          exit 0
-        fi
-        stage_hash="$(hash_file "$STAGE")"
-        stage_size="$(wc -c < "$STAGE" 2>/dev/null || echo 0)"
-        stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
-        [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-        backup_path=""
-        if [ ${backup ? '1' : '0'} = '1' ] && [ -f "$TARGET" ]; then
-          backup_path="$TARGET.before_${safeTag}_$stamp"
-          cp "$TARGET" "$backup_path" || {
-            echo "YAML_BACKUP_FAILED: $backup_path"
-            exit 1
-          }
-        fi
-        chmod 600 "$STAGE" || exit 1
-        mv -f "$STAGE" "$TARGET" || {
-          echo "YAML_COMMIT_FAILED: $TARGET"
-          exit 1
-        }
-        new_hash="$(hash_file "$TARGET")"
-        new_size="$(wc -c < "$TARGET" 2>/dev/null || echo 0)"
-        [ -z "$stage_hash" ] || [ "$stage_hash" = "$new_hash" ] || {
-          echo "YAML_COMMIT_CHECKSUM_MISMATCH: stage=$stage_hash target=$new_hash"
-          [ -n "$backup_path" ] && cp "$backup_path" "$TARGET" 2>/dev/null || true
-          exit 1
-        }
-        ${pruneKanoBackupsCmd()}
-        echo "YAML_COMMIT_OK=1"
-        echo "YAML_BACKUP=$backup_path"
-        echo "YAML_OLD_HASH=$old_hash"
-        echo "YAML_NEW_HASH=$new_hash"
-        echo "YAML_OLD_SIZE=$old_size"
-        echo "YAML_NEW_SIZE=$new_size"
-        echo "YAML_STAGE_SIZE=$stage_size"
-        `, 45 * 1000);
-    if (res.success) invalidateStatusSnapshot();
-    const content = String(res.content || '');
-    return {
-      ok: !!res.success && (/YAML_COMMIT_OK=1/.test(content) || /YAML_COMMIT_UNCHANGED=1/.test(content)),
-      unchanged: /YAML_COMMIT_UNCHANGED=1/.test(content),
-      backupPath: ((content.split('\n').find((line) => line.startsWith('YAML_BACKUP=')) || '').replace(/^YAML_BACKUP=/, '').trim()),
-      oldHash: ((content.split('\n').find((line) => line.startsWith('YAML_OLD_HASH=')) || '').replace(/^YAML_OLD_HASH=/, '').trim()),
-      newHash: ((content.split('\n').find((line) => line.startsWith('YAML_NEW_HASH=')) || '').replace(/^YAML_NEW_HASH=/, '').trim()),
-      content,
-      shell: res,
-    };
-  };
+  const commitStagedYaml = async ({targetPath, stagePath, label = 'YAML', backup = true,
+  backupTag = 'yaml_bridge', configSource = null, preserveSecret = true, sourceStagePath = null, removeSource = false}) => {
+  const withSource = configSource !== null || sourceStagePath !== null || removeSource;
+  if (withSource && targetPath !== CLASH_CONFIG || configSource !== null && !['template.yaml','subscription_original','uploaded_config'].includes(configSource) || sourceStagePath !== null && typeof sourceStagePath !== 'string' || removeSource && sourceStagePath !== null) {
+    return {ok:false,content:'F50_ERROR=invalid_config_source'};
+  }
+  const safeTag = String(backupTag || 'yaml_bridge').replace(/[^A-Za-z0-9_.-]+/g, '_');
+  const script = `set -e
+umask 077
+TARGET=${shellQuote(targetPath)}
+STAGE=${shellQuote(stagePath)}
+SOURCE_FILE=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
+SOURCE_VALUE=${shellQuote(configSource || '')}
+WITH_SOURCE=${withSource ? 1 : 0}
+SOURCE_STAGE=${shellQuote(sourceStagePath || '')}
+SOURCE_DELETE=${removeSource ? 1 : 0}
+PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
+BACKUP_REQUESTED=${backup ? 1 : 0}
+BACKUP_TAG=${shellQuote(safeTag)}
+YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
+${prepareYqRuntimeCmd()}
+${buildF50ConfigTransactionFunctions()}
+f50_config_tx_recover "$TARGET" "$SOURCE_FILE" || exit 1
+TX="$TARGET.kano_tx"
+PARSE_OUT="$STAGE.kano_parse.$$"
+NORMALIZED="$STAGE.kano_secret.$$"
+SOURCE_NEW="$SOURCE_FILE.kano_source.$$"
+TX_OWNED=0
+COMMITTED=0
+finish_yaml_commit() {
+  rc=$?; trap - EXIT HUP INT TERM
+  if [ "$TX_OWNED" = 1 ]; then
+    if ! f50_config_tx_recover "$TARGET" "$SOURCE_FILE"; then rc=1; fi
+  fi
+  rm -f "$PARSE_OUT" "$NORMALIZED" "$SOURCE_NEW"
+  [ "$COMMITTED" = 1 ] || rm -f "$STAGE"
+  exit "$rc"
+}
+trap finish_yaml_commit EXIT
+trap 'exit 130' HUP INT TERM
+[ -s "$STAGE" ] && [ ! -L "$STAGE" ] && [ ! -L "$TARGET" ] && [ ! -L "$SOURCE_FILE" ] || { echo F50_ERROR=yaml_path_invalid; exit 1; }
+${yqVersionCheckCmd()}
+"$YQ" e -e 'tag == "!!map"' "$STAGE" >/dev/null 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
+if [ "$PROTECT_SECRET" = 1 ]; then
+  old_secret=
+  if [ -s "$TARGET" ]; then old_secret=$("$YQ" e -r '.secret // ""' "$TARGET" 2>"$PARSE_OUT") || { echo F50_ERROR=live_secret_read_failed; exit 1; }; fi
+  if [ -n "$old_secret" ]; then
+    export F50_LIVE_CONFIG="$TARGET"
+    "$YQ" e '.secret = load(strenv(F50_LIVE_CONFIG)).secret' "$STAGE" > "$NORMALIZED" || exit 1
+    unset F50_LIVE_CONFIG
+  else
+    export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
+    "$YQ" e '.secret = strenv(F50_FIXED_SECRET)' "$STAGE" > "$NORMALIZED" || exit 1
+    unset F50_FIXED_SECRET
+  fi
+  unset old_secret
+  chmod 600 "$NORMALIZED" && mv -f "$NORMALIZED" "$STAGE" || exit 1
+fi
+hash_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
+command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=yaml_hash_tool_missing; exit 1; }
+old_hash=$(hash_file "$TARGET")
+old_size=0; [ ! -f "$TARGET" ] || old_size=$(wc -c < "$TARGET")
+source_same=1
+if [ "$WITH_SOURCE" = 1 ]; then
+  mkdir -p "\${SOURCE_FILE%/*}"
+  if [ "$SOURCE_DELETE" = 1 ]; then
+    [ ! -e "$SOURCE_FILE" ] || source_same=0
+  else
+    if [ -n "$SOURCE_STAGE" ]; then
+      [ -f "$SOURCE_STAGE" ] && [ ! -L "$SOURCE_STAGE" ] && cp -p "$SOURCE_STAGE" "$SOURCE_NEW" || exit 1
+    else
+      printf 'KANO_CONFIG_SOURCE=%s\\n' "$SOURCE_VALUE" > "$SOURCE_NEW" || exit 1
+    fi
+    cmp -s "$SOURCE_FILE" "$SOURCE_NEW" || source_same=0
+  fi
+fi
+if cmp -s "$TARGET" "$STAGE" && [ "$source_same" = 1 ]; then
+  rm -f "$STAGE"
+  echo YAML_COMMIT_UNCHANGED=1
+  printf 'YAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\n' "$old_hash" "$old_hash"
+  exit 0
+fi
+mkdir "$TX" || { echo F50_ERROR=config_transaction_busy; exit 1; }
+TX_OWNED=1
+printf '%s\\n' F50_CONFIG_TX_V1 > "$TX/format" || exit 1
+snapshot_pair_file() {
+  name=$1; src=$2
+  if [ -e "$src" ]; then cp -p "$src" "$TX/$name" && chmod 600 "$TX/$name" && touch "$TX/$name.had" || return 1
+  else touch "$TX/$name.absent" || return 1; fi
+}
+snapshot_pair_file config "$TARGET" || exit 1
+if [ "$WITH_SOURCE" = 1 ]; then snapshot_pair_file source "$SOURCE_FILE" && touch "$TX/with_source" || exit 1; fi
+backup_path=
+if [ "$BACKUP_REQUESTED" = 1 ] && [ -f "$TARGET" ]; then
+  backup_path="$TARGET.before_\${BACKUP_TAG}_$(date +%Y%m%d%H%M%S)_$$"
+  cp -p "$TX/config" "$backup_path" && chmod 600 "$backup_path" || exit 1
+  if [ "$WITH_SOURCE" = 1 ]; then
+    if [ -f "$TX/source.had" ]; then cp -p "$TX/source" "$backup_path.source" || exit 1
+    else touch "$backup_path.source.absent" || exit 1; fi
+  fi
+fi
+touch "$TX/ready" || exit 1
+sync
+stage_hash=$(hash_file "$STAGE")
+[ -n "$stage_hash" ] || exit 1
+chmod 600 "$STAGE" && mv -f "$STAGE" "$TARGET" || exit 1
+if [ "$WITH_SOURCE" = 1 ]; then
+  if [ "$SOURCE_DELETE" = 1 ]; then rm -f "$SOURCE_FILE" || exit 1
+  else chmod 600 "$SOURCE_NEW" && mv -f "$SOURCE_NEW" "$SOURCE_FILE" || exit 1; fi
+fi
+new_hash=$(hash_file "$TARGET")
+[ "$stage_hash" = "$new_hash" ] || { echo F50_ERROR=yaml_commit_checksum_mismatch; exit 1; }
+touch "$TX/committed" || exit 1
+sync
+COMMITTED=1
+printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\nYAML_OLD_SIZE=%s\\nYAML_NEW_SIZE=%s\\n' "$backup_path" "$old_hash" "$new_hash" "$old_size" "$(wc -c < "$TARGET")"
+`;
+  const res = await runShellWithRoot(script, 45000);
+  if (res.success) invalidateStatusSnapshot();
+  const content = String(res.content || '');
+  const field = (name) => (content.split(/\r?\n/).find(line => line.startsWith(name + '=')) || '').slice(name.length + 1);
+  return {ok:res.success === true && /^YAML_COMMIT_(?:OK|UNCHANGED)=1$/m.test(content),
+    unchanged:/^YAML_COMMIT_UNCHANGED=1$/m.test(content), backupPath:field('YAML_BACKUP'),
+    oldHash:field('YAML_OLD_HASH'),newHash:field('YAML_NEW_HASH'),content,shell:res};
+};
+
 
   const kprBaseWriteYamlObjectAtomic = async (yamlPath, objectValue, {
     label = 'YAML',
     marker = '',
     backup = true,
     backupTag = 'yaml_bridge',
+    configSource = null,
+    preserveSecret = true,
   } = {}) => {
     try {
       assertYamlRootMap(objectValue, label);
+      f50AssertSafeJsonNumbers(objectValue);
     } catch (e) {
       return { ok: false, content: e.message || String(e), shell: null };
     }
@@ -4116,8 +4920,11 @@ KANO_YQ_SMOKE_EOF
       label,
       backup,
       backupTag,
+      configSource,
+      preserveSecret,
     });
   };
+
 
   const ensurePolicyStorage = async () => {
     const res = await runShellWithRoot(`
@@ -4236,6 +5043,7 @@ KANO_YQ_SMOKE_EOF
   };
 
   const applyOverrideSafetyFields = (config, preservedSecret = '') => {
+    if (typeof preservedSecret === 'string' && preservedSecret.length) config.secret = preservedSecret;
     return applyRequiredF50Fields(config, { preservedSecret });
   };
 
@@ -4531,11 +5339,6 @@ KANO_YQ_SMOKE_EOF
       for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
       const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original', configSource: 'subscription_original' });
       if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
-      const marked = await runShellWithRoot(`
-        ${setConfigSourceCmd('subscription_original')}
-        grep -qx 'KANO_CONFIG_SOURCE=subscription_original' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
-      `, 10 * 1000);
-      if (!marked.success) throw new Error('保存原配置来源失败');
       invalidateStatusSnapshot();
       return true;
     } catch (error) {
@@ -4784,7 +5587,7 @@ KANO_YQ_SMOKE_EOF
     }
 
     let outputObj = read.value;
-    const preservedSecret = typeof read.value.secret == 'string' ? read.value.secret.trim() : '';
+    const preservedSecret = typeof read.value.secret == 'string' ? read.value.secret : '';
     try {
       if (hasUiOverride) outputObj = applyUiRuleOverridesToConfig(outputObj, ruleOverrideConfig);
       if (saved) {
@@ -4908,13 +5711,7 @@ KANO_WRITE_CHECK_EOF
     if (!write.ok) return fail('validate_or_commit_runtime', write.content || '运行配置验证或提交失败');
 
     configCommitted = true;
-    const sourceRes = await runShellWithRoot(`
-        ${setConfigSourceCmd('template.yaml')}
-        echo 'CONFIG_SOURCE_COMMITTED=template.yaml'
-        `, 15 * 1000);
-    if (!sourceRes.success || !String(sourceRes.content || '').includes('CONFIG_SOURCE_COMMITTED=template.yaml')) {
-      return fail('commit_config_source', sourceRes.content || '配置来源写入失败');
-    }
+
 
     const oldSize = ((write.content.split('\n').find((line) => line.startsWith('YAML_OLD_SIZE=')) || '').replace(/^YAML_OLD_SIZE=/, '').trim());
     const newSize = ((write.content.split('\n').find((line) => line.startsWith('YAML_NEW_SIZE=')) || '').replace(/^YAML_NEW_SIZE=/, '').trim());
@@ -5198,6 +5995,7 @@ KANO_WRITE_CHECK_EOF
       label: 'config.yaml',
       backup: true,
       backupTag: 'controller',
+      preserveSecret: false,
     });
     if (!configWrite.ok) {
       const templateRestored = await restoreTemplateWrite();
@@ -5272,7 +6070,9 @@ KANO_WRITE_CHECK_EOF
       ? String(urlPath || '/')
       : `/${urlPath}`;
     const url = `${info.apiBase}${path}`;
-    const bodyArg = body == null ? '' : `--data-binary ${shellQuote(body)}`;
+    const bodyText = body == null ? null : typeof body === 'string' ? body : JSON.stringify(body);
+    if (body != null && typeof bodyText !== 'string') throw new TypeError('Invalid API JSON body');
+    const bodyArg = bodyText == null ? '' : `--data-binary ${shellQuote(bodyText)}`;
     const typeArg = body == null ? '' : `-H ${shellQuote('Content-Type: application/json')}`;
     const outputArg = outputFile
       ? `-o ${shellQuote(outputFile)} -w ${shellQuote('%{http_code}')}`
@@ -5322,6 +6122,8 @@ KANO_WRITE_CHECK_EOF
     const errFile = `/data/kano_mihomo_api_${suffix}.err`;
     const curlCmd = buildApiCurl(urlPath, method, body, info, outFile, requestTimeout);
     const res = await runShellWithRoot(`
+        umask 077
+        trap ${shellQuote('rm -f ' + shellQuote(outFile) + ' ' + shellQuote(errFile))} EXIT
         ${getCurlBinCmd()}
         HTTP_CODE="$(${curlCmd} 2>${shellQuote(errFile)})"
         CURL_STATUS=$?
@@ -5505,18 +6307,19 @@ KANO_WRITE_CHECK_EOF
   };
 
   const mapWithConcurrency = async (items = [], limit = 2, worker = async (item) => item) => {
-    const source = Array.isArray(items) ? items : [];
-    if (source.length == 0) return [];
+    const source = Array.from(items);
     const results = new Array(source.length);
-    let cursor = 0;
+    let cursor = 0, failure = null;
     const runNext = async () => {
-      while (cursor < source.length) {
+      while (!failure && cursor < source.length) {
         const index = cursor++;
-        results[index] = await worker(source[index], index);
+        try { results[index] = await worker(source[index], index); }
+        catch (error) { if (!failure) failure = { error }; }
       }
     };
-    const workerCount = Math.min(source.length, Math.max(1, Number(limit) || 1));
-    await Promise.all(Array.from({ length: workerCount }, () => runNext()));
+    const count = Number.isFinite(Number(limit)) ? Math.max(1, Math.floor(Number(limit))) : 1;
+    await Promise.all(Array.from({ length: Math.min(source.length, count) }, runNext));
+    if (failure) throw failure.error;
     return results;
   };
 
@@ -5574,36 +6377,45 @@ KANO_WRITE_CHECK_EOF
     };
   };
 
-  const forceUpdateProvidersFromConfig = async ({ showToast = false, providerNames = null, config = null, refreshRemote = false } = {}) => {
-  const read = config ? {ok:true,value:config} : await readYamlObject(CLASH_CONFIG, 'config.yaml');
-  if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,message:read.message || 'config read failed'}]);
+  const forceUpdateProvidersFromConfig = async ({showToast=false,providerNames=null,config=null,refreshRemote=false}={}) => {
+  const read = config ? {ok:true,value:config} : await readYamlObject(CLASH_CONFIG,'config.yaml');
+  if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'config_read_failed',message:read.message || 'config read failed'}]);
   const defs = read.value['proxy-providers'] || {};
-  const names = Object.keys(defs).filter(n => !providerNames || providerNames.includes(n));
-  if(refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(n => names.includes(n))) {
-    const refreshed = await f50Command('refresh-remote-providers',100000);
-    if(!refreshed.success)return buildProviderUpdateResult(names.map(name=>({name,ok:false,message:f50Error(refreshed.content)})));
+  const names = Object.keys(defs).filter(name=>!providerNames || providerNames.includes(name));
+  if (refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(name=>names.includes(name))) {
+    const refreshed=await f50Command('refresh-remote-providers',100000);
+    if (!refreshed.success) return buildProviderUpdateResult(names.map(name=>({name,ok:false,proxyCount:null,errorType:'remote_refresh_failed',message:f50Error(refreshed.content)})));
   }
-  const info = await buildControllerInfo({fresh:true});
-  const pid = await getCorePid();
-  const results = await mapWithConcurrency(names, 2, async (name) => {
-    if (!pid) return {type:'proxy-provider',name,ok:false,message:'\u6838\u5fc3\u672a\u8fd0\u884c'};
-    const updated = await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'PUT', null, info, 5, {corePid:pid});
-    const snap = updated.success ? await callMihomoApi('/providers/proxies/' + encodeURIComponent(name), 'GET', null, info, 5, {corePid:pid}) : updated;
-    let count = 0;
-    try { const value = JSON.parse(snap.responseText || '{}'); count = Array.isArray(value.proxies) ? value.proxies.length : 0; } catch (_) {}
-    const ok = !!updated.success && !!snap.success && count > 0;
-    const rawMessage = snap.responseText || snap.message || snap.content || '';
-    const http = defs[name].type === 'http';
-    const upstream390 = http && (snap.statusCode === 390 || /(?:HTTP|status(?: code)?)\s*[:=]?\s*390\b/i.test(rawMessage));
-    return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,statusCode:snap.statusCode || 0,
-      message:ok ? '' : sanitizeSubscriptionSecrets(rawMessage || (http ? 'HTTP Provider 更新失败' : '\u672c\u5730\u8282\u70b9\u672a\u6210\u529f\u52a0\u8f7d\uff0c\u672a\u91cd\u8bd5\u8fdc\u7aef\u4e0b\u8f7d')),
-      errorType:ok ? '' : upstream390 ? 'upstream_390' : (snap.errorType || (http ? 'provider_update_failed' : 'local_reload_failed'))};
+  const info=await buildControllerInfo({fresh:true}),pid=await getCorePid();
+  const results=await mapWithConcurrency(names,2,async name=>{
+    if (!pid) return {type:'proxy-provider',name,ok:false,attempts:0,proxyCount:null,cacheAvailable:false,errorType:'not_run_core_stopped',message:'\u6838\u5fc3\u672a\u8fd0\u884c',connectivity:'unverified'};
+    const path='/providers/proxies/'+encodeURIComponent(name);
+    const updated=await callMihomoApi(path,'PUT',null,info,5,{corePid:pid});
+    // An update error says nothing about the still-loaded cache. Observe it independently.
+    const snap=await callMihomoApi(path,'GET',null,info,5,{corePid:pid});
+    let count=null,parseFailed=false;
+    if (snap.success) {
+      try { const value=JSON.parse(snap.responseText || ''); if (!Array.isArray(value.proxies)) throw Error('missing proxies'); count=value.proxies.length; }
+      catch (_) { parseFailed=true; }
+    }
+    const ok=updated.success===true && snap.success===true && count>0;
+    const failure=!updated.success ? updated : snap;
+    const rawMessage=sanitizeSubscriptionSecrets(failure.responseText || failure.message || failure.content || '');
+    const http=defs[name]?.type==='http';
+    const upstream390=http && (updated.statusCode===390 || /(?:HTTP|status(?: code)?)\s*[:=]?\s*390\b/i.test(rawMessage));
+    const errorType=ok ? '' : upstream390 ? 'upstream_390' : !updated.success ? (updated.statusCode===404 ? 'provider_missing' : updated.errorType || 'provider_update_failed')
+      : !snap.success ? snap.errorType || 'provider_snapshot_failed' : parseFailed ? 'provider_parse_failed' : 'provider_empty';
+    return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,cacheAvailable:count>0,
+      updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
+      statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
+      message:ok ? '' : rawMessage || (count===0 ? '\u8282\u70b9\u6765\u6e90\u5df2\u54cd\u5e94\uff0c\u4f46\u8282\u70b9\u4e3a\u7a7a' : '\u8282\u70b9\u52a0\u8f7d\u72b6\u6001\u672a\u786e\u8ba4')};
   });
-  const result = buildProviderUpdateResult(results, {controllerInfo:info,corePid:pid,
-    via:names.some(name => defs[name].type === 'http') ? 'http' : 'file'});
-  if (showToast) createToast(result.failed ? '\u90e8\u5206\u672c\u5730\u8282\u70b9\u672a\u52a0\u8f7d' : '\u672c\u5730\u8282\u70b9\u5df2\u52a0\u8f7d', result.failed ? 'red':'green');
+  const result=buildProviderUpdateResult(results,{controllerInfo:info,corePid:pid,
+    notRunReason:!pid && names.length ? '\u6838\u5fc3\u672a\u8fd0\u884c' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
+  if (showToast) createToast(result.failed?'\u90e8\u5206\u8282\u70b9\u6765\u6e90\u66f4\u65b0\u672a\u5b8c\u6210':'\u8282\u70b9\u5df2\u52a0\u8f7d\uff1b\u8fde\u901a\u6027\u672a\u6d4b\u8bd5',result.failed?'yellow':'green');
   return result;
 };
+
 
 
   const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
@@ -5980,23 +6792,65 @@ kano_stop_watchers() (
 
   const networkRescue = async ({ stopService = true, showOutput = true, reason = '\u6062\u590d\u7f51\u7edc', preempt = false } = {}) => {
   if (recoveryInProgress) return false;
-  if (!(await ensureCompatBackend())) return false;
   recoveryInProgress = true;
-  if (preempt && activeCriticalOperation) activeCriticalOperation.token.cancelled = true;
+  if (preempt) {
+    try {
+      const checked = await hostRunShellWithRoot.call(globalThis,
+        buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nf50_recovery_eligible', 10000);
+      if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
+        const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
+        createToast('恢复资格未确认；活跃任务或归属不明的租约已保留。<br>' + safeTextToHtml(detail), 'red', 12000);
+        lastInstallDiagnostic = { ...f50Diagnostic(detail), ok: false, summary: '恢复资格未确认' };
+        recoveryInProgress = false;
+        return false;
+      }
+    } catch (error) {
+      createToast('恢复资格检查失败：' + safeTextToHtml(error.message || String(error)), 'red', 12000);
+      recoveryInProgress = false;
+      return false;
+    }
+    if (activeCriticalOperation) activeCriticalOperation.token.cancelled = true;
+  }
   const own = preempt || !activeCriticalOperation;
   const progress = own ? createOperationProgress('\u6062\u590d\u7f51\u7edc') : activeCriticalOperation.progress;
   try {
     if (progress) progress.stage('\u505c\u6b62\u8fdb\u7a0b\u5e76\u91ca\u653e\u63a5\u7ba1\u89c4\u5219');
-    const r = await hostRunShellWithRoot.call(globalThis, 'sh ' + shellQuote(CLASH_SERVICE) + ' recover', 65000);
-    const ok = !!r.success && String(r.content || '').includes('RECOVERY_VERIFIED');
+    let nativeDetail = '';
+    // Normal stop/rollback retains the known backend's journal restoration. Manual rescue never needs it.
+    if (!preempt && !deviceTaskUncertain) {
+      try {
+        const trusted = await runShellWithRoot(`hash=$(sha256sum ${shellQuote(CLASH_SERVICE)} 2>/dev/null | awk '{print $1}')
+case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVERY_TRUSTED=1 ;; esac`, 5000);
+        if (trusted.success && /^F50_NATIVE_RECOVERY_TRUSTED=1$/m.test(String(trusted.content || ''))) {
+          const native = await f50Command('recover', 60000);
+          nativeDetail = 'F50_NATIVE_RECOVERY_RC=' + (native.success ? '0' : '1') + '\n' + f50Diagnostic(native.content).details + '\n';
+        }
+      } catch (error) { nativeDetail = 'F50_NATIVE_RECOVERY_UNCONFIRMED=1\n' + f50Diagnostic(error.message || String(error)).details + '\n'; }
+    }
+    if (!preempt && activeCriticalOperation && !activeCriticalOperation.leaseOwned) {
+      throw new Error('未取得设备操作租约，停止未执行；请等待其他页面任务结束');
+    }
+    const canResume = !preempt && activeCriticalOperation?.leaseOwned && !activeCriticalOperation.uncertain &&
+      !activeCriticalOperation.token.cancelled && !activeCriticalOperation.requests;
+    const resumeTag = canResume ? f50TaskTag(activeCriticalOperation.token) : '';
+    const r = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !canResume), 120000);
+    const ok = !!r.success && /^RECOVERY_VERIFIED$/m.test(String(r.content || ''));
+    if (ok) deviceTaskUncertain = false;
+    lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
+      summary: ok ? '\u7f51\u7edc\u63a5\u7ba1\u5df2\u91ca\u653e' : '\u6062\u590d\u672a\u5b8c\u6210\uff0c\u672a\u786e\u8ba4\u7684\u8d44\u6e90\u5df2\u4fdd\u7559' };
     invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
-    if (progress) progress.finish(ok, ok ? '\u5df2\u505c\u6b62\u5e76\u91ca\u653e\u7f51\u7edc' : '\u4ecd\u6709\u6b8b\u7559\uff0c\u8bf7\u67e5\u770b\u8be6\u60c5');
+    const resultDetail = ok ? '已停止并释放网络' : '仍有残留，请查看详情';
+    if (own) { if (progress) progress.finish(ok, resultDetail); }
+    else { operationFinish(ok, resultDetail); if (progress && ok) progress.stage('网络清理完成，等待释放设备租约'); }
     if (ok) renderRuntimeStatus('stopped', '\u732b\u732b - \u5df2\u505c\u6b62', document.querySelector('#running_mm'));
-    createToast(ok ? '\u7f51\u7edc\u63a5\u7ba1\u5df2\u91ca\u653e' : '\u6062\u590d\u672a\u5b8c\u6210<br>' + safeTextToHtml(f50Error(r.content)), ok ? 'green':'red', ok ? 5000:15000);
-    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? '\u6062\u590d\u5b8c\u6210':'\u6e05\u7406\u6b8b\u7559', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    const resultToast = [ok ? '网络接管已释放' : '恢复未完成<br>' + safeTextToHtml(f50Error(r.content)), ok ? 'green' : 'red', ok ? 5000 : 15000];
+    if (!own && ok) activeCriticalOperation.finalToast = resultToast;
+    else createToast(...resultToast);
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理结果；等待租约收尾') : '清理残留', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
     return ok;
   } catch (error) {
-    if (progress) progress.finish(false, '\u8bf7\u6c42\u5931\u8d25\uff0c\u72b6\u6001\u672a\u77e5');
+    if (own) { if (progress) progress.finish(false, '请求失败，状态未知'); }
+    else operationFinish(false, '请求失败，状态未知');
     createToast(safeTextToHtml(error.message || String(error)), 'red', 12000); return false;
   } finally { recoveryInProgress = false; syncCriticalOperationStatus(); }
 };
@@ -6025,7 +6879,7 @@ kano_stop_watchers() (
         CONFIG=${shellQuote(CLASH_CONFIG)}
         stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
         [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-        backup="$CONFIG.before_${safeLabel}_$stamp"
+        backup="$CONFIG.before_${safeLabel}_\${stamp}_$$"
         if [ -f "$CONFIG" ]; then
           cp "$CONFIG" "$backup" || exit 1
           rm -f "$backup.source" "$backup.source.absent" || exit 1
@@ -6034,7 +6888,7 @@ kano_stop_watchers() (
           else
             touch "$backup.source.absent" || exit 1
           fi
-          chmod 644 "$backup" 2>/dev/null || true
+          chmod 600 "$backup" || exit 1
           echo "CONFIG_ROLLBACK=$backup"
         else
           echo "CONFIG_ROLLBACK="
@@ -6046,45 +6900,25 @@ kano_stop_watchers() (
     return line.replace(/^CONFIG_ROLLBACK=/, '').trim();
   };
 
-  const restoreConfigRollbackPoint = async (rollbackPath = '', context = '\u56de\u6eda', { showToast = true } = {}) => {
-    if (!rollbackPath) return false;
-    const res = await runShellWithRoot(`
-        CONFIG=${shellQuote(CLASH_CONFIG)}
-        BACKUP=${shellQuote(rollbackPath)}
-        if [ ! -s "$BACKUP" ]; then
-          echo "ROLLBACK_MISSING: $BACKUP"
-          exit 1
-        fi
-        RESTORE_NEW="$CONFIG.kano_restore.$$"
-        cleanup_restore() {
-          rc=$?
-          trap - EXIT
-          rm -f "$RESTORE_NEW" 2>/dev/null || true
-          exit "$rc"
-        }
-        trap cleanup_restore EXIT
-        cp "$BACKUP" "$RESTORE_NEW" || exit 1
-        chmod 600 "$RESTORE_NEW" || exit 1
-        mv -f "$RESTORE_NEW" "$CONFIG" || exit 1
-        if [ -f "$BACKUP.source" ]; then
-          cp "$BACKUP.source" ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} || exit 1
-        elif [ -f "$BACKUP.source.absent" ]; then
-          rm -f ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} || exit 1
-        fi
-        sync 2>/dev/null || true
-        echo "CONFIG_ROLLBACK_RESTORED: $BACKUP"
-        `);
-    if (showToast) {
-      createToast(
-        res.success
-          ? `${escapeHtml(context)}\u5931\u8d25\uff0c\u5df2\u6062\u590d\u4e0a\u4e00\u4efd config.yaml`
-          : `${escapeHtml(context)}\u5931\u8d25\uff0c\u4e14 config.yaml \u56de\u6eda\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`,
-        res.success ? 'yellow' : 'red',
-        9000,
-      );
-    }
-    return res.success;
-  };
+  const restoreConfigRollbackPoint = async (rollbackPath='',context='\u56de\u6eda',{showToast=true}={}) => {
+  if (!rollbackPath) return false;
+  const stagePath=CLASH_CONFIG+'.kano_rollback_'+Date.now()+'_'+createRandomString(6);
+  const prepared=await runShellWithRoot(`set -e
+umask 077
+BACKUP=${shellQuote(rollbackPath)}
+STAGE=${shellQuote(stagePath)}
+[ -s "$BACKUP" ] && [ ! -L "$BACKUP" ] || exit 1
+cp "$BACKUP" "$STAGE" && chmod 600 "$STAGE" || exit 1
+if [ -f "$BACKUP.source" ]; then echo SOURCE_STATE=present
+elif [ -f "$BACKUP.source.absent" ]; then echo SOURCE_STATE=absent
+else echo SOURCE_STATE=unchanged; fi`,15000);
+  let restored={ok:false,content:prepared.content};
+  if (prepared.success) restored=await commitStagedYaml({targetPath:CLASH_CONFIG,stagePath,backup:false,
+    preserveSecret:false,sourceStagePath:/^SOURCE_STATE=present$/m.test(prepared.content)?rollbackPath+'.source':null,
+    removeSource:/^SOURCE_STATE=absent$/m.test(prepared.content)});
+  if (showToast) createToast(escapeHtml(context)+(restored.ok?'\u5931\u8d25\uff0c\u5df2\u6062\u590d\u65e7\u914d\u7f6e\u4e0e\u6765\u6e90\u6807\u8bb0':'\u5931\u8d25\uff0c\u4e14\u914d\u7f6e\u56de\u6eda\u672a\u5b8c\u6210'),restored.ok?'yellow':'red',9000);
+  return restored.ok;
+};
 
   const restartClashWithConfigRollback = async (rollbackPath = null, context = '\u91cd\u542f') => {
     appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
@@ -6583,7 +7417,14 @@ kano_stop_watchers() (
         connectionStatus = '响应格式不支持';
       }
     }
+    const [providerHealth,panelHealth] = await Promise.all([
+      callMihomoApi('/providers/proxies','GET',null,controllerInfo,5,{corePid:pid}),
+      runShellWithRoot(buildF50ShellBase()+buildF50PanelHelpers()+'\nf50_verify_zashboard_endpoint',12000),
+    ]);
+    const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
     const rows = [
+      ['\u6838\u5fc3\u5c42',health.core],['\u63a7\u5236 API',health.api],['\u63a5\u7ba1\u6709\u6548\u6027',health.takeover],
+      ['Zashboard',health.panel],['Provider \u52a0\u8f7d',health.providers],['\u4ee3\u7406\u8fde\u901a\u6027',health.connectivity],
       ['安装/运行状态', runtimeState.state],
       ['预检信息', runtimeState.message || '无'],
       ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
@@ -6593,7 +7434,7 @@ kano_stop_watchers() (
       ['7788 监听', proc.PORT_7788 == '1' ? '已监听' : '未监听'],
       ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
       ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
-      ['流量接管', policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy')],
+      ['接管模式（配置）', policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy')],
       ['IPv6', policyState.options.ipv6 == 'on' ? '已开启' : '未开启'],
       ['config.yaml', configExists ? `存在，${configSize || 0} bytes` : '不存在'],
       ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
@@ -6746,7 +7587,7 @@ btn_disabled.onclick = async () => {
     return false;
   } finally {
     setButtonBusy(btn_disabled, false);
-    releaseCriticalOperation(operationToken);
+    await releaseCriticalOperation(operationToken);
   }
 };
 
@@ -6944,6 +7785,7 @@ btn_disabled.onclick = async () => {
       ? String(requestedDnsPort)
       : String(F50_PORTS.dns);
     const proxyGroup = String(state.options.proxy_group || 'Proxy').replace(/[\r\n]/g, '').trim() || 'Proxy';
+    const subRuleMode = await readCurrentSubRuleMode();
     const optionsText = [
       `traffic_mode=${trafficMode}`,
       `transparent=${transparent}`,
@@ -6955,6 +7797,7 @@ btn_disabled.onclick = async () => {
       `private_route_enabled=${state.options.private_route_enabled || "off"}`,
       `private_route_cidrs=${state.options.private_route_cidrs || ""}`,
       `private_route_policy=${state.options.private_route_policy || ""}`,
+      `KANO_SUB_RULE_MODE=${subRuleMode}`,
       '',
     ].join('\n');
     const directDomain = normalizeDomainRuleText(state.directDomain || '');
@@ -6963,24 +7806,10 @@ btn_disabled.onclick = async () => {
     const rejectDomain = normalizeDomainRuleText(state.rejectDomain || '');
     if (!(await ensurePolicyToolsScript({ syncStorage: false }))) return false;
     const bootEnabled = await checkIsBootUp();
-    const policyTransactionFiles = [
-      CLASH_DEVICE_BYPASS_FILE,
-      CLASH_MAC_BYPASS_FILE,
-      BOOT_FILE,
-      CLASH_DIRECT_DOMAIN_FILE,
-      CLASH_DIRECT_IP_FILE,
-      CLASH_PROXY_DOMAIN_FILE,
-      CLASH_REJECT_DOMAIN_FILE,
-      CLASH_SAFE_DIRECT_DOMAIN_FILE,
-      CLASH_SAFE_DIRECT_IP_FILE,
-      CLASH_SAFE_PROXY_DOMAIN_FILE,
-      CLASH_SAFE_REJECT_DOMAIN_FILE,
-      CLASH_POLICY_OPTIONS_FILE,
-    ];
-    const snapshotPolicyFilesCmd = policyTransactionFiles
+    const snapshotPolicyFilesCmd = policyTransactionFiles()
       .map((path, index) => `snapshot_transaction_file ${index} ${shellQuote(path)}`)
       .join('\n');
-    const restorePolicyFilesCmd = policyTransactionFiles
+    const restorePolicyFilesCmd = policyTransactionFiles()
       .map((path, index) => `restore_transaction_file ${index} ${shellQuote(path)} || restore_rc=1`)
       .reverse()
       .join('\n');
@@ -6998,7 +7827,7 @@ btn_disabled.onclick = async () => {
           trap - EXIT
           if [ "$rc" -ne 0 ]; then
             set +e
-            restore_policy_transaction || rc=1
+            restore_policy_transaction || { echo "F50_RECOVERY_POLICY=$TX"; exit 1; }
           fi
           rm -rf "$TX" 2>/dev/null || true
           exit "$rc"
@@ -7009,6 +7838,7 @@ btn_disabled.onclick = async () => {
         trap finish_policy_save EXIT
         ${snapshotPolicyFilesCmd}
         mkdir -p ${shellQuote(CLASH_POLICY_DIR)}
+        mkdir -p ${shellQuote(CLASH_DIR + "/Tools")}
         mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
         write_policy_file() {
           target="$1"
@@ -7034,6 +7864,7 @@ btn_disabled.onclick = async () => {
         write_policy_file ${shellQuote(CLASH_REJECT_DOMAIN_FILE)} 600 ${shellQuote(rejectDomain)}
         ${syncSafePolicyFilesCmd()}
         write_policy_file ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} 600 ${shellQuote(optionsText)}
+        write_policy_file ${shellQuote(CLASH_SUB_RULE_MODE_FILE)} 600 ${shellQuote(`KANO_SUB_RULE_MODE=${subRuleMode}\n`)}
         ${bootEnabled ? addPolicyToolsBootLineCmd() : ''}
         echo POLICY_STATE_COMMITTED
         ${apply ? `
@@ -7102,7 +7933,7 @@ btn_disabled.onclick = async () => {
       createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
       return false;
     }
-    createToast('\u7b56\u7565\u914d\u7f6e\u5df2\u4fdd\u5b58', 'green');
+    if (!activeCriticalOperation) createToast('\u7b56\u7565\u914d\u7f6e\u5df2\u4fdd\u5b58', 'green');
     return true;
   };
 
@@ -7492,23 +8323,22 @@ btn_disabled.onclick = async () => {
           private_route_cidrs: selected.cidrs.join(' '),
           private_route_policy: selected.policy,
         }, deviceBypass: get('#mm_policy_device').value };
-        if (!(await kprSaveNetworkState(state, next))) {
-          get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
-          get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
-          get('#mm_policy_quic').checked = state.options.quic_block === 'on';
-          get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
-          get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
-          get('#mm_policy_device').value = state.deviceBypass || '';
-          get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
-          get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
-          get('#kpr_policy').value = state.options.private_route_policy || '';
-          get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
-        }
+        await kprSaveNetworkState(state, next);
+        get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
+        get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
+        get('#mm_policy_quic').checked = state.options.quic_block === 'on';
+        get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
+        get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
+        get('#mm_policy_device').value = state.deviceBypass || '';
+        get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
+        get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
+        get('#kpr_policy').value = state.options.private_route_policy || '';
+        get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
       } catch (error) {
         createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       } finally {
         setButtonBusy(button, false);
-        releaseCriticalOperation(token);
+        await releaseCriticalOperation(token);
       }
     };
   };
@@ -7536,7 +8366,7 @@ btn_disabled.onclick = async () => {
     typeof refreshDashboardAfterModeChange === 'function' ? refreshDashboardAfterModeChange() : Promise.resolve(),
   ]);
   result.warnings = refresh.filter(item => item.status === 'rejected').map(item => f50Diagnostic(item.reason?.message || String(item.reason)).summary);
-  createToast(result.summary, 'green');
+  createToast(result.summary, result.panelFailed ? 'yellow' : 'green');
   return result;
 };
   const restartClashOk = async options => (await restartClash(options)).ok;
@@ -7583,7 +8413,7 @@ btn_disabled.onclick = async () => {
       ...backupFiles.filter((item) => item.label != 'config.yaml'),
       ...backupFiles.filter((item) => item.label == 'config.yaml'),
     ];
-    const requiredNames = backupFiles.map((item) => item.label);
+    const requiredNames = backupFiles.filter((item) => !item.optional).map((item) => item.label);
     const restoreOrderText = restoreFiles.map((item) => item.label).join('\n');
     const confirmed = await askConfirm(
       `mm_config_package_restore_confirm_${createRandomString(4)}`,
@@ -7622,14 +8452,14 @@ btn_disabled.onclick = async () => {
     const restoreStageFilesCmd = restoreFiles.map((item) => {
       const mode = '600';
       return `
-        stage_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)} ${shellQuote(mode)}
+        stage_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)} ${shellQuote(mode)} ${item.optional ? 1 : 0} || exit 1
         `;
     }).join('');
     const restoreCommitFilesCmd = restoreFiles.map((item) => `
-        commit_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)}
+        commit_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)} || exit 1
         `).join('');
     const restoreRollbackFilesCmd = restoreFiles.slice().reverse().map((item) => `
-        rollback_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)}
+        rollback_restore_file ${shellQuote(item.label)} ${shellQuote(item.path)} || restore_failed=1
         `).join('');
     const restorePostRollbackFilesCmd = restoreFiles.slice().reverse().map((item) => {
       const mode = '600';
@@ -7659,20 +8489,26 @@ btn_disabled.onclick = async () => {
           staged="$dst.kano_restore.$$"
           rm -f "$staged" 2>/dev/null || true
           if [ -f "$ROLLBACK_DIR/$name.had" ] && [ -f "$ROLLBACK_DIR/$name" ]; then
-            cp "$ROLLBACK_DIR/$name" "$staged" 2>/dev/null && mv -f "$staged" "$dst" 2>/dev/null || true
+            cp "$ROLLBACK_DIR/$name" "$staged" && chmod 600 "$staged" && mv -f "$staged" "$dst" || return 1
           elif [ -f "$ROLLBACK_DIR/$name.absent" ]; then
-            rm -f "$dst" 2>/dev/null || true
+            rm -f "$dst" || return 1
           fi
         }
         cleanup_restore_transaction() {
           rc=$?
           trap - EXIT
           if [ "$rc" -ne 0 ] && [ "$COMMIT_STARTED" = "1" ] && [ "$COMMIT_DONE" != "1" ]; then
+            restore_failed=0
             ${restoreRollbackFilesCmd}
-            echo "RESTORE_TRANSACTION_ROLLED_BACK"
+            if [ "$restore_failed" = 0 ]; then echo RESTORE_TRANSACTION_ROLLED_BACK
+            else echo "F50_RECOVERY_PACKAGE=$ROLLBACK_DIR"; echo RESTORE_TRANSACTION_INCOMPLETE; fi
           fi
           rm -rf "$STAGE" 2>/dev/null || true
-          if [ "$rc" -ne 0 ]; then rm -rf "$ROLLBACK_DIR" 2>/dev/null || true; fi
+          if [ "$rc" -ne 0 ]; then
+            if [ "$COMMIT_STARTED" = 0 ] || { [ "$COMMIT_DONE" != 1 ] && [ "\${restore_failed:-0}" = 0 ]; }; then
+              rm -rf "$ROLLBACK_DIR" || echo "F50_RECOVERY_PACKAGE=$ROLLBACK_DIR"
+            else echo "F50_RECOVERY_PACKAGE=$ROLLBACK_DIR"; fi
+          fi
           rm -f "$SRC" 2>/dev/null || true
           exit "$rc"
         }
@@ -7759,6 +8595,8 @@ btn_disabled.onclick = async () => {
           dst="$2"
           mode="$3"
           src="$STAGE/$name"
+          if [ "\${4:-0}" = 1 ] && [ ! -e "$src" ]; then echo "PRESERVED_OPTIONAL: $name"; return 0; fi
+          [ ! -L "$src" ] && [ ! -L "$dst" ] || return 1
           staged="$dst.kano_restore.$$"
           mkdir -p "$(dirname "$dst")" || return 1
           if [ -e "$dst" ]; then
@@ -7768,17 +8606,28 @@ btn_disabled.onclick = async () => {
             touch "$ROLLBACK_DIR/$name.absent" || return 1
           fi
           cp "$src" "$staged" || return 1
-          chmod "$mode" "$staged" 2>/dev/null || true
+          chmod "$mode" "$staged" || return 1
+          touch "$ROLLBACK_DIR/$name.selected" || return 1
           echo "STAGED: $name"
         }
         commit_restore_file() {
           name="$1"
           dst="$2"
+          [ -f "$ROLLBACK_DIR/$name.selected" ] || return 0
           staged="$dst.kano_restore.$$"
           [ -f "$staged" ] || return 1
           mv -f "$staged" "$dst" || return 1
           echo "RESTORED: $name"
         }
+        export F50_LIVE_CONFIG=${shellQuote(CLASH_CONFIG)}
+        export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
+        if [ -s "$F50_LIVE_CONFIG" ]; then
+          "$YQ" e '.secret = (load(strenv(F50_LIVE_CONFIG)).secret // strenv(F50_FIXED_SECRET))' "$STAGE/config.yaml" > "$STAGE/config.safe" || exit 1
+        else
+          "$YQ" e '.secret = strenv(F50_FIXED_SECRET)' "$STAGE/config.yaml" > "$STAGE/config.safe" || exit 1
+        fi
+        mv -f "$STAGE/config.safe" "$STAGE/config.yaml" || exit 1
+        unset F50_LIVE_CONFIG F50_FIXED_SECRET
         ${restoreStageFilesCmd}
         COMMIT_STARTED=1
         ${restoreCommitFilesCmd}
@@ -7948,7 +8797,7 @@ btn_disabled.onclick = async () => {
           name="$2"
           if [ -f "$src" ]; then
             cp "$src" "$PKG_DIR/$name" || exit 1
-            chmod 644 "$PKG_DIR/$name" 2>/dev/null || true
+            chmod 600 "$PKG_DIR/$name" || return 1
             packed_count=$((packed_count + 1))
             echo "PACKED: $name"
             return 0
@@ -7970,6 +8819,9 @@ btn_disabled.onclick = async () => {
             override.js)
               printf '%s' ${shellQuote(defaultOverrideJsForBackup)} > "$PKG_DIR/$name" || return 1
               ;;
+            device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
+              : > "$PKG_DIR/$name" || return 1
+              ;;
             rule_override.json|rule_override_applied.json)
               printf '%s' ${shellQuote(defaultRuleOverrideJsonForBackup)} > "$PKG_DIR/$name" || return 1
               ;;
@@ -7978,7 +8830,7 @@ btn_disabled.onclick = async () => {
               return 1
               ;;
           esac
-          chmod 644 "$PKG_DIR/$name" 2>/dev/null || true
+          chmod 600 "$PKG_DIR/$name" || return 1
           packed_count=$((packed_count + 1))
           echo "DEFAULTED: $name"
         }
@@ -8034,7 +8886,7 @@ btn_disabled.onclick = async () => {
     }, 5 * 60 * 1000);
     } finally {
       setButtonBusy(backupBtn, false);
-      releaseCriticalOperation(operationToken);
+      await releaseCriticalOperation(operationToken);
     }
   };
 
@@ -8386,7 +9238,7 @@ btn_disabled.onclick = async () => {
             fi
           fi
           rm -f ${shellQuote(DOWNLOAD_LOG)} 2>/dev/null || true
-          rm -f /data/kano_mihomo_api_*.out /data/kano_mihomo_api_*.err /data/kano_yaml_after_override.yaml /data/kano_ui_rules_*.txt /data/kano_ui_rules_patch.yaml /data/kano_subscription_* 2>/dev/null || true
+          rm -f /data/kano_mihomo_api_*.out /data/kano_mihomo_api_*.err /data/kano_yaml_after_override.yaml /data/kano_ui_rules_*.txt /data/kano_ui_rules_patch.yaml /data/kano_subscription_config.raw /data/kano_subscription_config.yaml /data/kano_subscription_mode_check.out 2>/dev/null || true
           rm -f ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.tmp ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.bak 2>/dev/null || true
           for EMPTY_CACHE in ${shellQuote(CLASH_PROXY_DIR)}/proxies/*.yaml; do
             [ -f "$EMPTY_CACHE" ] && [ ! -s "$EMPTY_CACHE" ] && rm -f "$EMPTY_CACHE" 2>/dev/null || true
@@ -8806,7 +9658,7 @@ btn_disabled.onclick = async () => {
             尝试次数：${item.attempts}<br>
             ${item.ok ? '' : `原因：${escapeHtml(item.message)}<br>`}
             ${item.urlMasked ? `服务器：${escapeHtml(item.urlMasked)}<br>` : ''}
-            ${escapeHtml(cacheText)}
+            ${escapeHtml(cacheText)}<br>节点连通性：未测试
             ${technical}
           </div>`;
         }).join('')
@@ -8919,7 +9771,7 @@ btn_disabled.onclick = async () => {
       };
       const expectedSourceCount = normalizeSubSourceList(sources).length;
       const expectedProviderUrlCount = cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? 0 : expectedSourceCount;
-      const repairable = cleanMode == SUB_RULE_MODE_TEMPLATE && !configCheck.ok && configCheck.status == 'ok' && (
+      const repairable = cleanMode == SUB_RULE_MODE_TEMPLATE && !configCheck.ok && configCheck.readable && (
         configCheck.missingUrls > 0 ||
         configCheck.providerCount != expectedSourceCount ||
         configCheck.providerUrlCount != expectedProviderUrlCount ||
@@ -9034,16 +9886,6 @@ btn_disabled.onclick = async () => {
         return legacySources;
       }
       return await migrateLegacySubscriptionSources({ showToast: true });
-    };
-
-    const readCurrentSubRuleMode = async () => {
-      const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
-          sed -n '/^# KANO_SUB_RULE_MODE=/p' ${shellQuote(CLASH_SUB_URLS)} | head -n 1
-        fi
-      `, 10 * 1000);
-      if (!res.success) throw new Error('读取订阅模式失败，未修改配置');
-      return parseSubRuleModeFromText(res.content || '');
     };
 
     const writeSubConfigByMode = async (
@@ -9274,63 +10116,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
         return false;
       }
-      const res = await runShellWithRoot(`
-        set +e
-        CONFIG=${shellQuote(CLASH_CONFIG)}
-        TEMPLATE=${shellQuote(CLASH_TEMPLATE)}
-        WRITE_CHECK=${shellQuote(KANO_TEMPLATE_WRITE_CHECK)}
-        FLOW=${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
-        CONFIG_NEW="$CONFIG.kano_template_new.$$"
-        cleanup_template_commit() {
-          rc=$?
-          trap - EXIT
-          rm -f "$CONFIG_NEW" 2>/dev/null || true
-          exit "$rc"
-        }
-        trap cleanup_template_commit EXIT
-        : > "$WRITE_CHECK"
-        echo "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null) shell enter template_embedded overwrite" >> "$FLOW" 2>/dev/null || true
-        mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
-        [ -s "$TEMPLATE" ] || { echo "TEMPLATE_MISSING: template.yaml missing or empty"; exit 1; }
-        stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
-        [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-        cat "$TEMPLATE" > "$CONFIG_NEW" || { echo "CONFIG_COMMIT_FAILED: cannot stage template"; exit 1; }
-        chmod 644 "$CONFIG_NEW" 2>/dev/null || true
-        hash_file() {
-          file="$1"
-          if command -v sha256sum >/dev/null 2>&1; then sha256sum "$file" 2>/dev/null | awk '{print $1}'
-          elif command -v md5sum >/dev/null 2>&1; then md5sum "$file" 2>/dev/null | awk '{print $1}'
-          else cksum "$file" 2>/dev/null | awk '{print $1 ":" $2}'
-          fi
-        }
-        old_sha="$(hash_file "$CONFIG")"
-        staged_sha="$(hash_file "$CONFIG_NEW")"
-        if [ -f "$CONFIG" ]; then
-          cp "$CONFIG" "$CONFIG.before_template_overwrite.$stamp" 2>/dev/null || true
-        fi
-        mv -f "$CONFIG_NEW" "$CONFIG" || { echo "CONFIG_COMMIT_FAILED: atomic rename failed"; exit 1; }
-        sync 2>/dev/null || true
-        new_sha="$(hash_file "$CONFIG")"
-        {
-          echo "mode=template_embedded"
-          echo "old_sha=$old_sha"
-          echo "tmp_sha=$staged_sha"
-          echo "new_sha=$new_sha"
-          echo "step=committed"
-          echo "time=$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
-        } > ${shellQuote('/data/kano_template_write_check.out')}
-        if [ -z "$staged_sha" ] || [ -z "$new_sha" ] || [ "$staged_sha" != "$new_sha" ]; then
-          echo "CONFIG_COMMIT_FAILED: final config checksum differs from staged template"
-          cat ${shellQuote('/data/kano_template_write_check.out')} 2>/dev/null
-          exit 1
-        fi
-        ${setConfigSourceCmd('template.yaml')}
-        ${pruneKanoBackupsCmd()}
-        echo "已用 template.yaml 原子替换 config.yaml"
-        echo "CONFIG_SHA_OLD=\${old_sha:-none}"
-        echo "CONFIG_SHA_NEW=\${new_sha:-none}"
-        echo "WRITE_CHECK=/data/kano_template_write_check.out"
-        `, 30 * 1000);
+      const stagePath = CLASH_CONFIG + '.kano_template_' + Date.now() + '_' + createRandomString(6);
+      const staged = await runShellWithRoot('umask 077; cp ' + shellQuote(CLASH_TEMPLATE) + ' ' + shellQuote(stagePath), 15000);
+      const committed = staged.success ? await commitStagedYaml({targetPath: CLASH_CONFIG, stagePath,
+        label: 'config.yaml', backup: true, backupTag: 'template_embedded', configSource: 'template.yaml'}) : {ok:false, content:staged.content};
+      const res = {success:committed.ok, content:committed.content};
       if (!res.success) {
         createToast(`\u6a21\u677f\u8986\u5199\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
         await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
@@ -9417,7 +10207,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         mkdir -p ${shellQuote(CLASH_PROXY_DIR)}
         rm -f ${shellQuote(stagePath)} 2>/dev/null || true
         mv ${shellQuote(uploadedPath)} ${shellQuote(stagePath)}
-        chmod 644 ${shellQuote(stagePath)}
+        chmod 600 ${shellQuote(stagePath)}
         [ -s ${shellQuote(stagePath)} ] && echo STAGE_OK
       `);
       if (!stageRes.success) {
@@ -9425,13 +10215,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         createToast(`配置暂存失败，原 config.yaml 未改动<br>${safeTextToHtml(stageRes.content || '')}`, 'red', 9000);
         return false;
       }
-      const commitRes = await runShellWithRoot(`
-        set -e
-        mv -f ${shellQuote(stagePath)} ${shellQuote(CLASH_CONFIG)}
-        chmod 644 ${shellQuote(CLASH_CONFIG)}
-        ${setConfigSourceCmd('uploaded_config')}
-        [ -s ${shellQuote(CLASH_CONFIG)} ] && echo CONFIG_OK
-      `);
+      const committed = await commitStagedYaml({targetPath: CLASH_CONFIG, stagePath,
+        label: 'config.yaml', backup: true, backupTag: 'uploaded_config', configSource: 'uploaded_config'});
+      const commitRes = {success: committed.ok, content: committed.content};
       if (!commitRes.success) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
         const restored = await rollbackUploadedConfig('上传配置');
@@ -9594,30 +10380,52 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const saveBtn = el.querySelector('#mm_local_file_save_btn');
       const textarea = el.querySelector('#mm_local_file_text');
       const status = el.querySelector('#mm_local_file_status');
+      let readGeneration = 0, editorClosed = false, readyPath = '', loadedContent = '';
       const loadSelected = async () => {
         const fileInfo = findEditableLocalFile(select.value);
-        if (!fileInfo) return;
-        setButtonBusy(reloadBtn, true, '读取中…');
+        if (!fileInfo || editorClosed) return;
+        const generation = ++readGeneration;
+        readyPath = '';
+        saveBtn.disabled = true;
+        setButtonBusy(reloadBtn, true, '\u8bfb\u53d6\u4e2d\u2026');
         textarea.disabled = true;
         try {
           const result = await readEditableLocalFile(fileInfo);
+          if (editorClosed || generation !== readGeneration || select.value !== fileInfo.path) return;
           textarea.value = result.content;
-          status.textContent = result.ok
-            ? (result.exists ? fileInfo.path : `${fileInfo.path}（文件不存在，保存时创建）`)
-            : `读取失败：${result.message || '未知错误'}`;
+          loadedContent = result.content;
+          if (result.ok) readyPath = fileInfo.path;
+          status.textContent = result.ok ? fileInfo.path : '\u8bfb\u53d6\u5931\u8d25\uff1a' + (result.message || 'unknown');
+        } catch (error) {
+          if (!editorClosed && generation === readGeneration) status.textContent = String(error.message || error);
         } finally {
-          textarea.disabled = false;
-          setButtonBusy(reloadBtn, false);
+          if (!editorClosed && generation === readGeneration) {
+            textarea.disabled = !readyPath;
+            saveBtn.disabled = !readyPath;
+            setButtonBusy(reloadBtn, false);
+          }
         }
       };
       select.onchange = loadSelected;
       reloadBtn.onclick = loadSelected;
-      el.querySelector('#mm_local_file_close_btn').onclick = close;
+      el.querySelector('#mm_local_file_close_btn').onclick = () => { editorClosed = true; readGeneration++; close(); };
       saveBtn.onclick = async () => {
         const fileInfo = findEditableLocalFile(select.value);
-        if (!fileInfo) return;
-        return runCriticalButtonOperation(`保存 ${fileInfo.label}`, saveBtn, '保存中…', async () => {
-          if (await writeEditableLocalFile(fileInfo, textarea.value)) await loadSelected();
+        if (!fileInfo || editorClosed || readyPath !== fileInfo.path) return;
+        const content = textarea.value, expectedContent = loadedContent;
+        return runCriticalButtonOperation(`\u4fdd\u5b58 ${fileInfo.label}`, saveBtn, '\u4fdd\u5b58\u4e2d\u2026', async () => {
+          select.disabled = true; reloadBtn.disabled = true;
+          try {
+            const current = await readEditableLocalFile(fileInfo);
+            if (!current.ok || current.content !== expectedContent) {
+              readyPath = '';
+              createToast('\u6587\u4ef6\u5df2\u53d8\u5316\u6216\u65e0\u6cd5\u8bfb\u53d6\uff0c\u672a\u8986\u76d6\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u540e\u7f16\u8f91\u3002','yellow',9000);
+              return false;
+            }
+            const saved = await writeEditableLocalFile(fileInfo, content);
+            if (saved && !editorClosed) await loadSelected();
+            return saved;
+          } finally { select.disabled = false; reloadBtn.disabled = false; }
         });
       };
       await loadSelected();
@@ -9830,7 +10638,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
         } finally {
           setButtonBusy(submitBtn, false);
-          releaseCriticalOperation(operationToken);
+          await releaseCriticalOperation(operationToken);
         }
       };
     };
@@ -9886,7 +10694,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       } finally {
         setButtonBusy(updateSubBtn, false);
-        releaseCriticalOperation(operationToken);
+        await releaseCriticalOperation(operationToken);
       }
     };
 
@@ -10070,7 +10878,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           <div style="pointer-events:all;width:92vw;max-width:900px;">
             <div class="title" style="margin:0">JS 覆写</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
-              定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。
+              定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。仅运行信任的代码，Worker 隔离不等于安全沙箱。
             </div>
             <textarea id="mm_js_override_text" spellcheck="false" autocapitalize="off" style="width:100%;height:430px;max-height:60vh;border:1px solid rgba(96,165,250,.35);border-radius:12px;background:#111827;color:#E5E7EB;caret-color:#60A5FA;box-sizing:border-box;font-family:Consolas,Monaco,monospace,'Microsoft YaHei';line-height:1.5;padding:12px;outline:none;"></textarea>
             <div class="kano-dialog-actions kano-actions-4" style="--kano-action-count:4;margin-top:10px;">

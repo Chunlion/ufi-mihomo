@@ -2555,6 +2555,8 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
   let statusSnapshotCache = null;
   let statusSnapshotPromise = null;
   let statusSnapshotGeneration = 0;
+  let zashboardPanelUrl = '';
+  let panelLoadPromise = null;
 
   function shouldShowOperationProgress(label = '') {
     return /^(?:\u5b89\u88c5\u6838\u5fc3|\u5b89\u88c5\u732b\u732b|\u5378\u8f7d\u732b\u732b|\u5378\u8f7d\u6838\u5fc3|\u6062\u590d\u7f51\u7edc|\u66f4\u65b0\u8ba2\u9605|\u4fdd\u5b58\u66f4\u65b0\u8ba2\u9605|\u91cd\u65b0\u66f4\u65b0\u5931\u8d25\u8282\u70b9\u6765\u6e90|\u4fee\u590d\u8ba2\u9605\u914d\u7f6e|\u4fdd\u5b58\u7f51\u7edc\u4e0e\u79c1\u7f51\u8bbe\u7f6e|\u91cd\u542f\u6838\u5fc3|\u505c\u6b62\u6838\u5fc3|\u4fee\u590d\u4ee3\u7406\u914d\u7f6e|\u4fee\u590d\u7b56\u7565\u89c4\u5219|\u5e94\u7528\u6a21\u677f|\u5e94\u7528\u56fe\u5f62\u89c4\u5219|\u5e94\u7528 JS \u8986\u5199|\u68c0\u67e5\u5e76\u542f\u52a8\u732b\u732b|\u5bfc\u5165\u8f6c\u6362\u7ec4\u4ef6|\u5b89\u88c5\u6216\u66f4\u65b0\u8f6c\u6362\u7ec4\u4ef6|\u5bfc\u5165\u914d\u7f6e\u5305|\u5bfc\u51fa\u914d\u7f6e\u5305|\u4e0a\u4f20\u6a21\u677f|\u6e05\u7406\u7f13\u5b58|\u4fdd\u5b58 config\.yaml)$/.test(String(label));
@@ -2697,6 +2699,8 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
     controllerInfoCache = null;
     controllerInfoCacheExpiresAt = 0;
     controllerInfoLoadPromise = null;
+    zashboardPanelUrl = '';
+    panelLoadPromise = null;
   }
 
   // One read-only device request supplies the status widgets and controller metadata.
@@ -5869,6 +5873,8 @@ KANO_WRITE_CHECK_EOF
     controllerInfoCache = null;
     controllerInfoCacheExpiresAt = 0;
     controllerInfoLoadPromise = null;
+    zashboardPanelUrl = '';
+    panelLoadPromise = null;
   };
 
 
@@ -6551,17 +6557,30 @@ KANO_WRITE_CHECK_EOF
   };
 
   const buildPanelUrl = async () => {
-    const guard = await ensureZashboardPanelReady();
-    if (!guard.ok) throw new Error(guard.message || 'Zashboard 校验失败');
-    if (guard.repaired) createToast('Zashboard 配置或文件已自动修复', 'yellow', 7000);
-    const hostPromise = waitForLanHost();
+    if (panelLoadPromise) return panelLoadPromise;
+    zashboardPanelUrl = '';
+    const generation = statusSnapshotGeneration;
+    const loadPromise = (async () => {
+      const guard = await ensureZashboardPanelReady();
+      if (!guard.ok) throw new Error(guard.message || 'Zashboard 校验失败');
+      if (guard.repaired) createToast('Zashboard 配置或文件已自动修复', 'yellow', 7000);
+      const hostPromise = waitForLanHost();
+      try {
+        const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
+        const url = `http://${host}:${info.port || F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
+        if (panelLoadPromise === loadPromise && generation === statusSnapshotGeneration && !info.usingFallbackController) zashboardPanelUrl = url;
+        return url;
+      } catch (e) {
+        console.error(e);
+        const host = await hostPromise;
+        return `http://${host}:${F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
+      }
+    })();
+    panelLoadPromise = loadPromise;
     try {
-      const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
-      return `http://${host}:${info.port || F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
-    } catch (e) {
-      console.error(e);
-      const host = await hostPromise;
-      return `http://${host}:${F50_PORTS.controller}/ui/?_f50=${Date.now()}#/`;
+      return await loadPromise;
+    } finally {
+      if (panelLoadPromise === loadPromise) panelLoadPromise = null;
     }
   };
 
@@ -8988,7 +9007,6 @@ btn_disabled.onclick = async () => {
     const isWebPanelVisible = () => localStorage.getItem(WEB_VISIBLE_KEY) != 'hidden';
     let webPanelToggleBtn = null;
     let panelLoadRequestId = 0;
-    let panelLoadPromise = null;
     const setWebPanelVisible = async (visible, { load = true } = {}) => {
       const wrap = document.querySelector('#mm_web_panel_wrap');
       const iframe = document.querySelector('#mm_iframe');
@@ -9018,10 +9036,7 @@ btn_disabled.onclick = async () => {
       const currentSrc = iframe.getAttribute('src');
       if (!forceReload && currentSrc && currentSrc != 'about:blank' && currentSrc != 'javascript:;') return;
       const requestId = ++panelLoadRequestId;
-      if (!panelLoadPromise) {
-        panelLoadPromise = buildPanelUrl().finally(() => { panelLoadPromise = null; });
-      }
-      const url = await panelLoadPromise;
+      const url = await buildPanelUrl();
       if (requestId == panelLoadRequestId && isWebPanelVisible()
           && localStorage.getItem('#collapse_mm') == 'open'
           && document.querySelector('#mm_iframe') == iframe) {
@@ -9045,14 +9060,15 @@ btn_disabled.onclick = async () => {
     open.classList.add('btn');
     open.textContent = '打开新窗口';
     open.onclick = async () => {
-      const panelWindow = window.open('about:blank', '_blank');
+      const url = zashboardPanelUrl;
+      const panelWindow = window.open(url || 'about:blank', '_blank');
       if (!panelWindow) {
         createToast('浏览器阻止了新窗口，请允许此页面打开弹窗。', 'yellow', 7000);
         return;
       }
       try {
         panelWindow.opener = null;
-        panelWindow.location.replace(await buildPanelUrl());
+        if (!url) panelWindow.location.replace(await buildPanelUrl());
       } catch (error) {
         panelWindow.close();
         createToast(`打开面板失败<br>${safeTextToHtml(error.message || String(error))}`, 'red', 8000);

@@ -127,3 +127,31 @@ test('a blocked popup does not start panel checks', async () => {
   assert.equal(h.checks(), 0);
   assert.equal(h.toasts.length, 1);
 });
+
+test('read-only panel checks remain available after a mutation was cancelled', async () => {
+  let reads = 0;
+  const sandbox = {
+    CLASH_CONFIG: '/config', CLASH_DIR: '/data/clash', CLASH_PROXY_DIR: '/data/clash/Proxy',
+    CLASH_CONFIG_SOURCE_FILE: '/source', ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.com/ui.zip',
+    buildF50ZashboardValidationFunction: () => '', shellQuote: value => `'${value}'`,
+    getCorePid: async () => '3735', buildControllerInfo: async () => ({ port: 7788 }),
+    createRandomString: () => 'test', buildApiCurl: () => 'curl-test', getCurlBinCmd: () => '',
+    hostRunShellWithRoot: async script => {
+      reads++;
+      return { success: true, content: script.includes('F50_ZASHBOARD_GUARD_OK')
+        ? 'F50_ZASHBOARD_GUARD_OK=1\nF50_UNIFIED_DELAY=true\n'
+        : '{"unified-delay":true}\n__HTTP_CODE:200__\n__CURL_STATUS:0__\n' };
+    },
+    runShellWithRoot: async () => { throw new Error('mutation cancelled'); },
+  };
+  const api = vm.runInNewContext(slice('  const callMihomoApi =', '  const flushMihomoRuntimeCaches =')
+    + slice('  const probeZashboardGuard =', '  let zashboardGuardPromise =')
+    + '\n({probe:probeZashboardGuard,call:callMihomoApi})', sandbox);
+  assert.equal(await api.probe(), true);
+  assert.equal(reads, 2);
+  for (const method of ['PUT', 'POST', 'PATCH', 'DELETE']) {
+    await assert.rejects(api.call('/configs', method, '{}'), /mutation cancelled/);
+  }
+  await assert.rejects(api.call('/configs', 'GET', '{}'), /mutation cancelled/);
+  assert.equal(reads, 2);
+});

@@ -193,7 +193,7 @@ test('panel guard detects runtime delay settings that differ from the saved conf
       CLASH_CONFIG: 'config.yaml', CLASH_DIR: '/data/clash', CLASH_PROXY_DIR: '/data/clash/Proxy',
       CLASH_CONFIG_SOURCE_FILE: 'source.conf', ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.com/ui.zip',
       buildF50ZashboardValidationFunction: () => '', shellQuote: (value) => value,
-      runShellWithRoot: async () => ({ success: true, content: `F50_ZASHBOARD_GUARD_OK=1\nF50_UNIFIED_DELAY=${saved}\n` }),
+      hostRunShellWithRoot: async () => ({ success: true, content: `F50_ZASHBOARD_GUARD_OK=1\nF50_UNIFIED_DELAY=${saved}\n` }),
       getCorePid: async () => running ? '1234' : '',
       callMihomoApi: async () => {
         assert.ok(running, 'stopped core does not require an API probe');

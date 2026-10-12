@@ -6129,7 +6129,10 @@ KANO_WRITE_CHECK_EOF
     const outFile = `/data/kano_mihomo_api_${suffix}.out`;
     const errFile = `/data/kano_mihomo_api_${suffix}.err`;
     const curlCmd = buildApiCurl(urlPath, method, body, info, outFile, requestTimeout);
-    const res = await runShellWithRoot(`
+    const execute = method === 'GET' && body == null
+      ? (script, timeout) => hostRunShellWithRoot.call(globalThis, script, timeout)
+      : runShellWithRoot;
+    const res = await execute(`
         umask 077
         trap ${shellQuote('rm -f ' + shellQuote(outFile) + ' ' + shellQuote(errFile))} EXIT
         ${getCurlBinCmd()}
@@ -6235,7 +6238,7 @@ KANO_WRITE_CHECK_EOF
   };
 
   const probeZashboardGuard = async () => {
-    const res = await runShellWithRoot(`
+    const res = await hostRunShellWithRoot.call(globalThis, `
       ${buildF50ZashboardValidationFunction()}
       CFG=${shellQuote(CLASH_CONFIG)}
       YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}

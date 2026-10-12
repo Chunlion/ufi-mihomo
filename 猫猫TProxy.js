@@ -42,6 +42,7 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
   profile['unified-delay'] = true;
   delete profile['external-ui-name'];
 }
+// Controller protocol and wrapper contract; independent of the plugin release version.
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
@@ -709,7 +710,7 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
     print "    fi"
     next
   }
-  index($0,"start:*|restart:*|policy:apply") { sub(/start:/,"boot:*|start:") }
+  index($0,"start:*|restart:*|policy:apply") && !index($0,"boot:*|start:") { sub(/start:/,"boot:*|start:") }
   { print }
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
   END { if (helpers != 1 || saved != 1 || restored != 1 || panel_open) exit 1 }
@@ -1809,6 +1810,7 @@ probe=$(CLASH_ROOT="$PKG" f50_limit 5 "$PKG/Scripts/clashctl_arm64" version 2>&1
 case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
 probe=$(f50_limit 5 "$PKG/Proxy/Clash.Core" -v 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail core_not_executable "$probe"; exit 1; }
+${buildF50OriginalServicePatchScript('"$PKG/Scripts/Clash.Service"')} || { f50_install_fail service_patch_failed; exit 1; }
 sh -n "$PKG/Scripts/Clash.Service" || { f50_install_fail service_script_invalid; exit 1; }
 probe=$(CLASH_ROOT="$PKG" f50_limit 5 sh "$PKG/Scripts/Clash.Service" version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail service_script_failed "$probe"; exit 1; }

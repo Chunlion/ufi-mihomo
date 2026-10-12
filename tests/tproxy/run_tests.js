@@ -50,7 +50,7 @@ try {
 } catch (error) {
   check(false, '插件 JavaScript 语法有效', error.message);
 }
-check(source.includes('猫猫TProxy v8.0.0-compat.2.3'), '插件版本为 v8.0.0-compat.2.3');
+check(source.includes('猫猫TProxy v9.0.0'), '插件发布版本为 v9.0.0');
 check(source.includes("const F50_COMPAT_VERSION = '8.0.0-compat.2.3'"), '前后端兼容版本固定');
 check(source.includes('[ -s "$CFG" ] || { f50_install_fail configuration_missing; exit 1; }'), '安装要求初始 config.yaml 存在');
 check(source.includes('sh -n "$PKG/Scripts/Clash.Service"'), '安装前校验 Clash.Service 语法');
@@ -67,7 +67,7 @@ check(source.includes("dataSpaceGuardCmd('f50_install_fail data_space_low; exit 
 check(source.includes("dataSpaceGuardCmd('echo \"ARCHIVE_SPACE_LOW=$kano_data_avail_kb\"; exit 1')"), '在线下载安装包前检查设备可用空间');
 check(source.includes('f50_ensure_install_secret || exit 1'), '安装时补全空控制密钥');
 check(source.includes('f50_ensure_live_secret'), '启动时补全外部替换配置中的空控制密钥');
-check(source.includes('mapWithConcurrency(names, 2'), '节点来源更新限制并发数');
+check(/mapWithConcurrency\(names,\s*2\s*,/.test(source), '节点来源更新限制并发数');
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_DETACHED_TUN_CLEANUP=1'), '组件包服务包装器同步包含兼容清理', packageService.stderr.trim());
 check(packageService.status === 0 && packageService.stdout.includes('# KANO_IPV6_NAT_COMPAT=1'), '组件包支持缺少 IPv6 NAT 的设备', packageService.stderr.trim());
 
@@ -120,11 +120,11 @@ const shellSyntax = spawnSync('sh', ['-n'], { input: maintenanceShell, encoding:
 check(shellSyntax.status === 0, '维护和卸载 Shell 通过 sh -n', shellSyntax.stderr && shellSyntax.stderr.trim());
 check(maintenanceShell.includes('f50_verify_zashboard_endpoint'), '启动验收包含面板 HTTP 检查');
 check(maintenanceShell.includes('http://127.0.0.1:7788/ui/?_f50=$$'), '面板验收请求实际 /ui/ 服务入口');
-check(maintenanceShell.includes('F50_START_CODE=panel_http_failed'), '面板不可访问会使启动失败');
+check(maintenanceShell.includes('echo F50_HEALTH_PANEL=failed') && maintenanceShell.includes("sed 's/^F50_ERROR=/F50_WARNING=/'"), '面板不可访问保留核心启动结果并报告警告');
 check(maintenanceShell.includes('arg("iif");arg(d);arg("lookup");arg(t);print "!"'), 'TUN 规则删除只重建受支持字段');
 check(!maintenanceShell.includes('for(i=2;i<=NF;i++)arg($i);'), '不把 ip rule 展示注释回放到删除命令');
-check(maintenanceShell.includes('f50_drop_detached_tun_rules || return 1'), '启动前先清理 detached TUN 规则');
-check(maintenanceShell.includes("grep -Fq 'iif KanoTun [detached] lookup 17667'"), 'detached 标记使用固定字符串匹配');
+check(maintenanceShell.includes('f50_drop_detached_tun_rules "$start_action" || return 1'), '启动前先清理 detached TUN 规则');
+check(maintenanceShell.includes('if(k=="[detached]")') && maintenanceShell.includes('!foreign && p=="1776"'), 'detached 清理只匹配受管规则字段');
 check(maintenanceShell.includes('f50_disable_unsupported_ipv6_dns_hijack || return 1'), '启动前降级不受支持的 IPv6 DNS 劫持');
 check(maintenanceShell.includes('F50_START_CODE=secret_ensure_failed'), '控制密钥补全失败时停止启动');
 check(maintenanceShell.includes('f50_ensure_live_panel_config'), '每次启动前强制固定 Zashboard 配置');
@@ -162,12 +162,15 @@ try {
   fs.mkdirSync(path.join(oldRoot, 'Scripts'), { recursive: true });
   const service = path.join(oldRoot, 'Scripts/Clash.Service');
   const startLog = path.join(reinstallDir, 'kano_clash_start.log');
-  const preservationVersion = (source.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];
   for (const scenario of ['preflight', 'controller', 'success', 'patch']) {
-    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : `#!/bin/sh\n# KANO_ORIGINAL_CONFIG_PRESERVATION=${preservationVersion}\n${scenario === 'controller'
+    const controller = path.join(oldRoot, 'Scripts/clashctl');
+    fs.writeFileSync(controller, `#!/bin/sh\n${scenario === 'controller'
       ? "echo F50_ERROR=core_start_failed; echo password=test-start-password; exit 7"
       : 'echo START_STATE=started_verified_process; exit 0'}\n`);
-    const command = `F50_ROOT=${quotePath(oldRoot)}\n${maintenanceShell}
+    fs.chmodSync(controller, 0o755);
+    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : packageService.stdout.replace('action=$1\n',
+      'f50_save_original_config() { return 0; }\nf50_restore_original_config() { return 0; }\nrepair_panel_config() { return 0; }\naction=$1\n'));
+    const command = `F50_ROOT=${quotePath(oldRoot)}\nexport F50_OPERATION_LOCK=${quotePath(path.join(reinstallDir, 'operation.lock'))}\nexport F50_TASK_DIR=${quotePath(path.join(reinstallDir, 'tasks'))}\n${maintenanceShell}
 f50_ensure_live_secret() { ${scenario === 'preflight' ? 'echo password=test-start-password; return 1' : 'return 0'}; }
 f50_ensure_live_panel_config() { return 0; }
 f50_disable_unsupported_ipv6_dns_hijack() { return 0; }

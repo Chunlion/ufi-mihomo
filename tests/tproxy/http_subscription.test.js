@@ -33,6 +33,7 @@ function fixture() {
   for (const name of ['Scripts', 'Tools', 'Proxy', 'bin']) fs.mkdirSync(path.join(dir, name));
   const binary = path.join(dir, 'Scripts/clashctl_arm64');
   fs.writeFileSync(binary, original, { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, 'Tools/f50-controller.version'), '8.0.0-compat.2.3\n');
   return { dir, binary };
 }
 
@@ -69,7 +70,7 @@ test('an unsupported controller remains untouched', () => {
     fs.writeFileSync(binary, unsupported);
     const result = patch(dir);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_http_patch_unsupported/);
+    assert.match(result.stdout, /F50_ERROR=controller_http_patch_unknown_build/);
     assert.deepEqual(fs.readFileSync(binary), unsupported);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -97,7 +98,7 @@ test('an incomplete patch is rejected without changing the controller', () => {
     fs.writeFileSync(binary, incomplete);
     const result = patch(dir);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_http_patch_incomplete/);
+    assert.match(result.stdout, /F50_ERROR=controller_http_patch_unknown_build/);
     assert.deepEqual(fs.readFileSync(binary), incomplete);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -112,7 +113,8 @@ test('a failed decoder cannot replace the original controller', () => {
     assert.equal(result.status, 1);
     assert.match(result.stdout, /F50_ERROR=controller_http_patch_verify_failed/);
     assert.deepEqual(fs.readFileSync(binary), original);
-    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64']);
+    assert.deepEqual(fs.readFileSync(binary + '.http.original'), original);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64', 'clashctl_arm64.http.original']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -145,7 +147,8 @@ test('simultaneous patch processes use separate temporary files', async () => {
     const destinations = fs.readdirSync(path.join(dir, 'gate')).map(name => fs.readFileSync(path.join(dir, 'gate', name), 'utf8').trim());
     assert.equal(new Set(destinations).size, 2);
     for (const spec of api.specs) assert.deepEqual(fs.readFileSync(binary).subarray(spec.offset, spec.offset + spec.size), Buffer.from(spec.after, 'base64'));
-    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64']);
+    assert.deepEqual(fs.readFileSync(binary + '.http.original'), original);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'Scripts')), ['clashctl_arm64', 'clashctl_arm64.http.original']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

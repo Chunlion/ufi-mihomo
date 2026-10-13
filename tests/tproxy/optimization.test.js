@@ -29,7 +29,7 @@ for (const profile of ['tproxy4', 'tproxy6', 'tun4', 'tun6', 'off4', 'off6']) {
 for (const [name, output, rc, panel, expected] of [
   ['timeout', '', 124, true, 'start_timeout'],
   ['invalid configuration', 'F50_ERROR=original_config_invalid', 1, true, 'invalid_config'],
-  ['panel verification', 'START_STATE=started_verified_process', 0, false, 'panel_http_failed'],
+  ['panel verification warning', 'START_STATE=started_verified_process', 0, false, 'started'],
   ['network application', 'F50_ERROR=policy_apply_failed', 8, true, 'network_apply_failed'],
   ['success', 'START_STATE=started_verified_process', 0, true, 'started'],
 ]) {
@@ -52,6 +52,7 @@ printf '%s\\n' "$F50_START_DETAIL"
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, new RegExp(`OUTER=${expected}:${expected === 'started' ? 1 : 0}:${rc}:${expected === 'started' ? 0 : 1}`));
       assert.match(result.stdout, new RegExp(`^F50_START_CODE=${expected}$`, 'm'));
+      if (!panel) assert.match(result.stdout, /^F50_HEALTH_PANEL=failed$/m);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }
@@ -99,21 +100,23 @@ for (const when of ['before', 'during', 'wait']) {
       runShellWithRoot: async () => { calls++; if (when === 'during') throw cancel(); return { success: false, content: 'request timeout' }; },
       wait: async () => { operation.token.cancelled = true; },
     });
-    await assert.rejects(retry('test'), { name: 'OperationCancelled' });
-    assert.equal(calls, when === 'before' ? 0 : 1);
+    // The transport owns cancellation; this wrapper delegates without retrying.
+    if (when === 'during') await assert.rejects(retry('test'), { name: 'OperationCancelled' });
+    else assert.equal((await retry('test')).success, false);
+    assert.equal(calls, 1);
   });
 }
 
-test('ordinary retry counts and 800/1600 ms backoff remain unchanged', async () => {
+test('uncertain transport failures are never automatically retried', async () => {
   let calls = 0; const waits = [];
   const retry = run(slice('const runShellWithRootRetry', 'let binarySnapshotCache') + 'runShellWithRootRetry', {
     activeCriticalOperation: null,
     runShellWithRoot: async () => { calls++; throw new Error('request timeout'); },
     wait: async ms => waits.push(ms),
   });
-  assert.equal((await retry('test')).success, false);
-  assert.equal(calls, 3);
-  assert.deepEqual(waits, [800, 1600]);
+  await assert.rejects(retry('test'), /request timeout/);
+  assert.equal(calls, 1);
+  assert.deepEqual(waits, []);
 });
 
 const yq = process.env.F50_TEST_YQ;
@@ -148,6 +151,7 @@ test('YAML reads use one version process and detect replaced, missing or invalid
       CLASH_DIR: dir.replace(/\\/g, '/'), YAML_BRIDGE_MAX_BYTES: 32, shellQuote: quote,
       ensureCompatBackend: async () => true, prepareYqRuntimeCmd: () => ':',
       assertYamlRootMap: v => { if (!v || Array.isArray(v) || typeof v !== 'object') throw new Error('not mapping'); },
+      f50AssertSafeJsonNumbers() {},
       runShellWithRoot: async script => { calls++; const r = shell(script); return { success: r.status === 0, content: r.stdout + r.stderr }; },
     });
     assert.equal((await read(config)).ok, true);

@@ -37,8 +37,8 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
       forceUpdateProvidersFromConfig: async () => { method = 'refresh-custom'; return result(); },
       saveSubSources: async (...args) => { method = args[1]; return true; },
     });
-    assert.equal(await update(sources.slice(0, 1), 'template', 'provider'), true);
-    assert.equal(method, configSource === 'uploaded_config' ? 'refresh-custom' : 'original');
+    assert.equal(await update(sources.slice(0, 1), 'template', 'provider'), configSource === 'uploaded_config');
+    assert.equal(method, configSource === 'uploaded_config' ? 'refresh-custom' : undefined);
   });
 }
 
@@ -63,7 +63,7 @@ for (const status of [200, 390, 500]) {
   });
 }
 
-function saveCase({ failAt = '', running = true, fallback = false, disabled = false, custom = false, ruleMode = 'template', convertMode = 'local' } = {}) {
+function saveCase({ failAt = '', running = true, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local' } = {}) {
   const dir = temp();
   const constants = { CLASH_DIR: dir, CLASH_PROXY_DIR: path.join(dir, 'Proxy'), CLASH_POLICY_DIR: path.join(dir, 'Policy') };
   for (const [key, file] of Object.entries({ CLASH_CONFIG: 'Proxy/config.yaml', CLASH_SUB_URLS: 'Proxy/subscription_urls.txt',
@@ -73,19 +73,24 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
     constants[key] = write(dir, file, key === 'CLASH_SUB_URLS' ? '# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=provider\nhttps://one.example/sub Provider1\n' : 'old:' + key);
   }
   for (const s of sources) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'old cache:' + s.name);
+  if (legacy) {
+    fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=subscription_original\n');
+    fs.writeFileSync(constants.CLASH_SUB_URLS, '# KANO_SUB_RULE_MODE=original\nhttps://one.example/sub Provider1\n');
+  }
   const before = Object.fromEntries(Object.values(constants).filter(f => fs.statSync(f).isFile()).map(f => [f, fs.readFileSync(f, 'utf8')]));
   for (const s of sources) before[path.join(dir, 'Proxy/proxies/' + s.name + '.yaml')] = 'old cache:' + s.name;
   let restarts = 0, configWrites = 0;
   const stored = (ruleMode === 'original' ? sources.slice(0, 1) : sources).map(s => ({ ...s, enabled: !disabled }));
   const extra = slice('function validateSubscriptionMode', 'function buildF50CleanupScript')
-    + slice('const fileSnapshotHelpersCmd', 'const setConfigSourceCmd')
+    + slice('const fileSnapshotHelpersCmd', 'const setSubRuleMode')
     + slice('const switchHttpProviderToLocal', 'const readLegacySubscriptionSources')
     + slice('const saveSubSources = async', 'const overwriteConfigByTemplate')
     + '({saveSubSources,switchHttpProviderToLocal})';
   const api = subscriptionApi(extra, {
     ...constants, activeCriticalOperation: null, createRandomString: () => 'fixture',
     validateLocalSubscriptionUrl: () => ({ ok: true }), showSuspiciousSubSourcesError: () => false,
-    readCurrentSubSources: async () => stored, readConfigSource: async () => custom ? 'uploaded_config' : 'template.yaml',
+    readCurrentSubSources: async () => stored, readConfigSource: async () => legacy ? 'subscription_original' : custom ? 'uploaded_config' : 'template.yaml',
+    readCurrentSubRuleMode: async () => legacy ? 'original' : 'template',
     runShellWithRoot: async script => {
       const mapped = script.replaceAll('/data/', dir.replace(/\\/g, '/') + '/');
       const r = shell(mapped);
@@ -100,6 +105,7 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
     writeSubConfigByMode: async (items, mode, options) => {
       configWrites++;
       fs.writeFileSync(constants.CLASH_CONFIG, 'new config:' + mode + ':' + options.convertMode);
+      fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=template.yaml\n');
       if (failAt === 'write') throw new Error('config write failed');
       return true;
     },
@@ -112,8 +118,37 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
     buildProviderUpdateResult: () => result(), showSubscriptionUpdateSelfCheck: async () => true,
   });
   return { dir, constants, before, stored, api, configWrites: () => configWrites,
-    execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode) };
+    execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy }) };
 }
+
+for (const options of [{ legacy: true }, { legacy: true, migrateLegacy: true },
+  { legacy: true, migrateLegacy: true, failAt: 'write' }, { legacy: true, migrateLegacy: true, failAt: 'start' }]) {
+  test('legacy original migration is explicit, backed up and rollback-safe ' + JSON.stringify(options), async () => {
+    const c = saveCase(options);
+    try {
+      assert.equal(await c.execute(), options.migrateLegacy === true && !options.failAt);
+      if (!options.migrateLegacy || options.failAt) {
+        for (const [file, text] of Object.entries(c.before)) assert.equal(fs.readFileSync(file, 'utf8'), text);
+      }
+      const backups = fs.readdirSync(c.dir).filter(name => name.startsWith('kano_subscription_save_'));
+      assert.equal(backups.length, options.migrateLegacy ? 1 : 0);
+      if (backups.length) {
+        const backup = path.join(c.dir, backups[0]);
+        assert.equal(fs.readFileSync(path.join(backup, '0'), 'utf8'), c.before[c.constants.CLASH_CONFIG]);
+        assert.ok(fs.existsSync(path.join(backup, 'committed')));
+      }
+    } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+  });
+}
+
+test('an original header with no URLs prevents automatic legacy-source migration', async () => {
+  const read = subscriptionApi(slice('const readCurrentSubSources = async', 'const writeSubConfigByMode =') + 'readCurrentSubSources', {
+    runShellWithRoot: async () => ({ success: true, content: '# KANO_SUB_RULE_MODE=original\n' }),
+    readConfigSource: async () => { throw new Error('header already identifies protected state'); },
+    migrateLegacySubscriptionSources: async () => { throw new Error('must not migrate protected state'); },
+  });
+  assert.deepEqual(plain(await read()), []);
+});
 
 for (const failAt of ['', 'download', 'write', 'start', 'reload']) {
   test('HTTP 390 fallback transaction / ' + (failAt || 'success'), async () => {
@@ -132,7 +167,12 @@ for (const options of [{ disabled: true }, { custom: true }, { running: false },
   test('subscription save protections ' + JSON.stringify(options), async () => {
     const c = saveCase(options);
     try {
-      assert.equal(await c.execute(), true);
+      assert.equal(await c.execute(), options.ruleMode !== 'original');
+      if (options.ruleMode === 'original') {
+        assert.equal(c.configWrites(), 0);
+        for (const [file, text] of Object.entries(c.before)) assert.equal(fs.readFileSync(file, 'utf8'), text);
+        return;
+      }
       assert.equal(c.configWrites(), options.disabled || options.custom ? 0 : 1);
       assert.match(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8'), new RegExp('^# KANO_SUB_CONVERT_MODE=' + (options.convertMode || 'local') + '$', 'm'));
       if (options.disabled) assert.match(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8'), /^# KANO_DISABLED_SUB=/m);

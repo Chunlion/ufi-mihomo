@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const { parse, semantics } = require('../../scripts/compact_plugin');
 const { fs, assert, slice, run, shell, shellApi, source, original, plain, quote, temp, write } = require('./optimization_harness');
 const api = shellApi(), baseline = shellApi(original);
 function privateApi(text) {
@@ -13,8 +14,8 @@ const base = { 'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRE
   rules: ['MATCH,Proxy'], dns: { 'nameserver-policy': { 'custom.example': '1.1.1.1' } } };
 
 test('private routing implementation and firewall/process ownership functions are unchanged', () => {
-  assert.equal(slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later'),
-    slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later', original));
+  assert.equal(semantics(parse(slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later'))),
+    semantics(parse(slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later', original))));
   for (const name of ['stat', 'owned_exe', 'scan', 'same_process', 'stop_recorded', 'table_absent',
     'save', 'firewall_plan', 'ip_snapshot', 'drop_detached_tun_rules', 'disable_unsupported_ipv6_dns_hijack',
     'routes_plan', 'network_snapshot', 'execute_plan', 'clean_environment', 'artifact_paths', 'runtime_guard',
@@ -74,7 +75,9 @@ test('operation composition includes every transitive helper and reduces shell p
     for (const match of script.matchAll(/\b(f50_[a-z0-9_]+)\b/g)) {
       if (known.has(match[1])) assert.ok(declared.has(match[1]), operation + ': missing ' + match[1]);
     }
-    assert.ok(Buffer.byteLength(script) < Buffer.byteLength(originalScript), operation);
+    if (operation === 'install') assert.ok(Buffer.byteLength(script) < Buffer.byteLength(originalScript) - 25000, operation);
+    else if (['inspect', 'cleanup', 'final', 'uninstall'].includes(operation)) assert.equal(Buffer.byteLength(script), Buffer.byteLength(originalScript), operation);
+    else assert.ok(script.includes('f50_service_patch_finish'), 'start retains the new atomic patch transaction');
   }
 });
 

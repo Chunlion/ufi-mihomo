@@ -54,6 +54,7 @@ test('legacy sources migrate once; saved and custom configurations bypass migrat
       shellQuote: quote, normalizeSubSourceList: items => items,
       showLegacySuspiciousSubSourcesError: () => false, createToast() {}, appendTemplateFlowDebug() {},
       parseStoredSubSourcesFromText: text => text ? sources : [], parseLegacySubConfig: () => [],
+      parseSubRuleModeFromText: () => 'template',
       readConfigSource: async () => configSource,
       runShellWithRoot: async script => ({ success: true, content: script.includes("'/subscriptions'") ? saved : '' }),
       readLegacySubscriptionSources: async () => { legacyReads++; return { sources }; },

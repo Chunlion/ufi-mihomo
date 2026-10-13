@@ -1,0 +1,161 @@
+{
+  "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
+  "pureCommit": "e5e8568",
+  "format": {
+    "original": 641988,
+    "license": 606753,
+    "lf": 595171,
+    "utf8": 583981,
+    "dead": 583342
+  },
+  "final": 586356,
+  "sha256": "48ac39c8075066ea8486e47645ce669bb43998f2fde889408a2f811a6b5e3446",
+  "functionsBefore": 732,
+  "functionsAfter": 729,
+  "modules": [
+    {
+      "module": "旧模式与显式迁移",
+      "before": 47933,
+      "after": 43874,
+      "saved": 4059
+    },
+    {
+      "module": "UI / 覆写配置去重",
+      "before": 1583,
+      "after": 1154,
+      "saved": 429
+    },
+    {
+      "module": "Service 兼容层与安装调用",
+      "before": 53279,
+      "after": 55531,
+      "saved": -2252
+    },
+    {
+      "module": "模板事务",
+      "before": 22184,
+      "after": 23830,
+      "saved": -1646
+    },
+    {
+      "module": "任务回执与恢复",
+      "before": 15836,
+      "after": 19393,
+      "saved": -3557
+    },
+    {
+      "module": "JS 覆写能力校验",
+      "before": 4992,
+      "after": 5301,
+      "saved": -309
+    },
+    {
+      "module": "面板 manifest",
+      "before": 1487,
+      "after": 1576,
+      "saved": -89
+    },
+    {
+      "module": "旧模式删除后的死代码",
+      "before": 344,
+      "after": 0,
+      "saved": 344
+    },
+    {
+      "module": "其余调用点与常量",
+      "before": 435704,
+      "after": 435697,
+      "saved": 7
+    }
+  ],
+  "shell": [
+    {
+      "name": "install",
+      "before": 120668,
+      "after": 91797,
+      "saved": 28871,
+      "beforeSHA256": "286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387",
+      "afterSHA256": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867"
+    },
+    {
+      "name": "start",
+      "before": 50809,
+      "after": 53143,
+      "saved": -2334,
+      "beforeSHA256": "e5c59b91de81cdf59dde3f1782d6aef52d36316a0d923edecbf1053bf3267c9b",
+      "afterSHA256": "b73e83a2a4fdf39b4f25f1aa3ab0f4e2945347b5f675bdb440609158b25e28cf"
+    },
+    {
+      "name": "restart",
+      "before": 50811,
+      "after": 53145,
+      "saved": -2334,
+      "beforeSHA256": "b63c1422c01ed7ec494b415221e7709a0fc435270b84463414e1a651ae7ba3b1",
+      "afterSHA256": "4cad91b9c7c08b6bb57119afec0df9cfb96f98dae08a5bfebc78ed88a7a8df1d"
+    },
+    {
+      "name": "emergency",
+      "before": 28007,
+      "after": 30908,
+      "saved": -2901,
+      "beforeSHA256": "f2a643e7ce83e8649a7205de6327d02a43adcf362b3e57f5286e3a63f23202b1",
+      "afterSHA256": "0125491ecffb5af237f9b6d97a1652a7d331d86022b421669dda858b10508879"
+    },
+    {
+      "name": "service",
+      "before": 31265,
+      "after": 33459,
+      "saved": -2194,
+      "beforeSHA256": "85c44e130e0a527ef0ea6c0093032d75de7a09191218050245472c87482f8f69",
+      "afterSHA256": "e0facacdca0fd1a74fa99ff9cfbcb6072640d56abaec9deb89208fe4355de6d0"
+    },
+    {
+      "name": "http",
+      "before": 4608,
+      "after": 4608,
+      "saved": 0,
+      "beforeSHA256": "a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3",
+      "afterSHA256": "a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3"
+    },
+    {
+      "name": "tun6",
+      "before": 4491,
+      "after": 4491,
+      "saved": 0,
+      "beforeSHA256": "ca8111dd584610bb80987eedef14385b968c53a4bd809043caf1355c2a7b55f8",
+      "afterSHA256": "ca8111dd584610bb80987eedef14385b968c53a4bd809043caf1355c2a7b55f8"
+    },
+    {
+      "name": "dns",
+      "before": 6226,
+      "after": 6226,
+      "saved": 0,
+      "beforeSHA256": "fae3fd5044c86fc4689b581ff85432c974ac0f71c1e4e5c2f71b66aa8e41fc78",
+      "afterSHA256": "fae3fd5044c86fc4689b581ff85432c974ac0f71c1e4e5c2f71b66aa8e41fc78"
+    },
+    {
+      "name": "lease",
+      "before": 3628,
+      "after": 3628,
+      "saved": 0,
+      "beforeSHA256": "5790034969278be1aa6dcb8333e2abedc1d19a401029bf6f6332e09c1c328b3d",
+      "afterSHA256": "5790034969278be1aa6dcb8333e2abedc1d19a401029bf6f6332e09c1c328b3d"
+    },
+    {
+      "name": "transaction",
+      "before": 1228,
+      "after": 1228,
+      "saved": 0,
+      "beforeSHA256": "8e3e527df3c2ad1d30a1f005a60160c218ad9155674a2cddebed366397ce2dd0",
+      "afterSHA256": "8e3e527df3c2ad1d30a1f005a60160c218ad9155674a2cddebed366397ce2dd0"
+    },
+    {
+      "name": "cleanup",
+      "before": 16548,
+      "after": 16548,
+      "saved": 0,
+      "beforeSHA256": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
+      "afterSHA256": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2"
+    }
+  ]
+}

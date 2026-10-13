@@ -39,4 +39,12 @@ test('pure compaction preserves all 11 generated shell groups byte for byte', ()
   assert.ok(compacted.includes("appendActionGroup('组件与维护'"));
   assert.ok(compacted.endsWith('//</script >\n'));
 });
+test('compaction leaves tagged raw strings, escaped backslashes and regular expressions intact', () => {
+  const input = '//<script>\r\nconst tag = parts => parts.raw;\r\nconst a = "\\u4e2d";\r\nconst b = "\\\\u4e2d";\r\nconst c = /\\u4e2d/;\r\nconst d = tag`\\u4e2d`;\r\n//</script >\r\n/* GNU AFFERO GENERAL PUBLIC LICENSE */\r\n';
+  const result = compact(input).source;
+  assert.ok(result.includes('const a = "中"'));
+  assert.ok(result.includes('const b = "\\\\u4e2d"'));
+  assert.ok(result.includes('const c = /\\u4e2d/'));
+  assert.ok(result.includes('tag`\\u4e2d`'));
+});
 module.exports = { generators, outputs };

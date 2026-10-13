@@ -5545,7 +5545,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
   const updateAirportDnsTemplate = (template, policy) => {
     const config = cloneJsonValue(assertYamlRootMap(template, '基础模板'));
     if (config.dns != null && !isPlainYamlObject(config.dns)) throw new Error('模板 DNS 必须是映射');
-    if (!isPlainYamlObject(policy)) throw new Error('机场 DNS 必须是域名到 DNS 的映射');
+    if (!isPlainYamlObject(policy)) throw new Error('节点 DNS 策略必须是域名到 DNS 的映射');
     const entries = Object.entries(policy).map(([domain, value]) => {
       const name = domain.trim();
       if (!name || /[\s/?#]/.test(name)) throw new Error('填写节点域名或域名后缀，不要填写订阅链接');
@@ -5598,7 +5598,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
       const write = await writeYamlObjectAtomic(CLASH_TEMPLATE_BASE, updateAirportDnsTemplate(read.value, policy), {
         label: '基础模板', marker: read.generated ? GENERATED_TEMPLATE_MARKER : '', backup: true, backupTag: 'airport_dns',
       });
-      if (!write.ok) { createToast(`保存机场 DNS 失败<br>${safeTextToHtml(write.content || '')}`, 'red', 8000); return false; }
+      if (!write.ok) { createToast(`保存节点 DNS 策略失败<br>${safeTextToHtml(write.content || '')}`, 'red', 8000); return false; }
       return true;
     } catch (error) {
       createToast(safeTextToHtml(error.message), 'red', 8000);
@@ -5612,16 +5612,16 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     const policy = source['proxy-server-nameserver-policy'] || source;
     const normalized = updateAirportDnsTemplate({}, policy);
     const result = normalized.dns['proxy-server-nameserver-policy'] || {};
-    if (!Object.keys(result).length) throw new Error('没有可导入的机场专用 DNS');
+    if (!Object.keys(result).length) throw new Error('没有可导入的节点 DNS 策略');
     return result;
   };
 
   const parseAirportDnsText = async (text) => {
-    if (!String(text || '').trim()) throw new Error('请先粘贴机场 DNS 配置');
-    const staged = await stageTextBesideTarget(CLASH_TEMPLATE_BASE, text, '机场 DNS');
-    if (!staged.ok) throw new Error('机场 DNS 暂存失败，请检查设备连接和可用空间');
+    if (!String(text || '').trim()) throw new Error('请先粘贴节点 DNS 策略配置');
+    const staged = await stageTextBesideTarget(CLASH_TEMPLATE_BASE, text, '节点 DNS 策略');
+    if (!staged.ok) throw new Error('节点 DNS 策略暂存失败，请检查设备连接和可用空间');
     try {
-      const read = await readYamlObject(staged.stagePath, '机场 DNS');
+      const read = await readYamlObject(staged.stagePath, '节点 DNS 策略');
       if (!read.ok) throw new Error('无法解析粘贴内容，请检查 YAML 缩进和 DNS 地址');
       return extractAirportDnsPolicy(read.value);
     } finally {
@@ -11325,19 +11325,19 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       let editingDomain = null;
       const { el, close } = createFixedToast('mm_airport_dns_dialog', `
         <div style="pointer-events:all;width:92vw;max-width:760px;">
-          <div class="title" style="margin:0">机场专用 DNS</div>
-          <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">仅用于机场节点域名解析。填写机场提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
+          <div class="title" style="margin:0">节点 DNS 策略</div>
+          <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
             <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
             <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
           </div>
           <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
-          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `识别到 ${Object.keys(currentPolicy).length} 条专用 DNS` : '读取失败'}</div>
+          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `识别到 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '读取失败'}</div>
           <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
           <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
             <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
             <button id="mm_airport_dns_import">导入粘贴内容</button>
-            <button id="mm_airport_dns_copy">复制专用 DNS</button>
+            <button id="mm_airport_dns_copy">复制 DNS 策略</button>
           </div>
           <div id="mm_airport_dns_list" style="margin-top:10px;max-height:35vh;overflow:auto;"></div>
           <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
@@ -11351,7 +11351,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const list = el.querySelector('#mm_airport_dns_list');
       const render = () => {
         resetChildren(list);
-        if (!policy.size) { list.textContent = '暂无机场专用 DNS'; return; }
+        if (!policy.size) { list.textContent = '暂无节点 DNS 策略'; return; }
         for (const [domain, value] of policy) {
           const addresses = Array.isArray(value) ? value : [value];
           const row = document.createElement('div');
@@ -11393,7 +11393,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         catch (error) { createToast(safeTextToHtml(error.message), 'yellow', 6000); }
       };
       const importBtn = el.querySelector('#mm_airport_dns_import');
-      importBtn.onclick = () => runCriticalButtonOperation('导入机场 DNS', importBtn, '导入中…', async () => {
+      importBtn.onclick = () => runCriticalButtonOperation('导入节点 DNS 策略', importBtn, '导入中…', async () => {
         try { importPolicy(await parseAirportDnsText(yaml.value)); }
         catch (error) { createToast(safeTextToHtml(error.message), 'red', 7000); }
       });
@@ -11402,13 +11402,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         try {
           if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(yaml.value);
           else { yaml.focus(); yaml.select(); if (!document.execCommand('copy')) throw new Error(); }
-          createToast('机场 DNS 已复制', 'green', 5000);
+          createToast('节点 DNS 策略已复制', 'green', 5000);
         } catch (_) { yaml.focus(); yaml.select(); createToast('已选中配置，请手动复制', 'yellow', 5000); }
       };
       const save = el.querySelector('#mm_airport_dns_save');
-      save.onclick = () => runCriticalButtonOperation('保存机场 DNS', save, '保存中…', async () => {
+      save.onclick = () => runCriticalButtonOperation('保存节点 DNS 策略', save, '保存中…', async () => {
         if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return;
-        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('机场 DNS 已保存；点击“应用模板”生效', 'green', 7000);
+        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('节点 DNS 策略已保存；点击“应用模板”生效', 'green', 7000);
       });
       el.querySelector('#mm_airport_dns_close').onclick = close;
       render();
@@ -11438,7 +11438,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                 <div class="kano-dialog-menu-grid" style="--kano-menu-cols:3;">
                   <button id="mm_template_rules_btn">图形规则</button>
                   <button id="mm_template_js_btn">JS 覆写</button>
-                  <button id="mm_template_airport_dns_btn">机场专用 DNS</button>
+                  <button id="mm_template_airport_dns_btn">节点 DNS 策略</button>
                 </div>
               </div>
               <div class="kano-dialog-menu-section">

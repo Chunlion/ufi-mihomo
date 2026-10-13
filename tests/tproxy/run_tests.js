@@ -168,8 +168,8 @@ try {
       ? "echo F50_ERROR=core_start_failed; echo password=test-start-password; exit 7"
       : 'echo START_STATE=started_verified_process; exit 0'}\n`);
     fs.chmodSync(controller, 0o755);
-    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : packageService.stdout.replace('action=$1\n',
-      'f50_save_original_config() { return 0; }\nf50_restore_original_config() { return 0; }\nrepair_panel_config() { return 0; }\naction=$1\n'));
+    fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : packageService.stdout.replace('\naction=$1\n',
+      '\nf50_save_original_config() { return 0; }\nf50_restore_original_config() { return 0; }\nrepair_panel_config() { return 0; }\naction=$1\n'));
     const command = `F50_ROOT=${quotePath(oldRoot)}\nexport F50_OPERATION_LOCK=${quotePath(path.join(reinstallDir, 'operation.lock'))}\nexport F50_TASK_DIR=${quotePath(path.join(reinstallDir, 'tasks'))}\n${maintenanceShell}
 f50_ensure_live_secret() { ${scenario === 'preflight' ? 'echo password=test-start-password; return 1' : 'return 0'}; }
 f50_ensure_live_panel_config() { return 0; }
@@ -232,7 +232,7 @@ cat "$3"`, encoding: 'utf8' });
   fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "ip6tables: Table does not exist" >&2\nexit 3\n');
   fs.chmodSync(path.join(compatBin, 'ip6tables'), 0o755);
   const compat = spawnSync('sh', ['-s', '--', compatRoot, compatBin], { input: `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, encoding: 'utf8' });
-  check(compat.status === 0 && compat.stdout.includes('F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled') && compat.stdout.includes('dns_hijack=off'), '缺少 IPv6 NAT 时自动关闭 DNS 劫持', compat.stderr.trim());
+  check(compat.status === 0 && compat.stdout.includes('F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved') && compat.stdout.includes('dns_hijack=on'), '缺少 IPv6 NAT 时保留 DNS 劫持设置', compat.stderr.trim());
   fs.writeFileSync(path.join(compatRoot, 'Policy', 'options.conf'), 'traffic_mode=tproxy\nipv6=on\ndns_hijack=on\n');
   fs.writeFileSync(path.join(compatBin, 'ip6tables'), '#!/bin/sh\necho "xtables lock is busy" >&2\nexit 4\n');
   const transient = spawnSync('sh', ['-s', '--', compatRoot, compatBin], { input: `${maintenanceShell}\nPATH="$2:$PATH" F50_ROOT="$1" f50_disable_unsupported_ipv6_dns_hijack\ncat "$1/Policy/options.conf"`, encoding: 'utf8' });
@@ -303,7 +303,7 @@ check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== 
 const templateSource = slice('const buildF50TemplateObject', 'const readRuleOverrideConfig');
 check(templateSource.includes("'redir-port': 0") && Object.values(profiles).every(profile => profile['redir-port'] === 0), '生成模板与全部运行配置关闭未使用的 Redir 端口');
 const kprSource = slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
-const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles }).KPR;
+const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack }).KPR;
 const baseConfig = {
   proxies: [],
   'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],
@@ -312,7 +312,8 @@ const baseConfig = {
 const tproxy = kpr.runtime(baseConfig, { traffic_mode: 'tproxy', ipv6: 'off' });
 equal([tproxy['tproxy-port'], tproxy.tun.enable, tproxy.ipv6], [7895, false, false], 'TProxy IPv4 使用固定端口并关闭 TUN');
 const tun = kpr.runtime(baseConfig, { traffic_mode: 'tun', ipv6: 'on' });
-check(tun.tun.enable === true && tun.tun.device === 'KanoTun' && tun.ipv6 === true, 'TUN IPv6 配置完整');
+check(tun.tun.enable === true && tun.tun.device === 'KanoTun' && tun.ipv6 === true && tun.tun.stack === 'gvisor', 'TUN IPv6 配置完整');
+equal(['mixed', 'gvisor', 'system', 'mips'].map(tun_stack => kpr.runtime(baseConfig, { traffic_mode: 'tun', ipv6: 'on', tun_stack }).tun.stack), ['mixed', 'gvisor', 'system', 'mips'], 'TUN 协议栈选择覆盖自动值');
 const off = kpr.runtime(baseConfig, { traffic_mode: 'off', ipv6: 'off' });
 check(off.tun.enable === false && off['tproxy-port'] === 0, '关闭接管时停用 TUN 和 TProxy');
 const privateRoute = kpr.runtime(baseConfig, {

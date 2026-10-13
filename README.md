@@ -27,6 +27,8 @@
 - “本地模板”适合节点订阅和分享链接；“订阅原配置”只允许一个完整的 Mihomo YAML/JSON 订阅。
 - 上传或编辑 `config.yaml` 后，“保存订阅”默认不会替换自定义配置；需要替换时勾选应用。
 - 切换 TProxy、TUN 或关闭接管时，插件会调整必要的网络字段。YAML 注释和排版不会保留。
+- 内核缺少 IPv6 NAT 时，保留 IPv4 DNS 劫持和 IPv6 接管；IPv6 DNS 无法通过 NAT 重定向。
+- 网络设置支持选择 TUN 协议栈；自动模式下 IPv4 使用 mixed，双栈使用 gVisor。mips 需要 [Mihomo v1.19.31](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.31) 或以上，保存前检查版本。启动时会在配置重载后重新应用并验证接管路由。
 
 ### 默认端口
 

@@ -111,7 +111,9 @@ f50_scan "$F50_WORK/after.pids" || exit 1
 [ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; exit 1; }
 config_recovery_failed=0
 for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
-  f50_config_tx_recover "$config_target" "$F50_ROOT/Tools/config_source.conf" || config_recovery_failed=1
+  config_source_file="$F50_ROOT/Tools/config_source.conf"
+  if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
+  f50_config_tx_recover "$config_target" "$config_source_file" || config_recovery_failed=1
 done
 if f50_clean_environment && [ "$config_recovery_failed" = 0 ]; then
   # Only the known lease files are removed; an unexpected file prevents release.
@@ -186,31 +188,49 @@ f50_recovery_eligible() {
       case "$recovery_pid" in ''|*[!0-9]*) f50_recovery_block unknown_owner; return 1;; esac
       [ ! -d "$F50_PROC/$recovery_pid" ] || { f50_recovery_block active_service; return 1; };; esac
   fi
+  recovery_records=
   for recovery_entry in "$F50_TASK_DIR"/* "$F50_TASK_DIR"/.[!.]* "$F50_TASK_DIR"/..?*; do
     [ -e "$recovery_entry" ] || [ -L "$recovery_entry" ] || continue
     [ -f "$recovery_entry" ] && [ ! -L "$recovery_entry" ] || { f50_recovery_block unknown_task; return 1; }
-    recovery_pid=$(cat "$recovery_entry") || { f50_recovery_block unknown_task; return 1; }
-    case "$recovery_pid" in ''|*[!0-9]*) f50_recovery_block unknown_task; return 1;; esac
-    if [ -d "$F50_PROC/$recovery_pid" ]; then
-      f50_stat "$recovery_pid" || { f50_recovery_block unknown_task; return 1; }
-      recovery_env=$(tr '\\000' '\\n' < "$F50_PROC/$recovery_pid/environ" 2>/dev/null) || { f50_recovery_block unknown_task; return 1; }
-      printf '%s\\n' "$recovery_env" | grep -qxF "KANO_TPROXY_TASK=$recovery_owner" || { f50_recovery_block task_owner_mismatch; return 1; }
-      f50_recovery_block active_task; return 1
-    fi
-    # A PID-only stale registry cannot prove the request result or be silently discarded.
-    f50_recovery_block stale_task_record; return 1
+    read -r recovery_format recovery_tag recovery_request recovery_pid recovery_start recovery_manager recovery_manager_start recovery_state recovery_rc recovery_extra < "$recovery_entry" || { f50_recovery_block unknown_task; return 1; }
+    [ "$recovery_format" = F50_TASK_V2 ] && [ -z "$recovery_extra" ] || { f50_recovery_block stale_task_record; return 1; }
+    [ "$recovery_tag" = "$recovery_owner" ] && [ "$recovery_entry" = "$F50_TASK_DIR/$recovery_request" ] || { f50_recovery_block task_owner_mismatch; return 1; }
+    case "$recovery_request" in "$recovery_tag".*) recovery_sequence=\${recovery_request#"$recovery_tag".};; *) f50_recovery_block task_owner_mismatch; return 1;; esac
+    for recovery_number in "$recovery_sequence" "$recovery_pid" "$recovery_start" "$recovery_manager" "$recovery_manager_start" "$recovery_rc"; do
+      case "$recovery_number" in ''|*[!0-9]*) f50_recovery_block task_record_invalid; return 1;; esac
+    done
+    [ "$recovery_pid" -gt 0 ] && [ "$recovery_manager" -gt 0 ] && [ "$recovery_manager_start" -gt 0 ] && [ "$recovery_rc" -le 255 ] || { f50_recovery_block task_record_invalid; return 1; }
+    for recovery_identity in "$recovery_pid:$recovery_start" "$recovery_manager:$recovery_manager_start"; do
+      recovery_process=\${recovery_identity%:*}; recovery_process_start=\${recovery_identity#*:}
+      if [ -d "$F50_PROC/$recovery_process" ]; then
+        f50_stat "$recovery_process" || { f50_recovery_block task_identity_unknown; return 1; }
+        [ "$recovery_process_start" -gt 0 ] || { f50_recovery_block task_identity_unknown; return 1; }
+        if [ "$F50_STAT_START" = "$recovery_process_start" ]; then
+          case "$F50_STAT_STATE" in Z|X) ;; *) f50_recovery_block active_task; return 1;; esac
+        fi
+      fi
+    done
+    [ "$recovery_state" = finished ] || { f50_recovery_block task_receipt_missing; return 1; }
+    recovery_hash=$(sha256sum "$recovery_entry" | awk '{print $1}')
+    [ -n "$recovery_hash" ] || { f50_recovery_block task_receipt_unreadable; return 1; }
+    recovery_records="$recovery_records $recovery_request:$recovery_hash"
   done
   for recovery_proc in "$F50_PROC"/[0-9]*; do
     [ -d "$recovery_proc" ] || continue
     recovery_pid=\${recovery_proc##*/}
     { IFS= read -r recovery_comm < "$recovery_proc/comm"; } 2>/dev/null || continue
-    case "$recovery_comm" in sh|bash|dash|mksh|toybox|busybox|timeout)
+    case "$recovery_comm" in sh|bash|dash|mksh|toybox|busybox|timeout) ;; *) [ -n "$recovery_records" ] || continue;; esac
       [ "$recovery_pid" != "$$" ] || continue
       f50_stat "$recovery_pid" || { f50_recovery_block process_identity_unknown; return 1; }
       case "$F50_STAT_STATE" in Z|X) continue;; esac
       recovery_env=$(tr '\\000' '\\n' < "$recovery_proc/environ" 2>/dev/null) || { f50_recovery_block process_identity_unknown; return 1; }
-      if printf '%s\\n' "$recovery_env" | grep -q '^KANO_TPROXY_TASK=mm_'; then f50_recovery_block unreceipted_active_task; return 1; fi;;
-    esac
+      if printf '%s\\n' "$recovery_env" | grep -q '^KANO_TPROXY_TASK=mm_'; then
+        case "$recovery_comm" in Clash.Core|Clash|clash|mihomo)
+          recovery_exe=$(readlink "$recovery_proc/exe" 2>/dev/null)
+          recovery_exe=\${recovery_exe% (deleted)}
+          if f50_owned_exe "$recovery_exe"; then continue; fi;; esac
+        f50_recovery_block unreceipted_active_task; return 1
+      fi
   done
   case "$recovery_owner" in mm_service_*|"rescue_$$"|'') ;; mm_*)
     if [ ! -f "$F50_OPERATION_LOCK/frontend" ]; then
@@ -222,6 +242,20 @@ f50_recovery_eligible() {
       read -r recovery_uptime recovery_idle < /proc/uptime || { f50_recovery_block frontend_clock_unknown; return 1; }
       [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || { f50_recovery_block active_frontend; return 1; }
     fi;; esac
+  if [ -n "$recovery_records" ]; then
+    for recovery_tx in "$F50_ROOT/Proxy/"*.kano_tx "$F50_ROOT/Tools/"*.kano_tx "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
+      [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
+      [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
+    done
+    if [ "\${emergency_locked:-0}" = 1 ]; then
+      for recovery_record in $recovery_records; do
+        recovery_file="$F50_TASK_DIR/\${recovery_record%:*}"
+        [ ! -L "$recovery_file" ] && [ "$(sha256sum "$recovery_file" | awk '{print $1}')" = "\${recovery_record#*:}" ] && rm -f "$recovery_file" || { f50_recovery_block task_cleanup_failed; return 1; }
+      done
+      rmdir "$F50_TASK_DIR" || { f50_recovery_block task_directory_changed; return 1; }
+      echo F50_RECOVERY_TASKS_RECLAIMED=1
+    fi
+  fi
   [ -z "$recovery_owner" ] && echo F50_RECOVERY_STATE=idle || echo F50_RECOVERY_STATE=quiescent_lease
   echo F50_RECOVERY_ELIGIBLE=1
 }
@@ -655,7 +689,31 @@ disable_unsupported_ipv6_dns_hijack() {
   const tunCleanup = buildF50NetworkCompatHelpers().split('f50_disable_unsupported_ipv6_dns_hijack() {')[0]
     .replace('f50_drop_detached_tun_rules()', 'drop_detached_tun_rules()');
   return `(set -e
-SERVICE=${service}
+F50_SERVICE_TARGET=${service}
+[ -f "$F50_SERVICE_TARGET" ] && [ ! -L "$F50_SERVICE_TARGET" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
+F50_SERVICE_WORK=$(mktemp -d "$F50_SERVICE_TARGET.patch.XXXXXX") || exit 1
+umask 077
+F50_SERVICE_CANDIDATE="$F50_SERVICE_WORK/candidate"
+F50_SERVICE_BACKUP="$F50_SERVICE_WORK/original"
+F50_SERVICE_COMMITTED=0
+f50_service_patch_finish() {
+  patch_rc=$?; trap - EXIT HUP INT TERM
+  if [ "$patch_rc" != 0 ] && [ "$F50_SERVICE_COMMITTED" = 1 ]; then
+    if cp -p "$F50_SERVICE_BACKUP" "$F50_SERVICE_TARGET.rollback.$$" && mv -f "$F50_SERVICE_TARGET.rollback.$$" "$F50_SERVICE_TARGET" &&
+      [ "$(sha256sum "$F50_SERVICE_TARGET" | awk '{print $1}')" = "$F50_SERVICE_OLD_HASH" ]; then echo F50_SERVICE_PATCH_ROLLBACK=verified
+    else echo F50_ERROR=service_patch_rollback_failed; echo "F50_SERVICE_PATCH_BACKUP=$F50_SERVICE_BACKUP"; exit 1; fi
+  fi
+  rm -rf "$F50_SERVICE_WORK" || patch_rc=1
+  exit "$patch_rc"
+}
+trap f50_service_patch_finish EXIT
+trap 'exit 130' HUP INT TERM
+F50_SERVICE_OLD_HASH=$(sha256sum "$F50_SERVICE_TARGET" | awk '{print $1}')
+[ -n "$F50_SERVICE_OLD_HASH" ] || exit 1
+cp -p "$F50_SERVICE_TARGET" "$F50_SERVICE_BACKUP" && cp -p "$F50_SERVICE_BACKUP" "$F50_SERVICE_CANDIDATE" || exit 1
+[ "$(sha256sum "$F50_SERVICE_BACKUP" | awk '{print $1}')" = "$F50_SERVICE_OLD_HASH" ] || exit 1
+(set -e
+SERVICE="$F50_SERVICE_CANDIDATE"
 if ! grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$SERVICE"; then
   TMP="$SERVICE.tun.$$"
   FUNCTIONS="$TMP.functions"
@@ -710,7 +768,7 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
   panel && !panel_skip && $0 == "  echo F50_PANEL_CONFIG_RELOADED=1" { print "  F50_CONFIG_RELOAD_REQUIRED=0" }
   panel && panel_open && $0 ~ /^  auth=/ { print "  fi"; panel_open=0 }
   panel && $0 == "}" { panel=0 }
-  $0 == "\\"$binary\\" \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
+  $0 == "\\"$binary\\" \\"$@\\"" || $0 == "f50_run_controller \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
   $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
   $0 == "  start|restart)" { $0 = "  start|restart|boot)" }
   $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
@@ -733,7 +791,7 @@ mv -f "$TMP" "$SERVICE" || exit 1
 rm -f "$FUNCTIONS"
 trap - EXIT
 fi
-${buildF50ServiceCurlPatchScript(service)} || exit 1
+${buildF50ServiceCurlPatchScript('"$SERVICE"')} || exit 1
 if ! grep -qx '# KANO_TUN_IPV6_RETURN=2' "$SERVICE"; then
 TMP="$SERVICE.tun6.$$"
 FUNCTIONS="$TMP.functions"
@@ -782,6 +840,19 @@ mv -f "$TMP" "$SERVICE" || exit 1
 rm -f "$FUNCTIONS"
 trap - EXIT
 fi
+) || exit 1
+sh -n "$F50_SERVICE_CANDIDATE" || exit 1
+service_mode=$(stat -c '%a' "$F50_SERVICE_TARGET") || exit 1
+case "$service_mode" in ''|*[!0-7]*) exit 1;; esac
+chmod "$service_mode" "$F50_SERVICE_CANDIDATE" || exit 1
+[ "$(sha256sum "$F50_SERVICE_TARGET" | awk '{print $1}')" = "$F50_SERVICE_OLD_HASH" ] || { echo F50_ERROR=service_patch_target_changed; exit 1; }
+if ! cmp -s "$F50_SERVICE_CANDIDATE" "$F50_SERVICE_TARGET"; then
+  F50_SERVICE_NEW_HASH=$(sha256sum "$F50_SERVICE_CANDIDATE" | awk '{print $1}')
+  F50_SERVICE_COMMITTED=1
+  mv -f "$F50_SERVICE_CANDIDATE" "$F50_SERVICE_TARGET" || exit 1
+  [ "$(sha256sum "$F50_SERVICE_TARGET" | awk '{print $1}')" = "$F50_SERVICE_NEW_HASH" ] && sh -n "$F50_SERVICE_TARGET" || { echo F50_ERROR=service_patch_verify; exit 1; }
+fi
+echo F50_SERVICE_PATCH_COMMITTED=1
 )`;
 }
 async function ensureOriginalSubscriptionService() {
@@ -981,11 +1052,9 @@ f50_validate_zashboard() {
     echo F50_PANEL_CODE=wrong_identity; return 1
   fi
   grep -Eiq '<title>[[:space:]]*zashboard[[:space:]]*</title>' "$ui_dir/index.html" || { echo F50_PANEL_CODE=wrong_identity; return 1; }
-  manifest_compact=$(tr -d '[:space:]' < "$ui_dir/manifest.webmanifest" 2>/dev/null)
-  case "$manifest_compact" in
-    *'"name":"zashboard"'*'"short_name":"zashboard"'*) ;;
-    *) echo F50_PANEL_CODE=wrong_manifest; return 1 ;;
-  esac
+  manifest_yq="$ui_dir/../../../Tools/yq_linux_arm64"
+  [ -x "$manifest_yq" ] || { echo F50_PANEL_CODE=missing_manifest_parser; return 1; }
+  "$manifest_yq" e -p=json -e '.name == "zashboard" and .short_name == "zashboard"' "$ui_dir/manifest.webmanifest" >/dev/null 2>&1 || { echo F50_PANEL_CODE=wrong_manifest; return 1; }
   main_asset=$(sed -n 's/.*src="\\.\\/\\(assets\\/[^"?]*\\.js\\)[^"]*".*/\\1/p' "$ui_dir/index.html" | head -n 1)
   [ -n "$main_asset" ] && [ -s "$ui_dir/$main_asset" ] || { echo F50_PANEL_CODE=missing_main_asset; return 1; }
   grep -qi 'zashboard' "$ui_dir/$main_asset" || { echo F50_PANEL_CODE=wrong_bundle; return 1; }
@@ -1799,11 +1868,14 @@ f50_ensure_live_panel_config() {
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
 `; }
-function buildF50StartHelpers() { return `f50_start_service() {
+function buildF50StartHelpers() { return `f50_patch_service() {
+  ${buildF50OriginalServicePatchScript('"$1"')}
+}
+f50_start_service() {
   service_output=$(
   start_action=$1; start_budget=$2
   case "$start_action" in start|restart) ;; *) echo F50_ERROR=invalid_start_action; return 2 ;; esac
-  if ! ${buildF50OriginalServicePatchScript('"$F50_ROOT/Scripts/Clash.Service"')}; then
+  if ! f50_patch_service "$F50_ROOT/Scripts/Clash.Service"; then
     echo F50_ERROR=service_patch_failed
     echo F50_START_CODE=service_patch_failed
     echo F50_START_OK=0
@@ -2064,7 +2136,7 @@ probe=$(CLASH_ROOT="$PKG" f50_limit 5 "$PKG/Scripts/clashctl_arm64" version 2>&1
 case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
 probe=$(f50_limit 5 "$PKG/Proxy/Clash.Core" -v 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail core_not_executable "$probe"; exit 1; }
-${buildF50OriginalServicePatchScript('"$PKG/Scripts/Clash.Service"')} || { f50_install_fail service_patch_failed; exit 1; }
+f50_patch_service "$PKG/Scripts/Clash.Service" || { f50_install_fail service_patch_failed; exit 1; }
 sh -n "$PKG/Scripts/Clash.Service" || { f50_install_fail service_script_invalid; exit 1; }
 probe=$(CLASH_ROOT="$PKG" f50_limit 5 sh "$PKG/Scripts/Clash.Service" version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail service_script_failed "$probe"; exit 1; }
@@ -3028,8 +3100,8 @@ exit 0`;
   function validateSubscriptionMode(sources, mode) {
     const stored = normalizeStoredSubSourceList(sources);
     const enabled = normalizeSubSourceList(stored);
-    if (normalizeSubRuleModeValue(mode) === SUB_RULE_MODE_ORIGINAL && (stored.length !== 1 || enabled.length !== 1)) {
-      throw new Error('订阅自带配置只允许一条已启用的订阅链接；多条链接请选择本地模板');
+    if (normalizeSubRuleModeValue(mode) !== SUB_RULE_MODE_TEMPLATE) {
+      throw new Error('订阅原配置模式已停用；请主动迁移到本地模板，原配置不会自动覆盖');
     }
     return { stored, enabled };
   }
@@ -3157,7 +3229,6 @@ exit "$delete_rc"
     `[ -x ${CLASH_POLICY_SCRIPT} ] && ${CLASH_POLICY_SCRIPT} boot-apply >/data/kano_policy_boot.log 2>&1 || true`;
   const LEGACY_BOOT_MAC_BYPASS_LINE = `sleep 10; ${CLASH_MAC_BYPASS_SCRIPT}`;
   const SUB_RULE_MODE_TEMPLATE = 'template';
-  const SUB_RULE_MODE_ORIGINAL = 'original';
   const SUB_CONVERT_MODE_PROVIDER = 'provider';
   const SUB_CONVERT_MODE_LOCAL = 'local';
   const SUB_DISABLED_MARKER = '# KANO_SUB_DISABLED ';
@@ -3268,12 +3339,17 @@ f50_frontend_write ${shellQuote(tag)} running || exit 1
 mkdir -p "$F50_TASK_DIR" && chmod 700 "$F50_TASK_DIR" || exit 1
 env KANO_TPROXY_TASK=${shellQuote(tag)} sh -c ${shellQuote(base)} &
 kano_task_pid=$!
-printf '%s\\n' "$kano_task_pid" > "$F50_TASK_DIR/${request}" || { wait "$kano_task_pid"; exit 1; }
+kano_task_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' "/proc/$kano_task_pid/stat" 2>/dev/null)
+case "$kano_task_start" in ''|*[!0-9]*) kano_task_start=0;; esac
+kano_manager_start=$writer_start
+printf 'F50_TASK_V2 %s %s %s %s %s %s running 0\\n' ${shellQuote(tag)} ${shellQuote(request)} "$kano_task_pid" "$kano_task_start" "$$" "$kano_manager_start" > "$F50_TASK_DIR/${request}" || { wait "$kano_task_pid"; exit 1; }
 f50_writer_leave || { wait "$kano_task_pid"; exit 1; }
 wait "$kano_task_pid"
 kano_task_rc=$?
 f50_writer_enter || exit 1
-rm -f "$F50_TASK_DIR/${request}"
+printf 'F50_TASK_V2 %s %s %s %s %s %s finished %s\\n' ${shellQuote(tag)} ${shellQuote(request)} "$kano_task_pid" "$kano_task_start" "$$" "$kano_manager_start" "$kano_task_rc" > "$F50_TASK_DIR/${request}.receipt" &&
+  mv -f "$F50_TASK_DIR/${request}.receipt" "$F50_TASK_DIR/${request}" || exit 1
+rm -f "$F50_TASK_DIR/${request}" || kano_task_rc=1
 rmdir "$F50_TASK_DIR" 2>/dev/null || true
 f50_writer_leave || kano_task_rc=1
 printf '\\nF50_TASK_FINISHED=${request}:%s\\n' "$kano_task_rc"
@@ -4366,8 +4442,8 @@ KANO_YQ_SMOKE_EOF
 
 
   const normalizeSubRuleModeValue = (value = '') =>
-    String(value || '').trim().toLowerCase() == SUB_RULE_MODE_ORIGINAL
-      ? SUB_RULE_MODE_ORIGINAL : SUB_RULE_MODE_TEMPLATE;
+    String(value || '').trim().toLowerCase() == 'original'
+      ? 'original' : SUB_RULE_MODE_TEMPLATE;
   const readCurrentSubRuleMode = async () => {
     const res = await runShellWithRoot(`
       if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
@@ -4651,7 +4727,7 @@ KANO_YQ_SMOKE_EOF
 
   const ensureTemplateForF50 = async (
     sources = [],
-    { forceDefault = false, showToast = false, templatePath = CLASH_TEMPLATE } = {},
+    { forceDefault = false, showToast = false, templatePath = CLASH_TEMPLATE, backup = true } = {},
   ) => {
     await loadProviderUserAgent();
     const cleanSources = normalizeSubSourceList(sources);
@@ -4706,7 +4782,7 @@ KANO_YQ_SMOKE_EOF
     const write = await writeYamlObjectAtomic(templatePath, normalized.config, {
       label: 'template.yaml',
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
-      backup: exists,
+      backup: backup && exists,
       backupTag: 'f50_template',
     });
     if (!write.ok) {
@@ -4899,12 +4975,6 @@ KANO_YQ_SMOKE_EOF
       echo "YQ_VERSION_UNSUPPORTED: $version"; exit 1;
     }
   `;
-  const ensureYqRuntime = async ({quiet=false}={}) => {
- if (!(await ensureCompatBackend())) return false;
- const r=await runShellWithRoot(`YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}\n${yqVersionCheckCmd()}`,5000);
- const ok=!!r.success;
- if(!ok&&!quiet)createToast('YAML 组件不可用，请重新安装本版组件包','red');return ok;
-};
 
   const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
     if (!(await ensureCompatBackend())) {
@@ -5031,9 +5101,12 @@ KANO_YQ_SMOKE_EOF
   };
 
   const commitStagedYaml = async ({targetPath, stagePath, label = 'YAML', backup = true,
-  backupTag = 'yaml_bridge', configSource = null, preserveSecret = true, sourceStagePath = null, removeSource = false}) => {
-  const withSource = configSource !== null || sourceStagePath !== null || removeSource;
-  if (withSource && targetPath !== CLASH_CONFIG || configSource !== null && !['template.yaml','subscription_original','uploaded_config'].includes(configSource) || sourceStagePath !== null && typeof sourceStagePath !== 'string' || removeSource && sourceStagePath !== null) {
+  backupTag = 'yaml_bridge', configSource = null, preserveSecret = true, sourceStagePath = null, removeSource = false,
+  baseStagePath = null, basePath = null}) => {
+  const withBase = baseStagePath !== null;
+  const withSource = withBase || configSource !== null || sourceStagePath !== null || removeSource;
+  if (withBase && (typeof baseStagePath !== 'string' || typeof basePath !== 'string' || targetPath === CLASH_CONFIG || configSource !== null || sourceStagePath !== null || removeSource)
+    || !withBase && withSource && targetPath !== CLASH_CONFIG || configSource !== null && !['template.yaml','subscription_original','uploaded_config'].includes(configSource) || sourceStagePath !== null && typeof sourceStagePath !== 'string' || removeSource && sourceStagePath !== null) {
     return {ok:false,content:'F50_ERROR=invalid_config_source'};
   }
   const safeTag = String(backupTag || 'yaml_bridge').replace(/[^A-Za-z0-9_.-]+/g, '_');
@@ -5041,10 +5114,10 @@ KANO_YQ_SMOKE_EOF
 umask 077
 TARGET=${shellQuote(targetPath)}
 STAGE=${shellQuote(stagePath)}
-SOURCE_FILE=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
+SOURCE_FILE=${shellQuote(withBase ? basePath : CLASH_CONFIG_SOURCE_FILE)}
 SOURCE_VALUE=${shellQuote(configSource || '')}
 WITH_SOURCE=${withSource ? 1 : 0}
-SOURCE_STAGE=${shellQuote(sourceStagePath || '')}
+SOURCE_STAGE=${shellQuote(baseStagePath || sourceStagePath || '')}
 SOURCE_DELETE=${removeSource ? 1 : 0}
 PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
 BACKUP_REQUESTED=${backup ? 1 : 0}
@@ -5100,6 +5173,7 @@ if [ "$WITH_SOURCE" = 1 ]; then
   else
     if [ -n "$SOURCE_STAGE" ]; then
       [ -f "$SOURCE_STAGE" ] && [ ! -L "$SOURCE_STAGE" ] && cp -p "$SOURCE_STAGE" "$SOURCE_NEW" || exit 1
+      ${withBase ? '"$YQ" e -e \'tag == "!!map"\' "$SOURCE_NEW" >/dev/null 2>&1 || exit 1' : ''}
     else
       printf 'KANO_CONFIG_SOURCE=%s\\n' "$SOURCE_VALUE" > "$SOURCE_NEW" || exit 1
     fi
@@ -5122,6 +5196,7 @@ snapshot_pair_file() {
 }
 snapshot_pair_file config "$TARGET" || exit 1
 if [ "$WITH_SOURCE" = 1 ]; then snapshot_pair_file source "$SOURCE_FILE" && touch "$TX/with_source" || exit 1; fi
+${withBase ? 'touch "$TX/with_base" || exit 1' : ''}
 backup_path=
 if [ "$BACKUP_REQUESTED" = 1 ] && [ -f "$TARGET" ]; then
   backup_path="$TARGET.before_\${BACKUP_TAG}_$(date +%Y%m%d%H%M%S)_$$"
@@ -5135,6 +5210,7 @@ touch "$TX/ready" || exit 1
 sync
 stage_hash=$(hash_file "$STAGE")
 [ -n "$stage_hash" ] || exit 1
+if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then source_hash=$(hash_file "$SOURCE_NEW"); [ -n "$source_hash" ] || exit 1; fi
 chmod 600 "$STAGE" && mv -f "$STAGE" "$TARGET" || exit 1
 if [ "$WITH_SOURCE" = 1 ]; then
   if [ "$SOURCE_DELETE" = 1 ]; then rm -f "$SOURCE_FILE" || exit 1
@@ -5142,6 +5218,7 @@ if [ "$WITH_SOURCE" = 1 ]; then
 fi
 new_hash=$(hash_file "$TARGET")
 [ "$stage_hash" = "$new_hash" ] || { echo F50_ERROR=yaml_commit_checksum_mismatch; exit 1; }
+if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then [ "$source_hash" = "$(hash_file "$SOURCE_FILE")" ] || { echo F50_ERROR=yaml_source_checksum_mismatch; exit 1; }; fi
 touch "$TX/committed" || exit 1
 sync
 COMMITTED=1
@@ -5632,13 +5709,11 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     }
   };
 
-  const saveRuleOverrideConfig = async (config = {}) => {
-    const normalized = normalizeRuleOverrideConfig(config);
-    const text = JSON.stringify(normalized, null, 2) + '\n';
+  const saveOverrideText = async (target, text, label) => {
     const res = await runShellWithRoot(`
         set -e
         mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)}
-        TARGET=${shellQuote(CLASH_RULE_OVERRIDE_JSON)}
+        TARGET=${shellQuote(target)}
         TMP="$TARGET.kano_new.$$"
         trap 'rm -f "$TMP" 2>/dev/null || true' EXIT
         printf '%s' ${shellQuote(text)} > "$TMP"
@@ -5647,56 +5722,17 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
         trap - EXIT
         `);
     if (!res.success) {
-      createToast(`保存图形规则失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`保存${label}失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
     }
     return !!res.success;
   };
+  const saveRuleOverrideConfig = async (config = {}) =>
+    saveOverrideText(CLASH_RULE_OVERRIDE_JSON, JSON.stringify(normalizeRuleOverrideConfig(config), null, 2) + '\n', '图形规则');
 
 
-  const validateOriginalSubscriptionConfig = (config) => {
-    if (!Array.isArray(config.rules) || config.rules.length == 0
-      || !Array.isArray(config['proxy-groups']) || config['proxy-groups'].length == 0
-      || (!(Array.isArray(config.proxies) && config.proxies.length > 0)
-        && Object.keys(config['proxy-providers'] || {}).length == 0)) {
-      throw new Error('订阅需返回带规则、策略组和节点来源的完整 Mihomo YAML/JSON；仅节点订阅请使用模板模式');
-    }
-    return true;
-  };
 
-  const writeOriginalSubscriptionConfig = async (sources, { backup = true } = {}) => {
-    let cleanSources;
-    try { cleanSources = validateSubscriptionMode(sources, SUB_RULE_MODE_ORIGINAL).enabled; }
-    catch (error) { createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
-    if (cleanSources.length != 1) {
-      createToast('使用订阅原配置时，只能启用一个完整配置订阅', 'red', 8000);
-      return false;
-    }
-    const stagePath = `${CLASH_CONFIG}.kano_original_${Date.now()}_${createRandomString(6)}`;
-    try {
-      if (!(await ensureYqRuntime({ quiet: true }))) throw new Error('YAML 解析组件不可用');
-      const fetched = await convertSubscriptionsLocally(cleanSources, { rawConfigPath: stagePath });
-      if (!fetched.ok) throw new Error(fetched.message || '原配置下载失败，未修改运行配置');
-      const read = await readYamlObject(stagePath, '订阅原配置');
-      if (!read.ok) throw new Error('订阅不是有效的 YAML/JSON 完整配置，请检查返回格式');
-      validateOriginalSubscriptionConfig(read.value);
-      const info = await buildControllerInfo();
-      const adapted = applyRequiredF50Fields(read.value, { preserveConfig: true, preservedSecret: info.secret || '' });
-      // The subscription supplies policy, not credentials for the local control plane.
-      adapted['external-controller'] = info.externalController || `0.0.0.0:${F50_PORTS.controller}`;
-      if (typeof info.secret === 'string') adapted.secret = info.secret;
-      for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
-      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '订阅原配置', backup, backupTag: 'subscription_original', configSource: 'subscription_original' });
-      if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
-      invalidateStatusSnapshot();
-      return true;
-    } catch (error) {
-      if (activeCriticalOperation) activeCriticalOperation.failure = sanitizeSubscriptionSecrets(error.message || String(error));
-      createToast(safeTextToHtml(sanitizeSubscriptionSecrets(error.message || String(error))), 'red', 10000);
-      return false;
-    } finally {
-      await runShellWithRoot(`rm -f ${shellQuote(stagePath)}`, 10 * 1000);
-    }
-  };
+
+
 
 
   const buildDefaultOverrideJs = () => [
@@ -5728,11 +5764,16 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
 
   const validateOverrideJsSafety = (code = '') => {
     const safeCode = normalizeOverrideJs(code);
-    const blockedPattern = /\b(eval|Function|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|Worker|SharedWorker|importScripts|document|window|globalThis|localStorage|sessionStorage|indexedDB|caches|navigator|location|history|opener|parent|top|frames|runShellWithRoot|KANO_baseURL|common_headers|constructor|__proto__|prototype)\b/;
+    const blockedPattern = /\b(eval|Function|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|Worker|SharedWorker|import|importScripts|self|document|window|globalThis|localStorage|sessionStorage|indexedDB|caches|navigator|location|history|opener|parent|top|frames|runShellWithRoot|KANO_baseURL|common_headers|constructor|__proto__|prototype)\b/;
     if (safeCode.length > 20000) {
       throw new Error('JS 覆写过长，请精简后再保存');
     }
-    if (blockedPattern.test(safeCode)) {
+    const decoded = safeCode.replace(/\\(?:u([0-9a-fA-F]{4})|u\{([0-9a-fA-F]{1,6})\}|x([0-9a-fA-F]{2}))/g,
+      (match, utf16, point, byte) => {
+        const value = parseInt(utf16 || point || byte, 16);
+        return value <= 0x10ffff ? String.fromCodePoint(value) : match;
+      });
+    if (blockedPattern.test(decoded)) {
       throw new Error('JS 覆写包含被禁止的浏览器、网络、动态执行或原型访问能力');
     }
     return safeCode;
@@ -5755,21 +5796,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
       return false;
     }
     const output = code.trim() ? `${code.replace(/\s+$/, '')}\n` : '';
-    const res = await runShellWithRoot(`
-        set -e
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)}
-        TARGET=${shellQuote(CLASH_OVERRIDE_JS)}
-        TMP="$TARGET.kano_new.$$"
-        trap 'rm -f "$TMP" 2>/dev/null || true' EXIT
-        printf '%s' ${shellQuote(output)} > "$TMP"
-        chmod 600 "$TMP"
-        mv -f "$TMP" "$TARGET"
-        trap - EXIT
-        `);
-    if (!res.success) {
-      createToast(`保存 JS 覆写失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
-    }
-    return !!res.success;
+    return saveOverrideText(CLASH_OVERRIDE_JS, output, ' JS 覆写');
   };
 
 
@@ -5809,8 +5836,8 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
         try {
           const code = String(event.data && event.data.code || "");
           const config = event.data && event.data.config;
-          const module = { exports: null };
-          const exports = {};
+          const module = { exports: {} };
+          const exports = module.exports;
           const runnerBody =
             '\"use strict\";\\n' + code + '\\n' +
             'let fn = null;\\n' +
@@ -5884,23 +5911,39 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     { templateBasePath = CLASH_TEMPLATE_BASE, templatePath = CLASH_TEMPLATE } = {},
   ) => {
     const cleanSources = normalizeSubSourceList(sources);
-    const pre = await runShellWithRoot(`
-        mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)}
-        if [ -s ${shellQuote(templateBasePath)} ]; then
-          cp ${shellQuote(templateBasePath)} ${shellQuote(templatePath)} || exit 1
-          echo "BASE_TEMPLATE_RESTORED"
-        elif [ -s ${shellQuote(templatePath)} ]; then
-          cp ${shellQuote(templatePath)} ${shellQuote(templateBasePath)} || exit 1
-          echo "BASE_TEMPLATE_CREATED_FROM_CURRENT"
-        else
-          echo "BASE_TEMPLATE_EMPTY"
-        fi
-        `, 20 * 1000);
-    if (!pre.success) {
-      createToast(`准备基础模板失败<br>${safeTextToHtml(pre.content || '')}`, 'red', 8000);
+    const candidate = `${templatePath}.kano_candidate_${Date.now()}_${createRandomString(6)}`;
+    const baseCandidate = candidate + '.base';
+    try {
+      const pre = await runShellWithRoot(`set -e
+umask 077
+mkdir -p ${shellQuote(`${CLASH_DIR}/Tools`)}
+[ ! -L ${shellQuote(templateBasePath)} ] && [ ! -L ${shellQuote(templatePath)} ] || exit 1
+if [ -s ${shellQuote(templateBasePath)} ]; then
+  cp ${shellQuote(templateBasePath)} ${shellQuote(candidate)}
+  echo BASE_TEMPLATE_PRESENT
+elif [ -s ${shellQuote(templatePath)} ]; then
+  cp ${shellQuote(templatePath)} ${shellQuote(candidate)}
+  cp ${shellQuote(templatePath)} ${shellQuote(baseCandidate)}
+fi`, 20000);
+      if (!pre.success) throw new Error(pre.content || '无法准备候选模板');
+      if (!(await ensureTemplateForF50(cleanSources, { showToast: false, templatePath: candidate, backup: false }))) return false;
+      const newBase = !/^BASE_TEMPLATE_PRESENT$/m.test(String(pre.content || ''));
+      if (newBase) {
+        const base = await runShellWithRoot(`[ -s ${shellQuote(baseCandidate)} ] || cp ${shellQuote(candidate)} ${shellQuote(baseCandidate)}`, 10000);
+        if (!base.success) throw new Error(base.content || '无法准备基础模板');
+      }
+      if (!(await applyJsOverrideToTemplate({ sources: cleanSources, prepareTemplate: false, templatePath: candidate, backup: false }))) return false;
+      const committed = await commitStagedYaml({ targetPath: templatePath, stagePath: candidate,
+        label: 'template.yaml', backupTag: 'template',
+        baseStagePath: newBase ? baseCandidate : null, basePath: templateBasePath });
+      if (!committed.ok) throw new Error(committed.content || '模板事务提交失败');
+      return true;
+    } catch (error) {
+      createToast(`准备模板失败，旧模板和运行配置已保留<br>${safeTextToHtml(error.message || error)}`, 'red', 9000);
       return false;
+    } finally {
+      await runShellWithRoot('rm -f ' + shellQuote(candidate) + ' ' + shellQuote(baseCandidate), 10000);
     }
-    return await ensureTemplateForF50(cleanSources, { showToast: false, templatePath });
   };
 
   const applyJsOverrideToTemplate = async ({
@@ -5910,6 +5953,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     prepareTemplate = true,
     templateBasePath = CLASH_TEMPLATE_BASE,
     templatePath = CLASH_TEMPLATE,
+    backup = true,
   } = {}) => {
     const saved = await hasSavedJsOverride();
     const ruleOverrideConfig = await readRuleOverrideConfig();
@@ -5926,7 +5970,11 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     }
 
     const cleanSources = sources ? normalizeSubSourceList(sources) : await readSavedSubSourcesForTemplate();
-    if (prepareTemplate && !(await prepareTemplateFromBase(cleanSources, { templateBasePath, templatePath }))) return false;
+    if (prepareTemplate) {
+      if (!(await prepareTemplateFromBase(cleanSources, { templateBasePath, templatePath }))) return false;
+      if (showToast) createToast('覆写已应用到 template.yaml', 'green', 7000);
+      return restart ? restartClashOk({ skipCheck: true }) : true;
+    }
 
     const read = await readYamlObject(templatePath, 'template.yaml');
     if (!read.ok) {
@@ -5957,7 +6005,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     const write = await writeYamlObjectAtomic(templatePath, outputObj, {
       label: 'template.yaml',
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
-      backup: true,
+      backup,
       backupTag: 'override',
     });
     if (!write.ok) {
@@ -6785,7 +6833,7 @@ KANO_WRITE_CHECK_EOF
     return '订阅下载或解析失败，请检查链接和返回格式';
   };
 
-  const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
+  const convertSubscriptionsLocally = async (sources = []) => {
   const clean = normalizeSubSourceList(sources);
   if (!clean.length) return buildProviderUpdateResult([]);
   const subUrlChecks = clean.map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }));
@@ -6801,7 +6849,7 @@ KANO_WRITE_CHECK_EOF
   }
   if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载组件未就绪，请先修复组件'})));
   const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
-  const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent(), rawConfigPath }), 'subscription request');
+  const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent() }), 'subscription request');
   if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败，请检查设备连接和可用空间'})));
   let r;
   try {
@@ -6899,7 +6947,7 @@ KANO_WRITE_CHECK_EOF
         ? '运行配置解析失败'
         : status.configReadStatus === 'unavailable' ? '未能解析配置' : '运行配置已加载';
     const parts = [
-      status.configSource == 'uploaded_config' ? '自定义配置' : status.mode == SUB_RULE_MODE_ORIGINAL ? '订阅原配置' : '模板规则',
+      status.configSource == 'uploaded_config' ? '自定义配置' : status.mode == 'original' || status.configSource == 'subscription_original' ? '旧订阅原配置（待迁移）' : '模板规则',
       configLabel,
       status.failedStage ? `失败阶段：${status.failedStage}` : '',
     ].filter(Boolean);
@@ -7448,16 +7496,6 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       }
       if (!(await prepareTemplateFromBase(savedSources, { templateBasePath: txBase, templatePath: txTemplate }))) {
         throw '准备模板失败，已保留原 template.base.yaml / template.yaml';
-      }
-      if (!(await applyJsOverrideToTemplate({
-        showToast: false,
-        restart: false,
-        sources: savedSources,
-        prepareTemplate: false,
-        templateBasePath: txBase,
-        templatePath: txTemplate,
-      }))) {
-        throw 'JS/UI 覆写应用失败，已保留原 template.base.yaml / template.yaml';
       }
       if (templateSubSourcesToPersist.length > 0) {
         const subBackupRes = await runShellWithRoot(`
@@ -9736,9 +9774,7 @@ btn_disabled.onclick = async () => {
         appendTemplateFlowDebug('ensureTemplateProviders failed at prepareTemplateFromBase');
         return false;
       }
-      const overrideOk = await applyJsOverrideToTemplate({ showToast: false, restart: false, sources: cleanSources, prepareTemplate: false });
-      appendTemplateFlowDebug(`ensureTemplateProviders applyJsOverrideToTemplate result=${overrideOk ? '1' : '0'}`);
-      return overrideOk;
+      return true;
     };
 
     const writeSubEntrypoint = async (
@@ -9958,7 +9994,7 @@ btn_disabled.onclick = async () => {
   const issues = [];
   if (!read.ok) issues.push(read.message || '运行配置无法读取');
   if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('订阅标记读取失败');
-  const modeLineOk = data.mode === cleanMode, convertModeOk = cleanMode === SUB_RULE_MODE_ORIGINAL || data.convert === cleanConvertMode;
+  const modeLineOk = data.mode === cleanMode, convertModeOk = data.convert === cleanConvertMode;
   const providerCount = Object.keys(providers).length;
   const providerUrlCount = Object.values(providers).filter(p => p && /^https?:\/\//.test(String(p.url || ''))).length;
   const rulesCount = Array.isArray(config.rules) ? config.rules.length : 0;
@@ -9966,10 +10002,7 @@ btn_disabled.onclick = async () => {
   let missingUrls = 0, providerShapeErrors = 0;
   if (!modeLineOk) issues.push('配置来源标记不匹配');
   if (!convertModeOk) issues.push('节点处理方式标记不匹配');
-  if (cleanMode === SUB_RULE_MODE_ORIGINAL) {
-    try { validateOriginalSubscriptionConfig(config); } catch (e) { issues.push(e.message); }
-    if (data.source !== 'subscription_original') issues.push('当前不是订阅原配置');
-  } else {
+  {
     const local = cleanConvertMode === SUB_CONVERT_MODE_LOCAL;
     for (const source of cleanSources) {
       const p = providers[source.name] || {};
@@ -10136,9 +10169,7 @@ btn_disabled.onclick = async () => {
         ? Promise.resolve(configCheckResult)
         : inspectSubscriptionRuntimeConfig(sources, cleanMode, cleanConvertMode);
       const [controllerCheck, configCheck] = await Promise.all([controllerCheckPromise, configCheckPromise]);
-      const configSummary = cleanMode == SUB_RULE_MODE_ORIGINAL
-        ? `当前规则来源：订阅原配置\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n保留订阅策略，仅适配 F50 网络接管设置。`
-        : `当前规则来源：template 规则\n订阅转换：${cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? '设备本地转换' : 'Mihomo HTTP Provider'}\n当前 config 来源：${configCheck.configSource || 'unknown'}\nproxy-providers 数量：${configCheck.providerCount}\n有效订阅 URL 数量：${configCheck.providerUrlCount}\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n模式标记：${configCheck.modeLineOk && configCheck.convertModeOk ? '正确' : '错误'}`;
+      const configSummary = `当前规则来源：template 规则\n订阅转换：${cleanConvertMode == SUB_CONVERT_MODE_LOCAL ? '设备本地转换' : 'Mihomo HTTP Provider'}\n当前 config 来源：${configCheck.configSource || 'unknown'}\nproxy-providers 数量：${configCheck.providerCount}\n有效订阅 URL 数量：${configCheck.providerUrlCount}\nproxy-groups 数量：${configCheck.proxyGroupsCount}\nrules 数量：${configCheck.rulesCount}\n模式标记：${configCheck.modeLineOk && configCheck.convertModeOk ? '正确' : '错误'}`;
       const controllerOk = !!controllerCheck.success;
       const issues = (configCheck.issues || []).slice();
       const issueText = issues.join('\n');
@@ -10192,11 +10223,12 @@ btn_disabled.onclick = async () => {
       const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
       const configSource = await readConfigSource();
-      if (['uploaded_config', 'subscription_original'].includes(configSource) || mode == SUB_RULE_MODE_ORIGINAL) {
-        const providerUpdate = await forceUpdateProvidersFromConfig({ showToast: false });
-        if (configSource == 'subscription_original') {
-          await showSubscriptionUpdateSelfCheck(sources, SUB_RULE_MODE_ORIGINAL, providerUpdate);
-        }
+      if (configSource == 'subscription_original' || mode == 'original') {
+        createToast('旧订阅原配置已保留；请在订阅设置中迁移到本地模板后更新', 'yellow', 8000);
+        return;
+      }
+      if (configSource == 'uploaded_config') {
+        await forceUpdateProvidersFromConfig({ showToast: false });
         return;
       }
       await updateSubProviders(sources, mode, convertMode);
@@ -10208,8 +10240,9 @@ btn_disabled.onclick = async () => {
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const cleanSources = normalizeSubSourceList(sources);
   const configSource = await readConfigSource();
-  if (cleanMode === SUB_RULE_MODE_ORIGINAL || configSource === 'subscription_original') {
-    return saveSubSources(await readCurrentSubSources({ includeDisabled: true }), SUB_RULE_MODE_ORIGINAL, cleanConvertMode, { applyToCustom: true });
+  if (cleanMode === 'original' || configSource === 'subscription_original') {
+    createToast('旧订阅原配置已保留；请在订阅设置中迁移到本地模板后更新', 'yellow', 8000);
+    return false;
   }
   if (configSource === 'uploaded_config') {
     const refreshed=await forceUpdateProvidersFromConfig({showToast:true,refreshRemote:true});return refreshed.failed===0;
@@ -10257,7 +10290,8 @@ btn_disabled.onclick = async () => {
         if (showLegacySuspiciousSubSourcesError(sourceItems, '历史 subscription_urls.txt')) return [];
         return includeDisabled ? sourceItems : normalizeSubSourceList(sourceItems);
       }
-      if (['subscription_original', 'uploaded_config'].includes(await readConfigSource())) return [];
+      if (parseSubRuleModeFromText(source.content || '') === 'original'
+        || ['subscription_original', 'uploaded_config'].includes(await readConfigSource())) return [];
 
       const res = await runShellWithRoot(`
         if [ -f ${shellQuote(CLASH_CONFIG)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_CONFIG)}; fi
@@ -10287,9 +10321,7 @@ btn_disabled.onclick = async () => {
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
       const cleanSources = normalizeSubSourceList(sources);
       appendTemplateFlowDebug(`enter writeSubConfigByMode mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
-      if (cleanMode == SUB_RULE_MODE_ORIGINAL) {
-        return await writeOriginalSubscriptionConfig(cleanSources, { backup });
-      }
+      validateSubscriptionMode(cleanSources, cleanMode);
       if (!(await setSubRuleMode(cleanMode))) return false;
       if (!(await ensureTemplateProviders(cleanSources, { forceTemplate: true }))) {
         appendTemplateFlowDebug('writeSubConfigByMode template failed at ensureTemplateProviders');
@@ -10300,7 +10332,7 @@ btn_disabled.onclick = async () => {
       return ok;
     };
 
-    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, onProviderUpdate = null } = {}) => {
+    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, migrateLegacy = false, onProviderUpdate = null } = {}) => {
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   let storedSources, cleanSources;
@@ -10321,7 +10353,13 @@ btn_disabled.onclick = async () => {
   }
   if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
   operationStage('检查订阅和配置来源', 0, 5);
-  if ((!applyToCustom && await readConfigSource() === 'uploaded_config') || !cleanSources.length) {
+  const configSource = await readConfigSource();
+  const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
+  if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
+    createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
+    return false;
+  }
+  if ((!applyToCustom && configSource === 'uploaded_config') || !cleanSources.length) {
     const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
     operationFinish(saved, saved ? '订阅设置已保存，当前配置未更改' : '订阅设置保存失败');
     return saved;
@@ -10345,9 +10383,9 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
   try {
     wasRunning = !!(await getCorePid());
     if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('保存订阅设置失败');
-    operationStage(cleanMode === SUB_RULE_MODE_ORIGINAL ? '下载订阅的完整配置' : '根据本地模板生成配置', 1, 5);
+    operationStage('根据本地模板生成配置', 1, 5);
     let conversion = null;
-    if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
+    if (cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
       conversion = await convertSubscriptionsLocally(cleanSources);
       if (onProviderUpdate) onProviderUpdate(conversion);
       if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '本地订阅转换失败');
@@ -10360,11 +10398,11 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     runtimeAttempted = true;
     if (!(await restartClashOk({ skipCheck: true }))) throw new Error('新配置未通过运行检查');
     operationStage('更新并确认节点来源', 3, 5);
-    const providers = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL
+    const providers = cleanConvertMode === SUB_CONVERT_MODE_LOCAL
       ? await reloadLocalSubscriptionProviders(cleanSources, conversion)
       : await forceUpdateProvidersFromConfig({ showToast: false });
     if (onProviderUpdate) onProviderUpdate(providers);
-    if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
+    if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
       const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
       if (!fallback.ok) throw new Error('节点更新和本地转换回退均失败');
     } else if (providers.failed > 0) {
@@ -10373,9 +10411,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     }
     committed = true;
     invalidateStatusSnapshot();
-    const message = cleanMode === SUB_RULE_MODE_ORIGINAL
-      ? '已使用订阅自带配置覆盖运行配置，本地模板保留'
-      : '已根据本地模板更新订阅配置';
+    const message = '已根据本地模板更新订阅配置';
     operationFinish(true, message);
     createToast(message, 'green', 7000);
     return true;
@@ -10408,7 +10444,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚未完成，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
   } finally {
-    if ((committed || restored) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
+    if (legacyMigration) {
+      if (committed || restored) await runShellWithRoot('touch ' + shellQuote(tx + '/committed'), 10000);
+      createToast('迁移备份保留于 ' + escapeHtml(tx), 'yellow', 12000);
+    }
+    if (!legacyMigration && (committed || restored) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
       try { await runShellWithRoot('rm -rf ' + shellQuote(tx), 10000); } catch (_) {}
     }
   }
@@ -10424,14 +10464,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const sources = normalizeSubSourceList(storedSources);
       const currentMode = await readCurrentSubRuleMode();
       const currentConvertMode = await readSavedSubConvertMode();
-      if (sources.length > 0 && (currentMode == SUB_RULE_MODE_ORIGINAL || configSource == 'subscription_original')) {
+      if (currentMode == 'original' || configSource == 'subscription_original') {
         if (!confirm) {
-          createToast('当前使用订阅原配置；请先切换为模板模式再应用模板覆写', 'yellow', 8000);
+          createToast('旧订阅原配置已保留；请主动迁移到本地模板', 'yellow', 8000);
           return false;
         }
-        const accepted = await askConfirm('mm_original_to_template', '切换为模板模式？', '当前配置的规则和策略组将被模板配置替换。', '切换并应用', '取消');
+        if (!sources.length) { createToast('请先添加并启用订阅，再迁移到本地模板', 'yellow', 8000); return false; }
+        const accepted = await askConfirm('mm_original_to_template', '迁移到本地模板？', '旧配置及来源文件会备份；规则和策略组将由本地模板提供，失败时恢复旧状态。', '迁移并应用', '取消');
         if (!accepted) return false;
-        return await saveSubSources(storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true });
+        return await saveSubSources(storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true, migrateLegacy: true });
       }
       appendTemplateFlowDebug(`enter overwriteConfigByTemplate mode=${currentMode} convert=${currentConvertMode} sources=${sources.length}`);
       const sourceCheck = await inspectConfigNodeSource(sources);
@@ -10853,10 +10894,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                       <span>配置来源</span>
                       <select id="mm_sub_rule_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
                         <option value="${SUB_RULE_MODE_TEMPLATE}">使用本地模板</option>
-                        <option value="${SUB_RULE_MODE_ORIGINAL}">使用订阅原配置</option>
                       </select>
                     </label>
-                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">原配置需一个启用的完整 Mihomo YAML/JSON 订阅，保留规则、策略组和节点来源；DNS、IPv6 和流量接管仍按 F50 设置适配。</div>
                     ${configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
                     <div id="mm_sub_mode_hint" role="status" style="font-size:.64rem;line-height:1.6;color:#a6c8ee"></div>
                     <label id="mm_sub_convert_label" style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
@@ -10884,23 +10923,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const convertModeSelect = el.querySelector('#mm_sub_convert_mode');
       convertModeSelect.value = currentConvertMode;
       const ruleModeSelect = el.querySelector('#mm_sub_rule_mode');
-      ruleModeSelect.value = currentRuleMode;
+      ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       const syncRuleMode = () => {
-        const sources = Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({ url: row.querySelector('.mm_sub_url_input').value, enabled: row.dataset.enabled !== 'false' }));
-        const stored = normalizeStoredSubSourceList(sources);
-        const allowed = stored.length === 1 && stored[0].enabled;
-        const original = ruleModeSelect.querySelector('option[value="original"]');
-        if (original) original.disabled = !allowed;
-        if (!loadingRows && !allowed && ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL) ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
         const note = el.querySelector('#mm_sub_mode_hint');
-        setText(note, !allowed ? '多条链接只能使用本地模板；订阅原配置需且仅需一条已启用链接'
-          : ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL ? '将用订阅自带的规则、策略组和节点覆盖运行配置，不混入本地模板规则'
+        setText(note, currentRuleMode === 'original' || configSource === 'subscription_original'
+          ? '旧订阅原配置已保留；保存并更新时需确认迁移，旧文件会备份'
           : '使用插件本地模板的规则和策略组');
-        el.querySelector('#mm_sub_convert_label').style.display = ruleModeSelect.value == SUB_RULE_MODE_ORIGINAL ? 'none' : 'flex';
       };
       ruleModeSelect.onchange = syncRuleMode;
 
-      let loadingRows = true;
       const addSubRow = (source = {}, index = rowsEl.children.length) => {
         const row = document.createElement('div');
         row.className = 'mm_sub_row';
@@ -10971,8 +11002,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       } else {
         addSubRow();
       }
-      loadingRows = false;
-      ruleModeSelect.value = currentRuleMode;
+      ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       syncRuleMode();
       addBtn.onclick = () => addSubRow();
       clearBtn.onclick = async () => {
@@ -11015,7 +11045,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             sources,
             ruleModeSelect.value,
             convertModeSelect.value,
-            { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked },
+            { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked,
+              migrateLegacy: (currentRuleMode === 'original' || configSource === 'subscription_original')
+                && await askConfirm('mm_sub_migrate_legacy', '迁移到本地模板？', '旧配置及来源文件会备份；校验或启动失败时恢复旧状态。', '迁移并更新', '取消') },
           );
 
           operationFinish(success);
@@ -11056,7 +11088,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         operationStage('检查订阅');
         if (!(await ensureReady({ readOnly: true }))) { operationFinish(false); return; }
         const ruleMode = await readCurrentSubRuleMode();
-        if (await readConfigSource() == 'uploaded_config' && ruleMode != SUB_RULE_MODE_ORIGINAL) {
+        if (await readConfigSource() == 'uploaded_config') {
           operationFinish(await updateSubProviders([]));
           return;
         }

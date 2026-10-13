@@ -20,7 +20,7 @@ const clickHandler = slice('updateSubBtn.onclick = async', 'const applySavedOver
 
 for (const configSource of ['uploaded_config', 'subscription_original']) {
   for (const saved of [true, false]) {
-    test(`original YAML update from ${configSource}, save=${saved}`, async () => {
+    test(`legacy config protection / custom provider refresh from ${configSource}, providerOK=${saved}`, async () => {
       const sources = [{ name: 'Provider1', url: 'https://example.com/config.yaml', enabled: true }];
       const calls = [];
       const finished = [];
@@ -50,15 +50,12 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
         safeTextToHtml: (value) => value,
         readYamlObject: async () => ({ ok: true, value: { proxies: [{ name: 'Old' }] } }),
         saveSubSources: async (...args) => { calls.push(args); return saved; },
-        forceUpdateProvidersFromConfig: async () => { throw new Error('YAML update must download the saved URL'); },
+        forceUpdateProvidersFromConfig: async () => { calls.push('providers'); return { failed: saved ? 0 : 1 }; },
       };
       vm.runInNewContext(`${updateFunction}\n${clickHandler}`, sandbox);
       await sandbox.updateSubBtn.onclick();
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0][0], sources);
-      assert.deepEqual(calls[0].slice(1, 3), ['original', 'local']);
-      assert.equal(calls[0][3].applyToCustom, true);
-      assert.deepEqual(finished, [saved]);
+      assert.deepEqual(calls, configSource === 'uploaded_config' ? ['providers'] : []);
+      assert.deepEqual(finished, [configSource === 'uploaded_config' && saved]);
     });
   }
 }
@@ -423,7 +420,7 @@ test('service preserves original YAML after controller preparation and reloads i
     const functions = configApi.functions();
     const packaged = archive.stdout.replace(/\r\n/g, '\n');
     const functionsStart = packaged.indexOf('# KANO_ORIGINAL_CONFIG_PRESERVATION=');
-    const functionsEnd = packaged.indexOf('action=$1\n', functionsStart);
+    const functionsEnd = packaged.indexOf('f50_check_mips_version() {', functionsStart);
     assert.ok(functionsStart >= 0 && functionsEnd > functionsStart, 'package contains preservation functions');
     const packageFunctions = packaged.slice(functionsStart, functionsEnd);
     const originalWrapper = packaged.replace(packageFunctions, '')
@@ -437,15 +434,17 @@ test('service preserves original YAML after controller preparation and reloads i
       ${slice('function buildF50NetworkCompatHelpers()', 'function buildF50InspectHelpers()')}
       ensureOriginalSubscriptionService`, {
       PROFILE_DELTA: configApi.delta,
+      F50_MIPS_MIN_VERSION: '1.19.31',
       F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
       CLASH_SERVICE: shellPath(service), shellQuote: quote,
       runShellWithRoot: async (script) => { const result = run(['-c', script]);
-        assert.equal(result.status, 0, result.stderr); return { success: true }; },
+        assert.equal(result.status, 0, result.stdout + result.stderr); return { success: true }; },
     });
     assert.equal(await installer(), true);
     const installed = fs.readFileSync(service, 'utf8');
-    const expectedWrapper = packaged.replace(packageFunctions, () => functions);
-    assert.equal(installed, expectedWrapper, 'installed patch preserves packaged service and updates its preservation functions');
+    const stripHelpers = (text, block) => text.replace(block, '').replace(/\n{2,}/g, '\n');
+    assert.ok(installed.includes(functions), 'installed preservation helpers match the source');
+    assert.equal(stripHelpers(installed, functions), stripHelpers(packaged, packageFunctions), 'all surrounding service functions and calls remain intact');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
     const currentVersion = (functions.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];

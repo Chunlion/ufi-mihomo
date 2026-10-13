@@ -9,6 +9,7 @@ function installCase(options = {}) {
   const dir = temp(), root = path.join(dir, 'clash'), pkg = path.join(dir, 'package');
   const writePackage = (relative, text) => write(pkg, relative, text);
   writePackage('Scripts/clashctl_arm64', '#!/bin/sh\necho F50_CONTROLLER=8.0.0-compat.2.3\n');
+  writePackage('Tools/f50-controller.version', '8.0.0-compat.2.3\n');
   writePackage('Proxy/Clash.Core', '#!/bin/sh\necho Mihomo-test\n');
   writePackage('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
   writePackage('Proxy/config.yaml', options.invalidConfig ? 'rules: [\n' : config);
@@ -33,16 +34,19 @@ exit ${options.startRc || 0}
     if (options.stopped) write(root, 'Policy/stopped', 'explicit stop');
   }
   const zip = write(dir, 'upload.zip', 'mock archive');
-  const api = shellApi(source, `buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; dataSpaceGuardCmd = () => '';`);
+  const cleanupFault = options.stagingCleanupFailure ? write(dir, 'cleanup-fault', 'once') : '';
+  const api = shellApi(source, `buildF50HttpSubscriptionPatchScript = () => 'true'; buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; dataSpaceGuardCmd = () => '';`);
   const mocks = `
 f50_limit() { shift; "$@"; }
 unzip() {
   if [ "$1" = -Z1 ]; then printf '%s\\n' ${quote(options.unsafeZip ? '../escape' : 'Scripts/clashctl_arm64')}; return 0; fi
+  if [ "$1" = -l ]; then echo '4096 10 files'; return 0; fi
   if [ "$1" = -q ]; then cp -R ${quote(pkg + '/.')} "$4/"; return $?; fi
   return 1
 }
 f50_inspect() {
   F50_OLD_RUNNING=${options.running ? 1 : 0}; F50_OLD_FOUND=${options.old ? 1 : 0}
+  ${options.unknownLockEntry ? 'printf foreign > "$F50_DATA/clash.install.lock.d/unknown"' : ''}
   echo F50_INSPECT_OK=1
 }
 f50_clean_environment() {
@@ -53,10 +57,12 @@ f50_clean_environment() {
 f50_drop_detached_tun_rules() { return 0; }
 f50_disable_unsupported_ipv6_dns_hijack() { return 0; }
 f50_verify_zashboard_endpoint() { return ${options.panelFailure ? 1 : 0}; }
+${options.lockCleanupFailure ? 'rmdir() { case "$1" in */clash.install.lock.d) return 1;; esac; command rmdir "$@"; }' : ''}
+${cleanupFault ? `rm() { case "$1:$2" in -rf:*/.f50-install.*) if [ -f ${quote(cleanupFault)} ]; then command rm -f ${quote(cleanupFault)}; return 1; fi;; esac; command rm "$@"; }` : ''}
 `;
   const script = api.install(zip).replace('# The transaction owns staging', mocks + '\n# The transaction owns staging');
-  const result = shell(script, { F50_ROOT: root.replace(/\\/g, '/') });
-  return { dir, root, result };
+  const execute = () => shell(script, { F50_ROOT: root.replace(/\\/g, '/') });
+  return { dir, root, result: execute(), execute };
 }
 
 test('failed rollback retains the old backup and reports blocked cleanup', { skip: !yq }, () => {
@@ -94,11 +100,10 @@ for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
   ['missing fresh core', { missing: 'Proxy/Clash.Core' }, 'missing_core'],
-  ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'yaml_parser_not_executable'],
+  ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'panel_candidate_rejected'],
   ['invalid YAML', { invalidConfig: true }, 'config_probe_failed'],
   ['start timeout', { old: true, running: true, startRc: 124 }, 'start_timeout'],
   ['invalid core config', { old: true, running: true, startOutput: 'F50_ERROR=original_config_invalid', startRc: 1 }, 'invalid_config'],
-  ['panel HTTP failure', { old: true, running: true, panelFailure: true }, 'panel_http_failed'],
   ['network application failure', { old: true, running: true, startOutput: 'F50_ERROR=iptables_apply_failed', startRc: 8 }, 'network_apply_failed'],
   ['service patch failure', { old: true, running: true, patchFailure: true }, 'service_patch_failed'],
 ]) {
@@ -109,9 +114,45 @@ for (const [name, options, code] of [
       assert.match(result.stdout, new RegExp('^F50_INSTALL_CODE=' + code + '$', 'm'));
       assert.ok(!result.stdout.includes('KANO_INSTALL_OK=1'));
       if (options.old) {
-        assert.match(result.stdout, /^F50_ROLLBACK=restored$/m);
+        if (options.patchFailure) assert.ok(!result.stdout.includes('F50_ROLLBACK='), 'candidate failure never enters activation');
+        else assert.match(result.stdout, /^F50_ROLLBACK=restored$/m);
         assert.equal(fs.readFileSync(path.join(root, 'Proxy/Clash.Core'), 'utf8'), 'old core');
         assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);
+      }
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test('panel HTTP failure reports a warning and retains successfully started components', { skip: !yq }, () => {
+  const { dir, root, result } = installCase({ old: true, running: true, panelFailure: true });
+  try {
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^F50_HEALTH_PANEL=failed$/m);
+    assert.match(result.stdout, /^F50_INSTALL_COMPONENTS_OK=1$/m);
+    assert.match(result.stdout, /^KANO_INSTALL_OK=1$/m);
+    assert.ok(!result.stdout.includes('F50_ROLLBACK=restored'));
+    assert.ok(fs.existsSync(path.join(root, 'started')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const option of ['lockCleanupFailure', 'unknownLockEntry', 'stagingCleanupFailure']) {
+  test('successful installation with ' + option + ' reports finalization failure and permits only safe retry', { skip: !yq }, () => {
+    const { dir, root, result, execute } = installCase({ [option]: true });
+    try {
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /^F50_INSTALL_COMPONENTS_OK=1$/m);
+      assert.match(result.stdout, /^F50_INSTALL_TRANSACTION_STATE=finalize_failed$/m);
+      assert.match(result.stdout, /^KANO_INSTALL_OK=0$/m);
+      assert.ok(!result.stdout.includes('F50_ROLLBACK='));
+      assert.ok(fs.existsSync(path.join(root, 'started')));
+      const retry = execute();
+      if (option === 'stagingCleanupFailure') {
+        assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+        assert.match(retry.stdout, /^F50_INSTALL_TRANSACTION_STATE=complete$/m);
+      } else {
+        assert.equal(retry.status, 1);
+        assert.match(retry.stdout, /^F50_INSTALL_CODE=installation_busy$/m);
+        if (option === 'unknownLockEntry') assert.equal(fs.readFileSync(path.join(dir, 'clash.install.lock.d/unknown'), 'utf8'), 'foreign');
       }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });

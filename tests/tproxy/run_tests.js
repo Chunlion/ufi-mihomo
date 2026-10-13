@@ -280,7 +280,7 @@ const storedText = subscriptions.api.buildSubUrlsFileText([...multipleSources, {
 check(multipleSources.every((item, index) => storedText.includes(`${item.url} Provider${index + 1}`)), '订阅文件连续命名全部启用来源');
 check(storedText.includes('# KANO_DISABLED_SUB=https://off.example/sub'), '订阅文件保留禁用来源');
 equal(subscriptions.api.parseStoredSubSourcesFromText(storedText).map((item) => item.enabled), [true, true, true, true, false], '订阅文件可无损读回全部启用状态');
-check(source.includes('\\u591a\\u6761\\u94fe\\u63a5\\u53ea\\u80fd\\u4f7f\\u7528\\u672c\\u5730\\u6a21\\u677f'), '界面明确说明多订阅使用本地模板');
+check(source.includes('使用插件本地模板的规则和策略组') && !source.includes('<option value="${SUB_RULE_MODE_ORIGINAL}">'), '界面只提供本地模板模式');
 
 console.log('--- provider groups and traffic modes ---');
 const groupsSource = slice('const normalizeManagedProxyGroups', 'const MANAGED_RULE_SET_PATTERN');

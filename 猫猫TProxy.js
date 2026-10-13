@@ -734,7 +734,7 @@ rm -f "$FUNCTIONS"
 trap - EXIT
 fi
 ${buildF50ServiceCurlPatchScript(service)} || exit 1
-if ! grep -qx '# KANO_TUN_STACK_COMPAT=1' "$SERVICE"; then
+if ! grep -qx '# KANO_TUN_AUTO_MIPS=1' "$SERVICE"; then
 TMP="$SERVICE.tun6.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
@@ -742,8 +742,10 @@ trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 printf '%s' ${shellQuote(buildF50Tun6CompatFunctions())} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
   /^f50_prepare_tun6_stack\\(\\) \\{/ { skipping=1 }
-  skipping { if($0=="# KANO_TUN6_STACK_COMPAT=1") skipping=0; next }
+  /^f50_check_mips_version\\(\\) \\{/ { skipping=1 }
+  skipping { if($0=="# KANO_TUN6_STACK_COMPAT=1" || $0=="# KANO_TUN_STACK_COMPAT=1") skipping=0; next }
   $0 == "f50_prepare_tun6_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun6_stack || exit 1" { next }
+  $0 == "f50_check_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun_stack || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" { print "f50_check_tun_stack \\"$action\\" || exit 1"; checked++ }
   { print }
@@ -1343,7 +1345,7 @@ function buildF50Tun6CompatFunctions() {
   const [major, minor, patch] = F50_MIPS_MIN_VERSION.split('.').map(Number);
   return `f50_check_mips_version() {
   mips_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
-  mips_banner=$("$mips_root/Proxy/Clash.Core" -v 2>&1) || { echo F50_ERROR=mips_core_version_unavailable; return 1; }
+  mips_banner=$("$mips_root/Proxy/Clash.Core" -v 2>&1) || { echo F50_ERROR=mips_core_version_unavailable; return 2; }
   mips_version=$(printf '%s\\n' "$mips_banner" | sed -n 's/.*[vV]\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\).*/\\1 \\2 \\3/p' | head -1)
   printf '%s\\n' "$mips_version" | awk 'NF!=3 {exit 1} {exit !(($1>${major})||($1==${major}&&$2>${minor})||($1==${major}&&$2==${minor}&&$3>=${patch}))}' || {
     echo F50_ERROR=mips_requires_mihomo_${F50_MIPS_MIN_VERSION}; return 1
@@ -1357,7 +1359,14 @@ f50_check_tun_stack() {
   grep -qx 'traffic_mode=tun' "$tun6_root/Policy/options.conf" || return 0
   F50_SELECTED_TUN_STACK=$(sed -n 's/^tun_stack=//p' "$tun6_root/Policy/options.conf" | head -1)
   case "$F50_SELECTED_TUN_STACK" in
-    auto|'') if grep -qx 'ipv6=on' "$tun6_root/Policy/options.conf"; then F50_SELECTED_TUN_STACK=gvisor; else F50_SELECTED_TUN_STACK=mixed; fi;;
+    auto|'')
+      mips_probe=$(f50_check_mips_version); mips_rc=$?
+      case "$mips_rc" in
+        0) F50_SELECTED_TUN_STACK=mips;;
+        1) if grep -qx 'ipv6=on' "$tun6_root/Policy/options.conf"; then F50_SELECTED_TUN_STACK=gvisor; else F50_SELECTED_TUN_STACK=mixed; fi
+           echo F50_TUN_AUTO_FALLBACK="$F50_SELECTED_TUN_STACK";;
+        *) printf '%s\\n' "$mips_probe"; return "$mips_rc";;
+      esac;;
     mixed|gvisor|system) ;;
     mips) f50_check_mips_version || return 1;;
     *) echo F50_ERROR=invalid_tun_stack; return 1;;
@@ -1387,6 +1396,7 @@ f50_finish_tun_stack() {
   echo F50_TUN_STACK_READY="$F50_SELECTED_TUN_STACK"
 }
 # KANO_TUN_STACK_COMPAT=1
+# KANO_TUN_AUTO_MIPS=1
 `; }
 function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6_dns_hijack() {
   compat_options="\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}/Policy/options.conf"
@@ -2564,11 +2574,12 @@ async function kprReadConnected(config = {}, options = {}) {
 
 async function kprShapeRuntimeConfig(value, options = null, configSource = null) {
   options = options || await kprReadOptions();
+  const stack = await verifyF50TunStack(options);
   const preserveConfig = (configSource === null ? await readConfigSource() : configSource) === 'subscription_original';
   if (!(await ensureOriginalSubscriptionService())) throw new Error('配置处理组件更新失败，未修改配置');
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
-  return KPR.runtime(value, options, connected, preserveConfig);
+  return KPR.runtime(value, options.traffic_mode === 'tun' ? { ...options, tun_stack: stack } : options, connected, preserveConfig);
 }
 
 async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {
@@ -2630,11 +2641,14 @@ async function normalizeIpv6DnsCapability(state) {
 }
 async function verifyF50TunStack(options) {
   const stack = f50TunStack(options);
-  if (options.traffic_mode !== 'tun' || stack !== 'mips') return;
+  const automatic = !options.tun_stack || options.tun_stack === 'auto';
+  if (options.traffic_mode !== 'tun' || (!automatic && stack !== 'mips')) return stack;
   const result = await runShellWithRoot(buildF50Tun6CompatFunctions() + '\nf50_check_mips_version', 5000);
-  if (!result?.success || !/^F50_MIPS_VERSION_OK=1$/m.test(String(result.content || ''))) {
-    throw new Error(`mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上；当前内核版本未通过检查。`);
-  }
+  if (!result?.success) throw new Error('无法检查 Mihomo 版本，未修改配置。');
+  if (/^F50_MIPS_VERSION_OK=1$/m.test(String(result.content || ''))) return 'mips';
+  if (!/^F50_ERROR=mips_requires_mihomo_/m.test(String(result.content || ''))) throw new Error('无法检查 Mihomo 版本，未修改配置。');
+  if (automatic) return stack;
+  throw new Error(`mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上；当前内核版本未通过检查。`);
 }
 
 const policyTransactionFiles = () => [
@@ -2658,7 +2672,6 @@ async function kprSaveNetworkState(previous, next) {
   try {
     operationStage('\u68c0\u67e5\u6a21\u5f0f\u548c\u7f51\u7edc\u8bbe\u7f6e', 0, 4);
     next = { ...next, options: { ...next.options } };
-    await verifyF50TunStack(next.options);
     const feature = KPR.fromOptions(next.options);
     next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
     next.options.private_route_cidrs = feature.cidrs.join(' ');
@@ -8329,7 +8342,7 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">TUN 协议栈</div>
-                    <div><select id="mm_policy_tun_stack"><option value="auto">自动：IPv4 mixed，双栈 gVisor</option><option value="mixed">mixed</option><option value="gvisor">gVisor</option><option value="system">system</option><option value="mips">mips</option></select><div class="kp-mini">mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上，保存前检查版本。F50 双栈推荐 gVisor。</div></div>
+                    <div><select id="mm_policy_tun_stack"><option value="auto">自动：优先 mips，旧内核回退</option><option value="mixed">mixed</option><option value="gvisor">gVisor</option><option value="system">system</option><option value="mips">mips</option></select><div class="kp-mini">Mihomo v${F50_MIPS_MIN_VERSION} 或以上优先 mips；旧内核 IPv4 用 mixed，双栈用 gVisor。手动选择保留。</div></div>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">QUIC</div>

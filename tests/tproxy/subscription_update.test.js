@@ -220,6 +220,7 @@ test('first original config write and later network changes select preservation'
   const sandbox = {
     KPR: { fromOptions: () => ({ enabled: false }), runtime: (...args) => { calls.push(args); return args[0]; } },
     kprReadOptions: async () => ({ traffic_mode: 'tproxy' }),
+    verifyF50TunStack: async () => 'mips',
     readConfigSource: async () => 'subscription_original',
     ensureOriginalSubscriptionService: async () => true,
     CLASH_CONFIG: 'config.yaml',
@@ -228,9 +229,12 @@ test('first original config write and later network changes select preservation'
   vm.runInNewContext(`${slice('async function kprShapeRuntimeConfig', 'async function savePolicyState')}
     this.write = writeYamlObjectAtomic; this.shape = kprShapeRuntimeConfig;`, sandbox);
   await sandbox.write('config.yaml', originalConfig, { configSource: 'subscription_original' });
-  await sandbox.shape(originalConfig, { traffic_mode: 'tun' });
+  const options = { traffic_mode: 'tun', tun_stack: 'auto' };
+  await sandbox.shape(originalConfig, options);
   await sandbox.write('config.yaml', originalConfig, { configSource: 'template.yaml' });
   assert.deepEqual(calls.map((args) => args[3]), [true, true, false]);
+  assert.equal(calls[1][1].tun_stack, 'mips');
+  assert.equal(options.tun_stack, 'auto');
 });
 
 const yq = process.env.F50_TEST_YQ;

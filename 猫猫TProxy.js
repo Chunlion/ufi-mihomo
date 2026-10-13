@@ -5542,6 +5542,93 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
   });
 
 
+  const updateAirportDnsTemplate = (template, policy) => {
+    const config = cloneJsonValue(assertYamlRootMap(template, '基础模板'));
+    if (config.dns != null && !isPlainYamlObject(config.dns)) throw new Error('模板 DNS 必须是映射');
+    if (!isPlainYamlObject(policy)) throw new Error('机场 DNS 必须是域名到 DNS 的映射');
+    const entries = Object.entries(policy).map(([domain, value]) => {
+      const name = domain.trim();
+      if (!name || /[\s/?#]/.test(name)) throw new Error('填写节点域名或域名后缀，不要填写订阅链接');
+      const servers = Array.isArray(value) ? value : [value];
+      if (!servers.length || servers.some((server) => typeof server !== 'string' || !server.trim() || /\s/.test(server.trim()))) {
+        throw new Error('每个节点域名至少需要一个 DNS 地址，每行填写一个');
+      }
+      const clean = [...new Set(servers.map((server) => server.trim()))];
+      return [name, Array.isArray(value) ? clean : clean[0]];
+    });
+    config.dns = config.dns || {};
+    if (entries.length) {
+      config.dns['proxy-server-nameserver-policy'] = Object.fromEntries(entries);
+      const defaults = config.dns['proxy-server-nameserver'];
+      if (defaults == null || Array.isArray(defaults) && defaults.length === 0) {
+        config.dns['proxy-server-nameserver'] = cloneJsonValue(PROFILE_BASE.dns['proxy-server-nameserver']);
+      }
+    } else {
+      delete config.dns['proxy-server-nameserver-policy'];
+    }
+    return config;
+  };
+
+  const readAirportDnsTemplate = async () => {
+    const probe = await runShellWithRoot(`
+      if [ -s ${shellQuote(CLASH_TEMPLATE_BASE)} ]; then printf base;
+      elif [ -s ${shellQuote(CLASH_TEMPLATE)} ]; then printf current;
+      elif [ -s ${shellQuote(CLASH_CONFIG)} ]; then printf runtime; fi
+    `, 5000);
+    if (!probe.success) return { ok: false, message: '读取模板状态失败' };
+    const kind = String(probe.content || '').trim();
+    if (!['base', 'current', 'runtime'].includes(kind)) return { ok: false, message: '请先上传模板或配置文件' };
+    const path = kind === 'base' ? CLASH_TEMPLATE_BASE : kind === 'current' ? CLASH_TEMPLATE : CLASH_CONFIG;
+    const read = await readYamlObject(path, '基础模板');
+    if (!read.ok) return read;
+    const generated = await yamlHasGeneratedMarker(path);
+    if (generated === null) return { ok: false, message: '读取模板标记失败' };
+    try {
+      updateAirportDnsTemplate(read.value, read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {});
+      return { ...read, generated };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  };
+
+  const saveAirportDnsPolicy = async (policy) => {
+    const read = await readAirportDnsTemplate();
+    if (!read.ok) { createToast(safeTextToHtml(read.message), 'red', 8000); return false; }
+    try {
+      const write = await writeYamlObjectAtomic(CLASH_TEMPLATE_BASE, updateAirportDnsTemplate(read.value, policy), {
+        label: '基础模板', marker: read.generated ? GENERATED_TEMPLATE_MARKER : '', backup: true, backupTag: 'airport_dns',
+      });
+      if (!write.ok) { createToast(`保存机场 DNS 失败<br>${safeTextToHtml(write.content || '')}`, 'red', 8000); return false; }
+      return true;
+    } catch (error) {
+      createToast(safeTextToHtml(error.message), 'red', 8000);
+      return false;
+    }
+  };
+
+  const extractAirportDnsPolicy = (value) => {
+    const source = value && value.dns || value;
+    if (!isPlainYamlObject(source)) throw new Error('请粘贴域名与 DNS 的 YAML 映射');
+    const policy = source['proxy-server-nameserver-policy'] || source;
+    const normalized = updateAirportDnsTemplate({}, policy);
+    const result = normalized.dns['proxy-server-nameserver-policy'] || {};
+    if (!Object.keys(result).length) throw new Error('没有可导入的机场专用 DNS');
+    return result;
+  };
+
+  const parseAirportDnsText = async (text) => {
+    if (!String(text || '').trim()) throw new Error('请先粘贴机场 DNS 配置');
+    const staged = await stageTextBesideTarget(CLASH_TEMPLATE_BASE, text, '机场 DNS');
+    if (!staged.ok) throw new Error('机场 DNS 暂存失败，请检查设备连接和可用空间');
+    try {
+      const read = await readYamlObject(staged.stagePath, '机场 DNS');
+      if (!read.ok) throw new Error('无法解析粘贴内容，请检查 YAML 缩进和 DNS 地址');
+      return extractAirportDnsPolicy(read.value);
+    } finally {
+      await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000);
+    }
+  };
+
   const readRuleOverrideConfig = async () => {
     const res = await runShellWithRoot(`
         if [ -f ${shellQuote(CLASH_RULE_OVERRIDE_JSON)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_RULE_OVERRIDE_JSON)}; fi
@@ -6695,6 +6782,20 @@ KANO_WRITE_CHECK_EOF
 
 
 
+  const formatSubscriptionDownloadError = (provider = {}, detail = '') => {
+    const status = Number(provider.statusCode || 0);
+    const reason = String(provider.message || detail || '');
+    if (status === 401 || status === 403) return `订阅服务器拒绝访问（HTTP ${status}），请检查链接是否有效或已到期`;
+    if (status === 404) return '订阅链接不存在（HTTP 404），请检查下载地址';
+    if (status >= 300 && status < 400) return `订阅返回重定向（HTTP ${status}），请使用最终下载链接`;
+    if (status >= 500) return `订阅服务器暂时不可用（HTTP ${status}），请稍后重试`;
+    if (/certificate|x509|tls handshake/i.test(reason)) return '订阅服务器的 HTTPS 校验失败，请检查证书和设备时间';
+    if (/timeout|timed out|deadline exceeded/i.test(reason)) return '订阅下载超时，请检查网络或稍后重试';
+    if (/resolve|no such host|dns/i.test(reason)) return '订阅服务器域名解析失败，请检查网络和 DNS';
+    if (/yaml|json|parse|html|empty|no proxies|unsupported|no nodes/i.test(reason)) return '订阅返回内容无法识别，请检查是否为有效的节点订阅或完整 Mihomo 配置';
+    return '订阅下载或解析失败，请检查链接和返回格式';
+  };
+
   const convertSubscriptionsLocally = async (sources = [], { rawConfigPath = '' } = {}) => {
   const clean = normalizeSubSourceList(sources);
   if (!clean.length) return buildProviderUpdateResult([]);
@@ -6709,10 +6810,10 @@ KANO_WRITE_CHECK_EOF
       errorType: 'invalid_subscription_url',
     })));
   }
-  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'F50_BACKEND_REQUIRED'})));
+  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载组件未就绪，请先修复组件'})));
   const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
   const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent(), rawConfigPath }), 'subscription request');
-  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:staged.message || 'request staging failed'})));
+  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败，请检查设备连接和可用空间'})));
   let r;
   try {
     operationStage('\u4e0b\u8f7d\u5e76\u9a8c\u8bc1\u8ba2\u9605');
@@ -6725,10 +6826,14 @@ KANO_WRITE_CHECK_EOF
       const found = data && Array.isArray(data.providers) && data.providers.find(p => p.name === s.name);
       return {type:'proxy-provider',name:s.name,ok:!!(committed && found && found.ok),attempts:1,
         proxyCount:found ? found.proxyCount : null,statusCode:found ? found.statusCode : 0,
-        message:committed ? '' : (found && found.message || f50Error(r.content)),errorType:committed ? '' : 'local_download_failed',
+        message:committed ? '' : formatSubscriptionDownloadError(found || {}, r.content),errorType:committed ? '' : 'local_download_failed',
         rawMessage:'',cacheAvailable:null};
     });
-    return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : f50Error(r.content)});
+    return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : (results.find(provider => !provider.ok)?.message || formatSubscriptionDownloadError({}, r.content))});
+  } catch (_) {
+    const message = '无法确认订阅下载结果，请检查设备连接后重试';
+    return buildProviderUpdateResult(clean.map(source => ({ type: 'proxy-provider', name: source.name, ok: false, attempts: 1,
+      statusCode: 0, message, errorType: 'local_download_failed' })), { ok: false, via: 'local', committed: false, message });
   } finally {
     await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000).catch(() => {});
   }
@@ -11207,6 +11312,108 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
     };
 
+    const showAirportDnsDialog = async () => {
+      const [read, runtime] = await Promise.all([
+        readAirportDnsTemplate(), readYamlObject(CLASH_CONFIG, '当前配置'),
+      ]);
+      if (!read.ok) { createToast(safeTextToHtml(read.message), 'red', 8000); return; }
+      const policy = new Map(Object.entries(read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {}));
+      const currentPolicy = runtime.ok && runtime.value.dns && runtime.value.dns['proxy-server-nameserver-policy'] || {};
+      if (!policy.size && isPlainYamlObject(currentPolicy)) {
+        for (const [domain, value] of Object.entries(currentPolicy)) policy.set(domain, value);
+      }
+      let editingDomain = null;
+      const { el, close } = createFixedToast('mm_airport_dns_dialog', `
+        <div style="pointer-events:all;width:92vw;max-width:760px;">
+          <div class="title" style="margin:0">机场专用 DNS</div>
+          <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">仅用于机场节点域名解析。填写机场提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
+            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
+          </div>
+          <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
+          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `识别到 ${Object.keys(currentPolicy).length} 条专用 DNS` : '读取失败'}</div>
+          <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
+          <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
+            <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
+            <button id="mm_airport_dns_import">导入粘贴内容</button>
+            <button id="mm_airport_dns_copy">复制专用 DNS</button>
+          </div>
+          <div id="mm_airport_dns_list" style="margin-top:10px;max-height:35vh;overflow:auto;"></div>
+          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
+            <button id="mm_airport_dns_save">保存</button><button id="mm_airport_dns_close">关闭</button>
+          </div>
+        </div>
+      `);
+      const domains = el.querySelector('#mm_airport_dns_domains');
+      const servers = el.querySelector('#mm_airport_dns_servers');
+      const yaml = el.querySelector('#mm_airport_dns_yaml');
+      const list = el.querySelector('#mm_airport_dns_list');
+      const render = () => {
+        resetChildren(list);
+        if (!policy.size) { list.textContent = '暂无机场专用 DNS'; return; }
+        for (const [domain, value] of policy) {
+          const addresses = Array.isArray(value) ? value : [value];
+          const row = document.createElement('div');
+          row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid rgba(255,255,255,.1);';
+          const text = document.createElement('div');
+          text.style.cssText = 'font-size:.62rem;overflow-wrap:anywhere;';
+          text.textContent = `${domain} → ${addresses.join('，')}`;
+          const edit = document.createElement('button');
+          edit.textContent = '编辑';
+          edit.onclick = () => { editingDomain = domain; domains.value = domain; servers.value = addresses.join('\n'); };
+          const remove = document.createElement('button');
+          remove.textContent = '删除';
+          remove.onclick = () => { policy.delete(domain); render(); };
+          row.append(text, edit, remove);
+          list.appendChild(row);
+        }
+      };
+      const addEntry = () => {
+        try {
+          const names = domains.value.split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
+          const addresses = servers.value.split(/\r?\n/).map((address) => address.trim()).filter(Boolean);
+          if (!names.length) throw new Error('请填写节点域名');
+          const next = updateAirportDnsTemplate({}, Object.fromEntries(names.map((name) => [name, addresses])));
+          if (editingDomain && !names.includes(editingDomain)) policy.delete(editingDomain);
+          for (const [name, value] of Object.entries(next.dns['proxy-server-nameserver-policy'])) policy.set(name, value);
+          editingDomain = null;
+          domains.value = ''; servers.value = '';
+          render();
+          return true;
+        } catch (error) { createToast(safeTextToHtml(error.message), 'red', 7000); return false; }
+      };
+      el.querySelector('#mm_airport_dns_add').onclick = addEntry;
+      const importPolicy = (value) => {
+        for (const [name, addresses] of Object.entries(extractAirportDnsPolicy(value))) policy.set(name, addresses);
+        render();
+      };
+      el.querySelector('#mm_airport_dns_current').onclick = () => {
+        try { importPolicy(currentPolicy); }
+        catch (error) { createToast(safeTextToHtml(error.message), 'yellow', 6000); }
+      };
+      const importBtn = el.querySelector('#mm_airport_dns_import');
+      importBtn.onclick = () => runCriticalButtonOperation('导入机场 DNS', importBtn, '导入中…', async () => {
+        try { importPolicy(await parseAirportDnsText(yaml.value)); }
+        catch (error) { createToast(safeTextToHtml(error.message), 'red', 7000); }
+      });
+      el.querySelector('#mm_airport_dns_copy').onclick = async () => {
+        yaml.value = dumpConfigYaml({ 'proxy-server-nameserver-policy': Object.fromEntries(policy) });
+        try {
+          if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(yaml.value);
+          else { yaml.focus(); yaml.select(); if (!document.execCommand('copy')) throw new Error(); }
+          createToast('机场 DNS 已复制', 'green', 5000);
+        } catch (_) { yaml.focus(); yaml.select(); createToast('已选中配置，请手动复制', 'yellow', 5000); }
+      };
+      const save = el.querySelector('#mm_airport_dns_save');
+      save.onclick = () => runCriticalButtonOperation('保存机场 DNS', save, '保存中…', async () => {
+        if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return;
+        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('机场 DNS 已保存；点击“应用模板”生效', 'green', 7000);
+      });
+      el.querySelector('#mm_airport_dns_close').onclick = close;
+      render();
+    };
+
     const templateOverrideBtn = document.createElement('button');
     templateOverrideBtn.classList.add('btn');
     templateOverrideBtn.textContent = '配置与规则';
@@ -11227,10 +11434,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             </div>
             <div class="kano-dialog-menu">
               <div class="kano-dialog-menu-section">
-                <div class="kano-dialog-menu-title">规则覆写</div>
-                <div class="kano-dialog-menu-grid" style="--kano-menu-cols:2;">
+                <div class="kano-dialog-menu-title">规则与 DNS</div>
+                <div class="kano-dialog-menu-grid" style="--kano-menu-cols:3;">
                   <button id="mm_template_rules_btn">图形规则</button>
                   <button id="mm_template_js_btn">JS 覆写</button>
+                  <button id="mm_template_airport_dns_btn">机场专用 DNS</button>
                 </div>
               </div>
               <div class="kano-dialog-menu-section">
@@ -11250,6 +11458,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       );
       const rulesBtn = el.querySelector('#mm_template_rules_btn');
       const jsBtn = el.querySelector('#mm_template_js_btn');
+      const airportDnsBtn = el.querySelector('#mm_template_airport_dns_btn');
       const uploadTemplateBtn = el.querySelector('#mm_template_upload_btn');
       const restorePackageBtn = el.querySelector('#mm_template_restore_package_btn');
       const rebuildBtn = el.querySelector('#mm_template_rebuild_btn');
@@ -11265,6 +11474,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         close();
         await wait(350);
         await showJsOverrideDialog();
+      };
+      airportDnsBtn.onclick = async () => {
+        close();
+        await wait(350);
+        await showAirportDnsDialog();
       };
       rebuildBtn.onclick = async () => {
         return runCriticalButtonOperation('应用模板', rebuildBtn, '\u5e94\u7528\u4e2d\u2026', async () => {

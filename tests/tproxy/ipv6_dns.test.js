@@ -112,7 +112,7 @@ test('TUN6 validates the candidate and requests reload before rebuilding routing
   try {
     const result = f.tunInvoke('f50_run_controller() { echo "CONTROLLER=$*"; }\nf50_check_tun_stack restart && f50_prepare_tun_stack restart && echo "RELOAD=$F50_CONFIG_RELOAD_REQUIRED" && f50_finish_tun_stack');
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(f.read('Proxy/config.yaml'), 'stack: gvisor\n');
+    assert.equal(f.read('Proxy/config.yaml'), 'stack: mips\n');
     assert.match(result.stdout, /RELOAD=1\nCONTROLLER=policy apply\nCONTROLLER=policy verify/);
     assert.equal(f.read('Policy/options.conf'), f.options + 'tun_stack=auto\n');
   } finally { f.close(); }
@@ -159,9 +159,53 @@ test('settings reject unsupported mips before any saved-state operation', async 
     runShellWithRoot: async () => { probes++; return { success: true, content: 'F50_ERROR=mips_requires_mihomo_1.19.31' }; },
   });
   await verify({ traffic_mode: 'tun', ipv6: 'on', tun_stack: 'auto' });
-  assert.equal(probes, 0);
-  await assert.rejects(verify({ traffic_mode: 'tun', tun_stack: 'mips' }), /v1\.19\.31/);
   assert.equal(probes, 1);
+  await assert.rejects(verify({ traffic_mode: 'tun', tun_stack: 'mips' }), /v1\.19\.31/);
+  assert.equal(probes, 2);
   const save = source.slice(source.indexOf('async function kprSaveNetworkState('), source.indexOf('async function kprSaveNetworkState(') + 6500);
-  assert.ok(save.indexOf('await verifyF50TunStack(next.options)') < save.indexOf('saved = true'));
+  assert.ok(save.indexOf('await kprShapeRuntimeConfig') < save.indexOf('saved = true'));
+  const shape = source.slice(source.indexOf('async function kprShapeRuntimeConfig('), source.indexOf('async function writeYamlObjectAtomic('));
+  assert.ok(shape.indexOf('await verifyF50TunStack(options)') < shape.indexOf('ensureOriginalSubscriptionService()'));
+});
+for (const [version, ipv6, expected] of [['v1.19.32', 'on', 'mips'], ['v1.19.32', 'off', 'mips'], ['v1.19.30', 'on', 'gvisor'], ['v1.19.30', 'off', 'mixed'], ['Alpha-unknown', 'on', 'gvisor']]) test(`automatic ${version} IPv6=${ipv6} selects ${expected}`, () => {
+  const f = tunFixture(0, 'Mihomo Meta ' + version);
+  try {
+    const options = f.read('Policy/options.conf').replace('ipv6=on', 'ipv6=' + ipv6);
+    fs.writeFileSync(path.join(f.dir, 'Policy/options.conf'), options);
+    const result = f.tunInvoke('f50_check_tun_stack restart && f50_prepare_tun_stack restart');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(f.read('Proxy/config.yaml'), `stack: ${expected}\n`);
+    assert.equal(f.read('Policy/options.conf'), options);
+    assert.doesNotMatch(result.stdout, /F50_ERROR=/);
+    if (expected !== 'mips') assert.match(result.stdout, new RegExp(`F50_TUN_AUTO_FALLBACK=${expected}`));
+  } finally { f.close(); }
+});
+test('automatic mode stops when executing the core version probe fails', () => {
+  const f = tunFixture();
+  try {
+    fs.writeFileSync(path.join(f.dir, 'Proxy/Clash.Core'), '#!/bin/sh\nexit 5\n');
+    const result = f.tunInvoke('f50_check_tun_stack restart && f50_prepare_tun_stack restart');
+    assert.equal(result.status, 2);
+    assert.match(result.stdout, /mips_core_version_unavailable/);
+    assert.equal(f.read('Proxy/config.yaml'), 'stack: mixed\n');
+  } finally { f.close(); }
+});
+test('automatic settings resolve mips without changing the saved preference', async () => {
+  let probes = 0;
+  const verify = vm.runInNewContext(source.slice(source.indexOf('const F50_MIPS_MIN_VERSION'), source.indexOf('const F50_DEFAULT_SECRET')) + '\n' + source.slice(source.indexOf('async function verifyF50TunStack('), source.indexOf('const policyTransactionFiles')) + '\nverifyF50TunStack', {
+    buildF50Tun6CompatFunctions: () => tunHelpers,
+    runShellWithRoot: async () => { probes++; return { success: true, content: 'F50_MIPS_VERSION_OK=1' }; },
+  });
+  const options = { traffic_mode: 'tun', ipv6: 'on', tun_stack: 'auto' };
+  assert.equal(await verify(options), 'mips');
+  assert.equal(options.tun_stack, 'auto');
+  assert.equal(await verify({ ...options, tun_stack: 'gvisor' }), 'gvisor');
+  assert.equal(probes, 1);
+});
+test('settings do not treat a failed version read as an old kernel', async () => {
+  const verify = vm.runInNewContext(source.slice(source.indexOf('const F50_MIPS_MIN_VERSION'), source.indexOf('const F50_DEFAULT_SECRET')) + '\n' + source.slice(source.indexOf('async function verifyF50TunStack('), source.indexOf('const policyTransactionFiles')) + '\nverifyF50TunStack', {
+    buildF50Tun6CompatFunctions: () => tunHelpers,
+    runShellWithRoot: async () => ({ success: true, content: 'F50_ERROR=mips_core_version_unavailable' }),
+  });
+  await assert.rejects(verify({ traffic_mode: 'tun', tun_stack: 'auto' }), /无法检查/);
 });

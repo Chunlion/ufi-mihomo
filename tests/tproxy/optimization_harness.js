@@ -7,8 +7,11 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
-const original = fs.readFileSync(path.join(root, '猫猫TProxy.js'), 'utf8').replace(/\r\n/g, '\n');
-const source = fs.readFileSync(path.join(root, '猫猫TProxy_Optimized.js'), 'utf8').replace(/\r\n/g, '\n');
+const baselineRef = process.env.F50_BASELINE_REF || 'd89be0133be57d17fd667e4e6f48f239d626e5e5';
+const baseline = spawnSync('git', ['show', `${baselineRef}:猫猫TProxy.js`], { cwd: root, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 });
+assert.equal(baseline.status, 0, baseline.stderr);
+const original = baseline.stdout.replace(/\r\n/g, '\n');
+const source = fs.readFileSync(path.join(root, process.env.F50_PLUGIN || '猫猫TProxy.js'), 'utf8').replace(/\r\n/g, '\n');
 const quote = value => `'${String(value).replace(/\\/g, '/').replace(/'/g, `'"'"'`)}'`;
 const plain = value => JSON.parse(JSON.stringify(value));
 function slice(start, end, text = source) {

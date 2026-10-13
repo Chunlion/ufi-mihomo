@@ -365,21 +365,21 @@ function f50AssertSafeJsonNumbers(value) {
 }
 
 function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
-  let providers='\u672a\u786e\u8ba4';
+  let providers='未确认';
   if (provider.success) {
     try {
       const value=JSON.parse(provider.responseText || '');
       if (!value.providers || typeof value.providers!=='object') throw Error('invalid provider snapshot');
       const entries=Object.values(value.providers);
       const known=entries.filter(item=>Array.isArray(item?.proxies));
-      providers=known.length===entries.length ? `${entries.length} \u4e2a\u6765\u6e90\uff0c${known.reduce((n,item)=>n+item.proxies.length,0)} \u4e2a\u5df2\u52a0\u8f7d\u8282\u70b9` : '\u90e8\u5206\u6765\u6e90\u72b6\u6001\u672a\u786e\u8ba4';
-    } catch (_) { providers='\u54cd\u5e94\u683c\u5f0f\u65e0\u6cd5\u786e\u8ba4'; }
+      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分来源状态未确认';
+    } catch (_) { providers='响应格式无法确认'; }
   }
-  return {core:pid?'\u8fdb\u7a0b\u5b58\u5728':'\u672a\u786e\u8ba4\u8fd0\u884c',
-    api:api.success?'\u53ef\u8bbf\u95ee':'\u4e0d\u53ef\u8bbf\u95ee\u6216\u672a\u786e\u8ba4',
-    takeover:'\u672a\u505a\u6570\u636e\u9762\u5b9e\u6d4b\uff08\u4e0d\u4ee5\u8fdb\u7a0b\u6216 API \u53d6\u4ee3\uff09',
-    panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'\u53ef\u8bbf\u95ee':'\u4e0d\u53ef\u8bbf\u95ee\u6216\u672a\u786e\u8ba4',providers,
-    connectivity:'\u672a\u6d4b\u8bd5\uff08\u5df2\u52a0\u8f7d\u8282\u70b9\u4e0d\u4ee3\u8868\u53ef\u8fde\u901a\uff09'};
+  return {core:pid?'进程存在':'未确认运行',
+    api:api.success?'可访问':'不可访问或未确认',
+    takeover:'未做数据面实测（不以进程或 API 取代）',
+    panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'不可访问或未确认',providers,
+    connectivity:'未测试（已加载节点不代表可连通）'};
 }
 
 const F50_TRUSTED_SERVICE_HASHES = ["5cff3c10fc2f556fa1ac7c5ba204ab2168b143da1ffcb6c82a444700c5a7dd25","08a32d4aed30e4dceb32cc8bc3d8df33d2ae70e0e9b203f816db7fdf71edf3ab","84bf02d2dc8f6e391415a4b0c2f59c462b2fa974711dd795eb6b69005405e1ec","8ac8749f149c3d5aae7e49ecd192ae8894e2a3a48af8ed56086fc16c0e473dfc"];
@@ -813,11 +813,11 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const cause = backend || cleanup || code;
   const labels = {
     zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
-    archive_size_unknown: '\u65e0\u6cd5\u786e\u8ba4 ZIP \u89e3\u538b\u540e\u5927\u5c0f\uff0c\u672a\u5b89\u88c5\u3002',
-    data_space_insufficient_for_archive: '\u5b58\u50a8\u7a7a\u95f4\u4e0d\u8db3\u4ee5\u5b8c\u6210\u89e3\u538b\u548c\u56de\u6eda\uff0c\u672a\u66ff\u6362\u7ec4\u4ef6\u3002',
-    controller_http_patch_unknown_build: '\u63a7\u5236\u5668\u6574\u4f53\u54c8\u5e0c\u4e0d\u5339\u914d\uff0c\u5df2\u62d2\u7edd\u5b9a\u4f4d\u8865\u4e01\u3002',
-    config_transaction_pending: '\u5b58\u5728\u672a\u5b8c\u6210\u7684\u914d\u7f6e\u4e8b\u52a1\uff0c\u8bf7\u5148\u6062\u590d\u7f51\u7edc\u3002',
-    install_transaction_pending: '\u5b89\u88c5\u4e8b\u52a1\u672a\u5b8c\u6210\uff0c\u5df2\u963b\u6b62\u542f\u52a8\uff1b\u4fdd\u7559\u7684\u4e8b\u52a1\u65e5\u5fd7\u53ef\u7528\u4e8e\u56de\u6eda\u3002',
+    archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
+    data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
+    controller_http_patch_unknown_build: '控制器整体哈希不匹配，已拒绝定位补丁。',
+    config_transaction_pending: '存在未完成的配置事务，请先恢复网络。',
+    install_transaction_pending: '安装事务未完成，已阻止启动；保留的事务日志可用于回滚。',
     data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
     unzip_missing: '设备缺少解压程序，安装未执行。',
     archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
@@ -845,16 +845,16 @@ function f50Diagnostic(content, fallback = '操作未完成') {
     configuration_missing: '组件包没有初始配置，原安装保持不变。',
     old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
     old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
-    finalization_failed: '\u5b89\u88c5\u4e8b\u52a1\u6536\u5c3e\u672a\u5b8c\u6210\u3002',
+    finalization_failed: '安装事务收尾未完成。',
     installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
     preserve_user_data_failed: '保留用户配置失败，已取消安装。',
     commit_failed: '组件目录替换失败，请查看回滚结果。',
-    network_apply_failed: '\u7f51\u7edc\u63a5\u7ba1\u5e94\u7528\u5931\u8d25\uff0c\u8bf7\u67e5\u770b\u5177\u4f53\u9632\u706b\u5899\u6216\u8def\u7531\u9519\u8bef\u3002',
+    network_apply_failed: '网络接管应用失败，请查看具体防火墙或路由错误。',
     service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
-    service_failed: '\u670d\u52a1\u811a\u672c\u6267\u884c\u5931\u8d25\u3002',
-    start_timeout: '\u6838\u5fc3\u542f\u52a8\u8d85\u65f6\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
-    activation_unverified: '\u670d\u52a1\u672a\u8fd4\u56de\u542f\u52a8\u786e\u8ba4\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002',
-    activation_failed: '\u65b0\u7ec4\u4ef6\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u67e5\u770b\u540e\u7aef\u5177\u4f53\u539f\u56e0\u3002',
+    service_failed: '服务脚本执行失败。',
+    start_timeout: '核心启动超时，未确认启动成功。',
+    activation_unverified: '服务未返回启动确认，未确认启动成功。',
+    activation_failed: '新组件启动失败，请查看后端具体原因。',
     interrupted: '安装被中断，未确认完成。',
     transaction_interrupted: '安装事务未完整执行，请查看设备状态。',
     config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
@@ -874,9 +874,9 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   }
   else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过，请检查配置格式和策略引用。';
   else if (/policy|iptables|ip6tables|route|downstream|network|TUN|listener/i.test(cause) && code === 'activation_failed') summary = '网络接管规则应用失败：' + cause;
-  else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '\u542f\u52a8\u672a\u5b8c\u6210\uff1a' + backend;
+  else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '启动未完成：' + backend;
   const serviceRc = (lines.filter(line => line.startsWith('START_SERVICE_RC=')).pop() || '').slice('START_SERVICE_RC='.length).trim();
-  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '\u6838\u5fc3\u542f\u52a8\u8d85\u65f6\uff0c\u672a\u786e\u8ba4\u542f\u52a8\u6210\u529f\u3002';
+  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '核心启动超时，未确认启动成功。';
   const rollback = get('F50_ROLLBACK');
   if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚未完成：' + rollback;
   else if (rollback === 'restored') summary += ' 已恢复安装前状态。';
@@ -884,10 +884,10 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const transactionState = get('F50_INSTALL_TRANSACTION_STATE') || 'unknown';
   if (componentsInstalled && transactionState !== 'complete') {
     const installed = get('F50_INSTALL_STATUS') === 'installed_running'
-      ? '\u7ec4\u4ef6\u5df2\u5b89\u88c5\u5e76\u542f\u52a8' : '\u7ec4\u4ef6\u5df2\u5b89\u88c5\uff0c\u4fdd\u6301\u505c\u6b62';
+      ? '组件已安装并启动' : '组件已安装，保持停止';
     const warning = lines.filter(line => /^F50_INSTALL_WARNING=(?!previous_components_retained$)/.test(line)).pop() || '';
     const reason = warning.slice('F50_INSTALL_WARNING='.length) || code || transactionState;
-    summary = installed + '\uff1b\u4e8b\u52a1\u6536\u5c3e\u672a\u5b8c\u6210\uff08' + reason + '\uff09\uff0c\u672a\u6267\u884c\u7ec4\u4ef6\u56de\u6eda\u3002';
+    summary = installed + '；事务收尾未完成（' + reason + '），未执行组件回滚。';
   }
   const keyLines = lines.filter(line => /^(F50_(?:INSTALL_[A-Z_]+|CONFIG_STATE|BACKUP_LEFT|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|KANO_INSTALL_OK|START_SERVICE_RC|START_STATE)=/.test(line));
   const details = safe.length <= 6000 ? safe : keyLines.slice(0, 12).join('\n').slice(0, 2500) + '\n[OUTPUT_TRUNCATED]\n' + safe.slice(-3500);
@@ -903,7 +903,7 @@ function f50StartResult(response = {}, fallback = '') {
   const panelFailed=last('F50_HEALTH_PANEL')==='failed';
   const coreStarted=last('START_STATE')==='started_verified_process';
   return {...response,ok,success:ok,code:last('F50_START_CODE') || diagnostic.code || (ok?'started':'start_result_unknown'),
-    detail:text,content:text,panelFailed,coreStarted,finalized:ok,summary:ok ? (panelFailed?'\u6838\u5fc3\u5df2\u542f\u52a8\uff1bZashboard \u6682\u4e0d\u53ef\u7528':'\u6838\u5fc3\u542f\u52a8\u5df2\u786e\u8ba4\uff1b\u5b9e\u9645\u4ee3\u7406\u8fde\u901a\u6027\u672a\u6d4b\u8bd5') : diagnostic.summary,
+    detail:text,content:text,panelFailed,coreStarted,finalized:ok,summary:ok ? (panelFailed?'核心已启动；Zashboard 暂不可用':'核心启动已确认；实际代理连通性未测试') : diagnostic.summary,
     serviceRc:diagnostic.serviceRc,transportOk:response.success===true};
 }
 const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
@@ -942,7 +942,7 @@ async function performF50Uninstall() {
         detail:f50Diagnostic(error?.message || String(error)).details});
     }
   }
-  operationStage('\u590d\u67e5\u5378\u8f7d\u7ed3\u679c', stages.length, stages.length+1);
+  operationStage('复查卸载结果', stages.length, stages.length+1);
   let finalResponse;
   try {
     // Independent read-only proof: no new cancellable worker or plugin directory is created by the wrapper.
@@ -953,9 +953,9 @@ async function performF50Uninstall() {
   const verdict = f50UninstallVerdict(finalResponse);
   const details = diagnostics.map(item => 'STAGE=' + item.stage + '\nTRANSPORT_OK=' + Number(item.transportOk) + '\n' + item.detail).join('\n')
     + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
-  const summary = verdict.ok ? '\u732b\u732b\u53ca\u5168\u90e8\u7ec4\u4ef6\u6570\u636e\u5df2\u5378\u8f7d'
-    : verdict.code === 'residual' ? '\u6700\u7ec8\u590d\u67e5\u53d1\u73b0\u732b\u732b\u6b8b\u7559\uff0c\u8be6\u7ec6\u9879\u89c1\u201c\u72b6\u6001\u4e0e\u65e5\u5fd7\u201d'
-    : '\u5378\u8f7d\u7ed3\u679c\u672a\u786e\u8ba4\uff1a\u6700\u7ec8\u72b6\u6001\u8bfb\u53d6\u5931\u8d25\uff0c\u4e0d\u7b49\u4e8e\u5b58\u5728\u6b8b\u7559';
+  const summary = verdict.ok ? '猫猫及全部组件数据已卸载'
+    : verdict.code === 'residual' ? '最终复查发现猫猫残留，详细项见\u201c状态与日志\u201d'
+    : '卸载结果未确认：最终状态读取失败，不等于存在残留';
   lastInstallDiagnostic = {...verdict, summary, details, diagnostics};
   return {...verdict, summary, details};
 }
@@ -2423,15 +2423,15 @@ function createPrivateRouteLogic() {
     const enabled = input.enabled === true || input.enabled === 'on';
     const raw = Array.isArray(input.cidrs) ? input.cidrs : String(input.cidrs || '').replace(/#[^\n]*/g, '').split(/[\s,;]+/);
     const values = raw.map((v) => String(v).trim()).filter(Boolean);
-    if (values.length > 64) throw new Error('\u6700\u591a\u914d\u7f6e 64 \u4e2a\u79c1\u7f51\u7f51\u6bb5');
+    if (values.length > 64) throw new Error('最多配置 64 个私网网段');
     const cidrs = compact(values);
     for (const n of cidrs) if (!PRIVATE.some((p) => contains(cidr(p), cidr(n)))) {
-      throw new Error('\u4ec5\u652f\u6301 IPv4 RFC1918 \u6216 IPv6 ULA\uff08fc00::/7\uff09\uff1a' + n);
+      throw new Error('仅支持 IPv4 RFC1918 或 IPv6 ULA（fc00::/7）：' + n);
     }
     const policy = String(input.policy || '').trim();
-    if (policy.length > 128 || /[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('\u4ee3\u7406\u7ec4\u540d\u542b\u4e0d\u652f\u6301\u7684\u5b57\u7b26');
-    if (enabled && (!cidrs.length || !policy)) throw new Error('\u542f\u7528\u524d\u8bf7\u586b\u5199\u7f51\u6bb5\u5e76\u9009\u62e9\u4ee3\u7406\u51fa\u7ad9');
-    if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('\u4e0d\u80fd\u9009\u62e9\u5185\u7f6e\u7b56\u7565 ' + policy);
+    if (policy.length > 128 || /[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('代理组名含不支持的字符');
+    if (enabled && (!cidrs.length || !policy)) throw new Error('启用前请填写网段并选择代理出站');
+    if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('不能选择内置策略 ' + policy);
     return { enabled, cidrs, policy };
   }
   function fromOptions(o = {}) {
@@ -2440,7 +2440,7 @@ function createPrivateRouteLogic() {
   function checkConnected(state, connected) {
     for (const t of state.cidrs.map(cidr)) for (const item of connected) {
       const local = cidr(typeof item === 'string' ? item : item.cidr);
-      if (overlaps(t, local)) throw new Error('\u8fdc\u7aef\u7f51\u6bb5 ' + t.text + ' \u4e0e F50 \u76f4\u8fde\u7f51\u6bb5 ' + local.text + ' \u91cd\u53e0');
+      if (overlaps(t, local)) throw new Error('远端网段 ' + t.text + ' 与 F50 直连网段 ' + local.text + ' 重叠');
     }
   }
   function strip(config) {
@@ -2470,13 +2470,13 @@ function createPrivateRouteLogic() {
     const out = strip(config);
     if (!state.enabled || mode === 'off') return out;
     checkConnected(state, connected);
-    if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('\u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u9700\u8981 Mihomo \u89c4\u5219\u6a21\u5f0f');
-    if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('\u8fdc\u7aef\u7f51\u6bb5\u5305\u542b IPv6\uff0c\u8bf7\u5148\u52fe\u9009 IPv6 \u63a5\u7ba1');
+    if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('私网定向代理需要 Mihomo 规则模式');
+    if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('远端网段包含 IPv6，请先勾选 IPv6 接管');
     const groups = out['proxy-groups'] || [], proxies = out.proxies || [];
     if (!Array.isArray(groups) || !Array.isArray(proxies)) throw new Error('Invalid proxy definitions');
     const target = [...groups, ...proxies].find((p) => p && p.name === state.policy);
-    if (!target) throw new Error('\u914d\u7f6e\u4e2d\u4e0d\u5b58\u5728\u51fa\u7ad9\uff1a' + state.policy);
-    if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('\u6240\u9009\u51fa\u7ad9\u4e0d\u662f\u4ee3\u7406');
+    if (!target) throw new Error('配置中不存在出站：' + state.policy);
+    if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('所选出站不是代理');
     if (own(out, 'rules') && !Array.isArray(out.rules)) throw new Error('rules must be an array');
     const meta = { version: 2, mode, cidrs: state.cidrs, policy: state.policy, rules: [], tun: {}, rulesPresent: own(out, 'rules'), tunPresent: own(out, 'tun') };
     const rule = (n, policy) => (cidr(n).family === 4 ? 'IP-CIDR,' : 'IP-CIDR6,') + n + ',' + policy + ',no-resolve';
@@ -2563,12 +2563,12 @@ function createPrivateRouteLogic() {
     for (let i = 0; i < 32; i++) {
       if (visited.has(current)) throw new Error('Proxy group cycle: ' + current);
       visited.add(current);
-      if (['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(String(current).toUpperCase())) throw new Error('\u4ee3\u7406\u7ec4\u5f53\u524d\u6307\u5411 ' + current);
+      if (['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(String(current).toUpperCase())) throw new Error('代理组当前指向 ' + current);
       const value = proxies[current];
-      if (!value) throw new Error('\u6838\u5fc3\u672a\u52a0\u8f7d\u51fa\u7ad9 ' + current);
+      if (!value) throw new Error('核心未加载出站 ' + current);
       if (value.now) { current = value.now; continue; }
-      if (['direct', 'reject', 'reject-drop', 'pass', 'compatible'].includes(String(value.type || '').toLowerCase())) throw new Error('\u6240\u9009\u51fa\u7ad9\u4e3a\u76f4\u8fde\u6216\u62d2\u7edd');
-      if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('\u8bf7\u9009\u62e9\u56fa\u5b9a\u8282\u70b9\u6216\u80fd\u786e\u8ba4\u5f53\u524d\u51fa\u7ad9\u7684\u624b\u52a8\u9009\u62e9\u7ec4');
+      if (['direct', 'reject', 'reject-drop', 'pass', 'compatible'].includes(String(value.type || '').toLowerCase())) throw new Error('所选出站为直连或拒绝');
+      if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('请选择固定节点或能确认当前出站的手动选择组');
       return current;
     }
     throw new Error('Proxy group nesting exceeds 32');
@@ -2593,13 +2593,13 @@ async function kprReadOptions() {
 async function kprReadConnected(config = {}, options = {}) {
   const v6 = options.ipv6 === 'on';
   const result = await runShellWithRoot('ip -o -4 addr show' + (v6 ? ' && ip -o -6 addr show' : ''), 10000);
-  if (!result.success) throw new Error('\u65e0\u6cd5\u68c0\u67e5 F50 \u76f4\u8fde\u7f51\u6bb5');
+  if (!result.success) throw new Error('无法检查 F50 直连网段');
   const tun = String(config.tun && config.tun.device || 'KanoTun');
   const addresses = String(result.content || '').split('\n').map((line) => {
     const match = line.match(/^\s*\d+:\s+(\S+)\s+inet6?\s+(\S+)/);
     return match ? { iface: match[1].split('@')[0], cidr: match[2] } : null;
   }).filter((item) => item && item.iface !== tun && !/^(Mihomo|Meta|utun\d*|tun\d*)$/i.test(item.iface));
-  if (!addresses.length) throw new Error('\u6ca1\u6709\u8bfb\u5230\u7f51\u7edc\u63a5\u53e3');
+  if (!addresses.length) throw new Error('没有读到网络接口');
   return addresses;
 }
 
@@ -2701,7 +2701,7 @@ const policyTransactionFiles = () => [
 async function kprSaveNetworkState(previous, next) {
   let backup = '', policySnapshot = '', snapshotCommitted = false, snapshotRestored = false, saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
   try {
-    operationStage('\u68c0\u67e5\u6a21\u5f0f\u548c\u7f51\u7edc\u8bbe\u7f6e', 0, 4);
+    operationStage('检查模式和网络设置', 0, 4);
     next = { ...next, options: { ...next.options } };
     const feature = KPR.fromOptions(next.options);
     next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
@@ -2711,25 +2711,25 @@ async function kprSaveNetworkState(previous, next) {
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
     await normalizeIpv6DnsCapability(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
-      operationFinish(true, '\u8bbe\u7f6e\u672a\u53d8\u66f4');
-      if (activeCriticalOperation) activeCriticalOperation.finalToast = ['\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green'];
-      else createToast('\u8bbe\u7f6e\u672a\u53d8\u66f4', 'green');
+      operationFinish(true, '设置未变更');
+      if (activeCriticalOperation) activeCriticalOperation.finalToast = ['设置未变更', 'green'];
+      else createToast('设置未变更', 'green');
       return true;
     }
     configChanged = networkStateKey(previous, true) !== networkStateKey(next, true);
     const devices = normalizeDeviceBypassText(next.deviceBypass || '');
-    if (devices.invalid.length) throw new Error('\u8bbe\u5907\u5217\u8868\u683c\u5f0f\u9519\u8bef\uff1a' + devices.invalid.join('; '));
+    if (devices.invalid.length) throw new Error('设备列表格式错误：' + devices.invalid.join('; '));
     // Preserve the list; PolicyTools disables its effect outside TProxy.
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!source.ok) throw new Error(source.message || '\u65e0\u6cd5\u8bfb\u53d6\u8fd0\u884c\u914d\u7f6e');
+    if (!source.ok) throw new Error(source.message || '无法读取运行配置');
     configChanged = configChanged || source.value.mode !== 'rule';
     const prepared = await kprShapeRuntimeConfig(source.value, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
     if (configChanged) {
       backup = await createConfigRollbackPoint('network');
-      if (!backup) throw new Error('\u65e0\u6cd5\u521b\u5efa\u914d\u7f6e\u56de\u6eda\u70b9');
+      if (!backup) throw new Error('无法创建配置回滚点');
     }
     policySnapshot = `/data/kano_network_save_${Date.now()}_${createRandomString(6)}`;
     const snapshot = await runShellWithRoot(`set -e
@@ -2740,38 +2740,38 @@ ${fileSnapshotHelpersCmd()}
 ${policyTransactionFiles().map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo NETWORK_SNAPSHOT_READY`, 20000);
     if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照未确认，未保存新设置');
-    operationStage('\u5199\u5165\u8bbe\u7f6e\u4e0e\u8fd0\u884c\u914d\u7f6e', 1, 4);
+    operationStage('写入设置与运行配置', 1, 4);
     saved = true;
-    if (!(await savePolicyState(next, { apply: false }))) throw new Error('\u7f51\u7edc\u8bbe\u7f6e\u672a\u4fdd\u5b58');
+    if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
     if (configChanged) {
       const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, prepared, { label: 'config.yaml', backup: false });
-      if (!written.ok) throw new Error(written.content || '\u914d\u7f6e\u5199\u5165\u5931\u8d25');
+      if (!written.ok) throw new Error(written.content || '配置写入失败');
     }
     if (wasRunning) {
-      operationStage('\u540c\u6b65\u5185\u6838\u6a21\u5f0f\u4e0e\u63a5\u7ba1\u89c4\u5219', 2, 4);
+      operationStage('同步内核模式与接管规则', 2, 4);
       restartAttempted = true;
       const ok = configChanged
         ? await restartClashOk({ skipCheck: true, preferReload: false, policyReady: true, preparedConfig: prepared })
         : await reapplyPolicyRulesSilent({ ensureScript: false });
-      if (!ok) throw new Error('\u65b0\u8bbe\u7f6e\u672a\u901a\u8fc7\u8fd0\u884c\u68c0\u67e5');
+      if (!ok) throw new Error('新设置未通过运行检查');
       await kprVerifySelection(next.options);
     }
-    operationStage('\u786e\u8ba4\u6a21\u5f0f\u5df2\u751f\u6548', 3, 4);
+    operationStage('确认模式已生效', 3, 4);
     invalidateStatusSnapshot();
     snapshotCommitted = true;
     Object.assign(previous, JSON.parse(JSON.stringify(next)));
     if (wasRunning && typeof refreshDashboardAfterModeChange === 'function') {
       try { await refreshDashboardAfterModeChange(); } catch (_) {}
     }
-    if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN \u5df2\u6682\u505c\u8bbe\u5907\u7ed5\u8fc7\uff0c\u540d\u5355\u4fdd\u7559\uff1b\u5207\u56de TProxy \u81ea\u52a8\u6062\u590d', 'yellow', 8000);
-    operationFinish(true, wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u5df2\u4fdd\u5b58\uff0c\u6838\u5fc3\u4fdd\u6301\u505c\u6b62');
-    const successToast = [wasRunning ? '\u7f51\u7edc\u8bbe\u7f6e\u5df2\u5e94\u7528' : '\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62', 'green', 8000];
+    if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN 已暂停设备绕过，名单保留；切回 TProxy 自动恢复', 'yellow', 8000);
+    operationFinish(true, wasRunning ? '网络设置已应用' : '已保存，核心保持停止');
+    const successToast = [wasRunning ? '网络设置已应用' : '设置已保存；核心保持停止', 'green', 8000];
     if (activeCriticalOperation) activeCriticalOperation.finalToast = successToast;
     else createToast(...successToast);
     return true;
   } catch (error) {
     if (error.name === 'OperationCancelled' || activeCriticalOperation?.token.cancelled) return false;
-    operationStage('\u5e94\u7528\u5931\u8d25\uff0c\u6062\u590d\u539f\u8bbe\u7f6e');
+    operationStage('应用失败，恢复原设置');
     let recovered = !saved;
     if (saved) {
       let restoredSettings = false, restoredConfig = !backup;
@@ -2783,7 +2783,7 @@ ${policyTransactionFiles().map((path, i) => ({ path, i })).reverse().map(({ path
 echo NETWORK_SETTINGS_RESTORED`, 20000);
         restoredSettings = snapshotRestored = !!rollback.success && /^NETWORK_SETTINGS_RESTORED$/m.test(String(rollback.content || ''));
       } catch (_) {}
-      try { if (backup) restoredConfig = await restoreConfigRollbackPoint(backup, '\u7f51\u7edc\u8bbe\u7f6e', { showToast: false }); } catch (_) {}
+      try { if (backup) restoredConfig = await restoreConfigRollbackPoint(backup, '网络设置', { showToast: false }); } catch (_) {}
       recovered = restoredSettings && restoredConfig;
       if (recovered && wasRunning && restartAttempted) {
         try {
@@ -2793,12 +2793,12 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         } catch (_) { recovered = false; }
       }
       if (!recovered) {
-        try { await networkRescue({ stopService: true, showOutput: false, reason: '\u7f51\u7edc\u8bbe\u7f6e\u56de\u6eda\u5931\u8d25' }); } catch (_) {}
+        try { await networkRescue({ stopService: true, showOutput: false, reason: '网络设置回滚失败' }); } catch (_) {}
       }
     }
-    operationFinish(false, recovered ? '\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u6062\u590d\u539f\u8bbe\u7f6e' : '\u5e94\u7528\u4e0e\u56de\u6eda\u5931\u8d25');
+    operationFinish(false, recovered ? '应用失败，已恢复原设置' : '应用与回滚失败');
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
-      (recovered ? (saved ? '\u5df2\u6062\u590d\u539f\u8bbe\u7f6e\u548c\u914d\u7f6e' : '\u672a\u5e94\u7528\u65b0\u8bbe\u7f6e') : '\u56de\u6eda\u672a\u5b8c\u6210\uff0c\u5df2\u5c1d\u8bd5\u505c\u6b62\u6838\u5fc3\u5e76\u6e05\u7406\u89c4\u5219'), recovered ? 'yellow' : 'red', 14000);
+      (recovered ? (saved ? '已恢复原设置和配置' : '未应用新设置') : '回滚未完成，已尝试停止核心并清理规则'), recovered ? 'yellow' : 'red', 14000);
     return false;
   } finally {
     if (policySnapshot && (snapshotCommitted || snapshotRestored || !saved) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
@@ -2832,10 +2832,10 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
     if (operationProgress) operationProgress.dispose();
     const element = document.createElement('section');
     element.id = 'mm_operation_progress';
-    element.setAttribute('aria-label', '\u4efb\u52a1\u8fdb\u5ea6');
-    element.innerHTML = '<div class="mm-op-head"><span class="mm-op-title"></span><button type="button" aria-label="\u6536\u8d77">&#8722;</button></div>' +
+    element.setAttribute('aria-label', '任务进度');
+    element.innerHTML = '<div class="mm-op-head"><span class="mm-op-title"></span><button type="button" aria-label="收起">&#8722;</button></div>' +
       '<div class="mm-op-body"><div class="mm-op-phase" role="status" aria-live="polite"></div>' +
-      '<div class="mm-op-track" role="progressbar" aria-label="\u4efb\u52a1\u8fdb\u5ea6"><div class="mm-op-fill"></div></div>' +
+      '<div class="mm-op-track" role="progressbar" aria-label="任务进度"><div class="mm-op-fill"></div></div>' +
       '<div class="mm-op-foot"><span class="mm-op-count"></span><span class="mm-op-time"></span></div></div>';
     const get = (selector) => element.querySelector(selector);
     setText(get('.mm-op-title'), label);
@@ -2920,13 +2920,13 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         element.dataset.pending = 'false';
         element.dataset.result = ok === true ? 'done' : ok === false ? 'failed' : 'ended';
         element.setAttribute('aria-busy', 'false');
-        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '\u5df2\u5b8c\u6210' : ok === false ? '\u672a\u5b8c\u6210\uff0c\u8bf7\u67e5\u770b\u9519\u8bef\u8be6\u60c5' : '\u5df2\u7ed3\u675f'));
+        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '已完成' : ok === false ? '未完成，请查看错误详情' : '已结束'));
         setText(get('.mm-op-phase'), safe); get('.mm-op-phase').title = safe;
         if (ok === true) { get('.mm-op-fill').style.width = '100%'; get('.mm-op-track').setAttribute('aria-valuenow', '100'); }
         else get('.mm-op-track').removeAttribute('aria-valuenow');
         setText(get('.mm-op-count'), ok === true ? '100%' : '');
         setText(get('button'), '\u00d7');
-        get('button').setAttribute('aria-label', '\u5173\u95ed');
+        get('button').setAttribute('aria-label', '关闭');
         tick();
         if (ok !== false) closeTimer = setTimeout(() => progress.dispose(), 1600);
       },
@@ -2937,7 +2937,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
       else { collapsed = !collapsed; get('.mm-op-body').hidden = collapsed; setText(get('button'), collapsed ? '+' : '\u2212'); }
     };
     element.dataset.pending = 'true';
-    setText(get('.mm-op-phase'), '\u5904\u7406\u4e2d');
+    setText(get('.mm-op-phase'), '处理中');
     operationProgress = progress;
     return progress;
   }
@@ -2954,7 +2954,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
     }
   }
   function operationCancelled() {
-    const error = new Error('\u5df2\u88ab\u6062\u590d\u7f51\u7edc\u4e2d\u6b62\uff0c\u4e0d\u518d\u7ee7\u7eed\u5b89\u88c5\u6216\u91cd\u542f');
+    const error = new Error('已被恢复网络中止，不再继续安装或重启');
     error.name = 'OperationCancelled';
     return error;
   }
@@ -3007,9 +3007,9 @@ exit 0`;
         value = {corePid: fields.F50_CORE_PID || '', apiOk: false, processReadStatus: 'ok',
           configReadStatus: fields.F50_INSTALL_STATE === 'missing' ? 'missing' : 'unavailable',
           installState: fields.F50_INSTALL_STATE, trafficMode: 'unknown',
-          configError: '\u8fd0\u884c\u7ec4\u4ef6\u7f3a\u5931', apiError: '\u65e0\u6cd5\u8bfb\u53d6\u9762\u677f\u8fde\u63a5\u914d\u7f6e'};
+          configError: '运行组件缺失', apiError: '无法读取面板连接配置'};
       } else {
-        throw new Error(f50Error(text) || '\u72b6\u6001\u547d\u4ee4\u672a\u8fd4\u56de\u7ed3\u679c\uff08\u8d85\u65f6\u6216\u6267\u884c\u5931\u8d25\uff09');
+        throw new Error(f50Error(text) || '状态命令未返回结果（超时或执行失败）');
       }
       return value;
     })();
@@ -3029,7 +3029,7 @@ exit 0`;
     const stored = normalizeStoredSubSourceList(sources);
     const enabled = normalizeSubSourceList(stored);
     if (normalizeSubRuleModeValue(mode) === SUB_RULE_MODE_ORIGINAL && (stored.length !== 1 || enabled.length !== 1)) {
-      throw new Error('\u8ba2\u9605\u81ea\u5e26\u914d\u7f6e\u53ea\u5141\u8bb8\u4e00\u6761\u5df2\u542f\u7528\u7684\u8ba2\u9605\u94fe\u63a5\uff1b\u591a\u6761\u94fe\u63a5\u8bf7\u9009\u62e9\u672c\u5730\u6a21\u677f');
+      throw new Error('订阅自带配置只允许一条已启用的订阅链接；多条链接请选择本地模板');
     }
     return { stored, enabled };
   }
@@ -3063,15 +3063,15 @@ echo UNINSTALL_VERIFIED
 `;
 }
 function buildUninstallStages() { return [
-  {title:'\u505c\u6b62\u732b\u732b\u5e76\u6062\u590d\u7f51\u7edc', timeout:60000, script:buildF50CleanupScript()},
-  {title:'\u79fb\u9664\u732b\u732b\u5f00\u673a\u542f\u52a8\u9879', timeout:15000, script:`set -e
+  {title:'停止猫猫并恢复网络', timeout:60000, script:buildF50CleanupScript()},
+  {title:'移除猫猫开机启动项', timeout:15000, script:`set -e
 if [ -f ${shellQuote(BOOT_FILE)} ]; then
   ${removeBootLinesCmd()}
 fi
 if [ -f /data/f50_boot_fix/clash_boot.sh ]; then rm -f /data/f50_boot_fix/clash_boot.sh; fi
 echo F50_BOOT_REMOVED
 `},
-  {title:'\u5220\u9664\u732b\u732b\u7ec4\u4ef6\u548c\u6570\u636e', timeout:45000, script:buildF50MaintenanceFunctions('remove') + `
+  {title:'删除猫猫组件和数据', timeout:45000, script:buildF50MaintenanceFunctions('remove') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-delete.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 # Do not erase recoverable runtime files while owned processes or interception are demonstrably active.
@@ -3179,7 +3179,7 @@ exit "$delete_rc"
     op.token.cancelled = true;
     deviceTaskUncertain = true;
     const error = operationCancelled();
-    error.message = '\u8bbe\u5907\u4efb\u52a1\u662f\u5426\u7ed3\u675f\u672a\u77e5\uff0c\u5df2\u4fdd\u7559\u9501\u548c\u56de\u6eda\u70b9\u3002\u8bf7\u5148\u6267\u884c\u201c\u6062\u590d\u7f51\u7edc\u201d\u3002';
+    error.message = '设备任务是否结束未知，已保留锁和回滚点。请先执行\u201c恢复网络\u201d。';
     error.code = 'device_completion_unknown';
     lastInstallDiagnostic = f50Diagnostic('F50_ERROR=device_completion_unknown\n' + String(cause));
     lastInstallDiagnostic.summary = error.message;
@@ -3445,17 +3445,17 @@ exit "$kano_task_rc"`;
     try {
       url = new URL(String(value || '').trim());
     } catch {
-      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u7684\u8ba2\u9605\u5730\u5740\u65e0\u6548' };
+      return { ok: false, message: '本地转换的订阅地址无效' };
     }
     if (url.protocol != 'http:' && url.protocol != 'https:') {
-      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u53ea\u5141\u8bb8 HTTP \u6216 HTTPS' };
+      return { ok: false, message: '订阅地址只允许 HTTP 或 HTTPS' };
     }
     if (url.username || url.password) {
-      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u4e0d\u5f97\u5728 URL \u4e2d\u643a\u5e26\u7528\u6237\u540d\u6216\u5bc6\u7801' };
+      return { ok: false, message: '订阅地址不得在 URL 中携带用户名或密码' };
     }
     const hostname = String(url.hostname || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
     if (!hostname) {
-      return { ok: false, message: '\u8ba2\u9605\u5730\u5740\u7f3a\u5c11\u4e3b\u673a\u540d' };
+      return { ok: false, message: '订阅地址缺少主机名' };
     }
     if (
       hostname == 'localhost'
@@ -3466,7 +3466,7 @@ exit "$kano_task_rc"`;
       || isPrivateOrReservedIpv4(hostname)
       || (hostname.includes(':') && isPrivateOrReservedIpv6(hostname))
     ) {
-      return { ok: false, message: '\u672c\u5730\u8f6c\u6362\u62d2\u7edd\u56de\u73af\u3001\u79c1\u7f51\u6216\u4fdd\u7559\u5730\u5740' };
+      return { ok: false, message: '本地转换拒绝回环、私网或保留地址' };
     }
     return {
       ok: true,
@@ -3481,7 +3481,7 @@ exit "$kano_task_rc"`;
   const getUploadedPath = (url) => {
     const normalized = String(url || '').replace(/^\/+/, '');
     if (!normalized || normalized.includes('..')) {
-      throw new Error('\u4e0a\u4f20\u8def\u5f84\u5f02\u5e38');
+      throw new Error('上传路径异常');
     }
     return `${F50_FILES_DIR}/${normalized}`;
   };
@@ -3872,7 +3872,7 @@ KANO_YQ_SMOKE_EOF
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
     // UFI root-shell requests have a finite request window. Keep every foreground
     // download attempt below that window and try sources one-by-one from JS.
-    operationStage('\u68c0\u67e5\u5b89\u88c5\u5305\u7f13\u5b58');
+    operationStage('检查安装包缓存');
     if (allowCached) {
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -3890,7 +3890,7 @@ KANO_YQ_SMOKE_EOF
     const sources = [CLASH_PACKAGE_URL, CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
-      operationStage('\u4e0b\u8f7d\u5e76\u6821\u9a8c\u5b89\u88c5\u5305\uff1a\u6765\u6e90 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
+      operationStage('下载并校验安装包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
       const result = await runShellWithRoot(`
         set +e
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -3985,11 +3985,11 @@ KANO_YQ_SMOKE_EOF
   };
   const acquireCriticalOperation = (label = '关键操作', token = null) => {
     if (deviceTaskUncertain || transientShellOperation) {
-      createToast(deviceTaskUncertain ? '\u8bf7\u5148\u6062\u590d\u7f51\u7edc\u4ee5\u786e\u8ba4\u540e\u53f0\u4efb\u52a1\u5df2\u7ed3\u675f' : '\u8bbe\u5907\u8bfb\u53d6\u5c1a\u672a\u7ed3\u675f\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5', 'yellow');
+      createToast(deviceTaskUncertain ? '请先恢复网络以确认后台任务已结束' : '设备读取尚未结束，请稍后重试', 'yellow');
       return null;
     }
     if (recoveryInProgress) {
-      createToast('\u7f51\u7edc\u6062\u590d\u6b63\u5728\u6267\u884c', 'yellow');
+      createToast('网络恢复正在执行', 'yellow');
       return null;
     }
     if (activeCriticalOperation) {
@@ -3998,7 +3998,7 @@ KANO_YQ_SMOKE_EOF
       return null;
     }
     const operationToken = token || { id: `${Date.now()}_${createRandomString(6)}` };
-    activeCriticalOperation = { label: String(label || '\u5173\u952e\u64cd\u4f5c'), token: operationToken, progress: createOperationProgress(label) };
+    activeCriticalOperation = { label: String(label || '关键操作'), token: operationToken, progress: createOperationProgress(label) };
     invalidateStatusSnapshot();
     syncCriticalOperationStatus();
     return operationToken;
@@ -4091,7 +4091,7 @@ KANO_YQ_SMOKE_EOF
 
   const ensureAdvanced = async () => {
     if (await checkAdvanceFunc()) return true;
-    createToast('\u6ca1\u6709\u5f00\u542f\u9ad8\u7ea7\u529f\u80fd\uff0c\u65e0\u6cd5\u4f7f\u7528\uff01', 'red');
+    createToast('没有开启高级功能，无法使用！', 'red');
     return false;
   };
 
@@ -4127,7 +4127,7 @@ KANO_YQ_SMOKE_EOF
           sed -n '1p' ${shellQuote(CLASH_SUB_USER_AGENT_FILE)}
         fi
         `, 10 * 1000);
-    if (!res.success) throw new Error('\u8bfb\u53d6\u8ba2\u9605\u8bf7\u6c42\u5934\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u66f4\u65b0');
+    if (!res.success) throw new Error('读取订阅请求头失败，未继续更新');
     try {
       currentProviderUserAgent =
         parseStoredProviderUserAgent(res.content || '') ||
@@ -4563,18 +4563,7 @@ KANO_YQ_SMOKE_EOF
     return !!(sourceRes.success && String(sourceRes.content || '').includes('SUB_SOURCES_COMMITTED'));
   };
 
-  const setConfigSourceCmd = (source = 'unknown') => `
-        (
-          umask 077
-          TARGET=${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
-          TMP="$TARGET.new.$$"
-          trap 'rm -f "$TMP"' EXIT
-          trap 'exit 1' HUP INT TERM
-          mkdir -p ${shellQuote(CLASH_DIR + '/Tools')} || exit 1
-          printf 'KANO_CONFIG_SOURCE=%s\nKANO_CONFIG_SOURCE_TIME=%s\n' ${shellQuote(String(source || 'unknown'))} "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)" > "$TMP" || exit 1
-          chmod 600 "$TMP" && mv -f "$TMP" "$TARGET" || exit 1
-        ) || { echo CONFIG_SOURCE_WRITE_FAILED; exit 1; }
-        `;
+  
 
   const setSubRuleMode = async (mode = SUB_RULE_MODE_TEMPLATE) => {
     const cleanMode = normalizeSubRuleModeValue(mode);
@@ -4582,14 +4571,14 @@ KANO_YQ_SMOKE_EOF
         if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
         `, 10 * 1000);
     if (!current.success) {
-      createToast(`\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u8bfb\u53d6\u5931\u8d25<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
+      createToast(`规则模式状态读取失败<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
       return false;
     }
     const storedSources = parseStoredSubSourcesFromText(current.content || '');
     const convertMode = await readSavedSubConvertMode();
     const saved = await persistSubSourceState(storedSources, cleanMode, convertMode, { allowEmpty: true });
     if (!saved) {
-      createToast('\u89c4\u5219\u6a21\u5f0f\u72b6\u6001\u5199\u5165\u5931\u8d25', 'red', 9000);
+      createToast('规则模式状态写入失败', 'red', 9000);
     }
     return saved;
   };
@@ -4919,7 +4908,7 @@ KANO_YQ_SMOKE_EOF
 
   const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
     if (!(await ensureCompatBackend())) {
-      return { ok: false, value: null, message: `${label} \u9700\u8981 yq v4\uff0c\u8bf7\u5148\u4fee\u590d YAML \u7ec4\u4ef6`, shell: null };
+      return { ok: false, value: null, message: `${label} 需要 yq v4，请先修复 YAML 组件`, shell: null };
     }
     const res = await runShellWithRoot(`
         set -e
@@ -5684,7 +5673,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
     }
     const stagePath = `${CLASH_CONFIG}.kano_original_${Date.now()}_${createRandomString(6)}`;
     try {
-      if (!(await ensureYqRuntime({ quiet: true }))) throw new Error('YAML \u89e3\u6790\u7ec4\u4ef6\u4e0d\u53ef\u7528');
+      if (!(await ensureYqRuntime({ quiet: true }))) throw new Error('YAML 解析组件不可用');
       const fetched = await convertSubscriptionsLocally(cleanSources, { rawConfigPath: stagePath });
       if (!fetched.ok) throw new Error(fetched.message || '原配置下载失败，未修改运行配置');
       const read = await readYamlObject(stagePath, '订阅原配置');
@@ -5696,7 +5685,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
       adapted['external-controller'] = info.externalController || `0.0.0.0:${F50_PORTS.controller}`;
       if (typeof info.secret === 'string') adapted.secret = info.secret;
       for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe']) delete adapted[key];
-      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '\u8ba2\u9605\u539f\u914d\u7f6e', backup, backupTag: 'subscription_original', configSource: 'subscription_original' });
+      const written = await writeYamlObjectAtomic(CLASH_CONFIG, adapted, { label: '订阅原配置', backup, backupTag: 'subscription_original', configSource: 'subscription_original' });
       if (!written.ok) throw new Error(written.content || '订阅原配置写入失败');
       invalidateStatusSnapshot();
       return true;
@@ -5712,20 +5701,20 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
 
   const buildDefaultOverrideJs = () => [
     '/**',
-    ' * F50 JS \u8986\u5199\uff1a\u5199\u6cd5\u5c3d\u91cf\u8d34\u8fd1\u684c\u9762\u7aef mihomo/Clash Verge \u8986\u5199\u811a\u672c\u3002',
-    ' * \u4fdd\u5b58\u540e\u4f1a\u57fa\u4e8e template.base.yaml \u751f\u6210 template.yaml\uff0c\u4e0d\u4f1a\u76f4\u63a5\u628a\u6574\u4efd\u6a21\u677f\u66ff\u6362\u6210\u56fa\u5b9a\u5185\u5bb9\u3002',
-    ' * \u5e38\u7528\u5199\u6cd5\uff1a\u53ea\u6539 config.rules\uff0c\u6216\u5c11\u91cf\u6539 proxy-groups\u3002',
+    ' * F50 JS 覆写：写法尽量贴近桌面端 mihomo/Clash Verge 覆写脚本。',
+    ' * 保存后会基于 template.base.yaml 生成 template.yaml，不会直接把整份模板替换成固定内容。',
+    ' * 常用写法：只改 config.rules，或少量改 proxy-groups。',
     ' */',
     'function main(config) {',
     '  config.rules = config.rules || [];',
     '',
-    '  // \u793a\u4f8b 1\uff1a\u8ba9\u67d0\u4e2a\u57df\u540d\u76f4\u8fde\uff0c\u653e\u5230\u89c4\u5219\u6700\u524d\u9762',
+    '  // 示例 1：让某个域名直连，放到规则最前面',
     '  // config.rules.unshift("DOMAIN-SUFFIX,apple.com,DIRECT");',
     '',
-    '  // \u793a\u4f8b 2\uff1a\u8ba9\u67d0\u4e2a\u57df\u540d\u5f3a\u5236\u8d70\u4ee3\u7406\u7ec4 Proxy',
+    '  // 示例 2：让某个域名强制走代理组 Proxy',
     '  // config.rules.unshift("DOMAIN-SUFFIX,google.com,Proxy");',
     '',
-    '  // \u793a\u4f8b 3\uff1a\u62e6\u622a\u5e7f\u544a\u57df\u540d',
+    '  // 示例 3：拦截广告域名',
     '  // config.rules.unshift("DOMAIN-SUFFIX,doubleclick.net,REJECT");',
     '',
     '  return config;',
@@ -5908,7 +5897,7 @@ printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\
         fi
         `, 20 * 1000);
     if (!pre.success) {
-      createToast(`\u51c6\u5907\u57fa\u7840\u6a21\u677f\u5931\u8d25<br>${safeTextToHtml(pre.content || '')}`, 'red', 8000);
+      createToast(`准备基础模板失败<br>${safeTextToHtml(pre.content || '')}`, 'red', 8000);
       return false;
     }
     return await ensureTemplateForF50(cleanSources, { showToast: false, templatePath });
@@ -6235,13 +6224,13 @@ KANO_WRITE_CHECK_EOF
     const rawController = String(controller || '').trim().replace(/\/+$/g, '');
     const rawSecret = String(secret || '').trim();
     if (!rawController) {
-      return { ok: false, message: 'external-controller \u4e0d\u80fd\u4e3a\u7a7a' };
+      return { ok: false, message: 'external-controller 不能为空' };
     }
     if (!rawSecret) {
-      return { ok: false, message: 'secret \u4e0d\u80fd\u4e3a\u7a7a' };
+      return { ok: false, message: 'secret 不能为空' };
     }
     if (/[\r\n]/.test(rawController) || /[\r\n]/.test(rawSecret)) {
-      return { ok: false, message: 'external-controller \u548c secret \u4e0d\u80fd\u5305\u542b\u6362\u884c' };
+      return { ok: false, message: 'external-controller 和 secret 不能包含换行' };
     }
     let parsed = null;
     try {
@@ -6250,20 +6239,20 @@ KANO_WRITE_CHECK_EOF
         : (/^https?:\/\//i.test(rawController) ? rawController : `http://${rawController}`);
       parsed = new URL(probe);
     } catch {
-      return { ok: false, message: 'external-controller \u683c\u5f0f\u4e0d\u6b63\u786e' };
+      return { ok: false, message: 'external-controller 格式不正确' };
     }
     if (!parsed.port) {
-      return { ok: false, message: 'external-controller \u5fc5\u987b\u5305\u542b\u7aef\u53e3' };
+      return { ok: false, message: 'external-controller 必须包含端口' };
     }
     if (parsed.pathname && parsed.pathname != '/') {
-      return { ok: false, message: 'external-controller \u4e0d\u8981\u586b\u5199\u8def\u5f84' };
+      return { ok: false, message: 'external-controller 不要填写路径' };
     }
     const controllerForConfig = /^https?:\/\//i.test(rawController)
       ? parsed.host
       : rawController;
     const normalized = normalizeController(controllerForConfig);
     if (!normalized || !normalized.port || Number(normalized.port) < 1 || Number(normalized.port) > 65535) {
-      return { ok: false, message: 'external-controller \u7aef\u53e3\u4e0d\u6b63\u786e' };
+      return { ok: false, message: 'external-controller 端口不正确' };
     }
     return {
       ok: true,
@@ -6752,7 +6741,7 @@ KANO_WRITE_CHECK_EOF
   }
   const info=await buildControllerInfo({fresh:true}),pid=await getCorePid();
   const results=await mapWithConcurrency(names,2,async name=>{
-    if (!pid) return {type:'proxy-provider',name,ok:false,attempts:0,proxyCount:null,cacheAvailable:false,errorType:'not_run_core_stopped',message:'\u6838\u5fc3\u672a\u8fd0\u884c',connectivity:'unverified'};
+    if (!pid) return {type:'proxy-provider',name,ok:false,attempts:0,proxyCount:null,cacheAvailable:false,errorType:'not_run_core_stopped',message:'核心未运行',connectivity:'unverified'};
     const path='/providers/proxies/'+encodeURIComponent(name);
     const updated=await callMihomoApi(path,'PUT',null,info,5,{corePid:pid});
     // An update error says nothing about the still-loaded cache. Observe it independently.
@@ -6772,11 +6761,11 @@ KANO_WRITE_CHECK_EOF
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
-      message:ok ? '' : rawMessage || (count===0 ? '\u8282\u70b9\u6765\u6e90\u5df2\u54cd\u5e94\uff0c\u4f46\u8282\u70b9\u4e3a\u7a7a' : '\u8282\u70b9\u52a0\u8f7d\u72b6\u6001\u672a\u786e\u8ba4')};
+      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但节点为空' : '节点加载状态未确认')};
   });
   const result=buildProviderUpdateResult(results,{controllerInfo:info,corePid:pid,
-    notRunReason:!pid && names.length ? '\u6838\u5fc3\u672a\u8fd0\u884c' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
-  if (showToast) createToast(result.failed?'\u90e8\u5206\u8282\u70b9\u6765\u6e90\u66f4\u65b0\u672a\u5b8c\u6210':'\u8282\u70b9\u5df2\u52a0\u8f7d\uff1b\u8fde\u901a\u6027\u672a\u6d4b\u8bd5',result.failed?'yellow':'green');
+    notRunReason:!pid && names.length ? '核心未运行' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
+  if (showToast) createToast(result.failed?'部分节点来源更新未完成':'节点已加载；连通性未测试',result.failed?'yellow':'green');
   return result;
 };
 
@@ -6816,7 +6805,7 @@ KANO_WRITE_CHECK_EOF
   if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败，请检查设备连接和可用空间'})));
   let r;
   try {
-    operationStage('\u4e0b\u8f7d\u5e76\u9a8c\u8bc1\u8ba2\u9605');
+    operationStage('下载并验证订阅');
     r = await f50Command('fetch-batch ' + shellQuote(staged.stagePath), 100000);
     const line = String(r.content || '').split(/\r?\n/).find(s => s.startsWith('F50_FETCH_RESULT='));
     let data = null;
@@ -6905,14 +6894,14 @@ KANO_WRITE_CHECK_EOF
     const el = document.querySelector('#mm_rule_mode_status');
     if (!el) return status;
     const configLabel = status.configReadStatus == 'missing'
-      ? '\u8fd0\u884c\u914d\u7f6e\u672a\u627e\u5230'
+      ? '运行配置未找到'
       : status.configReadStatus == 'invalid'
-        ? '\u8fd0\u884c\u914d\u7f6e\u89e3\u6790\u5931\u8d25'
-        : status.configReadStatus === 'unavailable' ? '\u672a\u80fd\u89e3\u6790\u914d\u7f6e' : '\u8fd0\u884c\u914d\u7f6e\u5df2\u52a0\u8f7d';
+        ? '运行配置解析失败'
+        : status.configReadStatus === 'unavailable' ? '未能解析配置' : '运行配置已加载';
     const parts = [
       status.configSource == 'uploaded_config' ? '自定义配置' : status.mode == SUB_RULE_MODE_ORIGINAL ? '订阅原配置' : '模板规则',
       configLabel,
-      status.failedStage ? `\u5931\u8d25\u9636\u6bb5\uff1a${status.failedStage}` : '',
+      status.failedStage ? `失败阶段：${status.failedStage}` : '',
     ].filter(Boolean);
     setText(el, parts.join(' · '));
     return status;
@@ -6985,14 +6974,14 @@ KANO_WRITE_CHECK_EOF
       if (requestId !== runningStatusRequestId) return !!pid;
       if (label) label.title = [snapshot.processError, snapshot.configError, snapshot.optionsError, snapshot.apiError, snapshot.networkWarning].filter(Boolean).join('\n');
       if (snapshot.processReadStatus === 'unavailable') {
-        renderRuntimeStatus('unknown', '\u732b\u732b - \u8fdb\u7a0b\u72b6\u6001\u4e0d\u53ef\u8bfb', label);
+        renderRuntimeStatus('unknown', '猫猫 - 进程状态不可读', label);
         return false;
       }
       if (!pid && snapshot.installState === 'missing') {
-        renderRuntimeStatus('stopped', '\u732b\u732b - \u672a\u5b89\u88c5', label);
+        renderRuntimeStatus('stopped', '猫猫 - 未安装', label);
         return false;
       }
-      renderRuntimeStatus(pid ? 'checking' : 'stopped', pid ? '\u732b\u732b - \u68c0\u67e5 API' : '\u732b\u732b - \u5df2\u505c\u6b62', label);
+      renderRuntimeStatus(pid ? 'checking' : 'stopped', pid ? '猫猫 - 检查 API' : '猫猫 - 已停止', label);
       // Badges are supplementary: they must not delay the API indicator.
       Promise.allSettled([refreshRuleModeStatus(), refreshModeBadge()]).catch(() => {});
       let apiOk = snapshot.apiOk === true;
@@ -7002,16 +6991,16 @@ KANO_WRITE_CHECK_EOF
         apiOk = !!version.success;
       }
       if (requestId === runningStatusRequestId) renderRuntimeStatus(apiOk ? 'healthy' : pid ? 'error' : 'stopped',
-        apiOk ? '\u732b\u732b - API \u6b63\u5e38' : pid ? '\u732b\u732b - API \u672a\u901a' : '\u732b\u732b - \u5df2\u505c\u6b62', label);
+        apiOk ? '猫猫 - API 正常' : pid ? '猫猫 - API 未通' : '猫猫 - 已停止', label);
       return !!pid;
     } catch (error) {
       if (requestId === runningStatusRequestId && label) label.title = f50Error(error?.message || error);
-      if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '\u732b\u732b - \u72b6\u6001\u8bfb\u53d6\u5931\u8d25', label);
+      if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '猫猫 - 状态读取失败', label);
       return false;
     }
   };
 
-  const askConfirm = (id, title, body, ok = '\u786e\u8ba4', cancel = '\u53d6\u6d88') => new Promise((resolve) => {
+  const askConfirm = (id, title, body, ok = '确认', cancel = '取消') => new Promise((resolve) => {
     const progress = activeCriticalOperation && activeCriticalOperation.progress;
     if (progress) progress.pause(true);
     const { el, close } = createFixedToast(
@@ -7185,7 +7174,7 @@ kano_stop_watchers() (
 )`;
 
 
-  const networkRescue = async ({ stopService = true, showOutput = true, reason = '\u6062\u590d\u7f51\u7edc', preempt = false } = {}) => {
+  const networkRescue = async ({ stopService = true, showOutput = true, reason = '恢复网络', preempt = false } = {}) => {
   if (recoveryInProgress) return false;
   recoveryInProgress = true;
   if (preempt) {
@@ -7207,9 +7196,9 @@ kano_stop_watchers() (
     if (activeCriticalOperation) activeCriticalOperation.token.cancelled = true;
   }
   const own = preempt || !activeCriticalOperation;
-  const progress = own ? createOperationProgress('\u6062\u590d\u7f51\u7edc') : activeCriticalOperation.progress;
+  const progress = own ? createOperationProgress('恢复网络') : activeCriticalOperation.progress;
   try {
-    if (progress) progress.stage('\u505c\u6b62\u8fdb\u7a0b\u5e76\u91ca\u653e\u63a5\u7ba1\u89c4\u5219');
+    if (progress) progress.stage('停止进程并释放接管规则');
     let nativeDetail = '';
     // Normal stop/rollback retains the known backend's journal restoration. Manual rescue never needs it.
     if (!preempt && !deviceTaskUncertain) {
@@ -7232,12 +7221,12 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const ok = !!r.success && /^RECOVERY_VERIFIED$/m.test(String(r.content || ''));
     if (ok) deviceTaskUncertain = false;
     lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
-      summary: ok ? '\u7f51\u7edc\u63a5\u7ba1\u5df2\u91ca\u653e' : '\u6062\u590d\u672a\u5b8c\u6210\uff0c\u672a\u786e\u8ba4\u7684\u8d44\u6e90\u5df2\u4fdd\u7559' };
+      summary: ok ? '网络接管已释放' : '恢复未完成，未确认的资源已保留' };
     invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
     const resultDetail = ok ? '已停止并释放网络' : '仍有残留，请查看详情';
     if (own) { if (progress) progress.finish(ok, resultDetail); }
     else { operationFinish(ok, resultDetail); if (progress && ok) progress.stage('网络清理完成，等待释放设备租约'); }
-    if (ok) renderRuntimeStatus('stopped', '\u732b\u732b - \u5df2\u505c\u6b62', document.querySelector('#running_mm'));
+    if (ok) renderRuntimeStatus('stopped', '猫猫 - 已停止', document.querySelector('#running_mm'));
     const resultToast = [ok ? '网络接管已释放' : '恢复未完成<br>' + safeTextToHtml(f50Error(r.content)), ok ? 'green' : 'red', ok ? 5000 : 15000];
     if (!own && ok) activeCriticalOperation.finalToast = resultToast;
     else createToast(...resultToast);
@@ -7295,7 +7284,7 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     return line.replace(/^CONFIG_ROLLBACK=/, '').trim();
   };
 
-  const restoreConfigRollbackPoint = async (rollbackPath='',context='\u56de\u6eda',{showToast=true}={}) => {
+  const restoreConfigRollbackPoint = async (rollbackPath='',context='回滚',{showToast=true}={}) => {
   if (!rollbackPath) return false;
   const stagePath=CLASH_CONFIG+'.kano_rollback_'+Date.now()+'_'+createRandomString(6);
   const prepared=await runShellWithRoot(`set -e
@@ -7311,11 +7300,11 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   if (prepared.success) restored=await commitStagedYaml({targetPath:CLASH_CONFIG,stagePath,backup:false,
     preserveSecret:false,sourceStagePath:/^SOURCE_STATE=present$/m.test(prepared.content)?rollbackPath+'.source':null,
     removeSource:/^SOURCE_STATE=absent$/m.test(prepared.content)});
-  if (showToast) createToast(escapeHtml(context)+(restored.ok?'\u5931\u8d25\uff0c\u5df2\u6062\u590d\u65e7\u914d\u7f6e\u4e0e\u6765\u6e90\u6807\u8bb0':'\u5931\u8d25\uff0c\u4e14\u914d\u7f6e\u56de\u6eda\u672a\u5b8c\u6210'),restored.ok?'yellow':'red',9000);
+  if (showToast) createToast(escapeHtml(context)+(restored.ok?'失败，已恢复旧配置与来源标记':'失败，且配置回滚未完成'),restored.ok?'yellow':'red',9000);
   return restored.ok;
 };
 
-  const restartClashWithConfigRollback = async (rollbackPath = null, context = '\u91cd\u542f') => {
+  const restartClashWithConfigRollback = async (rollbackPath = null, context = '重启') => {
     appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
     const ok = await restartClashOk({ skipCheck: true });
     appendTemplateFlowDebug(`leave restartClashWithConfigRollback ok=${ok ? '1' : '0'} context=${context}`);
@@ -7384,7 +7373,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
                         [ -s ${shellQuote(uploadedPath)} ] && echo 1 || echo 0
                     `);
       if (String(foundFile.content || '').trim() != '1') {
-        throw '\u4e0a\u4f20\u5931\u8d25';
+        throw '上传失败';
       }
 
       const stageRes = await runShellWithRoot(`
@@ -7396,7 +7385,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         [ -s ${shellQuote(txBase)} ] && [ -s ${shellQuote(txTemplate)} ] && echo TEMPLATE_STAGED
       `);
       if (!stageRes.success || !String(stageRes.content || '').includes('TEMPLATE_STAGED')) {
-        throw stageRes.content || '\u6a21\u677f\u4e34\u65f6\u843d\u76d8\u5931\u8d25';
+        throw stageRes.content || '模板临时落盘失败';
       }
       const yamlCheckRes = await runShellWithRoot(`
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
@@ -7418,7 +7407,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "TEMPLATE_YAML_OK"
       `, 30 * 1000);
       if (!yamlCheckRes.success) {
-        throw yamlCheckRes.content || '\u6a21\u677f YAML \u6821\u9a8c\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
+        throw yamlCheckRes.content || '模板 YAML 校验失败，已保留原 template.base.yaml / template.yaml';
       }
 
       let savedSources = await readSavedSubSourcesForTemplate();
@@ -7426,7 +7415,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       let templateSubSyncMessage = '';
       const providerCheck = await readTemplateProviderSubSources(txBase, txTemplate, { includeSuspicious: true });
       if (providerCheck.suspiciousSources.length > 0) {
-        throw `\u6a21\u677f proxy-providers \u5305\u542b\u7591\u4f3c\u975e\u8282\u70b9\u8ba2\u9605\u94fe\u63a5\uff1a${providerCheck.suspiciousSources[0].url}\n\u8bf7\u4e0d\u8981\u628a DNS\u3001\u89c4\u5219\u96c6\u3001GeoIP/GeoSite/MMDB/ASN \u6216\u56fe\u6807\u94fe\u63a5\u653e\u5728 proxy-providers.url`;
+        throw `模板 proxy-providers 包含疑似非节点订阅链接：${providerCheck.suspiciousSources[0].url}\n请不要把 DNS、规则集、GeoIP/GeoSite/MMDB/ASN 或图标链接放在 proxy-providers.url`;
       }
       const templateSources = providerCheck.sources;
       if (preserveSubscription) {
@@ -7437,28 +7426,28 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         if (savedSources.length == 0) {
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = '\u5df2\u4ece\u6a21\u677f proxy-providers \u5bfc\u5165\u8ba2\u9605\u94fe\u63a5\uff0c\u5e76\u7edf\u4e00\u547d\u540d\u4e3a Provider1/Provider2\u3002';
+          templateSubSyncMessage = '已从模板 proxy-providers 导入订阅链接，并统一命名为 Provider1/Provider2。';
         } else if (savedKey != templateKey) {
           const oldSources = normalizeSubSourceList(savedSources);
           const newSources = normalizeSubSourceList(templateSources);
           const confirmed = await askConfirm(
             `mm_template_sub_replace_confirm_${createRandomString(4)}`,
-            '\u66ff\u6362\u8ba2\u9605\u94fe\u63a5\uff1f',
+            '替换订阅链接？',
             `模板包含 ${newSources.length} 个订阅链接，将替换当前 ${oldSources.length} 个已保存链接。`,
-            '\u66ff\u6362',
-            '\u53d6\u6d88',
+            '替换',
+            '取消',
           );
           if (!confirmed) return false;
           const oldCount = savedSources.length;
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = `\u5df2\u6309\u65b0\u6a21\u677f proxy-providers \u66ff\u6362\u8ba2\u9605\u94fe\u63a5\uff1a${oldCount} \u2192 ${templateSources.length}\u3002`;
+          templateSubSyncMessage = `已按新模板 proxy-providers 替换订阅链接：${oldCount} \u2192 ${templateSources.length}。`;
         } else {
           savedSources = templateSources;
         }
       }
       if (!(await prepareTemplateFromBase(savedSources, { templateBasePath: txBase, templatePath: txTemplate }))) {
-        throw '\u51c6\u5907\u6a21\u677f\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
+        throw '准备模板失败，已保留原 template.base.yaml / template.yaml';
       }
       if (!(await applyJsOverrideToTemplate({
         showToast: false,
@@ -7468,7 +7457,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         templateBasePath: txBase,
         templatePath: txTemplate,
       }))) {
-        throw 'JS/UI \u8986\u5199\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
+        throw 'JS/UI 覆写应用失败，已保留原 template.base.yaml / template.yaml';
       }
       if (templateSubSourcesToPersist.length > 0) {
         const subBackupRes = await runShellWithRoot(`
@@ -7482,7 +7471,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           fi
         `, 10 * 1000);
         if (!subBackupRes.success) {
-          throw `\u5907\u4efd\u65e7\u8ba2\u9605\u94fe\u63a5\u5931\u8d25\n${subBackupRes.content || ''}`.trim();
+          throw `备份旧订阅链接失败\n${subBackupRes.content || ''}`.trim();
         }
         subRollbackPath = ((String(subBackupRes.content || '').split('\n').find((line) => line.startsWith('SUB_ROLLBACK=')) || '')
           .replace(/^SUB_ROLLBACK=/, '')
@@ -7493,7 +7482,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           SUB_RULE_MODE_TEMPLATE,
           await readSavedSubConvertMode(),
         ))) {
-          throw '\u5199\u5165\u65b0\u6a21\u677f\u5bf9\u5e94\u7684\u8ba2\u9605\u94fe\u63a5\u5931\u8d25\uff0c\u5df2\u4fdd\u7559\u539f template.base.yaml / template.yaml';
+          throw '写入新模板对应的订阅链接失败，已保留原 template.base.yaml / template.yaml';
         }
       }
       const commitRes = await runShellWithRoot(`
@@ -7530,12 +7519,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "backup_template=$backup_template"
       `);
       if (!commitRes.success || !String(commitRes.content || '').includes('TEMPLATE_OK')) {
-        throw commitRes.content || '\u63d0\u4ea4\u6a21\u677f\u5931\u8d25\uff0c\u5df2\u5c1d\u8bd5\u6062\u590d\u539f\u6a21\u677f';
+        throw commitRes.content || '提交模板失败，已尝试恢复原模板';
       }
       if (templateSubSyncMessage) {
         createToast(templateSubSyncMessage, 'yellow', 7000);
       }
-      createToast('\u6a21\u677f\u5df2\u4fdd\u5b58\uff1b\u70b9\u51fb\u201c\u5e94\u7528\u6a21\u677f\u4e0e\u8986\u5199\u201d\u5199\u5165 config.yaml\u3002', 'green');
+      createToast('模板已保存；点击\u201c应用模板与覆写\u201d写入 config.yaml。', 'green');
       return true;
     } catch (e) {
       console.error(e);
@@ -7553,7 +7542,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         `, 10 * 1000);
       }
       createToast(
-        `\u6a21\u677f\u4e0a\u4f20\u5931\u8d25<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e || '\u672a\u77e5\u9519\u8bef'))}`,
+        `模板上传失败<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e || '未知错误'))}`,
         'red',
         9000,
       );
@@ -7573,7 +7562,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;">${bodyHtml}</div>
         <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
-          <button style="font-size:.64rem" id="${closeId}">\u5173\u95ed</button>
+          <button style="font-size:.64rem" id="${closeId}">关闭</button>
         </div>
       </div>`,
     );
@@ -7593,34 +7582,34 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const closeId = `${id}_close`;
     const sourceRows = [
       info.usingFallbackController
-        ? '\u63a7\u5236\u5730\u5740\uff1a\u4f7f\u7528\u9ed8\u8ba4\u503c'
-        : '\u63a7\u5236\u5730\u5740\uff1a\u5df2\u8bfb\u53d6\u914d\u7f6e',
+        ? '控制地址：使用默认值'
+        : '控制地址：已读取配置',
       info.usingFallbackSecret
-        ? '\u8bbf\u95ee\u5bc6\u94a5\uff1a\u914d\u7f6e\u4e2d\u672a\u8bbe\u7f6e'
-        : '\u8bbf\u95ee\u5bc6\u94a5\uff1a\u5df2\u8bfb\u53d6\u914d\u7f6e',
+        ? '访问密钥：配置中未设置'
+        : '访问密钥：已读取配置',
     ].join('<br>');
     const { el, close } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:92vw;max-width:620px;">
-        <div class="title" style="margin:0">\u9762\u677f\u8fde\u63a5</div>
+        <div class="title" style="margin:0">面板连接</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;">
           <div id="${statusId}" style="margin-bottom:10px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.45);">${sourceRows}</div>
           <label style="display:block;margin-bottom:8px;">
-            <span style="display:block;margin-bottom:4px;">\u63a7\u5236\u5730\u5740</span>
+            <span style="display:block;margin-bottom:4px;">控制地址</span>
             <input id="${controllerId}" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
           </label>
           <div style="display:block;margin-bottom:8px;">
-            <span style="display:block;margin-bottom:4px;">\u8bbf\u95ee\u5bc6\u94a5</span>
+            <span style="display:block;margin-bottom:4px;">访问密钥</span>
             <div style="display:flex;gap:8px;align-items:center;">
               <input id="${secretId}" type="password" autocomplete="off" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
-              <button id="${secretToggleId}" type="button" aria-controls="${secretId}" aria-pressed="false" title="\u663e\u793a\u5bc6\u7801" style="flex:0 0 auto;font-size:.64rem;white-space:nowrap;">\u663e\u793a</button>
+              <button id="${secretToggleId}" type="button" aria-controls="${secretId}" aria-pressed="false" title="显示密码" style="flex:0 0 auto;font-size:.64rem;white-space:nowrap;">显示</button>
             </div>
           </div>
         </div>
         <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:12px;">
-          <button style="font-size:.64rem" id="${checkId}">\u6d4b\u8bd5</button>
-          <button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${saveId}">\u4fdd\u5b58</button>
-          <button style="font-size:.64rem" id="${closeId}">\u5173\u95ed</button>
+          <button style="font-size:.64rem" id="${checkId}">测试</button>
+          <button style="font-size:.64rem;background:var(--dark-btn-color-active)" id="${saveId}">保存</button>
+          <button style="font-size:.64rem" id="${closeId}">关闭</button>
         </div>
       </div>`,
     );
@@ -7641,8 +7630,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     secretToggleBtn.onclick = () => {
       const show = secretInput.type === 'password';
       secretInput.type = show ? 'text' : 'password';
-      secretToggleBtn.textContent = show ? '\u9690\u85cf' : '\u663e\u793a';
-      secretToggleBtn.title = show ? '\u9690\u85cf\u5bc6\u7801' : '\u663e\u793a\u5bc6\u7801';
+      secretToggleBtn.textContent = show ? '隐藏' : '显示';
+      secretToggleBtn.title = show ? '隐藏密码' : '显示密码';
       secretToggleBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
     };
 
@@ -7657,13 +7646,13 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         setStatus(checked.message, '#fecaca');
         return;
       }
-      setButtonBusy(checkBtn, true, '\u68c0\u67e5\u4e2d\u2026');
+      setButtonBusy(checkBtn, true, '检查中\u2026');
       try {
         const res = await callMihomoApi('/version', 'GET', null, checked.info);
         setStatus(
           res.success
-            ? `\u8fde\u901a\u6027\u6b63\u5e38\uff1aHTTP ${res.statusCode}`
-            : `\u8fde\u901a\u6027\u5931\u8d25\uff1aHTTP ${res.statusCode || '\u65e0'}\n${res.responseText || ''}`.trim(),
+            ? `连通性正常：HTTP ${res.statusCode}`
+            : `连通性失败：HTTP ${res.statusCode || '无'}\n${res.responseText || ''}`.trim(),
           res.success ? '#bbf7d0' : '#fecaca',
         );
       } finally {
@@ -7672,17 +7661,17 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     };
 
     saveBtn.onclick = async () => {
-      return runCriticalButtonOperation('保存面板连接', saveBtn, '\u4fdd\u5b58\u4e2d\u2026', async () => {
+      return runCriticalButtonOperation('保存面板连接', saveBtn, '保存中\u2026', async () => {
         const res = await saveControllerSettings(controllerInput.value, secretInput.value);
         if (!res.ok) {
-          setStatus(res.message || '\u4fdd\u5b58\u5931\u8d25', '#fecaca');
+          setStatus(res.message || '保存失败', '#fecaca');
           return;
         }
         const checkText = res.connectivity && res.connectivity.success
-          ? `\u8fde\u901a\u6027\u6b63\u5e38\uff1aHTTP ${res.connectivity.statusCode}`
-          : `\u8fde\u901a\u6027\u5931\u8d25\uff1aHTTP ${(res.connectivity && res.connectivity.statusCode) || '\u65e0'}`;
-        setStatus(`\u5df2\u4fdd\u5b58\n${checkText}`, res.connectivity && res.connectivity.success ? '#bbf7d0' : '#fde68a');
-        createToast(res.connectivity && res.connectivity.success ? 'Web \u9762\u677f\u8fde\u63a5\u5df2\u4fdd\u5b58' : 'Web \u9762\u677f\u8fde\u63a5\u5df2\u4fdd\u5b58\uff0c\u4f46\u6d4b\u8bd5\u5931\u8d25', res.connectivity && res.connectivity.success ? 'green' : 'yellow', 6000);
+          ? `连通性正常：HTTP ${res.connectivity.statusCode}`
+          : `连通性失败：HTTP ${(res.connectivity && res.connectivity.statusCode) || '无'}`;
+        setStatus(`已保存\n${checkText}`, res.connectivity && res.connectivity.success ? '#bbf7d0' : '#fde68a');
+        createToast(res.connectivity && res.connectivity.success ? 'Web 面板连接已保存' : 'Web 面板连接已保存，但测试失败', res.connectivity && res.connectivity.success ? 'green' : 'yellow', 6000);
         if (afterSave) await afterSave();
       });
     };
@@ -7818,8 +7807,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     ]);
     const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
     const rows = [
-      ['\u6838\u5fc3\u5c42',health.core],['\u63a7\u5236 API',health.api],['\u63a5\u7ba1\u6709\u6548\u6027',health.takeover],
-      ['Zashboard',health.panel],['Provider \u52a0\u8f7d',health.providers],['\u4ee3\u7406\u8fde\u901a\u6027',health.connectivity],
+      ['核心层',health.core],['控制 API',health.api],['接管有效性',health.takeover],
+      ['Zashboard',health.panel],['Provider 加载',health.providers],['代理连通性',health.connectivity],
       ['安装/运行状态', runtimeState.state],
       ['预检信息', runtimeState.message || '无'],
       ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
@@ -7954,9 +7943,9 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   btn_disabled.textContent = '卸载插件';
 
 btn_disabled.onclick = async () => {
-  const operationToken = acquireCriticalOperation('\u5378\u8f7d\u732b\u732b');
+  const operationToken = acquireCriticalOperation('卸载猫猫');
   if (!operationToken) return;
-  setButtonBusy(btn_disabled, true, '\u5378\u8f7d\u4e2d\u2026');
+  setButtonBusy(btn_disabled, true, '卸载中\u2026');
   pluginArtifactsRemoved = true;
   try {
     if (templateFlowTimer !== null) clearTimeout(templateFlowTimer);
@@ -7968,8 +7957,8 @@ btn_disabled.onclick = async () => {
       invalidateBinarySnapshot(); invalidateStatusSnapshot();
       try { localStorage.removeItem('kano_mm_web_panel_visible'); localStorage.removeItem('#collapse_mm'); } catch (_) {}
       const frame = document.getElementById('mm_iframe'); if (frame) frame.src = 'about:blank';
-      renderRuntimeStatus('stopped', '\u732b\u732b - \u672a\u5b89\u88c5', document.querySelector('#running_mm'));
-      const ruleStatus = document.querySelector('#mm_rule_mode_status'); if (ruleStatus) ruleStatus.textContent = '\u732b\u732b\u7ec4\u4ef6\u5df2\u5220\u9664';
+      renderRuntimeStatus('stopped', '猫猫 - 未安装', document.querySelector('#running_mm'));
+      const ruleStatus = document.querySelector('#mm_rule_mode_status'); if (ruleStatus) ruleStatus.textContent = '猫猫组件已删除';
     } else pluginArtifactsRemoved = false;
     operationFinish(result.ok, result.summary);
     createToast(safeTextToHtml(result.summary), result.ok ? 'green' : 'red', result.ok ? 5000 : 12000);
@@ -8155,12 +8144,12 @@ btn_disabled.onclick = async () => {
 
   const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
     if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(state.options.tun_stack || 'auto') || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
-      createToast('\u6a21\u5f0f\u6216 DNS \u7aef\u53e3\u65e0\u6548', 'red', 8000);
+      createToast('模式或 DNS 端口无效', 'red', 8000);
       return false;
     }
     const normalizedDevice = normalizeDeviceBypassText(state.deviceBypass || '');
     if (normalizedDevice.invalid.length > 0) {
-      createToast(`\u8bbe\u5907\u7ed5\u8fc7\u5217\u8868\u6709\u683c\u5f0f\u9519\u8bef\uff1a<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
+      createToast(`设备绕过列表有格式错误：<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
       return false;
     }
     const macMirrorRows = normalizedDevice.text.split('\n')
@@ -8305,31 +8294,31 @@ btn_disabled.onclick = async () => {
         `, 60 * 1000);
     const policyOutput = String(res.content || '');
     if (!policyOutput.includes('POLICY_STATE_COMMITTED')) {
-      createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`保存策略配置失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     invalidateBinarySnapshot();
     if (apply) {
       if (res.success && policyOutput.includes('POLICY_RULES_APPLIED')) {
-        createToast('\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528', 'green', 7000);
+        createToast('策略规则已应用', 'green', 7000);
         return true;
       }
       const recoveryOk = policyOutput.includes('POLICY_APPLY_ROLLBACK=restored')
         && policyOutput.includes('POLICY_APPLY_RECOVERY=reapplied');
       createToast(
         recoveryOk
-          ? '\u65b0\u7b56\u7565\u5e94\u7528\u5931\u8d25\uff0c\u5df2\u6062\u590d\u5e76\u91cd\u65b0\u5e94\u7528\u4e0a\u4e00\u7248\u7b56\u7565'
-          : `\u65b0\u7b56\u7565\u5e94\u7528\u5931\u8d25\uff0c\u4e0a\u4e00\u7248\u7b56\u7565\u6062\u590d\u4e0d\u5b8c\u6574<br>${safeTextToHtml(policyOutput)}`,
+          ? '新策略应用失败，已恢复并重新应用上一版策略'
+          : `新策略应用失败，上一版策略恢复不完整<br>${safeTextToHtml(policyOutput)}`,
         recoveryOk ? 'yellow' : 'red',
         10000,
       );
       return false;
     }
     if (!res.success || !policyOutput.includes('POLICY_STATE_SAVED')) {
-      createToast(`\u4fdd\u5b58\u7b56\u7565\u914d\u7f6e\u5931\u8d25<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
+      createToast(`保存策略配置失败<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
       return false;
     }
-    if (!activeCriticalOperation) createToast('\u7b56\u7565\u914d\u7f6e\u5df2\u4fdd\u5b58', 'green');
+    if (!activeCriticalOperation) createToast('策略配置已保存', 'green');
     return true;
   };
 
@@ -8341,10 +8330,10 @@ btn_disabled.onclick = async () => {
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply`);
     if (!res.success || !String(res.content || '').includes('POLICY_APPLY_OK')) {
-      createToast(`\u7b56\u7565\u89c4\u5219\u5e94\u7528\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
+      createToast(`策略规则应用失败<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
     }
-    createToast('\u7b56\u7565\u89c4\u5219\u5df2\u5e94\u7528', 'green', 7000);
+    createToast('策略规则已应用', 'green', 7000);
     return true;
   };
 
@@ -8373,7 +8362,7 @@ btn_disabled.onclick = async () => {
         ip -4 neigh show 2>/dev/null || exit 1
         if [ -f /proc/net/if_inet6 ]; then ip -6 neigh show 2>/dev/null || exit 1; fi
         `, 8000);
-    if (!res.success) throw new Error('\u65e0\u6cd5\u8bfb\u53d6\u5ba2\u6237\u7aef\u90bb\u5c45\u8868');
+    if (!res.success) throw new Error('无法读取客户端邻居表');
     const seen = new Set(), rows = ['IP MAC SOURCE'];
     for (const line of String(res.content || '').split('\n')) {
       if (/\b(?:FAILED|INCOMPLETE)\b/.test(line)) continue;
@@ -8394,7 +8383,7 @@ btn_disabled.onclick = async () => {
       return;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} status`);
-    showInfoDialog('mm_policy_status', '\u7f51\u7edc\u4e0e\u89c4\u5219\u72b6\u6001', `<pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '\u6682\u65e0\u72b6\u6001')}</pre>`);
+    showInfoDialog('mm_policy_status', '网络与规则状态', `<pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '暂无状态')}</pre>`);
   };
 
   const showPolicyToolsDialog = async ({ initialTab = 'network' } = {}) => {
@@ -8451,30 +8440,30 @@ btn_disabled.onclick = async () => {
         <div id="kano_policy_shell">
           <div class="kp-head">
             <div>
-              <div class="kp-title">\u7f51\u7edc\u8bbe\u7f6e</div>
+              <div class="kp-title">网络设置</div>
             </div>
           </div>
 
           <div class="kp-body">
             <div class="kp-nav">
-              <button type="button" class="kp-tab" data-policy-tab="network">\u6d41\u91cf\u6a21\u5f0f</button>
-              <button type="button" class="kp-tab" data-policy-tab="device">\u76f4\u8fde\u8bbe\u5907</button>
+              <button type="button" class="kp-tab" data-policy-tab="network">流量模式</button>
+              <button type="button" class="kp-tab" data-policy-tab="device">直连设备</button>
               <button type="button" class="kp-tab" data-policy-tab="private">私网定向代理</button>
-              <button type="button" class="kp-tab" data-policy-tab="maintain">\u68c0\u67e5\u4fee\u590d</button>
+              <button type="button" class="kp-tab" data-policy-tab="maintain">检查修复</button>
             </div>
 
             <div class="kp-main">
               <section class="kp-panel" data-policy-panel="network">
                 <div class="kp-card">
-                  <div class="kp-card-title">\u6d41\u91cf\u6a21\u5f0f</div>
-                  <div class="kp-desc">TProxy \u63a5\u7ba1\u4e0b\u6e38\u8bbe\u5907\u6d41\u91cf\uff1bTUN \u7531 Mihomo \u521b\u5efa\u63a5\u53e3\uff0c\u63a7\u5236\u5668\u5efa\u7acb\u8def\u7531\u3002</div>
+                  <div class="kp-card-title">流量模式</div>
+                  <div class="kp-desc">TProxy 接管下游设备流量；TUN 由 Mihomo 创建接口，控制器建立路由。</div>
                   <div class="kp-row">
-                    <div class="kp-label">\u63a5\u7ba1\u6a21\u5f0f</div>
-                    <select id="mm_policy_traffic_mode"><option value="tproxy">TProxy\uff1a\u63a5\u7ba1 F50 \u8f6c\u53d1\u6d41\u91cf</option><option value="tun">TUN\uff1a\u72ec\u7acb\u63a5\u53e3\u4e0e\u8def\u7531</option><option value="off">\u5173\u95ed\uff1a\u6838\u5fc3\u8fd0\u884c\uff0c\u6d41\u91cf\u4e0d\u63a5\u7ba1</option></select>
+                    <div class="kp-label">接管模式</div>
+                    <select id="mm_policy_traffic_mode"><option value="tproxy">TProxy：接管 F50 转发流量</option><option value="tun">TUN：独立接口与路由</option><option value="off">关闭：核心运行，流量不接管</option></select>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">IPv6</div>
-                    <label><input id="mm_policy_ipv6" type="checkbox"> \u542f\u7528 IPv6 \u63a5\u7ba1\u89c4\u5219</label>
+                    <label><input id="mm_policy_ipv6" type="checkbox"> 启用 IPv6 接管规则</label>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">TUN 协议栈</div>
@@ -8485,8 +8474,8 @@ btn_disabled.onclick = async () => {
                     <label><input id="mm_policy_quic" type="checkbox"> 拦截下游 UDP/443（直连设备、定向私网除外）</label>
                   </div>
                   <div class="kp-row">
-                    <div class="kp-label">DNS \u52ab\u6301</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> \u52ab\u6301 53 \u5230 mihomo DNS \u7aef\u53e3 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
+                    <div class="kp-label">DNS 劫持</div>
+                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 mihomo DNS 端口 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
                   </div>
                 </div>
               </section>
@@ -8498,7 +8487,7 @@ btn_disabled.onclick = async () => {
                   <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
                   <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF"></textarea>
                   <div class="kp-actions" style="margin-top:9px;">
-                    <button type="button" id="mm_policy_scan_clients">\u626b\u63cf\u5ba2\u6237\u7aef</button>
+                    <button type="button" id="mm_policy_scan_clients">扫描客户端</button>
                   </div>
                   <div id="mm_policy_clients" class="kp-mini" aria-live="polite"></div>
                 </div>
@@ -8511,15 +8500,15 @@ btn_disabled.onclick = async () => {
                   <div class="kp-card-title">检查修复</div>
                   <div class="kp-desc">仅在核心启动异常、切换模式后失效或网络规则未生效时使用。</div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_fix_runtime_config">\u4fee\u590d\u8fd0\u884c\u914d\u7f6e</button>
+                    <button type="button" id="mm_policy_fix_runtime_config">修复运行配置</button>
                     <span>校正 TProxy、TUN、IPv6 和 DNS 所需配置，然后重启核心；不会删除订阅或模板配置。</span>
                   </div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_repair">\u91cd\u5efa\u7f51\u7edc\u89c4\u5219</button>
+                    <button type="button" id="mm_policy_repair">重建网络规则</button>
                     <span>重写策略脚本并重建 KANO_* iptables/ip6tables 链；不修改 config.yaml。</span>
                   </div>
                   <div class="kp-maintain-item">
-                    <button type="button" id="mm_policy_status_btn">\u67e5\u770b\u89c4\u5219\u72b6\u6001</button>
+                    <button type="button" id="mm_policy_status_btn">查看规则状态</button>
                     <span>显示实际使用的 iptables 后端、设备直连项和当前规则链，不会改动配置。</span>
                   </div>
                 </div>
@@ -8529,8 +8518,8 @@ btn_disabled.onclick = async () => {
 
           <div class="kp-footer">
             <div class="kp-footer-right">
-              <button type="button" id="mm_policy_save_apply">\u4fdd\u5b58\u5e76\u5e94\u7528</button>
-              <button type="button" id="mm_policy_close">\u5173\u95ed</button>
+              <button type="button" id="mm_policy_save_apply">保存并应用</button>
+              <button type="button" id="mm_policy_close">关闭</button>
             </div>
           </div>
         </div>
@@ -8570,8 +8559,8 @@ btn_disabled.onclick = async () => {
       if (disabled) get('#mm_policy_clients').innerHTML = '';
       note.classList.toggle('kp-warning', disabled);
       setText(note, mode === 'tun'
-        ? 'TUN \u4f7f\u7528\u56fa\u5b9a\u8def\u7531\u63a5\u7ba1\uff0c\u8bbe\u5907\u7ed5\u8fc7\u5df2\u6682\u505c\u3002\u540d\u5355\u4fdd\u7559\uff0c\u5207\u56de TProxy \u81ea\u52a8\u6062\u590d\u3002'
-        : mode === 'off' ? '\u6d41\u91cf\u63a5\u7ba1\u5df2\u5173\u95ed\uff0c\u540d\u5355\u4fdd\u7559\u4f46\u4e0d\u751f\u6548\u3002'
+        ? 'TUN 使用固定路由接管，设备绕过已暂停。名单保留，切回 TProxy 自动恢复。'
+        : mode === 'off' ? '流量接管已关闭，名单保留但不生效。'
         : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配它的全部 IP。勿将下级路由器 MAC 当作单台设备。');
     };
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
@@ -8590,7 +8579,7 @@ btn_disabled.onclick = async () => {
       const scanBtn = get('#mm_policy_scan_clients');
       const box = get('#mm_policy_clients');
       setButtonBusy(scanBtn, true, '扫描中…');
-      setText(box, '\u626b\u63cf\u4e2d...');
+      setText(box, '扫描中...');
       try {
         const text = await readClientListText();
         if (get('#mm_policy_traffic_mode').value !== 'tproxy') return;
@@ -8602,7 +8591,7 @@ btn_disabled.onclick = async () => {
         for (const line of lines) { const [ip, mac] = line.trim().split(/\s+/); const key=normalizeMac(mac); if(!macCounts.has(key))macCounts.set(key,new Set());macCounts.get(key).add(ip); }
         resetChildren(box);
         if (lines.length == 0) {
-          setText(box, '\u6ca1\u6709\u626b\u63cf\u5230\u5ba2\u6237\u7aef\u3002\u8bbe\u5907\u9700\u8981\u5148\u4ea7\u751f\u6d41\u91cf\uff0cARP \u8868\u91cc\u624d\u4f1a\u51fa\u73b0\u3002');
+          setText(box, '没有扫描到客户端。设备需要先产生流量，ARP 表里才会出现。');
           return;
         }
         lines.forEach((line) => {
@@ -8617,13 +8606,13 @@ btn_disabled.onclick = async () => {
           addIp.className = 'add_ip';
           addIp.style.fontSize = '.58rem';
           addIp.dataset.ip = ip || '';
-          addIp.textContent = '\u52a0 IP';
+          addIp.textContent = '加 IP';
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
           addMac.title = '此 MAC 的全部 IPv4/IPv6；路由器可能代表多台设备';
           addMac.style.fontSize = '.58rem';
           addMac.dataset.mac = mac || '';
-          addMac.textContent = '\u52a0 MAC';
+          addMac.textContent = '加 MAC';
           row.appendChild(ipEl);
           row.appendChild(macEl);
           row.appendChild(addIp);
@@ -8651,7 +8640,7 @@ btn_disabled.onclick = async () => {
 
     get('#mm_policy_fix_runtime_config').onclick = async () => {
       const btn = get('#mm_policy_fix_runtime_config');
-      return runCriticalButtonOperation('修复代理配置', btn, '\u4fee\u590d\u4e2d\u2026', async () => {
+      return runCriticalButtonOperation('修复代理配置', btn, '修复中\u2026', async () => {
         await restartClashOk({ skipCheck: true });
       });
     };
@@ -8752,7 +8741,7 @@ btn_disabled.onclick = async () => {
 
   const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false, preparedConfig = null } = {}) => {
   if (!skipCheck && !(await ensureReady())) return f50StartResult({success:false,content:'F50_START_CODE=backend_not_ready'});
-  operationStage('\u9a8c\u8bc1\u56fa\u5b9a\u914d\u7f6e\u5e76\u542f\u52a8\u6838\u5fc3');
+  operationStage('验证固定配置并启动核心');
   if (preparedConfig) {
     const write = await writeYamlObjectAtomic(CLASH_CONFIG, preparedConfig, {label:'config.yaml',backup:false});
     if (!write.ok) return f50StartResult({success:false,content:'F50_START_CODE=config_write_failed\n' + (write.content || '')});
@@ -8777,7 +8766,7 @@ btn_disabled.onclick = async () => {
 
   const btn_restart = document.createElement('button');
   btn_restart.classList.add('btn');
-  btn_restart.textContent = '\u91cd\u542f\u6838\u5fc3';
+  btn_restart.textContent = '重启核心';
   btn_restart.onclick = async () => {
     await runCriticalOperation('重启核心', async () => {
       setButtonBusy(btn_restart, true, '重启中…');
@@ -8801,7 +8790,7 @@ btn_disabled.onclick = async () => {
       if (!(await ensureReady())) return;
       // \u68c0\u67e5\u6587\u4ef6\u5927\u5c0f
       if (file.size > 2 * 1024 * 1024) {
-        createToast(`\u6a21\u677f\u6587\u4ef6\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc7${2}MB\uff01`, 'red');
+        createToast(`模板文件大小不能超过${2}MB！`, 'red');
         return;
       }
       await runCriticalOperation('上传模板', async () => saveTemplate(file));
@@ -8821,21 +8810,21 @@ btn_disabled.onclick = async () => {
     const restoreOrderText = restoreFiles.map((item) => item.label).join('\n');
     const confirmed = await askConfirm(
       `mm_config_package_restore_confirm_${createRandomString(4)}`,
-      '\u5bfc\u5165\u914d\u7f6e\u5305\uff1f',
-      `\u5c06\u6309\u4ee5\u4e0b\u987a\u5e8f\u56de\u704c\u914d\u7f6e\u6587\u4ef6\uff1a<br>${textToHtml(restoreOrderText)}<br><br>\u7f3a\u5c11\u4efb\u610f\u5fc5\u8981\u6587\u4ef6\u65f6\u4e0d\u4f1a\u8986\u76d6\u73b0\u6709\u914d\u7f6e\u3002`,
-      '\u5f00\u59cb\u5bfc\u5165',
-      '\u53d6\u6d88',
+      '导入配置包？',
+      `将按以下顺序回灌配置文件：<br>${textToHtml(restoreOrderText)}<br><br>缺少任意必要文件时不会覆盖现有配置。`,
+      '开始导入',
+      '取消',
     );
     if (!confirmed) return false;
 
     const isZipPackage = /\.zip$/i.test(file.name || '');
     const isTarPackage = /\.(tar\.gz|tgz)$/i.test(file.name || '');
     if (!isZipPackage && !isTarPackage) {
-      createToast('\u53ea\u652f\u6301\u5bfc\u5165 .tar.gz / .tgz / .zip \u914d\u7f6e\u5305', 'red');
+      createToast('只支持导入 .tar.gz / .tgz / .zip 配置包', 'red');
       return false;
     }
     if (file.size > 8 * 1024 * 1024) {
-      createToast('\u914d\u7f6e\u5305\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc7 8 MB', 'red');
+      createToast('配置包大小不能超过 8 MB', 'red');
       return false;
     }
 
@@ -8849,7 +8838,7 @@ btn_disabled.onclick = async () => {
     try {
       uploadedPath = await uploadFileToDevice(file);
     } catch (e) {
-      createToast(`\u914d\u7f6e\u5305\u4e0a\u4f20\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
+      createToast(`配置包上传失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
       return false;
     }
     const requiredNamesCmd = requiredNames.map((name) => shellQuote(name)).join(' ');
@@ -9050,9 +9039,9 @@ btn_disabled.onclick = async () => {
         .map((line) => line.replace(/^RESTORE_MISSING: /, '').trim())
         .filter(Boolean);
       if (missingFiles.length > 0) {
-        createToast(`\u914d\u7f6e\u5305\u7f3a\u5c11\u6587\u4ef6\uff0c\u5df2\u505c\u6b62\u5bfc\u5165<br>${textToHtml(missingFiles.join('\n'))}`, 'red', 10000);
+        createToast(`配置包缺少文件，已停止导入<br>${textToHtml(missingFiles.join('\n'))}`, 'red', 10000);
       } else {
-        createToast(`\u914d\u7f6e\u5305\u5bfc\u5165\u5931\u8d25<br>${safeTextToHtml(restoreOutput)}`, 'red', 10000);
+        createToast(`配置包导入失败<br>${safeTextToHtml(restoreOutput)}`, 'red', 10000);
       }
       return false;
     }
@@ -9117,7 +9106,7 @@ btn_disabled.onclick = async () => {
     const reloadRes = await reloadConfigHot(oldControllerInfo);
     let runningOk = reloadRes.success;
     if (!runningOk) {
-      createToast(`\u70ed\u91cd\u8f7d\u5931\u8d25\uff0c\u5df2\u6539\u7528\u670d\u52a1\u91cd\u542f<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
+      createToast(`热重载失败，已改用服务重启<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
       runningOk = await restartClashOk({ skipCheck: true });
     } else {
       runningOk = await reapplyPolicyRulesSilent();
@@ -9135,7 +9124,7 @@ btn_disabled.onclick = async () => {
       .filter((line) => line.startsWith('RESTORED: '))
       .map((line) => line.replace(/^RESTORED: /, '').trim())
       .filter(Boolean);
-    createToast(`\u914d\u7f6e\u5305\u5df2\u56de\u704c<br>\u5df2\u6062\u590d\uff1a${textToHtml(restoredFiles.join('\n') || restoreOrderText)}`, 'green', 9000);
+    createToast(`配置包已回灌<br>已恢复：${textToHtml(restoredFiles.join('\n') || restoreOrderText)}`, 'green', 9000);
     if (refreshSubscriptionAfterRestore) await refreshSubscriptionAfterRestore();
     return true;
   };
@@ -9158,7 +9147,7 @@ btn_disabled.onclick = async () => {
 
   const stopBtn = document.createElement('button');
   stopBtn.classList.add('btn');
-  stopBtn.textContent = '\u505c\u6b62\u6838\u5fc3';
+  stopBtn.textContent = '停止核心';
   stopBtn.onclick = async () => {
     await runCriticalOperation('停止核心', async () => {
       setButtonBusy(stopBtn, true, '停止中…');
@@ -9172,14 +9161,14 @@ btn_disabled.onclick = async () => {
 
   const backupBtn = document.createElement('button');
   backupBtn.classList.add('btn');
-  backupBtn.textContent = '\u5bfc\u51fa\u914d\u7f6e';
+  backupBtn.textContent = '导出配置';
   backupBtn.onclick = async () => {
     if (!(await ensureReady())) return;
     const operationToken = acquireCriticalOperation('导出配置包');
     if (!operationToken) return;
     setButtonBusy(backupBtn, true, '导出中…');
     try {
-    createToast('\u6b63\u5728\u5bfc\u51fa\u732b\u732b\u914d\u7f6e\u5305...', 'green');
+    createToast('正在导出猫猫配置包...', 'green');
     const t = Math.floor(Date.now() + Math.random());
     const backupFiles = configPackageBackupFiles();
     const defaultOverrideJsForBackup = buildDefaultOverrideJs();
@@ -9258,7 +9247,7 @@ btn_disabled.onclick = async () => {
         [ -s "$PKG" ] || { echo "PACK_FAILED: empty package"; exit 1; }
         echo "PACKAGE_NAME=$(basename "$PKG")"
         `, 30 * 1000);
-    if (!res.success) return createToast(`\u5907\u4efd\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red');
+    if (!res.success) return createToast(`备份失败<br>${safeTextToHtml(res.content || '')}`, 'red');
     const outputLines = String(res.content || '').split('\n');
     const packageName = ((outputLines.find((line) => line.startsWith('PACKAGE_NAME=')) || '')
       .replace(/^PACKAGE_NAME=/, '')
@@ -9278,7 +9267,7 @@ btn_disabled.onclick = async () => {
       8000,
     );
     const a = document.createElement('a');
-    a.download = `\u732b\u732b\u914d\u7f6e\u5907\u4efd\u5305_${t}${packageName.endsWith('.zip') ? '.zip' : '.tar.gz'}`;
+    a.download = `猫猫配置备份包_${t}${packageName.endsWith('.zip') ? '.zip' : '.tar.gz'}`;
     a.href = `/api/uploads/${encodeURIComponent(packageName)}`;
     a.target = '_blank';
     a.style.display = 'none';
@@ -9302,7 +9291,7 @@ btn_disabled.onclick = async () => {
     }
     const mmContainer = document.querySelector('.functions-container');
     if (!mmContainer) {
-      createToast('\u732b\u732b\u5165\u53e3\u521d\u59cb\u5316\u5931\u8d25\uff1a\u672a\u83b7\u53d6\u5230 F50 \u9875\u9762\u5bb9\u5668\u3002', 'red');
+      createToast('猫猫入口初始化失败：未获取到 F50 页面容器。', 'red');
       return;
     }
     const oldPanel = document.querySelector('#IFRAME_KANO');
@@ -9362,18 +9351,18 @@ btn_disabled.onclick = async () => {
       `
 <div id="IFRAME_KANO" class="kano-mm-root">
     <div class="title kano-mm-title">
-        <div class="kano-mm-title-left"><strong id="running_mm">\u732b\u732b</strong><span class="kano-mm-badge" id="mm_mode_badge">TProxy</span></div>
+        <div class="kano-mm-title-left"><strong id="running_mm">猫猫</strong><span class="kano-mm-badge" id="mm_mode_badge">TProxy</span></div>
         <div style="display:inline-block;" id="collapse_mm_btn"></div>
     </div>
     <div class="collapse" id="collapse_mm" data-name="close" style="height:0px;overflow:hidden;">
         <div class="collapse_box kano-mm-box">
             <div class="kano-mm-overview">
-              <div id="mm_rule_mode_status" class="kano-mm-status">\u914d\u7f6e\u72b6\u6001\uff1a\u8bfb\u53d6\u4e2d\u2026</div>
+              <div id="mm_rule_mode_status" class="kano-mm-status">配置状态：读取中\u2026</div>
               <div id="mm_task_status" class="kano-mm-task-status" data-state="idle" aria-live="polite">任务：空闲</div>
             </div>
             <div id="mm_action_box"></div>
             <div id="mm_web_panel_wrap" class="kano-mm-web-panel">
-              <div class="kano-mm-web-head"><span>\u5185\u5d4c Web \u9762\u677f</span></div>
+              <div class="kano-mm-web-head"><span>内嵌 Web 面板</span></div>
               <iframe id="mm_iframe" src="about:blank"></iframe>
             </div>
         </div>
@@ -9397,7 +9386,7 @@ btn_disabled.onclick = async () => {
       localStorage.setItem(WEB_VISIBLE_KEY, visible ? 'visible' : 'hidden');
       wrap.style.display = visible ? '' : 'none';
       if (typeof webPanelToggleBtn != 'undefined' && webPanelToggleBtn) {
-        webPanelToggleBtn.textContent = visible ? '\u9690\u85cf\u9762\u677f' : '\u663e\u793a\u9762\u677f';
+        webPanelToggleBtn.textContent = visible ? '隐藏面板' : '显示面板';
         webPanelToggleBtn.classList.toggle('kano-primary', visible);
       }
       if (visible && load && localStorage.getItem('#collapse_mm') == 'open') {
@@ -9434,7 +9423,7 @@ btn_disabled.onclick = async () => {
 
     webPanelToggleBtn = document.createElement('button');
     webPanelToggleBtn.classList.add('btn');
-    webPanelToggleBtn.textContent = isWebPanelVisible() ? '\u9690\u85cf\u9762\u677f' : '\u663e\u793a\u9762\u677f';
+    webPanelToggleBtn.textContent = isWebPanelVisible() ? '隐藏面板' : '显示面板';
     webPanelToggleBtn.onclick = async () => {
       await setWebPanelVisible(!isWebPanelVisible(), { load: true });
     };
@@ -9474,7 +9463,7 @@ btn_disabled.onclick = async () => {
     const boot_on = document.createElement('button');
     boot_on.id = 'clash_boot_on';
     boot_on.classList.add('btn');
-    boot_on.textContent = '\u5f00\u673a\u81ea\u542f';
+    boot_on.textContent = '开机自启';
     boot_on.style.background = '';
     const applyBootButtonState = (state) => {
       const status = state && state.state || 'disabled';
@@ -9502,7 +9491,7 @@ btn_disabled.onclick = async () => {
         const color = after.state == 'direct' || after.state == 'disabled' ? 'green' : 'yellow';
         createToast(
           after.state == 'disabled'
-            ? '\u5df2\u53d6\u6d88\u5f00\u673a\u81ea\u542f'
+            ? '已取消开机自启'
             : `${escapeHtml(after.message)}<br>使用 UFI-TOOLS 原生 ufi_tools_boot.sh 启动。`,
           color,
           8000,
@@ -9584,21 +9573,21 @@ btn_disabled.onclick = async () => {
 
     const rescueBtn = document.createElement('button');
     rescueBtn.classList.add('btn', 'kano-danger');
-    rescueBtn.textContent = '\u6062\u590d\u7f51\u7edc';
+    rescueBtn.textContent = '恢复网络';
     rescueBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const confirmed = await askConfirm(
         'mm_network_rescue_confirm',
-        '\u6267\u884c\u65ad\u7f51\u6062\u590d\uff1f',
-        '\u5c06\u505c\u6b62\u6838\u5fc3\u5e76\u6e05\u7406\u63d2\u4ef6\u521b\u5efa\u7684 KANO_* iptables \u89c4\u5219\uff0c\u7528\u4e8e\u6062\u590d\u89c4\u5219\u6b8b\u7559\u5bfc\u81f4\u7684\u65ad\u7f51\u3002',
-        '\u6267\u884c\u6062\u590d',
-        '\u53d6\u6d88',
+        '执行断网恢复？',
+        '将停止核心并清理插件创建的 KANO_* iptables 规则，用于恢复规则残留导致的断网。',
+        '执行恢复',
+        '取消',
       );
       if (!confirmed) return;
 
-      setButtonBusy(rescueBtn, true, '\u6062\u590d\u4e2d\u2026');
+      setButtonBusy(rescueBtn, true, '恢复中\u2026');
       try {
-        await networkRescue({ stopService: true, showOutput: true, preempt: true, reason: '\u624b\u52a8\u65ad\u7f51\u6062\u590d' });
+        await networkRescue({ stopService: true, showOutput: true, preempt: true, reason: '手动断网恢复' });
       } finally {
         setButtonBusy(rescueBtn, false);
 
@@ -9607,18 +9596,18 @@ btn_disabled.onclick = async () => {
 
     const clearCacheBtn = document.createElement('button');
     clearCacheBtn.classList.add('btn');
-    clearCacheBtn.textContent = '\u6e05\u7406\u7f13\u5b58';
+    clearCacheBtn.textContent = '清理缓存';
     clearCacheBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const confirmed = await askConfirm(
         'mm_clear_cache_confirm',
-        '\u6e05\u7406 mihomo \u7f13\u5b58\uff1f',
-        '\u4f1a\u901a\u8fc7 Mihomo API \u5237\u65b0 DNS / Fake-IP \u7f13\u5b58\uff0c\u5e76\u6e05\u7406 provider \u4e34\u65f6\u6587\u4ef6\u3001\u7a7a\u7f13\u5b58\u548c\u4e0b\u8f7d\u6b8b\u7559\uff1b\u4e0d\u4f1a\u5220\u9664\u6709\u6548\u8282\u70b9\u7f13\u5b58\u3001config.yaml\u3001template.yaml\u3001\u8ba2\u9605\u94fe\u63a5\u6216\u8986\u5199\u6587\u4ef6\u3002',
-        '\u6e05\u7406\u7f13\u5b58',
-        '\u53d6\u6d88',
+        '清理 mihomo 缓存？',
+        '会通过 Mihomo API 刷新 DNS / Fake-IP 缓存，并清理 provider 临时文件、空缓存和下载残留；不会删除有效节点缓存、config.yaml、template.yaml、订阅链接或覆写文件。',
+        '清理缓存',
+        '取消',
       );
       if (!confirmed) return;
-      return runCriticalButtonOperation('清理缓存', clearCacheBtn, '\u6e05\u7406\u4e2d\u2026', async () => {
+      return runCriticalButtonOperation('清理缓存', clearCacheBtn, '清理中\u2026', async () => {
         const runtimeResults = await flushMihomoRuntimeCaches();
         const res = await runDangerousShellWithRoot(`
           set +e
@@ -9648,10 +9637,10 @@ btn_disabled.onclick = async () => {
           echo "CACHE_CLEAN_DONE"
         `, 20 * 1000, 'clear_cache');
         const runtimeLines = runtimeResults.map((item) => {
-          if (item.success) return `${item.label}\uff1a\u5df2\u5237\u65b0`;
+          if (item.success) return `${item.label}：已刷新`;
           if (item.errorType == 'core_not_running') return `${item.label}：已跳过（核心未运行）`;
-          if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}\uff1a\u5f53\u524d\u5185\u6838\u4e0d\u652f\u6301`;
-          return `${item.label}\uff1a${item.message || '\u5237\u65b0\u5931\u8d25'}`;
+          if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}：当前内核不支持`;
+          return `${item.label}：${item.message || '刷新失败'}`;
         });
         const runtimeOk = runtimeResults.every((item) =>
           item.success || item.errorType == 'core_not_running' || item.statusCode == 404 || item.statusCode == 405);
@@ -9663,7 +9652,7 @@ btn_disabled.onclick = async () => {
             ? '离线自愈包：损坏文件已清理'
             : '离线自愈包：当前不存在';
         createToast(
-          `${allOk ? '\u7f13\u5b58\u5df2\u6e05\u7406' : '\u7f13\u5b58\u6e05\u7406\u90e8\u5206\u5b8c\u6210'}<br>${textToHtml([...runtimeLines, archiveLine, res.success ? '\u4e34\u65f6\u6587\u4ef6\uff1a\u5df2\u6e05\u7406' : '\u4e34\u65f6\u6587\u4ef6\uff1a\u6e05\u7406\u5931\u8d25'].join('\n'))}`,
+          `${allOk ? '缓存已清理' : '缓存清理部分完成'}<br>${textToHtml([...runtimeLines, archiveLine, res.success ? '临时文件：已清理' : '临时文件：清理失败'].join('\n'))}`,
           allOk ? 'green' : 'yellow',
           8000,
         );
@@ -9706,12 +9695,12 @@ btn_disabled.onclick = async () => {
       return true;
     };
 
-    const showLegacySuspiciousSubSourcesError = (sources, context = '\u65e7\u8ba2\u9605\u6765\u6e90') => {
+    const showLegacySuspiciousSubSourcesError = (sources, context = '旧订阅来源') => {
       const suspiciousSource = normalizeStoredSubSourceList(sources)
         .find((source) => detectSuspiciousSubSources([source]));
       if (!suspiciousSource) return false;
       createToast(
-        `${escapeHtml(context)}\u5305\u542b\u7591\u4f3c\u975e\u8282\u70b9\u8ba2\u9605\u94fe\u63a5\uff0c\u5df2\u505c\u6b62\u8bfb\u53d6/\u8fc1\u79fb\uff1a${escapeHtml(maskSubscriptionUrl(suspiciousSource.url) || '\u8ba2\u9605\u5730\u5740\u5df2\u9690\u85cf')}<br>\u8bf7\u5148\u6e05\u7406 DNS\u3001\u89c4\u5219\u96c6\u3001GeoIP/GeoSite/MMDB/ASN \u6216\u56fe\u6807\u94fe\u63a5\u3002`,
+        `${escapeHtml(context)}包含疑似非节点订阅链接，已停止读取/迁移：${escapeHtml(maskSubscriptionUrl(suspiciousSource.url) || '订阅地址已隐藏')}<br>请先清理 DNS、规则集、GeoIP/GeoSite/MMDB/ASN 或图标链接。`,
         'red',
         10000,
       );
@@ -9733,7 +9722,7 @@ btn_disabled.onclick = async () => {
         createToast('订阅源已清空，当前运行配置保持不变', 'green');
         await refreshRuleModeStatus();
       } else {
-        createToast('\u6e05\u7a7a\u8ba2\u9605\u6e90\u5931\u8d25', 'red');
+        createToast('清空订阅源失败', 'red');
       }
       return saved;
     };
@@ -9884,20 +9873,20 @@ btn_disabled.onclick = async () => {
       const legacy = await readLegacySubscriptionSources();
       if (legacy.blocked) return [];
       const cleanSources = normalizeSubSourceList(legacy.sources || []);
-      if (showLegacySuspiciousSubSourcesError(cleanSources, '\u65e7\u76f4\u901a\u6a21\u5f0f\u8ba2\u9605\u94fe\u63a5')) return [];
+      if (showLegacySuspiciousSubSourcesError(cleanSources, '旧直通模式订阅链接')) return [];
       if (cleanSources.length == 0) {
         if (legacy.legacyDetected && showToast) {
-          createToast('\u68c0\u6d4b\u5230\u65e7\u76f4\u901a\u6a21\u5f0f\u6b8b\u7559\uff0c\u4f46\u672a\u627e\u5230\u53ef\u8fc1\u79fb\u7684\u8ba2\u9605\u94fe\u63a5\uff1b\u8bf7\u91cd\u65b0\u4fdd\u5b58\u8ba2\u9605\u94fe\u63a5\u3002', 'yellow', 9000);
+          createToast('检测到旧直通模式残留，但未找到可迁移的订阅链接；请重新保存订阅链接。', 'yellow', 9000);
         }
         return [];
       }
       if (!(await persistSubSourceState(cleanSources, SUB_RULE_MODE_TEMPLATE))) {
-        if (showToast) createToast('\u65e7\u76f4\u901a\u6a21\u5f0f\u8fc1\u79fb\u5931\u8d25\uff1a\u8ba2\u9605\u94fe\u63a5\u5199\u5165\u5931\u8d25', 'red', 9000);
+        if (showToast) createToast('旧直通模式迁移失败：订阅链接写入失败', 'red', 9000);
         return [];
       }
       appendTemplateFlowDebug(`legacy subscription migrated sources=${cleanSources.length}`);
       if (showToast) {
-        createToast(`\u5df2\u8fc1\u79fb\u65e7\u76f4\u901a\u6a21\u5f0f\uff1a${cleanSources.length} \u4e2a\u8ba2\u9605\u94fe\u63a5\u5df2\u5199\u5165 subscription_urls.txt`, 'yellow', 8000);
+        createToast(`已迁移旧直通模式：${cleanSources.length} 个订阅链接已写入 subscription_urls.txt`, 'yellow', 8000);
       }
       return cleanSources;
     };
@@ -9912,7 +9901,7 @@ btn_disabled.onclick = async () => {
           ok: true,
           source: 'saved_subscription',
           sources: cleanSources,
-          message: `\u5df2\u68c0\u6d4b\u5230 ${cleanSources.length} \u4e2a\u5df2\u4fdd\u5b58\u8ba2\u9605\u94fe\u63a5\u3002`,
+          message: `已检测到 ${cleanSources.length} 个已保存订阅链接。`,
         };
       }
 
@@ -9925,7 +9914,7 @@ btn_disabled.onclick = async () => {
             sources: [],
             nodeCheck,
             requiresTemplateRebuild: true,
-            message: '\u6ca1\u6709\u5df2\u4fdd\u5b58\u8ba2\u9605\u94fe\u63a5\uff1b\u5c06\u4f7f\u7528 template.yaml \u5185\u5d4c\u8282\u70b9\u6216\u5e26 URL \u7684 proxy-providers \u751f\u6210 config.yaml\u3002',
+            message: '没有已保存订阅链接；将使用 template.yaml 内嵌节点或带 URL 的 proxy-providers 生成 config.yaml。',
           };
         }
         return {
@@ -9933,21 +9922,21 @@ btn_disabled.onclick = async () => {
           source: 'template_embedded',
           sources: [],
           nodeCheck,
-          message: 'template.yaml \u5305\u542b\u5185\u5d4c\u8282\u70b9\u6216\u5e26 URL \u7684 proxy-providers\u3002',
+          message: 'template.yaml 包含内嵌节点或带 URL 的 proxy-providers。',
         };
       }
 
       const detail = nodeCheck.status == 'missing'
-        ? 'template.yaml \u4e0d\u5b58\u5728\u3002'
+        ? 'template.yaml 不存在。'
         : nodeCheck.status == 'invalid'
-          ? `template.yaml \u89e3\u6790\u5931\u8d25\u3002<br>${safeTextToHtml(nodeCheck.content || '')}`
-          : 'template.yaml \u6ca1\u6709 proxies \u8282\u70b9\uff0c\u4e5f\u6ca1\u6709\u5e26 URL \u7684 proxy-providers\u3002';
+          ? `template.yaml 解析失败。<br>${safeTextToHtml(nodeCheck.content || '')}`
+          : 'template.yaml 没有 proxies 节点，也没有带 URL 的 proxy-providers。';
       return {
         ok: false,
         source: 'none',
         sources: [],
         nodeCheck,
-        message: `\u6ca1\u6709\u53ef\u7528\u8282\u70b9\u6765\u6e90\uff1a\u6ca1\u6709\u5df2\u4fdd\u5b58\u8ba2\u9605\u94fe\u63a5\uff0c${detail}<br>\u8bf7\u5148\u70b9\u201c\u8ba2\u9605\u94fe\u63a5\u201d\u586b\u5199\u5e76\u4fdd\u5b58\uff0c\u6216\u5728\u201c\u6a21\u677f\u4e0e\u8986\u5199\u201d\u4e0a\u4f20\u5305\u542b\u8282\u70b9\u7684 template.yaml\u3002`,
+        message: `没有可用节点来源：没有已保存订阅链接，${detail}<br>请先点\u201c订阅链接\u201d填写并保存，或在\u201c模板与覆写\u201d上传包含节点的 template.yaml。`,
       };
     };
 
@@ -9967,19 +9956,19 @@ btn_disabled.onclick = async () => {
   const readable = !!read.ok && !!meta.success && String(meta.content || '').includes('SUBSCRIPTION_META_READ');
   const providers = isPlainYamlObject(config['proxy-providers']) ? config['proxy-providers'] : {};
   const issues = [];
-  if (!read.ok) issues.push(read.message || '\u8fd0\u884c\u914d\u7f6e\u65e0\u6cd5\u8bfb\u53d6');
-  if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('\u8ba2\u9605\u6807\u8bb0\u8bfb\u53d6\u5931\u8d25');
+  if (!read.ok) issues.push(read.message || '运行配置无法读取');
+  if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('订阅标记读取失败');
   const modeLineOk = data.mode === cleanMode, convertModeOk = cleanMode === SUB_RULE_MODE_ORIGINAL || data.convert === cleanConvertMode;
   const providerCount = Object.keys(providers).length;
   const providerUrlCount = Object.values(providers).filter(p => p && /^https?:\/\//.test(String(p.url || ''))).length;
   const rulesCount = Array.isArray(config.rules) ? config.rules.length : 0;
   const proxyGroupsCount = Array.isArray(config['proxy-groups']) ? config['proxy-groups'].length : 0;
   let missingUrls = 0, providerShapeErrors = 0;
-  if (!modeLineOk) issues.push('\u914d\u7f6e\u6765\u6e90\u6807\u8bb0\u4e0d\u5339\u914d');
-  if (!convertModeOk) issues.push('\u8282\u70b9\u5904\u7406\u65b9\u5f0f\u6807\u8bb0\u4e0d\u5339\u914d');
+  if (!modeLineOk) issues.push('配置来源标记不匹配');
+  if (!convertModeOk) issues.push('节点处理方式标记不匹配');
   if (cleanMode === SUB_RULE_MODE_ORIGINAL) {
     try { validateOriginalSubscriptionConfig(config); } catch (e) { issues.push(e.message); }
-    if (data.source !== 'subscription_original') issues.push('\u5f53\u524d\u4e0d\u662f\u8ba2\u9605\u539f\u914d\u7f6e');
+    if (data.source !== 'subscription_original') issues.push('当前不是订阅原配置');
   } else {
     const local = cleanConvertMode === SUB_CONVERT_MODE_LOCAL;
     for (const source of cleanSources) {
@@ -9990,10 +9979,10 @@ btn_disabled.onclick = async () => {
         if (!p.header || !Array.isArray(p.header['User-Agent']) || p.header['User-Agent'][0] !== (ua || currentProviderUserAgent)) providerShapeErrors++;
       }
     }
-    if (providerCount !== cleanSources.length || providerUrlCount !== (local ? 0 : cleanSources.length)) issues.push('\u8282\u70b9\u6765\u6e90\u6570\u91cf\u4e0d\u5339\u914d');
-    if (missingUrls || providerShapeErrors) issues.push('\u8ba2\u9605 URL\u3001\u7c7b\u578b\u3001\u8def\u5f84\u6216 User-Agent \u4e0d\u5339\u914d');
-    if (!rulesCount || !proxyGroupsCount) issues.push('\u89c4\u5219\u6216\u7b56\u7565\u7ec4\u4e3a\u7a7a');
-    if (cleanSources.length && data.source !== 'template.yaml') issues.push('\u5f53\u524d\u914d\u7f6e\u4e0d\u662f\u672c\u5730\u6a21\u677f\u751f\u6210');
+    if (providerCount !== cleanSources.length || providerUrlCount !== (local ? 0 : cleanSources.length)) issues.push('节点来源数量不匹配');
+    if (missingUrls || providerShapeErrors) issues.push('订阅 URL、类型、路径或 User-Agent 不匹配');
+    if (!rulesCount || !proxyGroupsCount) issues.push('规则或策略组为空');
+    if (cleanSources.length && data.source !== 'template.yaml') issues.push('当前配置不是本地模板生成');
   }
   return { ok: !issues.length, readable, config: read.ok ? config : null, status: !readable ? 'read_failed' : issues.length ? 'invalid' : 'ok', providerCount, providerUrlCount,
     rulesCount, proxyGroupsCount, missingUrls, providerShapeErrors, modeLineOk, convertModeOk,
@@ -10161,8 +10150,8 @@ btn_disabled.onclick = async () => {
         .join('\n');
       const diagnosticSummary = diagnosticText || `RUNTIME_CONFIG_CHECK=${configCheck.status || 'unknown'}`;
       const controllerText = controllerCheck.success
-        ? `\u63a7\u5236 API\uff1a\u53ef\u8bbf\u95ee\uff08HTTP ${controllerCheck.statusCode}\uff09`
-        : `\u63a7\u5236 API\uff1a${controllerCheck.message || '不可访问'}${controllerCheck.statusCode ? `（HTTP ${controllerCheck.statusCode}）` : ''}`;
+        ? `控制 API：可访问（HTTP ${controllerCheck.statusCode}）`
+        : `控制 API：${controllerCheck.message || '不可访问'}${controllerCheck.statusCode ? `（HTTP ${controllerCheck.statusCode}）` : ''}`;
       const configValidationResult = {
         ...configCheck,
         ok: configCheck.ok,
@@ -10225,9 +10214,9 @@ btn_disabled.onclick = async () => {
   if (configSource === 'uploaded_config') {
     const refreshed=await forceUpdateProvidersFromConfig({showToast:true,refreshRemote:true});return refreshed.failed===0;
   }
-  if (!cleanSources.length) { createToast('\u6ca1\u6709\u5df2\u542f\u7528\u7684\u8ba2\u9605', 'red'); return false; }
+  if (!cleanSources.length) { createToast('没有已启用的订阅', 'red'); return false; }
   const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-  if (!read.ok) { createToast(safeTextToHtml(read.message || '\u8bfb\u53d6\u914d\u7f6e\u5931\u8d25'), 'red'); return false; }
+  if (!read.ok) { createToast(safeTextToHtml(read.message || '读取配置失败'), 'red'); return false; }
   const definitions = read.value['proxy-providers'] || {};
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
   const modeReady = cleanSources.every(s => definitions[s.name]?.type === expectedType);
@@ -10242,14 +10231,14 @@ btn_disabled.onclick = async () => {
   // Download first. A failed request never enters the restart/rollback path.
   const converted = await convertSubscriptionsLocally(cleanSources);
   if (converted.failed || !converted.ok) {
-    const message = (converted.providers || []).find(p => !p.ok)?.message || '\u8ba2\u9605\u4e0b\u8f7d\u5931\u8d25';
-    operationFinish(false, message); createToast(safeTextToHtml(message) + '<br>\u539f\u8282\u70b9\u548c\u6838\u5fc3\u8fd0\u884c\u72b6\u6001\u4fdd\u7559', 'red', 10000); return false;
+    const message = (converted.providers || []).find(p => !p.ok)?.message || '订阅下载失败';
+    operationFinish(false, message); createToast(safeTextToHtml(message) + '<br>原节点和核心运行状态保留', 'red', 10000); return false;
   }
-  if (!(await getCorePid())) { operationFinish(true, '\u8282\u70b9\u5df2\u4fdd\u5b58\uff0c\u6838\u5fc3\u4fdd\u6301\u505c\u6b62'); return true; }
+  if (!(await getCorePid())) { operationFinish(true, '节点已保存，核心保持停止'); return true; }
   const applied = await reloadLocalSubscriptionProviders(cleanSources, converted);
   const ok = applied.failed === 0;
-  operationFinish(ok, ok ? '\u8282\u70b9\u5df2\u66f4\u65b0\uff0c\u672a\u91cd\u542f\u6838\u5fc3' : '\u4e0b\u8f7d\u5b8c\u6210\uff0c\u4f46\u672c\u5730\u52a0\u8f7d\u5931\u8d25');
-  createToast(ok ? '\u8282\u70b9\u5df2\u66f4\u65b0' : '\u8282\u70b9\u4e0b\u8f7d\u6210\u529f\uff0c\u4f46\u6838\u5fc3\u672a\u786e\u8ba4\u52a0\u8f7d', ok ? 'green':'red', 8000);
+  operationFinish(ok, ok ? '节点已更新，未重启核心' : '下载完成，但本地加载失败');
+  createToast(ok ? '节点已更新' : '节点下载成功，但核心未确认加载', ok ? 'green':'red', 8000);
   return ok;
 }
 ;
@@ -10259,13 +10248,13 @@ btn_disabled.onclick = async () => {
         if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
         `);
       if (!source.success) {
-        createToast(`\u8bfb\u53d6\u8ba2\u9605\u6e90\u5931\u8d25\uff0c\u672a\u6267\u884c\u65e7\u914d\u7f6e\u8fc1\u79fb\u3002<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
+        createToast(`读取订阅源失败，未执行旧配置迁移。<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
         appendTemplateFlowDebug('readCurrentSubSources failed before legacy migration');
-        throw new Error('\u8bfb\u53d6\u8ba2\u9605\u5217\u8868\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u66f4\u65b0');
+        throw new Error('读取订阅列表失败，未继续更新');
       }
       const sourceItems = parseStoredSubSourcesFromText(source.content || '');
       if (sourceItems.length > 0) {
-        if (showLegacySuspiciousSubSourcesError(sourceItems, '\u5386\u53f2 subscription_urls.txt')) return [];
+        if (showLegacySuspiciousSubSourcesError(sourceItems, '历史 subscription_urls.txt')) return [];
         return includeDisabled ? sourceItems : normalizeSubSourceList(sourceItems);
       }
       if (['subscription_original', 'uploaded_config'].includes(await readConfigSource())) return [];
@@ -10278,11 +10267,11 @@ btn_disabled.onclick = async () => {
       if (legacySources.length > 0) {
         if (showLegacySuspiciousSubSourcesError(legacySources, 'legacy entrypoint')) return [];
         if (!(await persistSubSourceState(legacySources, SUB_RULE_MODE_TEMPLATE, await readSavedSubConvertMode()))) {
-          createToast('\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u8fc1\u79fb\u5931\u8d25\uff0c\u672a\u7ee7\u7eed\u4f7f\u7528\u672a\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\u3002', 'red', 9000);
+          createToast('旧版订阅入口迁移失败，未继续使用未保存的订阅源。', 'red', 9000);
           appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
           return [];
         }
-        createToast('\u5df2\u8fc1\u79fb\u65e7\u7248\u8ba2\u9605\u5165\u53e3\u3002', 'yellow', 6500);
+        createToast('已迁移旧版订阅入口。', 'yellow', 6500);
         appendTemplateFlowDebug(`legacy entrypoint migrated sources=${legacySources.length}`);
         return legacySources;
       }
@@ -10318,23 +10307,23 @@ btn_disabled.onclick = async () => {
   try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
   if (!storedSources.length || storedSources.some((source) => !isHttpUrl(source.url))) {
-    operationFinish(false, '\u8bf7\u8f93\u5165\u6709\u6548\u8ba2\u9605\u94fe\u63a5');
+    operationFinish(false, '请输入有效订阅链接');
     return false;
   }
   const invalidSubSource = cleanSources
     .map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }))
     .find((item) => !item.check.ok);
   if (invalidSubSource) {
-    const invalidMessage = invalidSubSource.check.message || '\u8ba2\u9605\u5730\u5740\u65e0\u6548';
+    const invalidMessage = invalidSubSource.check.message || '订阅地址无效';
     operationFinish(false, invalidMessage);
     createToast(safeTextToHtml(invalidMessage), 'red', 9000);
     return false;
   }
   if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
-  operationStage('\u68c0\u67e5\u8ba2\u9605\u548c\u914d\u7f6e\u6765\u6e90', 0, 5);
+  operationStage('检查订阅和配置来源', 0, 5);
   if ((!applyToCustom && await readConfigSource() === 'uploaded_config') || !cleanSources.length) {
     const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
-    operationFinish(saved, saved ? '\u8ba2\u9605\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff0c\u5f53\u524d\u914d\u7f6e\u672a\u66f4\u6539' : '\u8ba2\u9605\u8bbe\u7f6e\u4fdd\u5b58\u5931\u8d25');
+    operationFinish(saved, saved ? '订阅设置已保存，当前配置未更改' : '订阅设置保存失败');
     return saved;
   }
   const tx = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
@@ -10349,58 +10338,58 @@ ${fileSnapshotHelpersCmd()}
 ${paths.map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
   if (!snapshot.success || !String(snapshot.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
-    operationFinish(false, '\u65e0\u6cd5\u521b\u5efa\u56de\u6eda\u70b9\uff0c\u672a\u66f4\u6539\u8ba2\u9605');
+    operationFinish(false, '无法创建回滚点，未更改订阅');
     return false;
   }
   let runtimeAttempted = false, wasRunning = false, restored = false, committed = false;
   try {
     wasRunning = !!(await getCorePid());
-    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('\u4fdd\u5b58\u8ba2\u9605\u8bbe\u7f6e\u5931\u8d25');
-    operationStage(cleanMode === SUB_RULE_MODE_ORIGINAL ? '\u4e0b\u8f7d\u8ba2\u9605\u7684\u5b8c\u6574\u914d\u7f6e' : '\u6839\u636e\u672c\u5730\u6a21\u677f\u751f\u6210\u914d\u7f6e', 1, 5);
+    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('保存订阅设置失败');
+    operationStage(cleanMode === SUB_RULE_MODE_ORIGINAL ? '下载订阅的完整配置' : '根据本地模板生成配置', 1, 5);
     let conversion = null;
     if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
       conversion = await convertSubscriptionsLocally(cleanSources);
       if (onProviderUpdate) onProviderUpdate(conversion);
-      if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '\u672c\u5730\u8ba2\u9605\u8f6c\u6362\u5931\u8d25');
+      if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '本地订阅转换失败');
     }
     if (!(await writeSubConfigByMode(cleanSources, cleanMode, { backup: false, convertMode: cleanConvertMode }))) {
-      throw new Error('\u8ba2\u9605\u914d\u7f6e\u751f\u6210\u5931\u8d25');
+      throw new Error('订阅配置生成失败');
     }
-    operationStage('\u505c\u6b62\u5e76\u542f\u52a8\u5df2\u6821\u9a8c\u7684\u65b0\u914d\u7f6e', 2, 5);
+    operationStage('停止并启动已校验的新配置', 2, 5);
     if (!wasRunning) { const prepared=await f50Command('prepare',120000); if(!prepared.success)throw new Error(f50Error(prepared.content)); committed=true; invalidateStatusSnapshot(); operationFinish(true,'配置已保存，核心保持停止'); createToast('订阅已保存，未启动核心','green'); return true; }
     runtimeAttempted = true;
-    if (!(await restartClashOk({ skipCheck: true }))) throw new Error('\u65b0\u914d\u7f6e\u672a\u901a\u8fc7\u8fd0\u884c\u68c0\u67e5');
-    operationStage('\u66f4\u65b0\u5e76\u786e\u8ba4\u8282\u70b9\u6765\u6e90', 3, 5);
+    if (!(await restartClashOk({ skipCheck: true }))) throw new Error('新配置未通过运行检查');
+    operationStage('更新并确认节点来源', 3, 5);
     const providers = cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_LOCAL
       ? await reloadLocalSubscriptionProviders(cleanSources, conversion)
       : await forceUpdateProvidersFromConfig({ showToast: false });
     if (onProviderUpdate) onProviderUpdate(providers);
     if (cleanMode === SUB_RULE_MODE_TEMPLATE && cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
       const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
-      if (!fallback.ok) throw new Error('\u8282\u70b9\u66f4\u65b0\u548c\u672c\u5730\u8f6c\u6362\u56de\u9000\u5747\u5931\u8d25');
+      if (!fallback.ok) throw new Error('节点更新和本地转换回退均失败');
     } else if (providers.failed > 0) {
       const failed = (providers.providers || []).find((item) => !item.ok);
-      throw new Error(failed && failed.message || '\u8282\u70b9\u6765\u6e90\u66f4\u65b0\u672a\u5b8c\u6210');
+      throw new Error(failed && failed.message || '节点来源更新未完成');
     }
     committed = true;
     invalidateStatusSnapshot();
     const message = cleanMode === SUB_RULE_MODE_ORIGINAL
-      ? '\u5df2\u4f7f\u7528\u8ba2\u9605\u81ea\u5e26\u914d\u7f6e\u8986\u76d6\u8fd0\u884c\u914d\u7f6e\uff0c\u672c\u5730\u6a21\u677f\u4fdd\u7559'
-      : '\u5df2\u6839\u636e\u672c\u5730\u6a21\u677f\u66f4\u65b0\u8ba2\u9605\u914d\u7f6e';
+      ? '已使用订阅自带配置覆盖运行配置，本地模板保留'
+      : '已根据本地模板更新订阅配置';
     operationFinish(true, message);
     createToast(message, 'green', 7000);
     return true;
   } catch (error) {
     if (error.name === 'OperationCancelled' || (activeCriticalOperation && activeCriticalOperation.token.cancelled)) return false;
     const firstFailure = sanitizeSubscriptionSecrets(activeCriticalOperation && activeCriticalOperation.failure || error.message || String(error));
-    createToast(safeTextToHtml(firstFailure) + '<br>\u6b63\u5728\u6062\u590d\u539f\u914d\u7f6e', 'red', 10000);
-    operationStage('\u66f4\u65b0\u5931\u8d25\uff0c\u6062\u590d\u539f\u914d\u7f6e');
+    createToast(safeTextToHtml(firstFailure) + '<br>正在恢复原配置', 'red', 10000);
+    operationStage('更新失败，恢复原配置');
     // Stop a timed-out provider update before restoring cache files it could still replace.
     let stopped = true;
-    try { if (runtimeAttempted) stopped = await networkRescue({ stopService: true, showOutput: false, reason: '\u8ba2\u9605\u56de\u6eda' }); } catch (_) { stopped = false; }
+    try { if (runtimeAttempted) stopped = await networkRescue({ stopService: true, showOutput: false, reason: '订阅回滚' }); } catch (_) { stopped = false; }
     if (!stopped) {
-      operationFinish(false, '\u6838\u5fc3\u672a\u786e\u8ba4\u505c\u6b62\uff0c\u672a\u91cd\u542f\u6216\u8986\u76d6\u7f13\u5b58');
-      createToast('\u56de\u6eda\u5df2\u505c\u6b62\uff0c\u5907\u4efd\u4fdd\u7559\u4e8e ' + escapeHtml(tx), 'red', 15000);
+      operationFinish(false, '核心未确认停止，未重启或覆盖缓存');
+      createToast('回滚已停止，备份保留于 ' + escapeHtml(tx), 'red', 15000);
       return false;
     }
     try {
@@ -10413,10 +10402,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     invalidateStatusSnapshot();
     if (restored && runtimeAttempted && wasRunning) restored = await restartClashOk({ skipCheck: true });
     } catch (_) { restored = false; }
-    if (!restored) await networkRescue({ stopService: true, showOutput: false, reason: '\u8ba2\u9605\u56de\u6eda\u672a\u5b8c\u6210' });
+    if (!restored) await networkRescue({ stopService: true, showOutput: false, reason: '订阅回滚未完成' });
     const message = firstFailure;
-    operationFinish(false, message + (restored ? '\uff1b\u5df2\u6062\u590d\u66f4\u65b0\u524d\u72b6\u6001' : '\uff1b\u6062\u590d\u672a\u5b8c\u6210'));
-    createToast(safeTextToHtml(message) + '<br>' + (restored ? '\u5df2\u6062\u590d\u539f\u8ba2\u9605\u548c\u914d\u7f6e' : '\u56de\u6eda\u672a\u5b8c\u6210\uff0c\u5907\u4efd\u4fdd\u7559\u4e8e ' + escapeHtml(tx)), 'red', 12000);
+    operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复未完成'));
+    createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚未完成，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
   } finally {
     if ((committed || restored) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
@@ -10458,18 +10447,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       if (confirm) {
         const confirmed = await askConfirm(
           'mm_template_overwrite_confirm',
-          '\u5e94\u7528\u914d\u7f6e\u6a21\u677f\uff1f',
+          '应用配置模板？',
           `${body}<br>校验或启动失败时会恢复旧配置。`,
-          '\u5f00\u59cb\u5e94\u7528',
-          '\u53d6\u6d88',
+          '开始应用',
+          '取消',
         );
         if (!confirmed) return false;
       }
 
       if (sourceCheck.source == 'saved_subscription') {
         createToast(hasTemplate
-          ? '\u6b63\u5728\u6309\u914d\u7f6e\u6a21\u677f\u751f\u6210 config.yaml...'
-          : '\u6b63\u5728\u6309\u9ed8\u8ba4 F50 \u6a21\u677f\u751f\u6210 config.yaml...', 'yellow');
+          ? '正在按配置模板生成 config.yaml...'
+          : '正在按默认 F50 模板生成 config.yaml...', 'yellow');
         const rollbackPath = await createConfigRollbackPoint('template_rebuild_sources');
         if (rollbackPath === null) {
           createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
@@ -10489,10 +10478,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           backup: true,
           convertMode: currentConvertMode,
         }))) {
-          await restoreConfigRollbackPoint(rollbackPath, '\u5e94\u7528\u914d\u7f6e\u6a21\u677f');
+          await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
           return false;
         }
-        const restarted = await restartClashWithConfigRollback(rollbackPath, '\u5e94\u7528\u914d\u7f6e\u6a21\u677f');
+        const restarted = await restartClashWithConfigRollback(rollbackPath, '应用配置模板');
         if (restarted) {
           const providerUpdate = currentConvertMode == SUB_CONVERT_MODE_LOCAL
             ? await reloadLocalSubscriptionProviders(sources, localConversion)
@@ -10523,13 +10512,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         label: 'config.yaml', backup: true, backupTag: 'template_embedded', configSource: 'template.yaml'}) : {ok:false, content:staged.content};
       const res = {success:committed.ok, content:committed.content};
       if (!res.success) {
-        createToast(`\u6a21\u677f\u8986\u5199\u5931\u8d25<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+        createToast(`模板覆写失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
         await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
         return false;
       }
       createToast('模板已写入，正在检查并重启核心...', 'yellow', 6500);
       if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
-        const restored = await restoreConfigRollbackPoint(rollbackPath, '\u6a21\u677f\u8986\u5199', { showToast: false });
+        const restored = await restoreConfigRollbackPoint(rollbackPath, '模板覆写', { showToast: false });
         createToast(
           restored ? '模板配置整理失败，已恢复上一份 config.yaml' : '模板配置整理失败，且 config.yaml 回滚失败',
           restored ? 'yellow' : 'red',
@@ -10537,7 +10526,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         );
         return false;
       }
-      const restarted = await restartClashWithConfigRollback(rollbackPath, '\u6a21\u677f\u8986\u5199\u540e\u91cd\u542f');
+      const restarted = await restartClashWithConfigRollback(rollbackPath, '模板覆写后重启');
       if (restarted) {
         if (currentMode != SUB_RULE_MODE_TEMPLATE && !(await persistSubSourceState(
           storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { allowEmpty: true },
@@ -10788,7 +10777,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const generation = ++readGeneration;
         readyPath = '';
         saveBtn.disabled = true;
-        setButtonBusy(reloadBtn, true, '\u8bfb\u53d6\u4e2d\u2026');
+        setButtonBusy(reloadBtn, true, '读取中\u2026');
         textarea.disabled = true;
         try {
           const result = await readEditableLocalFile(fileInfo);
@@ -10796,7 +10785,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           textarea.value = result.content;
           loadedContent = result.content;
           if (result.ok) readyPath = fileInfo.path;
-          status.textContent = result.ok ? fileInfo.path : '\u8bfb\u53d6\u5931\u8d25\uff1a' + (result.message || 'unknown');
+          status.textContent = result.ok ? fileInfo.path : '读取失败：' + (result.message || 'unknown');
         } catch (error) {
           if (!editorClosed && generation === readGeneration) status.textContent = String(error.message || error);
         } finally {
@@ -10814,13 +10803,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const fileInfo = findEditableLocalFile(select.value);
         if (!fileInfo || editorClosed || readyPath !== fileInfo.path) return;
         const content = textarea.value, expectedContent = loadedContent;
-        return runCriticalButtonOperation(`\u4fdd\u5b58 ${fileInfo.label}`, saveBtn, '\u4fdd\u5b58\u4e2d\u2026', async () => {
+        return runCriticalButtonOperation(`保存 ${fileInfo.label}`, saveBtn, '保存中\u2026', async () => {
           select.disabled = true; reloadBtn.disabled = true;
           try {
             const current = await readEditableLocalFile(fileInfo);
             if (!current.ok || current.content !== expectedContent) {
               readyPath = '';
-              createToast('\u6587\u4ef6\u5df2\u53d8\u5316\u6216\u65e0\u6cd5\u8bfb\u53d6\uff0c\u672a\u8986\u76d6\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u540e\u7f16\u8f91\u3002','yellow',9000);
+              createToast('文件已变化或无法读取，未覆盖；请重新读取后编辑。','yellow',9000);
               return false;
             }
             const saved = await writeEditableLocalFile(fileInfo, content);
@@ -10842,7 +10831,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
     const importSub = async () => {
-      operationStage('\u8bfb\u53d6\u5df2\u4fdd\u5b58\u7684\u8ba2\u9605');
+      operationStage('读取已保存的订阅');
       const [currentSources, currentConvertMode, currentRuleMode, configSource] = await Promise.all([
         readCurrentSubSources({ includeDisabled: true }),
         readSavedSubConvertMode(),
@@ -10853,12 +10842,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         'mm_sub_input_toast',
         `
             <div style="pointer-events:all;width:80vw;max-width:800px;">
-                <div class="title" style="margin:0">\u8ba2\u9605\u8bbe\u7f6e</div>
+                <div class="title" style="margin:0">订阅设置</div>
                 <div style="margin:14px 0;display:flex;flex-direction:column;gap:10px;">
                     <div id="mm_sub_rows" style="display:flex;flex-direction:column;gap:8px;"></div>
                     <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
-                      <button style="font-size:.64rem" id="mm_sub_add_btn">\u6dfb\u52a0\u8ba2\u9605</button>
-                      <button style="font-size:.64rem" id="mm_sub_clear_btn">\u6e05\u7a7a\u8ba2\u9605</button>
+                      <button style="font-size:.64rem" id="mm_sub_add_btn">添加订阅</button>
+                      <button style="font-size:.64rem" id="mm_sub_clear_btn">清空订阅</button>
                     </div>
                     <label style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
                       <span>配置来源</span>
@@ -10881,8 +10870,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                     <div style="font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
                 </div>
                 <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
-                    <button style="font-size:.64rem" id="mm_sub_submit_btn">\u4fdd\u5b58\u5e76\u66f4\u65b0</button>
-                    <button style="font-size:.64rem" id="mm_sub_close_btn">\u5173\u95ed</button>
+                    <button style="font-size:.64rem" id="mm_sub_submit_btn">保存并更新</button>
+                    <button style="font-size:.64rem" id="mm_sub_close_btn">关闭</button>
                 </div>
             </div>
         `,
@@ -10904,9 +10893,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         if (original) original.disabled = !allowed;
         if (!loadingRows && !allowed && ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL) ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
         const note = el.querySelector('#mm_sub_mode_hint');
-        setText(note, !allowed ? '\u591a\u6761\u94fe\u63a5\u53ea\u80fd\u4f7f\u7528\u672c\u5730\u6a21\u677f\uff1b\u8ba2\u9605\u539f\u914d\u7f6e\u9700\u4e14\u4ec5\u9700\u4e00\u6761\u5df2\u542f\u7528\u94fe\u63a5'
-          : ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL ? '\u5c06\u7528\u8ba2\u9605\u81ea\u5e26\u7684\u89c4\u5219\u3001\u7b56\u7565\u7ec4\u548c\u8282\u70b9\u8986\u76d6\u8fd0\u884c\u914d\u7f6e\uff0c\u4e0d\u6df7\u5165\u672c\u5730\u6a21\u677f\u89c4\u5219'
-          : '\u4f7f\u7528\u63d2\u4ef6\u672c\u5730\u6a21\u677f\u7684\u89c4\u5219\u548c\u7b56\u7565\u7ec4');
+        setText(note, !allowed ? '多条链接只能使用本地模板；订阅原配置需且仅需一条已启用链接'
+          : ruleModeSelect.value === SUB_RULE_MODE_ORIGINAL ? '将用订阅自带的规则、策略组和节点覆盖运行配置，不混入本地模板规则'
+          : '使用插件本地模板的规则和策略组');
         el.querySelector('#mm_sub_convert_label').style.display = ruleModeSelect.value == SUB_RULE_MODE_ORIGINAL ? 'none' : 'flex';
       };
       ruleModeSelect.onchange = syncRuleMode;
@@ -10926,7 +10915,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         input.inputMode = 'url';
         input.autocapitalize = 'off';
         input.spellcheck = false;
-        input.placeholder = `\u8ba2\u9605\u94fe\u63a5 ${index + 1}`;
+        input.placeholder = `订阅链接 ${index + 1}`;
         input.style.width = '100%';
         input.style.minWidth = '0';
         input.style.padding = '10px';
@@ -10957,7 +10946,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         removeBtn.className = 'mm_sub_remove_btn';
         removeBtn.style.fontSize = '.64rem';
         removeBtn.style.width = '100%';
-        removeBtn.textContent = '\u5220\u9664';
+        removeBtn.textContent = '删除';
         removeBtn.onclick = () => {
           if (rowsEl.children.length <= 1) {
             input.value = '';
@@ -10989,10 +10978,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       clearBtn.onclick = async () => {
         const confirmed = await askConfirm(
           'mm_sub_clear_confirm',
-          '\u6e05\u7a7a\u5f53\u524d\u7f16\u8f91\u5185\u5bb9\uff1f',
-          '\u4ec5\u6e05\u7a7a\u5f53\u524d\u7a97\u53e3\u7684\u8f93\u5165\u3002\u70b9\u300c\u4fdd\u5b58\u5e76\u66f4\u65b0\u300d\u540e\u624d\u4f1a\u6e05\u7a7a\u5df2\u4fdd\u5b58\u7684\u8ba2\u9605\u6e90\uff1b\u76f4\u63a5\u5173\u95ed\u4e0d\u4f1a\u4fee\u6539\u8bbe\u5907\u3002',
-          '\u6e05\u7a7a',
-          '\u53d6\u6d88',
+          '清空当前编辑内容？',
+          '仅清空当前窗口的输入。点「保存并更新」后才会清空已保存的订阅源；直接关闭不会修改设备。',
+          '清空',
+          '取消',
         );
         if (!confirmed) return;
         resetChildren(rowsEl);
@@ -11013,7 +11002,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const operationToken = acquireCriticalOperation('保存更新订阅');
         if (!operationToken) return;
 
-        setButtonBusy(submitBtn, true, '\u5904\u7406\u4e2d\u2026');
+        setButtonBusy(submitBtn, true, '处理中\u2026');
 
         try {
           if (!hasSubscriptionUrl) {
@@ -11021,7 +11010,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             if (success) close();
             return;
           }
-          createToast('\u6b63\u5728\u5904\u7406\u8ba2\u9605...', 'yellow');
+          createToast('正在处理订阅...', 'yellow');
           const success = await saveSubSources(
             sources,
             ruleModeSelect.value,
@@ -11036,7 +11025,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         } catch (e) {
           if (e?.name === 'OperationCancelled') return;
           operationFinish(false, e.message || String(e));
-          createToast(`\u5904\u7406\u8ba2\u9605\u5931\u8d25<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
+          createToast(`处理订阅失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red');
         } finally {
           setButtonBusy(submitBtn, false);
           await releaseCriticalOperation(operationToken);
@@ -11047,9 +11036,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     // \u521b\u5efa\u8ba2\u9605\u94fe\u63a5\u6309\u94ae
     const subBtn = document.createElement('button');
     subBtn.classList.add('btn');
-    subBtn.textContent = '\u8ba2\u9605\u8bbe\u7f6e';
+    subBtn.textContent = '订阅设置';
     subBtn.onclick = async () => {
-  return runCriticalOperation('\u8bfb\u53d6\u8ba2\u9605\u8bbe\u7f6e', async () => {
+  return runCriticalOperation('读取订阅设置', async () => {
     if (!(await ensureReady({ readOnly: true }))) return false;
     await importSub();
     return true;
@@ -11058,13 +11047,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
     const updateSubBtn = document.createElement('button');
     updateSubBtn.classList.add('btn');
-    updateSubBtn.textContent = '\u66f4\u65b0\u8ba2\u9605';
+    updateSubBtn.textContent = '更新订阅';
     updateSubBtn.onclick = async () => {
       const operationToken = acquireCriticalOperation('更新订阅');
       if (!operationToken) return;
-      setButtonBusy(updateSubBtn, true, '\u66f4\u65b0\u4e2d\u2026');
+      setButtonBusy(updateSubBtn, true, '更新中\u2026');
       try {
-        operationStage('\u68c0\u67e5\u8ba2\u9605');
+        operationStage('检查订阅');
         if (!(await ensureReady({ readOnly: true }))) { operationFinish(false); return; }
         const ruleMode = await readCurrentSubRuleMode();
         if (await readConfigSource() == 'uploaded_config' && ruleMode != SUB_RULE_MODE_ORIGINAL) {
@@ -11451,7 +11440,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               </div>
             </div>
             <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
-              <button style="font-size:.64rem" id="mm_template_close_btn">\u5173\u95ed</button>
+              <button style="font-size:.64rem" id="mm_template_close_btn">关闭</button>
             </div>
           </div>
         `,
@@ -11481,7 +11470,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         await showAirportDnsDialog();
       };
       rebuildBtn.onclick = async () => {
-        return runCriticalButtonOperation('应用模板', rebuildBtn, '\u5e94\u7528\u4e2d\u2026', async () => {
+        return runCriticalButtonOperation('应用模板', rebuildBtn, '应用中\u2026', async () => {
           await overwriteConfigByTemplate();
         });
       };
@@ -11524,10 +11513,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       return details;
     };
 
-    const coreGroup = appendActionGroup('\u6838\u5fc3\u4e0e\u9762\u677f', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
-    appendActionGroup('\u8ba2\u9605\u4e0e\u914d\u7f6e', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
-    appendActionGroup('\u7f51\u7edc\u4e0e\u8bca\u65ad', [policyToolsBtn, rescueBtn, showLogBtn], false);
-    const componentsGroup = appendActionGroup('\u7ec4\u4ef6\u4e0e\u7ef4\u62a4', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
+    const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
+    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
+    appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
+    appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
     let bootProbeLoaded = false;
     let bootProbePending = false;
     coreGroup.addEventListener('toggle', async () => {
@@ -11580,669 +11569,3 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
   })();
 })(runShellWithRoot);
 //</script >
-
-/*
-License for this source distribution:
-                    GNU AFFERO GENERAL PUBLIC LICENSE
-                       Version 3, 19 November 2007
-
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
-
-                            Preamble
-
-  The GNU Affero General Public License is a free, copyleft license for
-software and other kinds of works, specifically designed to ensure
-cooperation with the community in the case of network server software.
-
-  The licenses for most software and other practical works are designed
-to take away your freedom to share and change the works.  By contrast,
-our General Public Licenses are intended to guarantee your freedom to
-share and change all versions of a program--to make sure it remains free
-software for all its users.
-
-  When we speak of free software, we are referring to freedom, not
-price.  Our General Public Licenses are designed to make sure that you
-have the freedom to distribute copies of free software (and charge for
-them if you wish), that you receive source code or can get it if you
-want it, that you can change the software or use pieces of it in new
-free programs, and that you know you can do these things.
-
-  Developers that use our General Public Licenses protect your rights
-with two steps: (1) assert copyright on the software, and (2) offer
-you this License which gives you legal permission to copy, distribute
-and/or modify the software.
-
-  A secondary benefit of defending all users' freedom is that
-improvements made in alternate versions of the program, if they
-receive widespread use, become available for other developers to
-incorporate.  Many developers of free software are heartened and
-encouraged by the resulting cooperation.  However, in the case of
-software used on network servers, this result may fail to come about.
-The GNU General Public License permits making a modified version and
-letting the public access it on a server without ever releasing its
-source code to the public.
-
-  The GNU Affero General Public License is designed specifically to
-ensure that, in such cases, the modified source code becomes available
-to the community.  It requires the operator of a network server to
-provide the source code of the modified version running there to the
-users of that server.  Therefore, public use of a modified version, on
-a publicly accessible server, gives the public access to the source
-code of the modified version.
-
-  An older license, called the Affero General Public License and
-published by Affero, was designed to accomplish similar goals.  This is
-a different license, not a version of the Affero GPL, but Affero has
-released a new version of the Affero GPL which permits relicensing under
-this license.
-
-  The precise terms and conditions for copying, distribution and
-modification follow.
-
-                       TERMS AND CONDITIONS
-
-  0. Definitions.
-
-  "This License" refers to version 3 of the GNU Affero General Public License.
-
-  "Copyright" also means copyright-like laws that apply to other kinds of
-works, such as semiconductor masks.
-
-  "The Program" refers to any copyrightable work licensed under this
-License.  Each licensee is addressed as "you".  "Licensees" and
-"recipients" may be individuals or organizations.
-
-  To "modify" a work means to copy from or adapt all or part of the work
-in a fashion requiring copyright permission, other than the making of an
-exact copy.  The resulting work is called a "modified version" of the
-earlier work or a work "based on" the earlier work.
-
-  A "covered work" means either the unmodified Program or a work based
-on the Program.
-
-  To "propagate" a work means to do anything with it that, without
-permission, would make you directly or secondarily liable for
-infringement under applicable copyright law, except executing it on a
-computer or modifying a private copy.  Propagation includes copying,
-distribution (with or without modification), making available to the
-public, and in some countries other activities as well.
-
-  To "convey" a work means any kind of propagation that enables other
-parties to make or receive copies.  Mere interaction with a user through
-a computer network, with no transfer of a copy, is not conveying.
-
-  An interactive user interface displays "Appropriate Legal Notices"
-to the extent that it includes a convenient and prominently visible
-feature that (1) displays an appropriate copyright notice, and (2)
-tells the user that there is no warranty for the work (except to the
-extent that warranties are provided), that licensees may convey the
-work under this License, and how to view a copy of this License.  If
-the interface presents a list of user commands or options, such as a
-menu, a prominent item in the list meets this criterion.
-
-  1. Source Code.
-
-  The "source code" for a work means the preferred form of the work
-for making modifications to it.  "Object code" means any non-source
-form of a work.
-
-  A "Standard Interface" means an interface that either is an official
-standard defined by a recognized standards body, or, in the case of
-interfaces specified for a particular programming language, one that
-is widely used among developers working in that language.
-
-  The "System Libraries" of an executable work include anything, other
-than the work as a whole, that (a) is included in the normal form of
-packaging a Major Component, but which is not part of that Major
-Component, and (b) serves only to enable use of the work with that
-Major Component, or to implement a Standard Interface for which an
-implementation is available to the public in source code form.  A
-"Major Component", in this context, means a major essential component
-(kernel, window system, and so on) of the specific operating system
-(if any) on which the executable work runs, or a compiler used to
-produce the work, or an object code interpreter used to run it.
-
-  The "Corresponding Source" for a work in object code form means all
-the source code needed to generate, install, and (for an executable
-work) run the object code and to modify the work, including scripts to
-control those activities.  However, it does not include the work's
-System Libraries, or general-purpose tools or generally available free
-programs which are used unmodified in performing those activities but
-which are not part of the work.  For example, Corresponding Source
-includes interface definition files associated with source files for
-the work, and the source code for shared libraries and dynamically
-linked subprograms that the work is specifically designed to require,
-such as by intimate data communication or control flow between those
-subprograms and other parts of the work.
-
-  The Corresponding Source need not include anything that users
-can regenerate automatically from other parts of the Corresponding
-Source.
-
-  The Corresponding Source for a work in source code form is that
-same work.
-
-  2. Basic Permissions.
-
-  All rights granted under this License are granted for the term of
-copyright on the Program, and are irrevocable provided the stated
-conditions are met.  This License explicitly affirms your unlimited
-permission to run the unmodified Program.  The output from running a
-covered work is covered by this License only if the output, given its
-content, constitutes a covered work.  This License acknowledges your
-rights of fair use or other equivalent, as provided by copyright law.
-
-  You may make, run and propagate covered works that you do not
-convey, without conditions so long as your license otherwise remains
-in force.  You may convey covered works to others for the sole purpose
-of having them make modifications exclusively for you, or provide you
-with facilities for running those works, provided that you comply with
-the terms of this License in conveying all material for which you do
-not control copyright.  Those thus making or running the covered works
-for you must do so exclusively on your behalf, under your direction
-and control, on terms that prohibit them from making any copies of
-your copyrighted material outside their relationship with you.
-
-  Conveying under any other circumstances is permitted solely under
-the conditions stated below.  Sublicensing is not allowed; section 10
-makes it unnecessary.
-
-  3. Protecting Users' Legal Rights From Anti-Circumvention Law.
-
-  No covered work shall be deemed part of an effective technological
-measure under any applicable law fulfilling obligations under article
-11 of the WIPO copyright treaty adopted on 20 December 1996, or
-similar laws prohibiting or restricting circumvention of such
-measures.
-
-  When you convey a covered work, you waive any legal power to forbid
-circumvention of technological measures to the extent such circumvention
-is effected by exercising rights under this License with respect to
-the covered work, and you disclaim any intention to limit operation or
-modification of the work as a means of enforcing, against the work's
-users, your or third parties' legal rights to forbid circumvention of
-technological measures.
-
-  4. Conveying Verbatim Copies.
-
-  You may convey verbatim copies of the Program's source code as you
-receive it, in any medium, provided that you conspicuously and
-appropriately publish on each copy an appropriate copyright notice;
-keep intact all notices stating that this License and any
-non-permissive terms added in accord with section 7 apply to the code;
-keep intact all notices of the absence of any warranty; and give all
-recipients a copy of this License along with the Program.
-
-  You may charge any price or no price for each copy that you convey,
-and you may offer support or warranty protection for a fee.
-
-  5. Conveying Modified Source Versions.
-
-  You may convey a work based on the Program, or the modifications to
-produce it from the Program, in the form of source code under the
-terms of section 4, provided that you also meet all of these conditions:
-
-    a) The work must carry prominent notices stating that you modified
-    it, and giving a relevant date.
-
-    b) The work must carry prominent notices stating that it is
-    released under this License and any conditions added under section
-    7.  This requirement modifies the requirement in section 4 to
-    "keep intact all notices".
-
-    c) You must license the entire work, as a whole, under this
-    License to anyone who comes into possession of a copy.  This
-    License will therefore apply, along with any applicable section 7
-    additional terms, to the whole of the work, and all its parts,
-    regardless of how they are packaged.  This License gives no
-    permission to license the work in any other way, but it does not
-    invalidate such permission if you have separately received it.
-
-    d) If the work has interactive user interfaces, each must display
-    Appropriate Legal Notices; however, if the Program has interactive
-    interfaces that do not display Appropriate Legal Notices, your
-    work need not make them do so.
-
-  A compilation of a covered work with other separate and independent
-works, which are not by their nature extensions of the covered work,
-and which are not combined with it such as to form a larger program,
-in or on a volume of a storage or distribution medium, is called an
-"aggregate" if the compilation and its resulting copyright are not
-used to limit the access or legal rights of the compilation's users
-beyond what the individual works permit.  Inclusion of a covered work
-in an aggregate does not cause this License to apply to the other
-parts of the aggregate.
-
-  6. Conveying Non-Source Forms.
-
-  You may convey a covered work in object code form under the terms
-of sections 4 and 5, provided that you also convey the
-machine-readable Corresponding Source under the terms of this License,
-in one of these ways:
-
-    a) Convey the object code in, or embodied in, a physical product
-    (including a physical distribution medium), accompanied by the
-    Corresponding Source fixed on a durable physical medium
-    customarily used for software interchange.
-
-    b) Convey the object code in, or embodied in, a physical product
-    (including a physical distribution medium), accompanied by a
-    written offer, valid for at least three years and valid for as
-    long as you offer spare parts or customer support for that product
-    model, to give anyone who possesses the object code either (1) a
-    copy of the Corresponding Source for all the software in the
-    product that is covered by this License, on a durable physical
-    medium customarily used for software interchange, for a price no
-    more than your reasonable cost of physically performing this
-    conveying of source, or (2) access to copy the
-    Corresponding Source from a network server at no charge.
-
-    c) Convey individual copies of the object code with a copy of the
-    written offer to provide the Corresponding Source.  This
-    alternative is allowed only occasionally and noncommercially, and
-    only if you received the object code with such an offer, in accord
-    with subsection 6b.
-
-    d) Convey the object code by offering access from a designated
-    place (gratis or for a charge), and offer equivalent access to the
-    Corresponding Source in the same way through the same place at no
-    further charge.  You need not require recipients to copy the
-    Corresponding Source along with the object code.  If the place to
-    copy the object code is a network server, the Corresponding Source
-    may be on a different server (operated by you or a third party)
-    that supports equivalent copying facilities, provided you maintain
-    clear directions next to the object code saying where to find the
-    Corresponding Source.  Regardless of what server hosts the
-    Corresponding Source, you remain obligated to ensure that it is
-    available for as long as needed to satisfy these requirements.
-
-    e) Convey the object code using peer-to-peer transmission, provided
-    you inform other peers where the object code and Corresponding
-    Source of the work are being offered to the general public at no
-    charge under subsection 6d.
-
-  A separable portion of the object code, whose source code is excluded
-from the Corresponding Source as a System Library, need not be
-included in conveying the object code work.
-
-  A "User Product" is either (1) a "consumer product", which means any
-tangible personal property which is normally used for personal, family,
-or household purposes, or (2) anything designed or sold for incorporation
-into a dwelling.  In determining whether a product is a consumer product,
-doubtful cases shall be resolved in favor of coverage.  For a particular
-product received by a particular user, "normally used" refers to a
-typical or common use of that class of product, regardless of the status
-of the particular user or of the way in which the particular user
-actually uses, or expects or is expected to use, the product.  A product
-is a consumer product regardless of whether the product has substantial
-commercial, industrial or non-consumer uses, unless such uses represent
-the only significant mode of use of the product.
-
-  "Installation Information" for a User Product means any methods,
-procedures, authorization keys, or other information required to install
-and execute modified versions of a covered work in that User Product from
-a modified version of its Corresponding Source.  The information must
-suffice to ensure that the continued functioning of the modified object
-code is in no case prevented or interfered with solely because
-modification has been made.
-
-  If you convey an object code work under this section in, or with, or
-specifically for use in, a User Product, and the conveying occurs as
-part of a transaction in which the right of possession and use of the
-User Product is transferred to the recipient in perpetuity or for a
-fixed term (regardless of how the transaction is characterized), the
-Corresponding Source conveyed under this section must be accompanied
-by the Installation Information.  But this requirement does not apply
-if neither you nor any third party retains the ability to install
-modified object code on the User Product (for example, the work has
-been installed in ROM).
-
-  The requirement to provide Installation Information does not include a
-requirement to continue to provide support service, warranty, or updates
-for a work that has been modified or installed by the recipient, or for
-the User Product in which it has been modified or installed.  Access to a
-network may be denied when the modification itself materially and
-adversely affects the operation of the network or violates the rules and
-protocols for communication across the network.
-
-  Corresponding Source conveyed, and Installation Information provided,
-in accord with this section must be in a format that is publicly
-documented (and with an implementation available to the public in
-source code form), and must require no special password or key for
-unpacking, reading or copying.
-
-  7. Additional Terms.
-
-  "Additional permissions" are terms that supplement the terms of this
-License by making exceptions from one or more of its conditions.
-Additional permissions that are applicable to the entire Program shall
-be treated as though they were included in this License, to the extent
-that they are valid under applicable law.  If additional permissions
-apply only to part of the Program, that part may be used separately
-under those permissions, but the entire Program remains governed by
-this License without regard to the additional permissions.
-
-  When you convey a copy of a covered work, you may at your option
-remove any additional permissions from that copy, or from any part of
-it.  (Additional permissions may be written to require their own
-removal in certain cases when you modify the work.)  You may place
-additional permissions on material, added by you to a covered work,
-for which you have or can give appropriate copyright permission.
-
-  Notwithstanding any other provision of this License, for material you
-add to a covered work, you may (if authorized by the copyright holders of
-that material) supplement the terms of this License with terms:
-
-    a) Disclaiming warranty or limiting liability differently from the
-    terms of sections 15 and 16 of this License; or
-
-    b) Requiring preservation of specified reasonable legal notices or
-    author attributions in that material or in the Appropriate Legal
-    Notices displayed by works containing it; or
-
-    c) Prohibiting misrepresentation of the origin of that material, or
-    requiring that modified versions of such material be marked in
-    reasonable ways as different from the original version; or
-
-    d) Limiting the use for publicity purposes of names of licensors or
-    authors of the material; or
-
-    e) Declining to grant rights under trademark law for use of some
-    trade names, trademarks, or service marks; or
-
-    f) Requiring indemnification of licensors and authors of that
-    material by anyone who conveys the material (or modified versions of
-    it) with contractual assumptions of liability to the recipient, for
-    any liability that these contractual assumptions directly impose on
-    those licensors and authors.
-
-  All other non-permissive additional terms are considered "further
-restrictions" within the meaning of section 10.  If the Program as you
-received it, or any part of it, contains a notice stating that it is
-governed by this License along with a term that is a further
-restriction, you may remove that term.  If a license document contains
-a further restriction but permits relicensing or conveying under this
-License, you may add to a covered work material governed by the terms
-of that license document, provided that the further restriction does
-not survive such relicensing or conveying.
-
-  If you add terms to a covered work in accord with this section, you
-must place, in the relevant source files, a statement of the
-additional terms that apply to those files, or a notice indicating
-where to find the applicable terms.
-
-  Additional terms, permissive or non-permissive, may be stated in the
-form of a separately written license, or stated as exceptions;
-the above requirements apply either way.
-
-  8. Termination.
-
-  You may not propagate or modify a covered work except as expressly
-provided under this License.  Any attempt otherwise to propagate or
-modify it is void, and will automatically terminate your rights under
-this License (including any patent licenses granted under the third
-paragraph of section 11).
-
-  However, if you cease all violation of this License, then your
-license from a particular copyright holder is reinstated (a)
-provisionally, unless and until the copyright holder explicitly and
-finally terminates your license, and (b) permanently, if the copyright
-holder fails to notify you of the violation by some reasonable means
-prior to 60 days after the cessation.
-
-  Moreover, your license from a particular copyright holder is
-reinstated permanently if the copyright holder notifies you of the
-violation by some reasonable means, this is the first time you have
-received notice of violation of this License (for any work) from that
-copyright holder, and you cure the violation prior to 30 days after
-your receipt of the notice.
-
-  Termination of your rights under this section does not terminate the
-licenses of parties who have received copies or rights from you under
-this License.  If your rights have been terminated and not permanently
-reinstated, you do not qualify to receive new licenses for the same
-material under section 10.
-
-  9. Acceptance Not Required for Having Copies.
-
-  You are not required to accept this License in order to receive or
-run a copy of the Program.  Ancillary propagation of a covered work
-occurring solely as a consequence of using peer-to-peer transmission
-to receive a copy likewise does not require acceptance.  However,
-nothing other than this License grants you permission to propagate or
-modify any covered work.  These actions infringe copyright if you do
-not accept this License.  Therefore, by modifying or propagating a
-covered work, you indicate your acceptance of this License to do so.
-
-  10. Automatic Licensing of Downstream Recipients.
-
-  Each time you convey a covered work, the recipient automatically
-receives a license from the original licensors, to run, modify and
-propagate that work, subject to this License.  You are not responsible
-for enforcing compliance by third parties with this License.
-
-  An "entity transaction" is a transaction transferring control of an
-organization, or substantially all assets of one, or subdividing an
-organization, or merging organizations.  If propagation of a covered
-work results from an entity transaction, each party to that
-transaction who receives a copy of the work also receives whatever
-licenses to the work the party's predecessor in interest had or could
-give under the previous paragraph, plus a right to possession of the
-Corresponding Source of the work from the predecessor in interest, if
-the predecessor has it or can get it with reasonable efforts.
-
-  You may not impose any further restrictions on the exercise of the
-rights granted or affirmed under this License.  For example, you may
-not impose a license fee, royalty, or other charge for exercise of
-rights granted under this License, and you may not initiate litigation
-(including a cross-claim or counterclaim in a lawsuit) alleging that
-any patent claim is infringed by making, using, selling, offering for
-sale, or importing the Program or any portion of it.
-
-  11. Patents.
-
-  A "contributor" is a copyright holder who authorizes use under this
-License of the Program or a work on which the Program is based.  The
-work thus licensed is called the contributor's "contributor version".
-
-  A contributor's "essential patent claims" are all patent claims
-owned or controlled by the contributor, whether already acquired or
-hereafter acquired, that would be infringed by some manner, permitted
-by this License, of making, using, or selling its contributor version,
-but do not include claims that would be infringed only as a
-consequence of further modification of the contributor version.  For
-purposes of this definition, "control" includes the right to grant
-patent sublicenses in a manner consistent with the requirements of
-this License.
-
-  Each contributor grants you a non-exclusive, worldwide, royalty-free
-patent license under the contributor's essential patent claims, to
-make, use, sell, offer for sale, import and otherwise run, modify and
-propagate the contents of its contributor version.
-
-  In the following three paragraphs, a "patent license" is any express
-agreement or commitment, however denominated, not to enforce a patent
-(such as an express permission to practice a patent or covenant not to
-sue for patent infringement).  To "grant" such a patent license to a
-party means to make such an agreement or commitment not to enforce a
-patent against the party.
-
-  If you convey a covered work, knowingly relying on a patent license,
-and the Corresponding Source of the work is not available for anyone
-to copy, free of charge and under the terms of this License, through a
-publicly available network server or other readily accessible means,
-then you must either (1) cause the Corresponding Source to be so
-available, or (2) arrange to deprive yourself of the benefit of the
-patent license for this particular work, or (3) arrange, in a manner
-consistent with the requirements of this License, to extend the patent
-license to downstream recipients.  "Knowingly relying" means you have
-actual knowledge that, but for the patent license, your conveying the
-covered work in a country, or your recipient's use of the covered work
-in a country, would infringe one or more identifiable patents in that
-country that you have reason to believe are valid.
-
-  If, pursuant to or in connection with a single transaction or
-arrangement, you convey, or propagate by procuring conveyance of, a
-covered work, and grant a patent license to some of the parties
-receiving the covered work authorizing them to use, propagate, modify
-or convey a specific copy of the covered work, then the patent license
-you grant is automatically extended to all recipients of the covered
-work and works based on it.
-
-  A patent license is "discriminatory" if it does not include within
-the scope of its coverage, prohibits the exercise of, or is
-conditioned on the non-exercise of one or more of the rights that are
-specifically granted under this License.  You may not convey a covered
-work if you are a party to an arrangement with a third party that is
-in the business of distributing software, under which you make payment
-to the third party based on the extent of your activity of conveying
-the work, and under which the third party grants, to any of the
-parties who would receive the covered work from you, a discriminatory
-patent license (a) in connection with copies of the covered work
-conveyed by you (or copies made from those copies), or (b) primarily
-for and in connection with specific products or compilations that
-contain the covered work, unless you entered into that arrangement,
-or that patent license was granted, prior to 28 March 2007.
-
-  Nothing in this License shall be construed as excluding or limiting
-any implied license or other defenses to infringement that may
-otherwise be available to you under applicable patent law.
-
-  12. No Surrender of Others' Freedom.
-
-  If conditions are imposed on you (whether by court order, agreement or
-otherwise) that contradict the conditions of this License, they do not
-excuse you from the conditions of this License.  If you cannot convey a
-covered work so as to satisfy simultaneously your obligations under this
-License and any other pertinent obligations, then as a consequence you may
-not convey it at all.  For example, if you agree to terms that obligate you
-to collect a royalty for further conveying from those to whom you convey
-the Program, the only way you could satisfy both those terms and this
-License would be to refrain entirely from conveying the Program.
-
-  13. Remote Network Interaction; Use with the GNU General Public License.
-
-  Notwithstanding any other provision of this License, if you modify the
-Program, your modified version must prominently offer all users
-interacting with it remotely through a computer network (if your version
-supports such interaction) an opportunity to receive the Corresponding
-Source of your version by providing access to the Corresponding Source
-from a network server at no charge, through some standard or customary
-means of facilitating copying of software.  This Corresponding Source
-shall include the Corresponding Source for any work covered by version 3
-of the GNU General Public License that is incorporated pursuant to the
-following paragraph.
-
-  Notwithstanding any other provision of this License, you have
-permission to link or combine any covered work with a work licensed
-under version 3 of the GNU General Public License into a single
-combined work, and to convey the resulting work.  The terms of this
-License will continue to apply to the part which is the covered work,
-but the work with which it is combined will remain governed by version
-3 of the GNU General Public License.
-
-  14. Revised Versions of this License.
-
-  The Free Software Foundation may publish revised and/or new versions of
-the GNU Affero General Public License from time to time.  Such new versions
-will be similar in spirit to the present version, but may differ in detail to
-address new problems or concerns.
-
-  Each version is given a distinguishing version number.  If the
-Program specifies that a certain numbered version of the GNU Affero General
-Public License "or any later version" applies to it, you have the
-option of following the terms and conditions either of that numbered
-version or of any later version published by the Free Software
-Foundation.  If the Program does not specify a version number of the
-GNU Affero General Public License, you may choose any version ever published
-by the Free Software Foundation.
-
-  If the Program specifies that a proxy can decide which future
-versions of the GNU Affero General Public License can be used, that proxy's
-public statement of acceptance of a version permanently authorizes you
-to choose that version for the Program.
-
-  Later license versions may give you additional or different
-permissions.  However, no additional obligations are imposed on any
-author or copyright holder as a result of your choosing to follow a
-later version.
-
-  15. Disclaimer of Warranty.
-
-  THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
-APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
-HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
-OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
-THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
-IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
-ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
-
-  16. Limitation of Liability.
-
-  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
-WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
-THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
-GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
-USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
-DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
-PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
-EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
-SUCH DAMAGES.
-
-  17. Interpretation of Sections 15 and 16.
-
-  If the disclaimer of warranty and limitation of liability provided
-above cannot be given local legal effect according to their terms,
-reviewing courts shall apply local law that most closely approximates
-an absolute waiver of all civil liability in connection with the
-Program, unless a warranty or assumption of liability accompanies a
-copy of the Program in return for a fee.
-
-                     END OF TERMS AND CONDITIONS
-
-            How to Apply These Terms to Your New Programs
-
-  If you develop a new program, and you want it to be of the greatest
-possible use to the public, the best way to achieve this is to make it
-free software which everyone can redistribute and change under these terms.
-
-  To do so, attach the following notices to the program.  It is safest
-to attach them to the start of each source file to most effectively
-state the exclusion of warranty; and each file should have at least
-the "copyright" line and a pointer to where the full notice is found.
-
-    <one line to give the program's name and a brief idea of what it does.>
-    Copyright (C) <year>  <name of author>
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-Also add information on how to contact you by electronic and paper mail.
-
-  If your software can interact with users remotely through a computer
-network, you should also make sure that it provides a way for users to
-get its source.  For example, if your program is a web application, its
-interface could display a "Source" link that leads users to an archive
-of the code.  There are many ways you could offer source, and different
-solutions will be better for different programs; see section 13 for the
-specific requirements.
-
-  You should also get your employer (if you work as a programmer) or school,
-if any, to sign a "copyright disclaimer" for the program, if necessary.
-For more information on this, and how to apply and follow the GNU AGPL, see
-<https://www.gnu.org/licenses/>.
-
-*/

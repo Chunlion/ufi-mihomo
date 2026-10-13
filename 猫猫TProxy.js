@@ -4,6 +4,12 @@
 ((hostRunShellWithRoot) => {
 const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
 const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, controller:7788};
+const F50_MIPS_MIN_VERSION = '1.19.31';
+function f50TunStack(options = {}) {
+  const stack = options.tun_stack || 'auto';
+  if (!['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(stack)) throw new Error('TUN 协议栈无效');
+  return stack === 'auto' ? (options.ipv6 === 'on' ? 'gvisor' : 'mixed') : stack;
+}
 const F50_DEFAULT_SECRET = '123456';
 // 深合并：plain object 递归合并，数组直接整体替换；返回全新对象，不修改入参。
 function f50IsPlainObject(v) { return !!v && typeof v === "object" && !Array.isArray(v); }
@@ -30,7 +36,7 @@ const PROFILE_DELTA = {
   "tproxy4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
   "tproxy6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
   "tun4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"mtu":1500,"stack":"mixed","strict-route":false}},
-  "tun6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"inet6-address":["fdfe:dcba:9876::1/126"],"mtu":1500,"stack":"mixed","strict-route":false}},
+  "tun6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":0,"tun":{"auto-detect-interface":true,"auto-redirect":false,"auto-route":false,"device":"KanoTun","dns-hijack":[],"enable":true,"inet6-address":["fdfe:dcba:9876::1/126"],"mtu":1500,"stack":"gvisor","strict-route":false}},
   "off4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":0,"tun":{"enable":false}},
   "off6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":0,"tun":{"enable":false}},
 };
@@ -640,6 +646,12 @@ echo F50_SERVICE_CURL_PATCH_OK=1
 
 function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE)) {
   const functions = buildF50OriginalConfigFunctions();
+  const dnsCompat = buildF50Ipv6DnsCompatFunctions() + `
+disable_unsupported_ipv6_dns_hijack() {
+  case "$1:$2" in boot:*|start:*|restart:*|policy:apply|policy:boot-apply) ;; *) return 0 ;; esac
+  f50_disable_unsupported_ipv6_dns_hijack
+}
+`;
   const tunCleanup = buildF50NetworkCompatHelpers().split('f50_disable_unsupported_ipv6_dns_hijack() {')[0]
     .replace('f50_drop_detached_tun_rules()', 'drop_detached_tun_rules()');
   return `(set -e
@@ -722,6 +734,51 @@ rm -f "$FUNCTIONS"
 trap - EXIT
 fi
 ${buildF50ServiceCurlPatchScript(service)} || exit 1
+if ! grep -qx '# KANO_TUN_STACK_COMPAT=1' "$SERVICE"; then
+TMP="$SERVICE.tun6.$$"
+FUNCTIONS="$TMP.functions"
+umask 077
+trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+printf '%s' ${shellQuote(buildF50Tun6CompatFunctions())} > "$FUNCTIONS" || exit 1
+awk -v functions="$FUNCTIONS" '
+  /^f50_prepare_tun6_stack\\(\\) \\{/ { skipping=1 }
+  skipping { if($0=="# KANO_TUN6_STACK_COMPAT=1") skipping=0; next }
+  $0 == "f50_prepare_tun6_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun6_stack || exit 1" { next }
+  $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
+  $0 == "f50_save_original_config \\"$action\\" || exit 1" { print "f50_check_tun_stack \\"$action\\" || exit 1"; checked++ }
+  { print }
+  $0 == "f50_restore_original_config || exit 1" { print "f50_prepare_tun_stack \\"$action\\" || exit 1"; prepared++ }
+  $0 == "    repair_panel_config || { echo F50_SERVICE_FINALIZED=0; exit 1; }" { print "    f50_finish_tun_stack || exit 1"; finalized++ }
+  END { if(helpers!=1 || prepared!=1 || finalized!=1 || checked!=1 || skipping) exit 1 }
+' "$SERVICE" > "$TMP" || exit 1
+sh -n "$TMP" || exit 1
+chmod 755 "$TMP" || exit 1
+mv -f "$TMP" "$SERVICE" || exit 1
+rm -f "$FUNCTIONS"
+trap - EXIT
+fi
+if ! grep -qx '# KANO_IPV6_DNS_SPLIT=1' "$SERVICE"; then
+TMP="$SERVICE.dns.$$"
+FUNCTIONS="$TMP.functions"
+umask 077
+trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
+awk -v functions="$FUNCTIONS" '
+  /^disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ {
+    while ((getline line < functions) > 0) print line
+    close(functions); helpers++; skipping=1; next
+  }
+  skipping { if($0=="}") skipping=0; next }
+  $0 == "\\"$binary\\" \\"$@\\"" { print "f50_run_controller \\"$@\\""; calls++; next }
+  { print }
+  END { if(helpers!=1 || calls!=1 || skipping) exit 1 }
+' "$SERVICE" > "$TMP" || exit 1
+sh -n "$TMP" || exit 1
+chmod 755 "$TMP" || exit 1
+mv -f "$TMP" "$SERVICE" || exit 1
+rm -f "$FUNCTIONS"
+trap - EXIT
+fi
 )`;
 }
 async function ensureOriginalSubscriptionService() {
@@ -1281,29 +1338,185 @@ f50_drop_detached_tun_rules() {
   done
   return 0
 }
-f50_disable_unsupported_ipv6_dns_hijack() {
-  compat_options="$F50_ROOT/Policy/options.conf"
+${buildF50Ipv6DnsCompatFunctions()}`; }
+function buildF50Tun6CompatFunctions() {
+  const [major, minor, patch] = F50_MIPS_MIN_VERSION.split('.').map(Number);
+  return `f50_check_mips_version() {
+  mips_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  mips_banner=$("$mips_root/Proxy/Clash.Core" -v 2>&1) || { echo F50_ERROR=mips_core_version_unavailable; return 1; }
+  mips_version=$(printf '%s\\n' "$mips_banner" | sed -n 's/.*[vV]\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\).*/\\1 \\2 \\3/p' | head -1)
+  printf '%s\\n' "$mips_version" | awk 'NF!=3 {exit 1} {exit !(($1>${major})||($1==${major}&&$2>${minor})||($1==${major}&&$2==${minor}&&$3>=${patch}))}' || {
+    echo F50_ERROR=mips_requires_mihomo_${F50_MIPS_MIN_VERSION}; return 1
+  }
+  echo F50_MIPS_VERSION_OK=1
+}
+f50_check_tun_stack() {
+  case "$1" in start|restart|boot) ;; *) return 0;; esac
+  tun6_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  [ -r "$tun6_root/Policy/options.conf" ] || return 0
+  grep -qx 'traffic_mode=tun' "$tun6_root/Policy/options.conf" || return 0
+  F50_SELECTED_TUN_STACK=$(sed -n 's/^tun_stack=//p' "$tun6_root/Policy/options.conf" | head -1)
+  case "$F50_SELECTED_TUN_STACK" in
+    auto|'') if grep -qx 'ipv6=on' "$tun6_root/Policy/options.conf"; then F50_SELECTED_TUN_STACK=gvisor; else F50_SELECTED_TUN_STACK=mixed; fi;;
+    mixed|gvisor|system) ;;
+    mips) f50_check_mips_version || return 1;;
+    *) echo F50_ERROR=invalid_tun_stack; return 1;;
+  esac
+}
+f50_prepare_tun_stack() {
+  [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
+  tun6_cfg="$tun6_root/Proxy/config.yaml"
+  tun6_yq="$tun6_root/Tools/yq_linux_arm64"
+  "$tun6_yq" eval -e '.tun.enable == true' "$tun6_cfg" >/dev/null 2>&1 || {
+    echo F50_ERROR=tun_config_mismatch; return 1
+  }
+  F50_TUN_STACK="$F50_SELECTED_TUN_STACK" "$tun6_yq" eval -e '.tun.stack == strenv(F50_TUN_STACK)' "$tun6_cfg" >/dev/null 2>&1 && return 0
+  tun6_candidate="$tun6_cfg.tun6.$$"
+  # The legacy controller always writes mixed; restore the selected stack before reload.
+  F50_TUN_STACK="$F50_SELECTED_TUN_STACK" "$tun6_yq" eval -P -o=yaml -I=2 '.tun.stack = strenv(F50_TUN_STACK)' "$tun6_cfg" > "$tun6_candidate" &&
+    "$tun6_root/Proxy/Clash.Core" -t -d "$tun6_root/Proxy" -f "$tun6_candidate" >/dev/null 2>&1 &&
+    chmod 600 "$tun6_candidate" && mv -f "$tun6_candidate" "$tun6_cfg" || {
+      rm -f "$tun6_candidate"; echo F50_ERROR=tun_stack_prepare_failed; return 1
+    }
+  F50_CONFIG_RELOAD_REQUIRED=1
+}
+f50_finish_tun_stack() {
+  [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
+  # Reloading a TUN recreates its interface and removes controller-owned routes.
+  f50_run_controller policy apply && f50_run_controller policy verify || return 1
+  echo F50_TUN_STACK_READY="$F50_SELECTED_TUN_STACK"
+}
+# KANO_TUN_STACK_COMPAT=1
+`; }
+function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6_dns_hijack() {
+  compat_options="\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}/Policy/options.conf"
   [ -r "$compat_options" ] || return 0
   grep -qx 'ipv6=on' "$compat_options" || return 0
   grep -qx 'dns_hijack=on' "$compat_options" || return 0
   compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
   [ "$compat_nat_rc" = 0 ] && return 0
-  printf '%s\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
-  compat_tmp="$compat_options.kano_compat.$$"
-  awk '{if($0=="dns_hijack=on") print "dns_hijack=off"; else print}' "$compat_options" > "$compat_tmp" || {
-    rm -f "$compat_tmp" 2>/dev/null || true
-    echo F50_ERROR=ipv6_nat_compat_write_failed
-    return 1
-  }
-  chmod 600 "$compat_tmp" 2>/dev/null || true
-  mv -f "$compat_tmp" "$compat_options" || {
-    rm -f "$compat_tmp" 2>/dev/null || true
-    echo F50_ERROR=ipv6_nat_compat_commit_failed
-    return 1
-  }
-  echo F50_WARNING=ipv6_nat_unavailable_dns_hijack_disabled
+  printf '%s\\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
+  echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 }
+f50_dns_restore_options() {
+  [ -e "$f50_dns_backup" ] || return 0
+  [ -f "$f50_dns_backup" ] && [ ! -L "$f50_dns_backup" ] && [ ! -L "$f50_dns_options" ] || {
+    echo F50_ERROR=ipv6_dns_options_unsafe; return 1
+  }
+  cp -p "$f50_dns_backup" "$f50_dns_options.restore.$$" &&
+    mv -f "$f50_dns_options.restore.$$" "$f50_dns_options" && rm -f "$f50_dns_backup" || {
+      echo F50_ERROR=ipv6_dns_options_restore_failed; return 1
+    }
+}
+f50_dns4_rule() {
+  if [ "$dns4_action" = verify ]; then
+    iptables -w 5 -t nat -C "$@" || { echo F50_ERROR=ipv4_dns_rule_missing; return 1; }
+  else
+    printf '%s' '-A' >> "$dns4_batch" || return 1
+    printf ' %s' "$@" >> "$dns4_batch" || return 1
+    printf '\\n' >> "$dns4_batch" || return 1
+  fi
+}
+f50_ipv4_dns_rules() {
+  dns4_action=$1
+  dns4_port=$(sed -n 's/^dns_port=//p' "$f50_dns_options" | head -1)
+  dns4_port=\${dns4_port:-1053}
+  case "$dns4_port" in *[!0-9]*|'') echo F50_ERROR=invalid_dns_port; return 1;; esac
+  [ "$dns4_port" -ge 1 ] && [ "$dns4_port" -le 65535 ] || { echo F50_ERROR=invalid_dns_port; return 1; }
+  dns4_mode=$(sed -n 's/^traffic_mode=//p' "$f50_dns_options" | head -1)
+  dns4_interfaces=$(iptables -w 5 -t mangle -S PREROUTING | awk '
+    $1=="-A" && $2=="PREROUTING" {
+      iface=""; owned=0
+      for(i=3;i<=NF;i++) { if($i=="-i") iface=$(i+1); if($i=="-j" && $(i+1)=="KANO_F50_PRE") owned=1 }
+      if(owned && iface!="" && !seen[iface]++) print iface
+    }') || return 1
+  [ -n "$dns4_interfaces" ] || { echo F50_ERROR=ipv4_dns_lan_missing; return 1; }
+  if [ "$dns4_action" = apply ]; then
+    dns4_existing=$(iptables -w 5 -t nat -S) || return 1
+    printf '*nat\\n:KANO_F50_DNS - [0:0]\\n' > "$dns4_batch" || return 1
+    printf '%s\\n' "$dns4_existing" | awk '$1=="-A" && $2=="PREROUTING" && $NF=="KANO_F50_DNS" {sub(/^-A /,"-D "); print}' >> "$dns4_batch" || return 1
+  fi
+  if [ "$dns4_mode" = tproxy ] && [ -r "$f50_dns_root/Policy/device_bypass.txt" ]; then
+    sed 's/#.*//;s/\\r//g;/^[[:space:]]*$/d' "$f50_dns_root/Policy/device_bypass.txt" |
+      while read -r dns4_device; do
+        case "$dns4_device" in
+          *:*)
+            if printf '%s\\n' "$dns4_device" | grep -Eq '^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$'; then
+              for dns4_protocol in udp tcp; do
+                f50_dns4_rule KANO_F50_DNS -m mac --mac-source "$dns4_device" -p "$dns4_protocol" --dport 53 -j ACCEPT || exit 1
+              done
+            fi ;;
+          *)
+            for dns4_protocol in udp tcp; do
+              f50_dns4_rule KANO_F50_DNS -s "$dns4_device" -p "$dns4_protocol" --dport 53 -j ACCEPT || exit 1
+            done ;;
+        esac
+      done || return 1
+  fi
+  if [ "$dns4_mode" = tun ] && grep -qx 'private_route_enabled=on' "$f50_dns_options"; then
+    for dns4_cidr in $(sed -n 's/^private_route_cidrs=//p' "$f50_dns_options"); do
+      case "$dns4_cidr" in *:*) continue;; esac
+      f50_dns4_rule KANO_F50_DNS -d "$dns4_cidr" -j ACCEPT || return 1
+    done
+  fi
+  for dns4_protocol in udp tcp; do
+    f50_dns4_rule KANO_F50_DNS -p "$dns4_protocol" --dport 53 -j REDIRECT --to-ports "$dns4_port" || return 1
+  done
+  f50_dns4_rule KANO_F50_DNS -j RETURN || return 1
+  for dns4_interface in $dns4_interfaces; do
+    for dns4_protocol in udp tcp; do
+      f50_dns4_rule PREROUTING -i "$dns4_interface" -p "$dns4_protocol" --dport 53 -j KANO_F50_DNS || return 1
+    done
+  done
+  if [ "$dns4_action" = apply ]; then
+    printf 'COMMIT\\n' >> "$dns4_batch" || return 1
+    iptables-restore -w 5 -n < "$dns4_batch" || { echo F50_ERROR=ipv4_dns_apply_failed; return 1; }
+    f50_ipv4_dns_rules verify || return 1
+  fi
+  echo F50_IPV4_DNS_VERIFIED=1
+}
+f50_run_controller() (
+  case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped)
+    "$binary" "$@"; exit $?;;
+  esac
+  f50_dns_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  f50_dns_options="$f50_dns_root/Policy/options.conf"
+  f50_dns_backup="$f50_dns_options.ipv6_dns"
+  f50_dns_restore_options || exit 1
+  case "$1:$2" in start:*|restart:*|boot:*|policy:apply|policy:boot-apply|policy:verify) ;;
+    *) "$binary" "$@"; exit $?;;
+  esac
+  if ! grep -qx 'ipv6=on' "$f50_dns_options" || ! grep -qx 'dns_hijack=on' "$f50_dns_options" ||
+      grep -qx 'traffic_mode=off' "$f50_dns_options"; then "$binary" "$@"; exit $?; fi
+  f50_dns_probe=$(ip6tables -t nat -S 2>&1); f50_dns_probe_rc=$?
+  if [ "$f50_dns_probe_rc" = 0 ] || ! printf '%s\\n' "$f50_dns_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"; then
+    "$binary" "$@"; exit $?
+  fi
+  [ ! -L "$f50_dns_options" ] || { echo F50_ERROR=ipv6_dns_options_unsafe; exit 1; }
+  umask 077
+  dns4_batch="$f50_dns_root/Policy/.ipv4_dns.$$"
+  f50_dns_finish() {
+    f50_dns_exit=$?
+    trap - EXIT HUP INT TERM
+    f50_dns_restore_options || f50_dns_exit=1
+    rm -f "$dns4_batch" "$f50_dns_options.tmp.$$" "$f50_dns_options.restore.$$" || f50_dns_exit=1
+    exit "$f50_dns_exit"
+  }
+  trap f50_dns_finish EXIT
+  trap 'exit 130' HUP INT TERM
+  cp -p "$f50_dns_options" "$f50_dns_backup" || exit 1
+  # The legacy controller has one DNS flag; only its leased invocation sees DNS off.
+  awk '{if($0=="dns_hijack=on")print "dns_hijack=off";else print}' "$f50_dns_options" > "$f50_dns_options.tmp.$$" &&
+    chmod 600 "$f50_dns_options.tmp.$$" && mv -f "$f50_dns_options.tmp.$$" "$f50_dns_options" || exit 1
+  "$binary" "$@"; f50_dns_rc=$?
+  f50_dns_restore_options || exit 1
+  [ "$f50_dns_rc" = 0 ] || exit "$f50_dns_rc"
+  case "$1:$2" in policy:verify) f50_ipv4_dns_rules verify;; *) f50_ipv4_dns_rules apply;; esac || exit 1
+  echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
+)
+# KANO_IPV6_DNS_SPLIT=1
 `; }
+
 function buildF50InspectHelpers() { return `f50_inspect() {
   f50_scan "$F50_WORK/pids" || return 1
   f50_network_snapshot "$F50_WORK/net" || return 1
@@ -2276,6 +2489,7 @@ function createPrivateRouteLogic() {
   if (!preserveConfig && own(source.dns || {}, 'proxy-server-nameserver-policy')) {
     out.dns['proxy-server-nameserver-policy'] = clone(source.dns['proxy-server-nameserver-policy']);
   }
+  if (mode === 'tun') out.tun.stack = f50TunStack(options);
   if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
   if (!own(out,'proxies')) out.proxies = [];
   if (own(out,'proxy-groups') && !Array.isArray(out['proxy-groups'])) throw new Error('proxy-groups must be a list');
@@ -2399,10 +2613,10 @@ async function kprVerifySelection(options) {
 }
 
 function networkStateKey(state, runtimeOnly = false) {
-  const keys = ['traffic_mode', 'ipv6', 'dns_hijack', 'dns_port', 'private_route_enabled', 'private_route_cidrs', 'private_route_policy', 'tproxy_port'];
+  const keys = ['traffic_mode', 'ipv6', 'tun_stack', 'dns_hijack', 'dns_port', 'private_route_enabled', 'private_route_cidrs', 'private_route_policy', 'tproxy_port'];
   if (!runtimeOnly) keys.push('quic_block', 'proxy_group');
   const options = state.options || {};
-  const values = keys.map((key) => String(options[key] == null ? '' : options[key]).trim());
+  const values = keys.map((key) => String(options[key] == null ? (key === 'tun_stack' ? 'auto' : '') : options[key]).trim());
   if (!runtimeOnly) for (const key of ['deviceBypass', 'directDomain', 'directIp', 'proxyDomain', 'rejectDomain']) values.push(String(state[key] || '').trim());
   return JSON.stringify(values);
 }
@@ -2411,9 +2625,16 @@ async function normalizeIpv6DnsCapability(state) {
   if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
   const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
   if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
-  state.options.dns_hijack = 'off';
-  createToast('内核不支持 IPv6 NAT，已关闭 DNS 劫持；IPv6 接管保持启用。', 'yellow', 10000);
+  createToast('内核不支持 IPv6 NAT，保留 IPv4 DNS 劫持；IPv6 接管保持启用。', 'yellow', 10000);
   return true;
+}
+async function verifyF50TunStack(options) {
+  const stack = f50TunStack(options);
+  if (options.traffic_mode !== 'tun' || stack !== 'mips') return;
+  const result = await runShellWithRoot(buildF50Tun6CompatFunctions() + '\nf50_check_mips_version', 5000);
+  if (!result?.success || !/^F50_MIPS_VERSION_OK=1$/m.test(String(result.content || ''))) {
+    throw new Error(`mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上；当前内核版本未通过检查。`);
+  }
 }
 
 const policyTransactionFiles = () => [
@@ -2437,6 +2658,7 @@ async function kprSaveNetworkState(previous, next) {
   try {
     operationStage('\u68c0\u67e5\u6a21\u5f0f\u548c\u7f51\u7edc\u8bbe\u7f6e', 0, 4);
     next = { ...next, options: { ...next.options } };
+    await verifyF50TunStack(next.options);
     const feature = KPR.fromOptions(next.options);
     next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
     next.options.private_route_cidrs = feature.cidrs.join(' ');
@@ -7633,7 +7855,7 @@ btn_disabled.onclick = async () => {
   const ensurePolicyToolsScript = async () => await ensureCompatBackend();
 
   const parsePolicyOptionsText = (text='')=>{
- const options={traffic_mode:'',transparent:'on',ipv6:'off',quic_block:'off',dns_hijack:'on',dns_port:String(F50_PORTS.dns),tproxy_port:String(F50_PORTS.tproxy),proxy_group:'Proxy'};
+ const options={traffic_mode:'',transparent:'on',ipv6:'off',tun_stack:'auto',quic_block:'off',dns_hijack:'on',dns_port:String(F50_PORTS.dns),tproxy_port:String(F50_PORTS.tproxy),proxy_group:'Proxy'};
  for(const line of String(text).split(/\r?\n/)){const m=line.match(/^([A-Za-z0-9_]+)=(.*)$/);if(m)options[m[1]]=m[2]}
  if(!['tproxy','tun','off'].includes(options.traffic_mode))options.traffic_mode=options.transparent==='off'?'off':'tproxy';
  options.dns_port=String(F50_PORTS.dns);options.tproxy_port=String(F50_PORTS.tproxy);return options;
@@ -7783,7 +8005,7 @@ btn_disabled.onclick = async () => {
   };
 
   const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
-    if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
+    if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(state.options.tun_stack || 'auto') || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
       createToast('\u6a21\u5f0f\u6216 DNS \u7aef\u53e3\u65e0\u6548', 'red', 8000);
       return false;
     }
@@ -7814,6 +8036,7 @@ btn_disabled.onclick = async () => {
       `traffic_mode=${trafficMode}`,
       `transparent=${transparent}`,
       `ipv6=${ipv6}`,
+      `tun_stack=${state.options.tun_stack || 'auto'}`,
       `quic_block=${quicBlock}`,
       `dns_hijack=${dnsHijack}`,
       `dns_port=${dnsPort}`,
@@ -8105,6 +8328,10 @@ btn_disabled.onclick = async () => {
                     <label><input id="mm_policy_ipv6" type="checkbox"> \u542f\u7528 IPv6 \u63a5\u7ba1\u89c4\u5219</label>
                   </div>
                   <div class="kp-row">
+                    <div class="kp-label">TUN 协议栈</div>
+                    <div><select id="mm_policy_tun_stack"><option value="auto">自动：IPv4 mixed，双栈 gVisor</option><option value="mixed">mixed</option><option value="gvisor">gVisor</option><option value="system">system</option><option value="mips">mips</option></select><div class="kp-mini">mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上，保存前检查版本。F50 双栈推荐 gVisor。</div></div>
+                  </div>
+                  <div class="kp-row">
                     <div class="kp-label">QUIC</div>
                     <label><input id="mm_policy_quic" type="checkbox"> 拦截下游 UDP/443（直连设备、定向私网除外）</label>
                   </div>
@@ -8179,6 +8406,7 @@ btn_disabled.onclick = async () => {
 
     get('#mm_policy_traffic_mode').value = state.options.traffic_mode || 'tproxy';
     get('#mm_policy_ipv6').checked = state.options.ipv6 == 'on';
+    get('#mm_policy_tun_stack').value = state.options.tun_stack || 'auto';
     get('#mm_policy_quic').checked = state.options.quic_block == 'on';
     get('#mm_policy_dns').checked = state.options.dns_hijack == 'on';
     get('#mm_policy_dns_port').value = state.options.dns_port || String(F50_PORTS.dns);
@@ -8187,6 +8415,7 @@ btn_disabled.onclick = async () => {
       const mode = get('#mm_policy_traffic_mode').value;
       const note = get('#mm_policy_device_scope');
       const disabled = mode !== 'tproxy';
+      get('#mm_policy_tun_stack').disabled = mode !== 'tun';
       get('#mm_policy_device').disabled = disabled;
       get('#mm_policy_scan_clients').disabled = disabled;
       if (disabled) get('#mm_policy_clients').innerHTML = '';
@@ -8340,6 +8569,7 @@ btn_disabled.onclick = async () => {
         const next = { ...state, options: { ...state.options,
           traffic_mode: get('#mm_policy_traffic_mode').value,
           ipv6: get('#mm_policy_ipv6').checked ? 'on' : 'off',
+          tun_stack: get('#mm_policy_tun_stack').value,
           quic_block: get('#mm_policy_quic').checked ? 'on' : 'off',
           dns_hijack: get('#mm_policy_dns').checked ? 'on' : 'off',
           dns_port: get('#mm_policy_dns_port').value,
@@ -8350,6 +8580,7 @@ btn_disabled.onclick = async () => {
         await kprSaveNetworkState(state, next);
         get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
         get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
+        get('#mm_policy_tun_stack').value = state.options.tun_stack || 'auto';
         get('#mm_policy_quic').checked = state.options.quic_block === 'on';
         get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
         get('#mm_policy_dns_port').value = String(F50_PORTS.dns);

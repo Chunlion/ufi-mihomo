@@ -118,6 +118,153 @@ const originalConfig = {
 };
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+function airportApi(overrides = {}) {
+  const context = {
+    cloneJsonValue: plain,
+    isPlainYamlObject: value => value !== null && typeof value === 'object' && !Array.isArray(value),
+    assertYamlRootMap: value => value,
+    PROFILE_BASE: { dns: { 'proxy-server-nameserver': ['223.5.5.5'] } },
+    CLASH_TEMPLATE_BASE: '/data/clash/Tools/template.base.yaml',
+    CLASH_TEMPLATE: '/data/clash/Tools/template.yaml',
+    CLASH_CONFIG: '/data/clash/Proxy/config.yaml',
+    GENERATED_TEMPLATE_MARKER: '# generated',
+    shellQuote: value => `'${value}'`,
+    createToast() {}, safeTextToHtml: value => value,
+    ...overrides,
+  };
+  return vm.runInNewContext(slice('const updateAirportDnsTemplate =', 'const readRuleOverrideConfig =') +
+    '\n({update:updateAirportDnsTemplate,extract:extractAirportDnsPolicy,save:saveAirportDnsPolicy,parse:parseAirportDnsText})', context);
+}
+const airportPolicy = {
+  'node-a.example.com': ['dns-a.example.com:1066', 'https://dns-b.example.com/dns-query'],
+  '+.example.net': ['dns-a.example.com:1066'],
+};
+test('airport DNS edits preserve the rest of the template and survive runtime generation', () => {
+  const api = airportApi();
+  const before = plain(originalConfig);
+  const next = plain(api.update(before, airportPolicy));
+  assert.deepEqual(before, originalConfig);
+  const expected = plain(originalConfig);
+  expected.dns['proxy-server-nameserver-policy'] = airportPolicy;
+  expected.dns['proxy-server-nameserver'] = ['223.5.5.5'];
+  assert.deepEqual(next, expected);
+  assert.deepEqual(plain(configApi.runtime(next).dns['proxy-server-nameserver-policy']), airportPolicy);
+  const removed = plain(api.update(next, {}));
+  assert.equal(removed.dns['proxy-server-nameserver-policy'], undefined);
+  assert.deepEqual(removed.dns['proxy-server-nameserver'], next.dns['proxy-server-nameserver']);
+});
+test('airport DNS supplies required node resolver defaults only when missing', () => {
+  const api = airportApi();
+  const defaults = ['dns-default.example.com:5353'];
+  assert.deepEqual(plain(api.update({ dns: { 'proxy-server-nameserver': defaults } }, airportPolicy).dns['proxy-server-nameserver']), defaults);
+  assert.deepEqual(plain(api.update({}, airportPolicy).dns['proxy-server-nameserver']), ['223.5.5.5']);
+});
+test('airport DNS imports full configuration, named section and domain mapping', () => {
+  const api = airportApi();
+  for (const input of [airportPolicy, { 'proxy-server-nameserver-policy': airportPolicy }, { dns: { 'proxy-server-nameserver-policy': airportPolicy } }]) {
+    assert.deepEqual(plain(api.extract(input)), airportPolicy);
+  }
+  for (const input of [{}, { dns: { enable: true } }, { 'https://example.com/sub?token=example': ['223.5.5.5'] }, { 'node.example.com': [] }, { 'node.example.com': [42] }]) {
+    assert.throws(() => api.extract(input));
+  }
+});
+test('airport DNS saves only the base template, preserving its generation marker', async () => {
+  const writes = [];
+  const fresh = { ...plain(originalConfig), 'log-level': 'warning' };
+  const api = airportApi({
+    runShellWithRoot: async () => ({ success: true, content: 'base' }),
+    readYamlObject: async () => ({ ok: true, value: fresh }),
+    yamlHasGeneratedMarker: async () => true,
+    writeYamlObjectAtomic: async (...args) => { writes.push(args); return { ok: true }; },
+  });
+  assert.equal(await api.save(airportPolicy), true);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0][0], '/data/clash/Tools/template.base.yaml');
+  assert.equal(writes[0][1]['log-level'], 'warning');
+  assert.equal(writes[0][2].marker, '# generated');
+  assert.equal(writes[0][2].backup, true);
+});
+test('airport DNS does not write when reading the template fails', async () => {
+  const api = airportApi({
+    runShellWithRoot: async () => ({ success: false }),
+    writeYamlObjectAtomic: async () => { throw new Error('must not write'); },
+  });
+  assert.equal(await api.save(airportPolicy), false);
+});
+test('airport DNS can create a base template from the current configuration', async () => {
+  let saved = false;
+  const api = airportApi({
+    runShellWithRoot: async () => ({ success: true, content: 'runtime' }),
+    readYamlObject: async path => {
+      assert.equal(path, '/data/clash/Proxy/config.yaml');
+      return { ok: true, value: plain(originalConfig) };
+    },
+    yamlHasGeneratedMarker: async () => false,
+    writeYamlObjectAtomic: async path => {
+      assert.equal(path, '/data/clash/Tools/template.base.yaml');
+      saved = true; return { ok: true };
+    },
+  });
+  assert.equal(await api.save(airportPolicy), true);
+  assert.equal(saved, true);
+});
+test('airport DNS paste errors are readable and temporary files are cleaned', async () => {
+  const calls = [];
+  const api = airportApi({
+    stageTextBesideTarget: async () => ({ ok: true, stagePath: '/data/clash/Tools/example.stage' }),
+    readYamlObject: async () => ({ ok: false, message: 'parser internal details' }),
+    runShellWithRoot: async command => { calls.push(command); return { success: true }; },
+  });
+  await assert.rejects(api.parse('invalid: ['), /请检查 YAML/);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /rm -f .*example\.stage/);
+});
+
+const downloadSources = [{ name: 'Provider1', url: 'https://example.com/sub' }];
+for (const [statusCode, detail, expected] of [
+  [302, 'dial tcp: i/o timeout', /重定向/],
+  [403, 'dial tcp: i/o timeout', /拒绝访问/],
+  [404, 'not found', /链接不存在/],
+  [500, 'dial tcp: i/o timeout', /服务器暂时不可用/],
+  [200, 'HTML is not a subscription', /内容无法识别/],
+  [0, 'dial tcp: i/o timeout', /下载超时/],
+]) test(`local subscription failure ${statusCode} has a readable message and cleans its request`, async () => {
+  const cleaned = [];
+  const download = vm.runInNewContext(slice('const formatSubscriptionDownloadError =', 'const mergeLocalConversionReloadResult =') + 'convertSubscriptionsLocally', {
+    normalizeSubSourceList: value => value, validateLocalSubscriptionUrl: () => ({ ok: true }),
+    ensureCompatBackend: async () => true, loadProviderUserAgent: async () => 'clash.meta',
+    createRandomString: () => 'example', operationStage() {}, shellQuote: value => `'${value}'`,
+    stageTextBesideTarget: async () => ({ ok: true, stagePath: '/data/request.stage' }),
+    f50Command: async () => ({ success: false, content: 'F50_FETCH_RESULT=' + JSON.stringify({ ok: false, committed: false,
+      providers: [{ name: 'Provider1', ok: false, statusCode, message: detail }] }) }),
+    runShellWithRoot: async command => { cleaned.push(command); return { success: true }; },
+    buildProviderUpdateResult: (providers, options) => ({ providers, ...options }),
+  });
+  const output = await download(downloadSources);
+  assert.equal(output.ok, false);
+  assert.equal(output.committed, false);
+  assert.match(output.providers[0].message, expected);
+  assert.doesNotMatch(output.message, /dial tcp|i\/o timeout|F50_ERROR/);
+  assert.deepEqual(cleaned, ["rm -f '/data/request.stage'"]);
+});
+test('local subscription transport exceptions report an unconfirmed result', async () => {
+  let cleaned = false;
+  const download = vm.runInNewContext(slice('const formatSubscriptionDownloadError =', 'const mergeLocalConversionReloadResult =') + 'convertSubscriptionsLocally', {
+    normalizeSubSourceList: value => value, validateLocalSubscriptionUrl: () => ({ ok: true }),
+    ensureCompatBackend: async () => true, loadProviderUserAgent: async () => 'clash.meta',
+    createRandomString: () => 'example', operationStage() {}, shellQuote: value => `'${value}'`,
+    stageTextBesideTarget: async () => ({ ok: true, stagePath: '/data/request.stage' }),
+    f50Command: async () => { throw new Error('Unexpected end of JSON input'); },
+    runShellWithRoot: async () => { cleaned = true; return { success: true }; },
+    buildProviderUpdateResult: (providers, options) => ({ providers, ...options }),
+  });
+  const output = await download(downloadSources);
+  assert.equal(output.ok, false);
+  assert.match(output.message, /无法确认.*检查设备连接/);
+  assert.doesNotMatch(output.message, /JSON|未写入/);
+  assert.equal(cleaned, true);
+});
+
 for (const mode of ['tproxy', 'tun', 'off']) {
   test(`original config retains custom settings in ${mode} mode`, () => {
     const original = plain(originalConfig);

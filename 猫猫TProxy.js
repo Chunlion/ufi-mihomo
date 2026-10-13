@@ -734,7 +734,7 @@ rm -f "$FUNCTIONS"
 trap - EXIT
 fi
 ${buildF50ServiceCurlPatchScript(service)} || exit 1
-if ! grep -qx '# KANO_TUN_AUTO_MIPS=1' "$SERVICE"; then
+if ! grep -qx '# KANO_TUN_IPV6_RETURN=2' "$SERVICE"; then
 TMP="$SERVICE.tun6.$$"
 FUNCTIONS="$TMP.functions"
 umask 077
@@ -744,12 +744,13 @@ awk -v functions="$FUNCTIONS" '
   /^f50_prepare_tun6_stack\\(\\) \\{/ { skipping=1 }
   /^f50_check_mips_version\\(\\) \\{/ { skipping=1 }
   skipping { if($0=="# KANO_TUN6_STACK_COMPAT=1" || $0=="# KANO_TUN_STACK_COMPAT=1") skipping=0; next }
+  $0 == "# KANO_TUN_AUTO_MIPS=1" || $0 == "# KANO_TUN_IPV6_RETURN=1" || $0 == "# KANO_TUN_IPV6_RETURN=2" { next }
   $0 == "f50_prepare_tun6_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun6_stack || exit 1" { next }
-  $0 == "f50_check_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun_stack || exit 1" { next }
+  $0 == "f50_check_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$@\\" || exit 1" || $0 == "    f50_finish_tun_stack || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" { print "f50_check_tun_stack \\"$action\\" || exit 1"; checked++ }
   { print }
-  $0 == "f50_restore_original_config || exit 1" { print "f50_prepare_tun_stack \\"$action\\" || exit 1"; prepared++ }
+  $0 == "f50_restore_original_config || exit 1" { print "f50_prepare_tun_stack \\"$@\\" || exit 1"; prepared++ }
   $0 == "    repair_panel_config || { echo F50_SERVICE_FINALIZED=0; exit 1; }" { print "    f50_finish_tun_stack || exit 1"; finalized++ }
   END { if(helpers!=1 || prepared!=1 || finalized!=1 || checked!=1 || skipping) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
@@ -1373,6 +1374,9 @@ f50_check_tun_stack() {
   esac
 }
 f50_prepare_tun_stack() {
+  case "$1:$2" in
+    policy:apply|policy:boot-apply|policy:verify) f50_tun6_return_route "$2"; return $?;;
+  esac
   [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
   tun6_cfg="$tun6_root/Proxy/config.yaml"
   tun6_yq="$tun6_root/Tools/yq_linux_arm64"
@@ -1392,11 +1396,38 @@ f50_prepare_tun_stack() {
 f50_finish_tun_stack() {
   [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
   # Reloading a TUN recreates its interface and removes controller-owned routes.
-  f50_run_controller policy apply && f50_run_controller policy verify || return 1
+  f50_run_controller policy apply && f50_tun6_return_route apply &&
+    f50_run_controller policy verify && f50_tun6_return_route verify || return 1
   echo F50_TUN_STACK_READY="$F50_SELECTED_TUN_STACK"
+}
+f50_tun6_return_route() {
+  tun6_route_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  grep -qx 'traffic_mode=tun' "$tun6_route_root/Policy/options.conf" &&
+    grep -qx 'ipv6=on' "$tun6_route_root/Policy/options.conf" || return 0
+  tun6_route_stack=$(sed -n 's/^tun_stack=//p' "$tun6_route_root/Policy/options.conf" | head -1)
+  case "$tun6_route_stack" in mixed|system) ;; *) return 0;; esac
+  # Android policy routing otherwise sends the system stack's SYN-ACK to the cellular interface.
+  tun6_addresses=$(ip -6 -o addr show dev KanoTun scope global) || return 1
+  tun6_prefixes=$(printf '%s\\n' "$tun6_addresses" | awk '$3=="inet6" && $4 ~ /^[0-9a-fA-F:]+\\/[0-9]+$/ && $4 !~ /^[fF][eE]80:/ && !seen[$4]++ {print $4}') || return 1
+  [ -n "$tun6_prefixes" ] || { echo F50_ERROR=tun6_address_missing; return 1; }
+  for tun6_prefix in $tun6_prefixes; do
+    if [ "$1" = verify ]; then
+      tun6_return=$(ip -6 route show table 17667 exact "$tun6_prefix") || return 1
+      printf '%s\\n' "$tun6_return" | awk '
+        $1 ~ /:/ {dev="";proto="";for(i=2;i<NF;i++){if($i=="dev")dev=$(i+1);if($i=="proto")proto=$(i+1)}
+          if(dev=="KanoTun" && proto=="242")found=1}
+        END{exit !found}' || { echo F50_ERROR=tun6_return_route_missing; return 1; }
+    else
+      ip -6 route replace "$tun6_prefix" dev KanoTun table 17667 proto 242 || {
+        echo F50_ERROR=tun6_return_route_failed; return 1
+      }
+    fi
+  done
+  echo F50_TUN_IPV6_RETURN_READY=1
 }
 # KANO_TUN_STACK_COMPAT=1
 # KANO_TUN_AUTO_MIPS=1
+# KANO_TUN_IPV6_RETURN=2
 `; }
 function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6_dns_hijack() {
   compat_options="\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}/Policy/options.conf"

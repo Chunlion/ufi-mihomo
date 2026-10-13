@@ -135,6 +135,67 @@ test('TUN6 does not report readiness when rebuilt routing verification fails', (
     assert.doesNotMatch(result.stdout, /F50_TUN_STACK_READY/);
   } finally { f.close(); }
 });
+const tunRouteMock = `ip() {
+  printf '%s\\n' "$*" >> "$CLASH_ROOT/ip-calls"
+  case "$*" in
+    '-6 -o addr show dev KanoTun scope global')
+      printf '%s\\n' '95: KanoTun inet6 fdfe:dcba:9876::1/126 scope global' '95: KanoTun inet6 fe80::1/64 scope link';;
+    '-6 route replace fdfe:dcba:9876::1/126 dev KanoTun table 17667 proto 242')
+      [ "\${ROUTE_FAIL:-0}" = 0 ] || return 7
+      echo 'fdfe:dcba:9876::/126 dev KanoTun proto 242 metric 1024' > "$CLASH_ROOT/return-route";;
+    '-6 route show table 17667 exact fdfe:dcba:9876::1/126')
+      [ ! -r "$CLASH_ROOT/return-route" ] || cat "$CLASH_ROOT/return-route";;
+    *) return 9;;
+  esac
+}`;
+for (const stack of ['system', 'mixed']) test(`${stack} restores the IPv6 TUN return route after startup and policy apply`, () => {
+  const f = tunFixture(0, 'v1.19.32', stack);
+  try {
+    const result = f.tunInvoke(`${tunRouteMock}\nf50_run_controller() { echo "CONTROLLER=$*"; }\nf50_check_tun_stack restart && f50_finish_tun_stack && f50_prepare_tun_stack policy apply && f50_prepare_tun_stack policy verify`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, new RegExp(`F50_TUN_STACK_READY=${stack}`));
+    assert.equal(f.read('ip-calls').split('\n').filter(line => line.includes(' route replace ')).length, 2);
+    assert.doesNotMatch(f.read('ip-calls'), /replace fe80|rule |flush|table 2022/);
+    assert.equal(f.read('Policy/options.conf'), f.options + `tun_stack=${stack}\n`);
+  } finally { f.close(); }
+});
+test('IPv6 TUN route verification detects a missing route without repairing it', () => {
+  const f = tunFixture(0, 'v1.19.32', 'system');
+  try {
+    const result = f.tunInvoke(`${tunRouteMock}\nf50_prepare_tun_stack policy verify`);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /F50_ERROR=tun6_return_route_missing/);
+    assert.doesNotMatch(f.read('ip-calls'), /replace/);
+  } finally { f.close(); }
+});
+test('IPv6 TUN route failures prevent readiness', () => {
+  const f = tunFixture(0, 'v1.19.32', 'mixed');
+  try {
+    const result = f.tunInvoke(`${tunRouteMock}\nROUTE_FAIL=1\nf50_run_controller() { return 0; }\nf50_check_tun_stack restart && f50_finish_tun_stack`);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /F50_ERROR=tun6_return_route_failed/);
+    assert.doesNotMatch(result.stdout, /F50_TUN_STACK_READY/);
+  } finally { f.close(); }
+});
+test('IPv6 TUN route repair rejects an absent TUN address', () => {
+  const f = tunFixture(0, 'v1.19.32', 'system');
+  try {
+    const result = f.tunInvoke('ip() { return 0; }\nf50_prepare_tun_stack policy apply');
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /F50_ERROR=tun6_address_missing/);
+  } finally { f.close(); }
+});
+test('IPv6 TUN return-route repair leaves other stacks and modes unchanged', () => {
+  for (const [mode, ipv6, stack] of [['tun', 'on', 'mips'], ['tun', 'on', 'gvisor'], ['tun', 'off', 'system'], ['tproxy', 'on', 'mixed']]) {
+    const f = tunFixture(0, 'v1.19.32', stack);
+    try {
+      fs.writeFileSync(path.join(f.dir, 'Policy/options.conf'), `traffic_mode=${mode}\nipv6=${ipv6}\ntun_stack=${stack}\n`);
+      const result = f.tunInvoke(`${tunRouteMock}\nf50_prepare_tun_stack policy apply`);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(fs.existsSync(path.join(f.dir, 'ip-calls')), false);
+    } finally { f.close(); }
+  }
+});
 for (const [version, supported] of [['v1.19.30', false], ['v1.19.31', true], ['v1.19.32', true], ['v1.20.0', true], ['v1.9.99', false], ['Alpha-unknown', false]]) test(`mips version gate: ${version}`, () => {
   const f = tunFixture(0, 'Mihomo Meta ' + version, 'mips');
   try {

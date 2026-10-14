@@ -72,18 +72,74 @@ for (const failure of ['', 'download', 'stale', 'other-provider']) {
         assert.equal(options.showToast, false);
         return { failed: failure === 'other-provider' ? 1 : 0, providers: [
           { name: 'Provider1', ok: true, proxyCount: failure === 'stale' ? 2 : 3 },
-          { name: 'Remote', ok: failure !== 'other-provider', proxyCount: 1 },
+          { name: 'Remote', ok: failure !== 'other-provider', proxyCount: 1, message: failure === 'other-provider' ? 'HTTP 500' : '' },
         ] };
       },
-      createToast: (message, color) => toasts.push(color),
+      createToast: (message, color) => toasts.push({ message, color }),
       saveSubSources: async () => { throw new Error('custom configuration must stay intact'); },
     });
     assert.equal(await update([], 'template', 'local'), !failure);
     assert.deepEqual(calls, failure === 'download' ? ['download'] : ['download', 'load']);
     assert.deepEqual(config, before);
-    assert.deepEqual(toasts, [failure ? 'red' : 'green']);
+    assert.deepEqual(toasts.map(toast => toast.color), [failure ? 'red' : 'green']);
+    if (failure === 'stale') assert.match(toasts[0].message, /Provider1.*3.*2/);
+    if (failure === 'other-provider') assert.match(toasts[0].message, /Remote.*HTTP 500/);
   });
 }
+
+for (const observation of [
+  { provider: { name: 'Provider1', ok: true, proxyCount: 2, cacheAvailable: true }, count: 2, cache: true, error: 'provider_count_mismatch' },
+  { provider: { name: 'Provider1', ok: false, proxyCount: 2, cacheAvailable: true, errorType: 'provider_update_failed', message: 'update failed' }, count: 2, cache: true, error: 'provider_update_failed' },
+  { provider: { name: 'Provider1', ok: false, proxyCount: null, cacheAvailable: false, errorType: 'provider_snapshot_failed', message: 'snapshot failed' }, count: null, cache: null, error: 'provider_snapshot_failed' },
+  { provider: null, count: null, cache: null, error: 'provider_reload_missing' },
+]) test('local refresh keeps observed cache state / ' + observation.error, () => {
+  const merge = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const mergeLocalConversionReloadResult', 'const reloadLocalSubscriptionProviders') + 'mergeLocalConversionReloadResult');
+  const merged = merge({ committed: true, providers: [{ name: 'Provider1', ok: true, proxyCount: 3 }] },
+    { providers: observation.provider ? [observation.provider] : [] });
+  assert.equal(merged.failed, 1);
+  assert.equal(merged.committed, true);
+  assert.equal(merged.providers[0].proxyCount, observation.count);
+  assert.equal(merged.providers[0].cacheAvailable, observation.cache);
+  assert.equal(merged.providers[0].errorType, observation.error);
+});
+
+for (const configSource of ['uploaded_config', 'template.yaml']) {
+  test(configSource + ' does not promise cache preservation for an unconfirmed download', async () => {
+    const toasts = [];
+    const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+      ensureCompatBackend: async () => true, readConfigSource: async () => configSource,
+      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': { Provider1: { type: 'file', path: './proxies/Provider1.yaml' } } } }),
+      convertSubscriptionsLocally: async () => ({ ok: false, failed: 1, providers: [{ name: 'Provider1', ok: false, message: '无法确认订阅下载结果，请检查设备连接后重试' }] }),
+      forceUpdateProvidersFromConfig: async () => { throw new Error('unconfirmed download must not reload providers'); },
+      createToast: message => toasts.push(message),
+    });
+    assert.equal(await update(sources.slice(0, 1), 'template', 'local'), false);
+    assert.equal(toasts.length, 1);
+    assert.match(toasts[0], /无法确认订阅下载结果/);
+    assert.doesNotMatch(toasts[0], /原节点和核心运行状态保留/);
+  });
+}
+
+test('template local refresh reports the provider and both mismatched counts', async () => {
+  const toasts = [];
+  const config = { 'proxy-providers': { Provider1: { type: 'file' } }, rules: ['MATCH,DIRECT'], dns: { enable: false } };
+  const before = plain(config);
+  const api = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const mergeLocalConversionReloadResult', 'const reloadLocalSubscriptionProviders')
+    + slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + '({ update: updateSubProviders, merge: mergeLocalConversionReloadResult })', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
+    readYamlObject: async () => ({ ok: true, value: config }), getCorePid: async () => '123',
+    convertSubscriptionsLocally: async () => ({ ok: true, failed: 0, committed: true, providers: [{ name: 'Provider1', ok: true, proxyCount: 3 }] }),
+    reloadLocalSubscriptionProviders: async (items, converted) => api.merge(converted, { providers: [{ name: 'Provider1', ok: true, proxyCount: 2 }] }),
+    saveSubSources: async () => { throw new Error('ready template must not be rebuilt'); },
+    createToast: (message, color) => toasts.push({ message, color }),
+  });
+  assert.equal(await api.update(sources.slice(0, 1), 'template', 'local'), false);
+  assert.deepEqual(config, before);
+  assert.equal(toasts[0].color, 'red');
+  assert.match(toasts[0].message, /Provider1.*3.*2/);
+});
 
 test('refreshing a subset keeps its existing provider filename', async () => {
   let request;

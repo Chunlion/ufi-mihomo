@@ -6890,12 +6890,13 @@ KANO_WRITE_CHECK_EOF
           attempts: 0,
           errorType: 'provider_reload_missing',
           message: '本地转换已提交，但运行核心未返回节点来源刷新结果',
-          cacheAvailable: true,
+          proxyCount: null,
+          cacheAvailable: null,
         };
       }
       const proxyCount = Number.isInteger(reloaded.proxyCount)
         ? reloaded.proxyCount
-        : converted.proxyCount;
+        : null;
       const emptyProvider = reloaded.ok && proxyCount === 0;
       const countMismatch = reloaded.ok && Number.isInteger(converted.proxyCount) && reloaded.proxyCount !== converted.proxyCount;
       const ok = reloaded.ok && !emptyProvider && !countMismatch;
@@ -6904,9 +6905,9 @@ KANO_WRITE_CHECK_EOF
         ...reloaded,
         ok,
         errorType: ok ? '' : (emptyProvider ? 'empty_provider' : countMismatch ? 'provider_count_mismatch' : reloaded.errorType),
-        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? `订阅已下载 ${converted.proxyCount} 个节点，核心加载数量不一致` : reloaded.message),
+        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? `订阅已下载 ${converted.proxyCount} 个节点，核心加载 ${proxyCount === null ? '未确认' : proxyCount + ' 个'}，数量不一致` : reloaded.message),
         proxyCount,
-        cacheAvailable: ok || (!reloaded.ok && converted.cacheAvailable),
+        cacheAvailable: proxyCount === null ? null : proxyCount > 0,
         format: converted.format,
         via: 'local+mihomo',
       };
@@ -10255,14 +10256,15 @@ btn_disabled.onclick = async () => {
     const converted = localSources.length ? await convertSubscriptionsLocally(localSources, { preserveNames: true }) : null;
     if (converted && (converted.failed || !converted.ok)) {
       const message = (converted.providers || []).find(provider => !provider.ok)?.message || '订阅下载失败';
-      createToast(safeTextToHtml(message) + '<br>原节点和核心运行状态保留', 'red', 10000);
+      createToast(safeTextToHtml(message), 'red', 10000);
       return false;
     }
     const refreshed = await forceUpdateProvidersFromConfig({showToast:!converted,config:read.value,refreshRemote:true});
     if (!converted) return refreshed.failed === 0;
     const loaded = mergeLocalConversionReloadResult(converted, refreshed);
     const ok = refreshed.failed === 0 && loaded.failed === 0;
-    const message = (loaded.providers || []).find(provider => !provider.ok)?.message || '节点下载成功，但核心未确认加载';
+    const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
+    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心未确认加载';
     createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
     return ok;
   }
@@ -10284,13 +10286,15 @@ btn_disabled.onclick = async () => {
   const converted = await convertSubscriptionsLocally(cleanSources);
   if (converted.failed || !converted.ok) {
     const message = (converted.providers || []).find(p => !p.ok)?.message || '订阅下载失败';
-    operationFinish(false, message); createToast(safeTextToHtml(message) + '<br>原节点和核心运行状态保留', 'red', 10000); return false;
+    operationFinish(false, message); createToast(safeTextToHtml(message), 'red', 10000); return false;
   }
   if (!(await getCorePid())) { operationFinish(true, '节点已保存，核心保持停止'); return true; }
   const applied = await reloadLocalSubscriptionProviders(cleanSources, converted);
   const ok = applied.failed === 0;
   operationFinish(ok, ok ? '节点已更新，未重启核心' : '下载完成，但本地加载失败');
-  createToast(ok ? '节点已更新' : '节点下载成功，但核心未确认加载', ok ? 'green':'red', 8000);
+  const failedProvider = (applied.providers || []).find(provider => !provider.ok);
+  const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心未确认加载';
+  createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green':'red', 8000);
   return ok;
 }
 ;

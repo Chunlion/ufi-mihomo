@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "6be20fcc1ca3cbb7732441d08c89a0d85ece6a88",
+  "sourceBaseCommit": "ea5821f58217ffd3df762ccada7f9166c3f278c3",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,8 +9,8 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 588756,
-  "sha256": "7e06f8f2e1643160ccffdc5dbea1e89c62da2f54b7fba1c8451ceb83a34d0970",
+  "final": 589080,
+  "sha256": "51708e32860c8bb2f969981c94abf1dcad8231f15b902116a8ed6821a60caaf7",
   "functionsBefore": 732,
   "functionsAfter": 734,
   "modules": [
@@ -29,8 +29,8 @@
     {
       "module": "Service 兼容层与安装调用",
       "before": 53279,
-      "after": 55531,
-      "saved": -2252
+      "after": 55059,
+      "saved": -1780
     },
     {
       "module": "模板事务",
@@ -65,8 +65,8 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 436367,
-      "saved": -663
+      "after": 437163,
+      "saved": -1459
     }
   ],
   "shell": [

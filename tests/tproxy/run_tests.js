@@ -103,7 +103,7 @@ equal([customPanel['external-ui'], customPanel['external-ui-url']], [
 ], '所有配置只允许使用 Zashboard');
 
 console.log('--- generated maintenance shell ---');
-const originalServiceSource = slice('const F50_PORTS', 'const F50_COMPAT_VERSION')
+const originalServiceSource = slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS')
   + slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady');
 const maintenanceSource = originalServiceSource
   + slice('function buildF50ZashboardValidationFunction()', 'function buildF50InspectScript()');

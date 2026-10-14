@@ -5,7 +5,9 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const plugin = fs.readFileSync(path.join(__dirname, '../猫猫TProxy.js'), 'utf8');
 const specsStart = plugin.indexOf('const F50_HTTP_CONTROLLER_PATCHES = ') + 'const F50_HTTP_CONTROLLER_PATCHES = '.length;
-const expected = JSON.parse(plugin.slice(specsStart, plugin.indexOf('\n];', specsStart) + 2));
+const registry = JSON.parse(plugin.slice(specsStart, plugin.indexOf('\n};', specsStart) + 2));
+const version = plugin.match(/^const F50_COMPAT_VERSION = '([^']+)';$/m)[1];
+const expected = Object.values(registry[version])[0];
 
 function generatePatches(original) {
   // The offsets and virtual addresses below belong to the bundled ARM64 compat.2.3 build.

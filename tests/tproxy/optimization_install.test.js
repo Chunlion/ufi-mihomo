@@ -35,6 +35,7 @@ exit ${options.startRc || 0}
   }
   const zip = write(dir, 'upload.zip', 'mock archive');
   const cleanupFault = options.stagingCleanupFailure ? write(dir, 'cleanup-fault', 'once') : '';
+  const interruptFault = options.interruptDuringCleanup ? write(dir, 'interrupt-fault', 'once') : '';
   const api = shellApi(source, `buildF50HttpSubscriptionPatchScript = () => 'true'; buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; dataSpaceGuardCmd = () => '';`);
   const mocks = `
 f50_limit() { shift; "$@"; }
@@ -51,6 +52,7 @@ f50_inspect() {
 }
 f50_clean_environment() {
   clean_calls=$((\${clean_calls:-0} + 1))
+  ${interruptFault ? `if [ -f ${quote(interruptFault)} ]; then rm -f ${quote(interruptFault)}; kill -TERM "$$"; fi` : ''}
   if [ ${options.rollbackCleanupFailure ? 1 : 0} = 1 ] && [ "$clean_calls" -gt 1 ]; then return 1; fi
   return ${options.cleanupFailure ? 1 : 0}
 }
@@ -60,7 +62,7 @@ f50_verify_zashboard_endpoint() { return ${options.panelFailure ? 1 : 0}; }
 ${options.lockCleanupFailure ? 'rmdir() { case "$1" in */clash.install.lock.d) return 1;; esac; command rmdir "$@"; }' : ''}
 ${cleanupFault ? `rm() { case "$1:$2" in -rf:*/.f50-install.*) if [ -f ${quote(cleanupFault)} ]; then command rm -f ${quote(cleanupFault)}; return 1; fi;; esac; command rm "$@"; }` : ''}
 `;
-  const script = api.install(zip).replace('# The transaction owns staging', mocks + '\n# The transaction owns staging');
+  const script = api.install(zip).replace('# The transaction owns staging', () => mocks + '\n# The transaction owns staging');
   const execute = () => shell(script, { F50_ROOT: root.replace(/\\/g, '/') });
   return { dir, root, result: execute(), execute };
 }
@@ -74,6 +76,23 @@ test('failed rollback retains the old backup and reports blocked cleanup', { ski
     assert.ok(match);
     assert.equal(fs.readFileSync(path.join(match[1], 'Proxy/Clash.Core'), 'utf8'), 'old core');
     assert.ok(fs.readdirSync(dir).some(name => name.startsWith('.f50-install.')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installation interruption preserves the old configuration and permits a complete retry', { skip: !yq }, () => {
+  const { dir, root, result, execute } = installCase({ old: true, running: true, interruptDuringCleanup: true });
+  try {
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^F50_INSTALL_CODE=interrupted$/m);
+    assert.match(result.stdout, /^F50_ROLLBACK=restored_stopped$/m);
+    assert.equal(fs.readFileSync(path.join(root, 'Proxy/Clash.Core'), 'utf8'), 'old core');
+    assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);
+    assert.equal(fs.existsSync(path.join(dir, 'clash.install.lock.d')), false);
+    const retry = execute();
+    assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+    assert.match(retry.stdout, /^F50_INSTALL_TRANSACTION_STATE=complete$/m);
+    assert.match(retry.stdout, /^KANO_INSTALL_OK=1$/m);
+    assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

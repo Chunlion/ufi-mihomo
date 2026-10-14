@@ -430,58 +430,64 @@ function buildF50PanelConfigCheck() {
   return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
 }
 // These byte ranges target the bundled ARM64 controller; unknown builds remain untouched.
-const F50_HTTP_CONTROLLER_PATCHES = [
-  {
-    "offset": 2580116,
-    "before": "BARA+Z8UAPFgAABU4gNAshUAABQEAED5hQBAuQaNjtKGDq7yvwAGa2AAAFTiA0CyDQAAFIQQQDmfzAFxYAAAVA==",
-    "after": "BARA+Z8QAPFgAABUnxQA8YEBAFQHAED55QBAuQaNjtKGDq7yvwAGa8EAAFSfEADxwAAAVOUQQDm/zAFxYAAAVA==",
-    "size": 64
-  },
-  {
-    "offset": 2589324,
-    "before": "fwAA8Q==",
-    "after": "+aIAFA==",
-    "size": 4
-  },
-  {
-    "offset": 2756208,
-    "before": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-    "after": "o6HrteTDQPmEBED5nxAA8cAAAFRjAIDSogQA0EJUJ5EFXf8XHyAD1UMAgNICFwCQQmwEkQBd/xc=",
-    "size": 56
-  },
-  {
-    "offset": 208,
-    "before": "ZA4qAAAAAAA=",
-    "after": "qA4qAAAAAAA=",
-    "size": 8
-  },
-  {
-    "offset": 216,
-    "before": "ZA4qAAAAAAA=",
-    "after": "qA4qAAAAAAA=",
-    "size": 8
-  },
-  {
-    "offset": 5767440,
-    "before": "AAAAAAAAAAAAAAAAAA==",
-    "after": "PWh0dHAsaHR0cHM4MA==",
-    "size": 13
-  },
-  {
-    "offset": 4016104,
-    "before": "sHA0AAAAAAAGAAAAAAAAAA==",
-    "after": "EAFZAAAAAAALAAAAAAAAAA==",
-    "size": 16
-  },
-  {
-    "offset": 3448114,
-    "before": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IGJlIEhUVFBTIHdpdGhvdXQgdXNlcmluZm8=",
-    "after": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IHVzZSBIVFRQKFMpLCBubyB1c2VyaW5mby4=",
-    "size": 47
+const F50_HTTP_CONTROLLER_PATCHES = {
+  "8.0.0-compat.2.3": {
+    "0880e42c78dea90ce7dc3e946df0174308388c126b1eab17a643d85a145744c7": [
+      {
+        "offset": 2580116,
+        "before": "BARA+Z8UAPFgAABU4gNAshUAABQEAED5hQBAuQaNjtKGDq7yvwAGa2AAAFTiA0CyDQAAFIQQQDmfzAFxYAAAVA==",
+        "after": "BARA+Z8QAPFgAABUnxQA8YEBAFQHAED55QBAuQaNjtKGDq7yvwAGa8EAAFSfEADxwAAAVOUQQDm/zAFxYAAAVA==",
+        "size": 64
+      },
+      {
+        "offset": 2589324,
+        "before": "fwAA8Q==",
+        "after": "+aIAFA==",
+        "size": 4
+      },
+      {
+        "offset": 2756208,
+        "before": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "after": "o6HrteTDQPmEBED5nxAA8cAAAFRjAIDSogQA0EJUJ5EFXf8XHyAD1UMAgNICFwCQQmwEkQBd/xc=",
+        "size": 56
+      },
+      {
+        "offset": 208,
+        "before": "ZA4qAAAAAAA=",
+        "after": "qA4qAAAAAAA=",
+        "size": 8
+      },
+      {
+        "offset": 216,
+        "before": "ZA4qAAAAAAA=",
+        "after": "qA4qAAAAAAA=",
+        "size": 8
+      },
+      {
+        "offset": 5767440,
+        "before": "AAAAAAAAAAAAAAAAAA==",
+        "after": "PWh0dHAsaHR0cHM4MA==",
+        "size": 13
+      },
+      {
+        "offset": 4016104,
+        "before": "sHA0AAAAAAAGAAAAAAAAAA==",
+        "after": "EAFZAAAAAAALAAAAAAAAAA==",
+        "size": 16
+      },
+      {
+        "offset": 3448114,
+        "before": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IGJlIEhUVFBTIHdpdGhvdXQgdXNlcmluZm8=",
+        "after": "c3Vic2NyaXB0aW9uIFVSTCBtdXN0IHVzZSBIVFRQKFMpLCBubyB1c2VyaW5mby4=",
+        "size": 47
+      }
+    ]
   }
-];
+};
+const F50_HTTP_CONTROLLER_PATCHED_HASH = '532fdfa4901aa31906a25b7b3f7fa96c92ce6b530df297ba4d8f4ab9c5a2ad07';
 function buildF50HttpSubscriptionPatchScript(root = "'/data/clash'") {
-  const specs = F50_HTTP_CONTROLLER_PATCHES.map(p => shellQuote([p.offset, p.size, p.before, p.after].join('|'))).join(' ');
+  const [originalHash, patches] = Object.entries(F50_HTTP_CONTROLLER_PATCHES[F50_COMPAT_VERSION])[0];
+  const specs = patches.map(p => shellQuote([p.offset, p.size, p.before, p.after].join('|'))).join(' ');
   return `(set -e
 ROOT=${root}
 FOUND=0
@@ -493,11 +499,11 @@ for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
   [ ! -L "$BIN" ] || { echo F50_ERROR=controller_http_patch_symlink; exit 1; }
   command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_hash_tool_missing; exit 1; }
-  [ "$(cat "$ROOT/Tools/f50-controller.version" 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_ERROR=controller_http_patch_version_mismatch; exit 1; }
+  [ "$(cat "$ROOT/Tools/f50-controller.version" 2>/dev/null)" = '${F50_COMPAT_VERSION}' ] || { echo F50_ERROR=controller_http_patch_version_mismatch; exit 1; }
   PATCH_HASH=$(sha256sum "$BIN" | awk '{print $1}')
   case "$PATCH_HASH" in
-    0880e42c78dea90ce7dc3e946df0174308388c126b1eab17a643d85a145744c7) ;;
-    532fdfa4901aa31906a25b7b3f7fa96c92ce6b530df297ba4d8f4ab9c5a2ad07) ;;
+    ${originalHash}) ;;
+    ${F50_HTTP_CONTROLLER_PATCHED_HASH}) ;;
     *) echo F50_ERROR=controller_http_patch_unknown_build; exit 1 ;;
   esac
   FOUND=1
@@ -512,16 +518,16 @@ EOF_F50_HTTP_SPEC
     else echo F50_ERROR=controller_http_patch_unsupported; exit 1
     fi
   done
-  [ "$OLD" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || [ "$CURRENT" = ${F50_HTTP_CONTROLLER_PATCHES.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
+  [ "$OLD" = ${patches.length} ] || [ "$CURRENT" = ${patches.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
 done
 [ "$FOUND" = 1 ] || { echo F50_BACKEND_MISSING; exit 1; }
-if [ "$CURRENT" = 8 ]; then echo F50_CONTROLLER_HTTP_PATCH=already_current; exit 0; fi
+if [ "$CURRENT" = ${patches.length} ]; then echo F50_CONTROLLER_HTTP_PATCH=already_current; exit 0; fi
 for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
   ORIGINAL="$BIN.http.original"
   [ ! -L "$ORIGINAL" ] || { echo F50_ERROR=controller_http_patch_backup_symlink; exit 1; }
   if [ -e "$ORIGINAL" ]; then
-    [ "$(sha256sum "$ORIGINAL" | awk '{print $1}')" = 0880e42c78dea90ce7dc3e946df0174308388c126b1eab17a643d85a145744c7 ] || { echo F50_ERROR=controller_http_patch_backup_mismatch; exit 1; }
+    [ "$(sha256sum "$ORIGINAL" | awk '{print $1}')" = ${originalHash} ] || { echo F50_ERROR=controller_http_patch_backup_mismatch; exit 1; }
   else
     NEW="$BIN.http.$$"
     cp -p "$BIN" "$NEW" && chmod 600 "$NEW" && mv "$NEW" "$ORIGINAL" || { echo F50_ERROR=controller_http_patch_backup_failed; exit 1; }
@@ -537,7 +543,7 @@ EOF_F50_HTTP_SPEC
     ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
     [ "$ACTUAL" = "$AFTER" ] || { echo F50_ERROR=controller_http_patch_verify_failed; exit 1; }
   done
-  [ "$(sha256sum "$NEW" | awk '{print $1}')" = 532fdfa4901aa31906a25b7b3f7fa96c92ce6b530df297ba4d8f4ab9c5a2ad07 ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
+  [ "$(sha256sum "$NEW" | awk '{print $1}')" = ${F50_HTTP_CONTROLLER_PATCHED_HASH} ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
   chmod 755 "$NEW" || exit 1
   if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
   NEW=''
@@ -680,6 +686,14 @@ echo F50_SERVICE_CURL_PATCH_OK=1
 
 function buildF50OriginalServicePatchScript(service = shellQuote(CLASH_SERVICE)) {
   const functions = buildF50OriginalConfigFunctions();
+  const patchSetup = `FUNCTIONS="$TMP.functions"
+umask 077
+trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT`;
+  const patchFinish = `sh -n "$TMP" || exit 1
+chmod 755 "$TMP" || exit 1
+mv -f "$TMP" "$SERVICE" || exit 1
+rm -f "$FUNCTIONS"
+trap - EXIT`;
   const dnsCompat = buildF50Ipv6DnsCompatFunctions() + `
 disable_unsupported_ipv6_dns_hijack() {
   case "$1:$2" in boot:*|start:*|restart:*|policy:apply|policy:boot-apply) ;; *) return 0 ;; esac
@@ -716,9 +730,7 @@ cp -p "$F50_SERVICE_TARGET" "$F50_SERVICE_BACKUP" && cp -p "$F50_SERVICE_BACKUP"
 SERVICE="$F50_SERVICE_CANDIDATE"
 if ! grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$SERVICE"; then
   TMP="$SERVICE.tun.$$"
-  FUNCTIONS="$TMP.functions"
-  umask 077
-  trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+${patchSetup.replace(/^/gm, '  ')}
   printf '%s' ${shellQuote(tunCleanup)} > "$FUNCTIONS" || exit 1
   awk -v functions="$FUNCTIONS" '
     /^drop_detached_tun_rules\\(\\) \\{/ {
@@ -729,17 +741,11 @@ if ! grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$SERVICE"; then
     { print }
     END { if(replaced!=1 || skipping) exit 1 }
   ' "$SERVICE" > "$TMP" || exit 1
-  sh -n "$TMP" || exit 1
-  chmod 755 "$TMP" || exit 1
-  mv -f "$TMP" "$SERVICE" || exit 1
-  rm -f "$FUNCTIONS"
-  trap - EXIT
+${patchFinish.replace(/^/gm, '  ')}
 fi
 if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=13' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
-FUNCTIONS="$TMP.functions"
-umask 077
-trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
@@ -785,18 +791,12 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
   $0 == "[ \\"$rc\\" = 0 ] || exit \\"$rc\\"" { print "f50_restore_original_config || exit 1"; restored++ }
   END { if (helpers != 1 || saved != 1 || restored != 1 || panel_open) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
-sh -n "$TMP" || exit 1
-chmod 755 "$TMP" || exit 1
-mv -f "$TMP" "$SERVICE" || exit 1
-rm -f "$FUNCTIONS"
-trap - EXIT
+${patchFinish}
 fi
 ${buildF50ServiceCurlPatchScript('"$SERVICE"')} || exit 1
 if ! grep -qx '# KANO_TUN_IPV6_RETURN=2' "$SERVICE"; then
 TMP="$SERVICE.tun6.$$"
-FUNCTIONS="$TMP.functions"
-umask 077
-trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+${patchSetup}
 printf '%s' ${shellQuote(buildF50Tun6CompatFunctions())} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
   /^f50_prepare_tun6_stack\\(\\) \\{/ { skipping=1 }
@@ -812,17 +812,11 @@ awk -v functions="$FUNCTIONS" '
   $0 == "    repair_panel_config || { echo F50_SERVICE_FINALIZED=0; exit 1; }" { print "    f50_finish_tun_stack || exit 1"; finalized++ }
   END { if(helpers!=1 || prepared!=1 || finalized!=1 || checked!=1 || skipping) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
-sh -n "$TMP" || exit 1
-chmod 755 "$TMP" || exit 1
-mv -f "$TMP" "$SERVICE" || exit 1
-rm -f "$FUNCTIONS"
-trap - EXIT
+${patchFinish}
 fi
 if ! grep -qx '# KANO_IPV6_DNS_SPLIT=1' "$SERVICE"; then
 TMP="$SERVICE.dns.$$"
-FUNCTIONS="$TMP.functions"
-umask 077
-trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
+${patchSetup}
 printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
   /^disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ {
@@ -834,11 +828,7 @@ awk -v functions="$FUNCTIONS" '
   { print }
   END { if(helpers!=1 || calls!=1 || skipping) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
-sh -n "$TMP" || exit 1
-chmod 755 "$TMP" || exit 1
-mv -f "$TMP" "$SERVICE" || exit 1
-rm -f "$FUNCTIONS"
-trap - EXIT
+${patchFinish}
 fi
 ) || exit 1
 sh -n "$F50_SERVICE_CANDIDATE" || exit 1
@@ -872,6 +862,59 @@ sh /data/clash/Scripts/Clash.Service version`, 15000);
 }
 
 let lastInstallDiagnostic = null;
+const F50_DIAGNOSTIC_LABELS = {
+  zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
+  archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
+  data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
+  controller_http_patch_unknown_build: '控制器整体哈希不匹配，已拒绝定位补丁。',
+  config_transaction_pending: '存在未完成的配置事务，请先恢复网络。',
+  install_transaction_pending: '安装事务未完成，已阻止启动；保留的事务日志可用于回滚。',
+  data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
+  unzip_missing: '设备缺少解压程序，安装未执行。',
+  archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
+  unsafe_archive_path: '安装包含越界路径，已拒绝解压。',
+  archive_symlink: '安装包含符号链接，未替换现有组件。',
+  unzip_failed: '安装包解压失败或超时，旧组件尚未替换。',
+  missing_controller: '安装包缺少控制器，旧组件尚未替换。',
+  missing_core: '全新安装需要包含 Mihomo 内核的完整组件包。',
+  controller_not_executable: '控制器无法执行，请检查架构和执行权限。',
+  core_not_executable: 'Mihomo 内核无法执行，请检查架构和执行权限。',
+  yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
+  secret_write_failed: '控制密钥写入失败，原配置未被替换。',
+  secret_ensure_failed: '控制密钥补全失败，核心未启动。',
+  panel_config_write_failed: 'Zashboard 配置固定失败，核心未启动。',
+  service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
+  service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
+  controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
+  service_protocol_mismatch: '服务脚本与控制器不配套。',
+  panel_candidate_rejected: '组件包中的面板不是有效 Zashboard，已保留原面板。',
+  panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
+  missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
+  service_patch_failed: '启动组件更新失败，请重新安装组件包。',
+  invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
+  invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
+  configuration_missing: '组件包没有初始配置，原安装保持不变。',
+  old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
+  old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
+  finalization_failed: '安装事务收尾未完成。',
+  installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
+  preserve_user_data_failed: '保留用户配置失败，已取消安装。',
+  commit_failed: '组件目录替换失败，请查看回滚结果。',
+  network_apply_failed: '网络接管应用失败，请查看具体防火墙或路由错误。',
+  service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
+  service_failed: '服务脚本执行失败。',
+  start_timeout: '核心启动超时，未确认启动成功。',
+  activation_unverified: '服务未返回启动确认，未确认启动成功。',
+  activation_failed: '新组件启动失败，请查看后端具体原因。',
+  interrupted: '安装被中断，未确认完成。',
+  transaction_interrupted: '安装事务未完整执行，请查看设备状态。',
+  config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
+  process_respawned: '停止后仍检测到猫猫进程，已停止安装。',
+  process_table_unreadable: '无法读取进程表，不能确认旧进程已停止。',
+  journal_restore_incomplete: '网络参数或配置事务恢复未完成，已停止安装。',
+  network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
+  owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
+};
 function f50Diagnostic(content, fallback = '操作未完成') {
   const safe = sanitizeSubscriptionSecrets(String(content || ''))
     .replace(/(?:https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\/\/[^\s"'<>]+/gi, '[URL_REDACTED]')
@@ -882,59 +925,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const backend = get('F50_INSTALL_CAUSE') || get('F50_ERROR');
   const cleanup = get('F50_CLEAN_ERROR');
   const cause = backend || cleanup || code;
-  const labels = {
-    zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
-    archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
-    data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
-    controller_http_patch_unknown_build: '控制器整体哈希不匹配，已拒绝定位补丁。',
-    config_transaction_pending: '存在未完成的配置事务，请先恢复网络。',
-    install_transaction_pending: '安装事务未完成，已阻止启动；保留的事务日志可用于回滚。',
-    data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
-    unzip_missing: '设备缺少解压程序，安装未执行。',
-    archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
-    unsafe_archive_path: '安装包含越界路径，已拒绝解压。',
-    archive_symlink: '安装包含符号链接，未替换现有组件。',
-    unzip_failed: '安装包解压失败或超时，旧组件尚未替换。',
-    missing_controller: '安装包缺少控制器，旧组件尚未替换。',
-    missing_core: '全新安装需要包含 Mihomo 内核的完整组件包。',
-    controller_not_executable: '控制器无法执行，请检查架构和执行权限。',
-    core_not_executable: 'Mihomo 内核无法执行，请检查架构和执行权限。',
-    yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
-    secret_write_failed: '控制密钥写入失败，原配置未被替换。',
-    secret_ensure_failed: '控制密钥补全失败，核心未启动。',
-    panel_config_write_failed: 'Zashboard 配置固定失败，核心未启动。',
-    service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
-    service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
-    controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
-    service_protocol_mismatch: '服务脚本与控制器不配套。',
-    panel_candidate_rejected: '组件包中的面板不是有效 Zashboard，已保留原面板。',
-    panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
-    missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
-    service_patch_failed: '启动组件更新失败，请重新安装组件包。',
-    invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
-    invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
-    configuration_missing: '组件包没有初始配置，原安装保持不变。',
-    old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
-    old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
-    finalization_failed: '安装事务收尾未完成。',
-    installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
-    preserve_user_data_failed: '保留用户配置失败，已取消安装。',
-    commit_failed: '组件目录替换失败，请查看回滚结果。',
-    network_apply_failed: '网络接管应用失败，请查看具体防火墙或路由错误。',
-    service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
-    service_failed: '服务脚本执行失败。',
-    start_timeout: '核心启动超时，未确认启动成功。',
-    activation_unverified: '服务未返回启动确认，未确认启动成功。',
-    activation_failed: '新组件启动失败，请查看后端具体原因。',
-    interrupted: '安装被中断，未确认完成。',
-    transaction_interrupted: '安装事务未完整执行，请查看设备状态。',
-    config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
-    process_respawned: '停止后仍检测到猫猫进程，已停止安装。',
-    process_table_unreadable: '无法读取进程表，不能确认旧进程已停止。',
-    journal_restore_incomplete: '网络参数或配置事务恢复未完成，已停止安装。',
-    network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
-    owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
-  };
+  const labels = F50_DIAGNOSTIC_LABELS;
   let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
   if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';

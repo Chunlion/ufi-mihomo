@@ -12,7 +12,7 @@ const source = fs.readFileSync(path.join(root, '猫猫TProxy.js'), 'utf8');
 const quote = value => `'${String(value).replace(/\\/g, '/').replace(/'/g, `'"'"'`)}'`;
 const start = source.indexOf('const F50_HTTP_CONTROLLER_PATCHES =');
 const end = source.indexOf('function buildF50OriginalConfigFunctions()', start);
-const api = vm.runInNewContext(source.slice(start, end) + '\n({specs:F50_HTTP_CONTROLLER_PATCHES,script:buildF50HttpSubscriptionPatchScript})', { shellQuote: quote });
+const api = vm.runInNewContext(source.slice(start, end) + '\n({specs:Object.values(F50_HTTP_CONTROLLER_PATCHES[F50_COMPAT_VERSION])[0],script:buildF50HttpSubscriptionPatchScript})', { shellQuote: quote, F50_COMPAT_VERSION: '8.0.0-compat.2.3' });
 const extracted = spawnSync('tar', ['-xOf', path.join(root, 'tproxy-yq.zip'), 'Scripts/clashctl_arm64'], { maxBuffer: 16 * 1024 * 1024 });
 assert.equal(extracted.status, 0, String(extracted.stderr));
 const original = extracted.stdout;

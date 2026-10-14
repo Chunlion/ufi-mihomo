@@ -1,19 +1,19 @@
 {
-  "date": "2026-10-14T09:40:25.091Z",
+  "date": "2026-10-14T14:45:17.096Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "6be20fcc1ca3cbb7732441d08c89a0d85ece6a88",
-    "bytes": 588756,
-    "sha256": "7e06f8f2e1643160ccffdc5dbea1e89c62da2f54b7fba1c8451ceb83a34d0970"
+    "baseCommit": "b21155e51515b779b8d4df1120acedb29fba8c3c",
+    "bytes": 589080,
+    "sha256": "51708e32860c8bb2f969981c94abf1dcad8231f15b902116a8ed6821a60caaf7"
   },
-  "invocation": "node scripts/verify_plugin.js",
+  "invocation": "node scripts/verify_plugin.js; node tests/tproxy/run_tests.js (failed-suite rerun); node --test tests/tproxy/optimization_install.test.js (interruption-case rerun)",
   "concurrency": 1,
   "totals": {
-    "passed": 355,
+    "passed": 406,
     "failed": 0,
-    "notRun": 7
+    "notRun": 0
   },
   "results": [
     {
@@ -439,6 +439,172 @@
       ]
     },
     {
+      "file": "tests/tproxy/cleanup.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/cleanup.test.js",
+      "status": "PASS",
+      "passed": 39,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "cleanup preserves generated output / buildF50EmergencyScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50RecoveryEligibilityFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50LeaseFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ServiceLeaseGate",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ConfigTransactionFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50RedactFunction",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50PanelConfigCheck",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50HttpSubscriptionPatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50OriginalConfigFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50CurlLocator",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ServiceCurlPatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50OriginalServicePatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50StartScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ZashboardValidationFunction",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50MaintenanceFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ShellBase",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ProcessHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50NetworkHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50NetworkCompatHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50Tun6CompatFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50InspectHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50CleanupHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50ArtifactHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50InstallHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50RemovalHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50FinalProbeHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50PanelHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50StartHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50InspectScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50InstallScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildStatusSnapshotCommand",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50CleanupScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildF50FinalCheckScript",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildUninstallStages",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildOwnedCoreFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves generated output / buildApiCurl",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup changes only patch registry, diagnostic labels and Service text composition",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves all diagnostic labels and result fields",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
       "file": "tests/tproxy/compact.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/compact.test.js",
       "status": "PASS",
@@ -490,9 +656,9 @@
       "file": "tests/tproxy/http_subscription.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/http_subscription.test.js",
       "status": "PASS",
-      "passed": 8,
+      "passed": 15,
       "failed": 0,
-      "notRun": 7,
+      "notRun": 0,
       "cases": [
         {
           "name": "retained ARM64 patch source reproduces the embedded byte ranges",
@@ -528,31 +694,31 @@
         },
         {
           "name": "ARM64 download accepts http://8.8.8.8/sub and pins port 80",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download accepts https://8.8.8.8/sub and pins port 443",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download retains URL validation for ftp://8.8.8.8/sub",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub",
-          "status": "NOT_RUN"
+          "status": "PASS"
         },
         {
           "name": "ARM64 download retains URL validation for http://127.0.0.1/sub",
-          "status": "NOT_RUN"
+          "status": "PASS"
         }
       ]
     },
@@ -828,12 +994,16 @@
       "file": "tests/tproxy/optimization_install.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_install.test.js",
       "status": "PASS",
-      "passed": 19,
+      "passed": 20,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
           "name": "failed rollback retains the old backup and reports blocked cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "installation interruption preserves the old configuration and permits a complete retry",
           "status": "PASS"
         },
         {
@@ -1590,6 +1760,32 @@
         },
         {
           "name": "service preserves original YAML after controller preparation and reloads it",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/yaml_bridge.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/yaml_bridge.test.js",
+      "status": "PASS",
+      "passed": 4,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "JSON bridge isolates yq warnings and enables supported merge semantics",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge accepts warnings from yq without the newer merge flag",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge preserves yq parse errors and exit status",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge still rejects malformed JSON after a successful yq exit",
           "status": "PASS"
         }
       ]

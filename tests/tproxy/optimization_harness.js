@@ -33,7 +33,7 @@ function syntax(input) {
   assert.equal(result.status, 0, result.stderr);
 }
 function shellApi(text = source, extra = '') {
-  return run(slice('const F50_PORTS', 'const F50_COMPAT_VERSION', text)
+  return run(slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS', text)
     + slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady', text)
     + slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath', text)
       .replace('const rotateClashLogCmd =', 'let rotateClashLogCmd =')

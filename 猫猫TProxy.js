@@ -6260,11 +6260,7 @@ KANO_WRITE_CHECK_EOF
   };
 
   const invalidateControllerInfo = () => {
-    controllerInfoCache = null;
-    controllerInfoCacheExpiresAt = 0;
-    controllerInfoLoadPromise = null;
-    zashboardPanelUrl = '';
-    panelLoadPromise = null;
+    invalidateStatusSnapshot();
   };
 
 
@@ -9481,7 +9477,14 @@ btn_disabled.onclick = async () => {
       }
       try {
         panelWindow.opener = null;
-        if (!url) panelWindow.location.replace(await buildPanelUrl());
+        if (!url) {
+          let generation, panelUrl;
+          do {
+            generation = statusSnapshotGeneration;
+            panelUrl = zashboardPanelUrl || await buildPanelUrl();
+          } while (generation !== statusSnapshotGeneration);
+          panelWindow.location.replace(panelUrl);
+        }
       } catch (error) {
         panelWindow.close();
         createToast(`打开面板失败<br>${safeTextToHtml(error.message || String(error))}`, 'red', 8000);
@@ -11363,9 +11366,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       if (!read.ok) { createToast(safeTextToHtml(read.message), 'red', 8000); return; }
       const policy = new Map(Object.entries(read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {}));
       const currentPolicy = runtime.ok && runtime.value.dns && runtime.value.dns['proxy-server-nameserver-policy'] || {};
-      if (!policy.size && isPlainYamlObject(currentPolicy)) {
-        for (const [domain, value] of Object.entries(currentPolicy)) policy.set(domain, value);
-      }
       let editingDomain = null;
       const { el, close } = createFixedToast('mm_airport_dns_dialog', `
         <div style="pointer-events:all;width:92vw;max-width:760px;">
@@ -11408,7 +11408,14 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           edit.onclick = () => { editingDomain = domain; domains.value = domain; servers.value = addresses.join('\n'); };
           const remove = document.createElement('button');
           remove.textContent = '删除';
-          remove.onclick = () => { policy.delete(domain); render(); };
+          remove.onclick = () => {
+            policy.delete(domain);
+            if (editingDomain === domain) {
+              editingDomain = null;
+              domains.value = ''; servers.value = '';
+            }
+            render();
+          };
           row.append(text, edit, remove);
           list.appendChild(row);
         }

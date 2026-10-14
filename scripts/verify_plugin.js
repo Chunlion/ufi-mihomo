@@ -7,7 +7,7 @@ const { spawnSync, execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const plugin = path.join(root, '猫猫TProxy.js');
 const source = fs.readFileSync(plugin);
-const sourceInfo = { path: '猫猫TProxy.js', commit: execFileSync('git', ['log', '-1', '--format=%H', '--', '猫猫TProxy.js'], { cwd: root, encoding: 'utf8' }).trim(),
+const sourceInfo = { path: '猫猫TProxy.js', baseCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   bytes: source.length, sha256: crypto.createHash('sha256').update(source).digest('hex') };
 const directory = path.join(root, 'tests/tproxy');
 const files = ['run_tests.js', ...fs.readdirSync(directory).filter(file => file.endsWith('.test.js')).sort()];

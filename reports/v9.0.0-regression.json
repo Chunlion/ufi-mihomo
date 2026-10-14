@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-14T08:01:23.602Z",
+  "date": "2026-10-14T08:14:25.794Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "commit": "518c72a1b3a8c6801fbdb5d1c1acda59c10f72e2",
-    "bytes": 588247,
-    "sha256": "87dfc94c29cdd43c410ab0d52acee64ac76dc24eed5aa1a1cbe2677ec819b101"
+    "baseCommit": "c18aba870015578c03d0176112769333161ae554",
+    "bytes": 588634,
+    "sha256": "1833eab6d5a00d3573595097ffac03c359c1d0fec928200b1d142ca9dae413da"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 340,
+    "passed": 347,
     "failed": 0,
     "notRun": 7
   },
@@ -1000,7 +1000,7 @@
       "file": "tests/tproxy/optimization_subscription.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_subscription.test.js",
       "status": "PASS",
-      "passed": 31,
+      "passed": 38,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1042,6 +1042,34 @@
         },
         {
           "name": "uploaded local provider downloads its saved subscription / other-provider",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_count_mismatch",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_update_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_snapshot_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_reload_missing",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded_config does not promise cache preservation for an unconfirmed download",
+          "status": "PASS"
+        },
+        {
+          "name": "template.yaml does not promise cache preservation for an unconfirmed download",
+          "status": "PASS"
+        },
+        {
+          "name": "template local refresh reports the provider and both mismatched counts",
           "status": "PASS"
         },
         {

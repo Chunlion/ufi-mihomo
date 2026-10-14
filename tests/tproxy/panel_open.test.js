@@ -78,6 +78,29 @@ test('explicit panel refresh rechecks readiness and renews the URL', async () =>
 });
 
 for (const invalidate of ['statusChanged', 'controllerChanged']) {
+  for (const prebuilt of [false, true]) {
+    test(`${invalidate} prevents stale popup navigation, newer URL cached=${prebuilt}`, async () => {
+      const old = deferred(), started = deferred();
+      let queries = 0;
+      const h = harness({ info: async () => {
+        if (++queries === 1) { started.resolve(); return old.promise; }
+        return { port: 9002 };
+      } });
+      const opening = h.api.open();
+      await started.promise;
+      h.api[invalidate]();
+      if (prebuilt) await h.api.build();
+      old.resolve({ port: 9001 });
+      await opening;
+      assert.equal(h.windows.length, 1);
+      assert.equal(h.windows[0].closed, false);
+      assert.equal(h.windows[0].replacements.length, 1);
+      assert.match(h.windows[0].replacements[0], /:9002\/ui\//);
+      assert.equal(h.windows[0].replacements[0], h.api.cached());
+      assert.equal(h.checks(), 2);
+    });
+  }
+
   test(`${invalidate} makes the next new window revalidate`, async () => {
     const h = harness();
     await h.api.build();

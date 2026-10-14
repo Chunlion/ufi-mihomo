@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-14T08:14:25.794Z",
+  "date": "2026-10-14T09:40:25.091Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "c18aba870015578c03d0176112769333161ae554",
-    "bytes": 588634,
-    "sha256": "1833eab6d5a00d3573595097ffac03c359c1d0fec928200b1d142ca9dae413da"
+    "baseCommit": "6be20fcc1ca3cbb7732441d08c89a0d85ece6a88",
+    "bytes": 588756,
+    "sha256": "7e06f8f2e1643160ccffdc5dbea1e89c62da2f54b7fba1c8451ceb83a34d0970"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 347,
+    "passed": 355,
     "failed": 0,
     "notRun": 7
   },
@@ -1162,7 +1162,7 @@
       "file": "tests/tproxy/panel_open.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/panel_open.test.js",
       "status": "PASS",
-      "passed": 12,
+      "passed": 16,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1179,11 +1179,27 @@
           "status": "PASS"
         },
         {
+          "name": "statusChanged prevents stale popup navigation, newer URL cached=false",
+          "status": "PASS"
+        },
+        {
+          "name": "statusChanged prevents stale popup navigation, newer URL cached=true",
+          "status": "PASS"
+        },
+        {
           "name": "statusChanged makes the next new window revalidate",
           "status": "PASS"
         },
         {
           "name": "statusChanged prevents an older in-flight result from restoring the cache",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged prevents stale popup navigation, newer URL cached=false",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged prevents stale popup navigation, newer URL cached=true",
           "status": "PASS"
         },
         {
@@ -1432,7 +1448,7 @@
       "file": "tests/tproxy/subscription_update.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/subscription_update.test.js",
       "status": "PASS",
-      "passed": 31,
+      "passed": 35,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1454,6 +1470,22 @@
         },
         {
           "name": "uploaded config in template mode only refreshes its providers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleared node DNS policy stays empty after save and reopen before applying",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting an edited node DNS entry clears its draft before saving",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting another node DNS entry preserves the current edit",
+          "status": "PASS"
+        },
+        {
+          "name": "empty saved node DNS policy imports the running policy only on request",
           "status": "PASS"
         },
         {

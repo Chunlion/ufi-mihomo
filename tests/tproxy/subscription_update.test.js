@@ -130,12 +130,90 @@ function airportApi(overrides = {}) {
     ...overrides,
   };
   return vm.runInNewContext(slice('const updateAirportDnsTemplate =', 'const readRuleOverrideConfig =') +
-    '\n({update:updateAirportDnsTemplate,extract:extractAirportDnsPolicy,save:saveAirportDnsPolicy,parse:parseAirportDnsText})', context);
+    '\n({update:updateAirportDnsTemplate,extract:extractAirportDnsPolicy,save:saveAirportDnsPolicy,parse:parseAirportDnsText,read:readAirportDnsTemplate})', context);
 }
 const airportPolicy = {
   'node-a.example.com': ['dns-a.example.com:1066', 'https://dns-b.example.com/dns-query'],
   '+.example.net': ['dns-a.example.com:1066'],
 };
+function airportDialogHarness(initialPolicy = {}, runtimePolicy = airportPolicy) {
+  let template = { dns: { 'proxy-server-nameserver-policy': plain(initialPolicy) }, rules: ['MATCH,DIRECT'] };
+  let elements;
+  const writes = [];
+  const read = async file => ({ ok: true, value: file === '/data/clash/Tools/template.base.yaml'
+    ? plain(template) : { dns: { 'proxy-server-nameserver-policy': plain(runtimePolicy) } } });
+  const api = airportApi({
+    runShellWithRoot: async () => ({ success: true, content: 'base' }),
+    readYamlObject: read, yamlHasGeneratedMarker: async () => false,
+    writeYamlObjectAtomic: async (file, value) => {
+      assert.equal(file, '/data/clash/Tools/template.base.yaml');
+      template = plain(value); writes.push(template); return { ok: true };
+    },
+  });
+  const element = () => ({ value: '', textContent: '', style: {}, children: [],
+    append(...items) { this.children.push(...items); }, appendChild(item) { this.children.push(item); } });
+  const open = vm.runInNewContext(slice('const showAirportDnsDialog = async', 'const templateOverrideBtn =') + '\nshowAirportDnsDialog', {
+    CLASH_CONFIG: '/data/clash/Proxy/config.yaml', readAirportDnsTemplate: api.read, readYamlObject: read,
+    isPlainYamlObject: value => value !== null && typeof value === 'object' && !Array.isArray(value),
+    updateAirportDnsTemplate: api.update, extractAirportDnsPolicy: api.extract, saveAirportDnsPolicy: api.save,
+    createToast() {}, safeTextToHtml: String, document: { createElement: element },
+    createFixedToast: () => {
+      elements = new Map();
+      return { close() {}, el: { querySelector(id) {
+        if (!elements.has(id)) elements.set(id, element());
+        return elements.get(id);
+      } } };
+    },
+    resetChildren: node => { node.children = []; },
+    runCriticalButtonOperation: async (label, button, loading, action) => action(),
+  });
+  return { open, writes, get: id => elements.get('#mm_airport_dns_' + id) };
+}
+
+test('cleared node DNS policy stays empty after save and reopen before applying', async () => {
+  const h = airportDialogHarness(airportPolicy);
+  await h.open();
+  while (h.get('list').children.length) h.get('list').children[0].children[2].onclick();
+  await h.get('save').onclick();
+  assert.equal(h.writes[0].dns['proxy-server-nameserver-policy'], undefined);
+  await h.open();
+  assert.equal(h.get('list').children.length, 0);
+});
+
+test('deleting an edited node DNS entry clears its draft before saving', async () => {
+  const h = airportDialogHarness(airportPolicy);
+  await h.open();
+  const row = h.get('list').children[0];
+  row.children[1].onclick();
+  row.children[2].onclick();
+  assert.equal(h.get('domains').value, '');
+  assert.equal(h.get('servers').value, '');
+  await h.get('save').onclick();
+  assert.equal(h.writes[0].dns['proxy-server-nameserver-policy']['node-a.example.com'], undefined);
+  assert.deepEqual(h.writes[0].dns['proxy-server-nameserver-policy']['+.example.net'], airportPolicy['+.example.net']);
+});
+
+test('deleting another node DNS entry preserves the current edit', async () => {
+  const h = airportDialogHarness(airportPolicy);
+  await h.open();
+  const [editing, other] = h.get('list').children;
+  editing.children[1].onclick();
+  other.children[2].onclick();
+  assert.equal(h.get('domains').value, 'node-a.example.com');
+  await h.get('save').onclick();
+  assert.deepEqual(h.writes[0].dns['proxy-server-nameserver-policy'], { 'node-a.example.com': airportPolicy['node-a.example.com'] });
+});
+
+test('empty saved node DNS policy imports the running policy only on request', async () => {
+  const h = airportDialogHarness();
+  await h.open();
+  assert.equal(h.get('list').children.length, 0);
+  h.get('current').onclick();
+  assert.equal(h.get('list').children.length, Object.keys(airportPolicy).length);
+  await h.get('save').onclick();
+  assert.deepEqual(h.writes[0].dns['proxy-server-nameserver-policy'], airportPolicy);
+});
+
 test('airport DNS edits preserve the rest of the template and survive runtime generation', () => {
   const api = airportApi();
   const before = plain(originalConfig);

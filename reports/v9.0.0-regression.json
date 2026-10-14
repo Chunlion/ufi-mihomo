@@ -1,11 +1,17 @@
 {
-  "date": "2026-10-13T11:45:45.118Z",
+  "date": "2026-10-14T08:01:23.602Z",
   "platform": "linux",
   "node": "v20.19.2",
+  "source": {
+    "path": "猫猫TProxy.js",
+    "commit": "518c72a1b3a8c6801fbdb5d1c1acda59c10f72e2",
+    "bytes": 588247,
+    "sha256": "87dfc94c29cdd43c410ab0d52acee64ac76dc24eed5aa1a1cbe2677ec819b101"
+  },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 334,
+    "passed": 340,
     "failed": 0,
     "notRun": 7
   },
@@ -994,7 +1000,7 @@
       "file": "tests/tproxy/optimization_subscription.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_subscription.test.js",
       "status": "PASS",
-      "passed": 25,
+      "passed": 31,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1020,6 +1026,30 @@
         },
         {
           "name": "subscription_original retains its dedicated update path",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / success",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / download",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / stale",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / other-provider",
+          "status": "PASS"
+        },
+        {
+          "name": "refreshing a subset keeps its existing provider filename",
+          "status": "PASS"
+        },
+        {
+          "name": "a configuration without providers cannot report a successful subscription refresh",
           "status": "PASS"
         },
         {

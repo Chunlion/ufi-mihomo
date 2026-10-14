@@ -44,6 +44,7 @@ const hash = text => crypto.createHash('sha256').update(text).digest('hex');
 const shell = Object.keys(before).map(name => ({ name, before: Buffer.byteLength(before[name]), after: Buffer.byteLength(after[name]), saved: Buffer.byteLength(before[name]) - Buffer.byteLength(after[name]), beforeSHA256: hash(before[name]), afterSHA256: hash(after[name]) }));
 const functions = text => { let count = 0; visit(parse(text), node => { if (['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) count++; }); return count; };
 const metrics = { baseline: 'd89be0133be57d17fd667e4e6f48f239d626e5e5', pureCommit: 'e5e8568',
+  sourceCommit: execFileSync('git', ['log', '-1', '--format=%H', '--', '猫猫TProxy.js'], { cwd: root, encoding: 'utf8' }).trim(),
   format: compact(original.replace(/\n/g, '\r\n')).sizes, final: Buffer.byteLength(source), sha256: hash(source),
   functionsBefore: functions(original), functionsAfter: functions(source), modules, shell };
 fs.writeFileSync(require('node:path').join(root, 'reports/v9.0.0-size.json'), JSON.stringify(metrics, null, 2) + '\n');

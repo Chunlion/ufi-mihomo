@@ -48,7 +48,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
         validateSubscriptionMode() {},
         createToast() {},
         safeTextToHtml: (value) => value,
-        readYamlObject: async () => ({ ok: true, value: { proxies: [{ name: 'Old' }] } }),
+        readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': { Provider1: { type: 'http' } } } }),
         saveSubSources: async (...args) => { calls.push(args); return saved; },
         forceUpdateProvidersFromConfig: async () => { calls.push('providers'); return { failed: saved ? 0 : 1 }; },
       };

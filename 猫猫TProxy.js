@@ -4993,7 +4993,19 @@ KANO_YQ_SMOKE_EOF
           echo "YAML_FILE_TOO_LARGE: bytes=$size limit=${YAML_BRIDGE_MAX_BYTES}"
           exit 1
         }
-        timeout -k 1 15 "$YQ" e -o=json '.' "$FILE"
+        set -- e
+        if "$YQ" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then
+          set -- "$@" --yaml-fix-merge-anchor-to-spec
+        fi
+        yaml_read_stderr="$KANO_YQ_TMP/yq_json_read.$$.err"
+        trap 'rm -f "$yaml_read_stderr"' EXIT
+        if timeout -k 1 15 "$YQ" "$@" -o=json '.' "$FILE" 2>"$yaml_read_stderr"; then
+          :
+        else
+          yaml_read_rc=$?
+          cat "$yaml_read_stderr"
+          exit "$yaml_read_rc"
+        fi
         `, 20 * 1000);
     if (!res.success) {
       return {

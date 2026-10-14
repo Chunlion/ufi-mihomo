@@ -468,7 +468,7 @@ test('YAML validation rejects duplicate mapping keys', { skip: !yq }, () => {
   }
 });
 test('restored config validation failures include the core reason in diagnostics', () => {
-  const diagnostic = vm.runInNewContext(`${slice('function f50Diagnostic', 'function f50Error')}\nf50Diagnostic`, {
+  const diagnostic = vm.runInNewContext(`${slice('const F50_DIAGNOSTIC_LABELS', 'function f50Error')}\nf50Diagnostic`, {
     sanitizeSubscriptionSecrets: (value) => String(value),
   });
   const markers = 'F50_ERROR=original_config_invalid\nSTART_SERVICE_RC=0\nF50_START_CODE=service_failed\nF50_START_OK=0';

@@ -6783,6 +6783,7 @@ KANO_WRITE_CHECK_EOF
   if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'config_read_failed',message:read.message || 'config read failed'}]);
   const defs = read.value['proxy-providers'] || {};
   const names = Object.keys(defs).filter(name=>!providerNames || providerNames.includes(name));
+  if (!names.length) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'provider_missing',message:'当前配置没有可更新的节点来源'}]);
   if (refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(name=>names.includes(name))) {
     const refreshed=await f50Command('refresh-remote-providers',100000);
     if (!refreshed.success) return buildProviderUpdateResult(names.map(name=>({name,ok:false,proxyCount:null,errorType:'remote_refresh_failed',message:f50Error(refreshed.content)})));
@@ -6833,8 +6834,8 @@ KANO_WRITE_CHECK_EOF
     return '订阅下载或解析失败，请检查链接和返回格式';
   };
 
-  const convertSubscriptionsLocally = async (sources = []) => {
-  const clean = normalizeSubSourceList(sources);
+  const convertSubscriptionsLocally = async (sources = [], { preserveNames = false } = {}) => {
+  const clean = preserveNames ? sources : normalizeSubSourceList(sources);
   if (!clean.length) return buildProviderUpdateResult([]);
   const subUrlChecks = clean.map((source) => ({ source, check: validateLocalSubscriptionUrl(source.url) }));
   if (subUrlChecks.some((item) => !item.check.ok)) {
@@ -6896,13 +6897,14 @@ KANO_WRITE_CHECK_EOF
         ? reloaded.proxyCount
         : converted.proxyCount;
       const emptyProvider = reloaded.ok && proxyCount === 0;
-      const ok = reloaded.ok && !emptyProvider;
+      const countMismatch = reloaded.ok && Number.isInteger(converted.proxyCount) && reloaded.proxyCount !== converted.proxyCount;
+      const ok = reloaded.ok && !emptyProvider && !countMismatch;
       return {
         ...converted,
         ...reloaded,
         ok,
-        errorType: ok ? '' : (emptyProvider ? 'empty_provider' : reloaded.errorType),
-        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : reloaded.message),
+        errorType: ok ? '' : (emptyProvider ? 'empty_provider' : countMismatch ? 'provider_count_mismatch' : reloaded.errorType),
+        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? `订阅已下载 ${converted.proxyCount} 个节点，核心加载数量不一致` : reloaded.message),
         proxyCount,
         cacheAvailable: ok || (!reloaded.ok && converted.cacheAvailable),
         format: converted.format,
@@ -10245,7 +10247,24 @@ btn_disabled.onclick = async () => {
     return false;
   }
   if (configSource === 'uploaded_config') {
-    const refreshed=await forceUpdateProvidersFromConfig({showToast:true,refreshRemote:true});return refreshed.failed===0;
+    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!read.ok) { createToast(safeTextToHtml(read.message || '读取配置失败'), 'red'); return false; }
+    const definitions = read.value['proxy-providers'] || {};
+    const localSources = normalizeSubSourceList(cleanSources.length ? cleanSources : await readCurrentSubSources()).filter(source =>
+      definitions[source.name]?.type === 'file' && definitions[source.name]?.path === `./proxies/${source.name}.yaml`);
+    const converted = localSources.length ? await convertSubscriptionsLocally(localSources, { preserveNames: true }) : null;
+    if (converted && (converted.failed || !converted.ok)) {
+      const message = (converted.providers || []).find(provider => !provider.ok)?.message || '订阅下载失败';
+      createToast(safeTextToHtml(message) + '<br>原节点和核心运行状态保留', 'red', 10000);
+      return false;
+    }
+    const refreshed = await forceUpdateProvidersFromConfig({showToast:!converted,config:read.value,refreshRemote:true});
+    if (!converted) return refreshed.failed === 0;
+    const loaded = mergeLocalConversionReloadResult(converted, refreshed);
+    const ok = refreshed.failed === 0 && loaded.failed === 0;
+    const message = (loaded.providers || []).find(provider => !provider.ok)?.message || '节点下载成功，但核心未确认加载';
+    createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
+    return ok;
   }
   if (!cleanSources.length) { createToast('没有已启用的订阅', 'red'); return false; }
   const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');

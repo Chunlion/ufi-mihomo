@@ -34,6 +34,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
     const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
       ensureCompatBackend: async () => true, readConfigSource: async () => configSource,
       readCurrentSubSources: async () => sources.slice(0, 1),
+      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': { Provider1: { type: 'http' } } } }),
       forceUpdateProvidersFromConfig: async () => { method = 'refresh-custom'; return result(); },
       saveSubSources: async (...args) => { method = args[1]; return true; },
     });
@@ -41,6 +42,76 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
     assert.equal(method, configSource === 'uploaded_config' ? 'refresh-custom' : undefined);
   });
 }
+
+for (const failure of ['', 'download', 'stale', 'other-provider']) {
+  test('uploaded local provider downloads its saved subscription / ' + (failure || 'success'), async () => {
+    const calls = [], toasts = [];
+    const config = { 'proxy-providers': {
+      Provider1: { type: 'file', path: './proxies/Provider1.yaml' },
+      Provider2: { type: 'file', path: './custom.yaml' },
+      Remote: { type: 'http', url: 'https://remote.example/sub' },
+    }, rules: ['MATCH,DIRECT'], dns: { enable: false } };
+    const before = plain(config);
+    const update = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+      + slice('const mergeLocalConversionReloadResult', 'const reloadLocalSubscriptionProviders')
+      + slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+      ensureCompatBackend: async () => true, readConfigSource: async () => 'uploaded_config',
+      readCurrentSubSources: async () => sources,
+      readYamlObject: async () => ({ ok: true, value: config }),
+      convertSubscriptionsLocally: async (items, options) => {
+        calls.push('download');
+        assert.deepEqual(plain(items), sources.slice(0, 1));
+        assert.equal(options.preserveNames, true);
+        return { ok: failure !== 'download', failed: failure === 'download' ? 1 : 0,
+          committed: failure !== 'download', providers: [{ name: 'Provider1', ok: failure !== 'download', proxyCount: 3, message: 'download failed' }] };
+      },
+      forceUpdateProvidersFromConfig: async options => {
+        calls.push('load');
+        assert.equal(options.config, config);
+        assert.equal(options.refreshRemote, true);
+        assert.equal(options.showToast, false);
+        return { failed: failure === 'other-provider' ? 1 : 0, providers: [
+          { name: 'Provider1', ok: true, proxyCount: failure === 'stale' ? 2 : 3 },
+          { name: 'Remote', ok: failure !== 'other-provider', proxyCount: 1 },
+        ] };
+      },
+      createToast: (message, color) => toasts.push(color),
+      saveSubSources: async () => { throw new Error('custom configuration must stay intact'); },
+    });
+    assert.equal(await update([], 'template', 'local'), !failure);
+    assert.deepEqual(calls, failure === 'download' ? ['download'] : ['download', 'load']);
+    assert.deepEqual(config, before);
+    assert.deepEqual(toasts, [failure ? 'red' : 'green']);
+  });
+}
+
+test('refreshing a subset keeps its existing provider filename', async () => {
+  let request;
+  const convert = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const formatSubscriptionDownloadError', 'const mergeLocalConversionReloadResult') + 'convertSubscriptionsLocally', {
+    validateLocalSubscriptionUrl: () => ({ ok: true }), ensureCompatBackend: async () => true,
+    createRandomString: () => 'fixture', loadProviderUserAgent: async () => 'clash.meta',
+    stageTextBesideTarget: async (target, text) => { request = JSON.parse(text); return { ok: true, stagePath: target }; },
+    f50Command: async () => ({ success: true, content: 'F50_FETCH_RESULT=' + JSON.stringify({ ok: true, committed: true,
+      providers: [{ name: 'Provider2', ok: true, proxyCount: 3 }] }) }),
+    runShellWithRoot: async () => ({ success: true }),
+  });
+  const converted = await convert(sources.slice(1), { preserveNames: true });
+  assert.deepEqual(request.sources, sources.slice(1));
+  assert.equal(converted.providers[0].name, 'Provider2');
+  assert.equal(converted.providers[0].ok, true);
+});
+
+test('a configuration without providers cannot report a successful subscription refresh', async () => {
+  const refresh = run(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const forceUpdateProvidersFromConfig', 'const convertSubscriptionsLocally') + 'forceUpdateProvidersFromConfig', {
+    ...subContext,
+    buildControllerInfo: async () => { throw new Error('no provider to update'); },
+  });
+  const updated = await refresh({ config: { proxies: [{ name: 'Old' }] } });
+  assert.equal(updated.failed, 1);
+  assert.equal(updated.providers[0].errorType, 'provider_missing');
+});
 
 for (const status of [200, 390, 500]) {
   test(`Mihomo HTTP Provider API status ${status}`, async () => {

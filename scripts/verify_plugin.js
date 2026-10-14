@@ -2,8 +2,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
+const { spawnSync, execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
+const plugin = path.join(root, '猫猫TProxy.js');
+const source = fs.readFileSync(plugin);
+const sourceInfo = { path: '猫猫TProxy.js', commit: execFileSync('git', ['log', '-1', '--format=%H', '--', '猫猫TProxy.js'], { cwd: root, encoding: 'utf8' }).trim(),
+  bytes: source.length, sha256: crypto.createHash('sha256').update(source).digest('hex') };
 const directory = path.join(root, 'tests/tproxy');
 const files = ['run_tests.js', ...fs.readdirSync(directory).filter(file => file.endsWith('.test.js')).sort()];
 const results = [];
@@ -37,7 +42,8 @@ for (const file of files) {
   console.log(`${result.status} ${file}: ${passed} passed, ${failed} failed, ${skipped} not run`);
   if (failed) console.log((run.error?.message || output.match(/\n  error:[\s\S]{0,1800}/)?.[0] || output.slice(-1500)).trim());
 }
-const report = { date: new Date().toISOString(), platform: process.platform, node: process.version,
+if (!source.equals(fs.readFileSync(plugin))) throw new Error('Plugin changed during regression tests');
+const report = { date: new Date().toISOString(), platform: process.platform, node: process.version, source: sourceInfo,
   invocation: 'node scripts/verify_plugin.js', concurrency: 1,
   totals: results.reduce((sum, result) => ({ passed: sum.passed + result.passed, failed: sum.failed + result.failed, notRun: sum.notRun + result.notRun }), { passed: 0, failed: 0, notRun: 0 }), results };
 const destination = path.join(root, 'reports/v9.0.0-regression.json');

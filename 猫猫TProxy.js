@@ -3355,12 +3355,12 @@ exit "$delete_rc"
   const LOG_FILE = '/data/clash/Proxy/Clash.log';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
-  const CLASH_PACKAGE_URL = '';
+  const CLASH_PACKAGE_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/0f6fe98b0dc461ae4a473431d5deae7c5727afad/tproxy-yq.zip';
   const CLASH_PACKAGE_FALLBACK_URL = '';
   const CLASH_PACKAGE_REPO_URL = '';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
-  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04","published":false});
+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04","published":true});
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;

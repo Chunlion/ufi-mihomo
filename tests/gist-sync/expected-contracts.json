@@ -141,5 +141,5 @@
     "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
     "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
   },
-  "sourceSHA256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f"
+  "sourceSHA256": "d08567c3b099e6510871034d44ae43ce2d33f16c98cb8dbaccf0abcc44413806"
 }

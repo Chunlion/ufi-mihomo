@@ -160,6 +160,14 @@ func (a *App) candidate(ctx context.Context, plain, work string) (string, string
 	if e != nil {
 		return "", "", e
 	}
+	sources, e := a.manualSources()
+	if e != nil {
+		return "", "", e
+	}
+	if e = mergeManualSources(m, sources); e != nil {
+		return "", "", e
+	}
+	m[gistMeta] = true
 	o, c, e := a.options(ctx)
 	if e != nil {
 		return "", "", e

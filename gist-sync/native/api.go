@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -79,7 +80,47 @@ func (a *App) runtimeVerify(ctx context.Context, m map[string]any) error {
 			return e
 		}
 	}
+	manual, e := stringList(m[manualMeta])
+	if e != nil {
+		return e
+	}
+	if len(manual) > 0 {
+		loaded, e := a.api(ctx, str(m["secret"]), "GET", "/providers/proxies", nil)
+		if e != nil {
+			return e
+		}
+		for _, name := range manual {
+			if manualProviderReady(obj(loaded["providers"])[name]) {
+				continue
+			}
+			if _, e = a.api(ctx, str(m["secret"]), "PUT", "/providers/proxies/"+url.PathEscape(name), nil); e != nil {
+				return fail("manual_provider_update_failed")
+			}
+			loaded, e = a.api(ctx, str(m["secret"]), "GET", "/providers/proxies", nil)
+			if e != nil {
+				return e
+			}
+			if !manualProviderReady(obj(loaded["providers"])[name]) {
+				return fail("manual_provider_empty")
+			}
+		}
+	}
 	return nil
+}
+
+func manualProviderReady(value any) bool {
+	p := obj(value)
+	nodes, ok := p["proxies"].([]any)
+	if !ok {
+		return false
+	}
+	for _, node := range nodes {
+		n := obj(node)
+		if str(n["name"]) != "" && !(str(n["name"]) == "COMPATIBLE" && strings.EqualFold(str(n["type"]), "Direct")) {
+			return true
+		}
+	}
+	return false
 }
 func resolveSelection(proxies map[string]any, name string) error {
 	seen := map[string]bool{}

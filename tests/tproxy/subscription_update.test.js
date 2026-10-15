@@ -38,6 +38,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
         operationFinish: (ok) => finished.push(ok),
         ensureReady: async () => true,
         ensureCompatBackend: async () => true,
+        f50GistManaged: async () => null,
         readConfigSource: async () => configSource,
         readCurrentSubRuleMode: async () => 'original',
         readSavedSubConvertMode: async () => 'local',

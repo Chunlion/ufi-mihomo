@@ -35,7 +35,7 @@ def main():
 
 仓库：`{proof['root']}`；分支 `{proof['branch']}`；本轮基线 `{baseline['head']}`。
 初始只有用户已有的未跟踪 `AGENTS.md`，保持原样且不纳入提交。
-RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 字节一致，整合后的维护源码全部位于本仓库，没有初始化替代仓库。
+RC2/RC3 是独立交付来源；维护源码、构建和测试均已纳入本仓库，没有初始化替代仓库。
 
 - 主插件纳入 Gist 设置、下载、解密、配置事务、互斥、来源保护及恢复；Controller 协议、固定 Secret 和网络规则保留。
 - 默认完整组件包增加 age、同步程序、脚本和清单；安装前校验文件哈希、程序退出状态及版本；重复升级保留设置与私钥。在线包未发布，停止使用缺少 GistSync 的旧镜像。
@@ -43,6 +43,7 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
 - 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 - select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
 - 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
+- 订阅设置读取 Gist 的订阅与内置节点；手动订阅通过同一设备同步任务保存并合并，后续自动同步持续保留，按 URL 去重，不重建本地模板。新增手动 Provider 下载采用 DIRECT，确认实际节点后才报告加载成功；下载失败验证原配置回滚。
 - 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 
 ```text
@@ -69,6 +70,11 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
     integration=json.loads((REPORTS/'integration.json').read_text(encoding='utf-8'))
     lines+=['## 真实组件覆盖','',integration['components'],'']
     lines += [f"- INTEGRATION PASS：{x['name']}。" for x in integration['tests']]
+    lines += ['', '## Gist 与手动订阅合并', '',
+              '从当前源码重新构建。订阅设置读取 Gist 的 Provider 和内置节点；手动来源沿用 subscription_urls.txt，经加密请求在设备锁内保存。每次同步从 Gist 原文重新合并，按规范化 URL 去重，不替换原规则、策略组或同名 Provider。',
+              '真实 age/yq/Mihomo 测试覆盖连续同步、后台到期更新、上游新增同一 URL、禁用及删除、节点实际加载和下载失败后的配置恢复。不同 URL 可能包含同一节点，不跨来源删除节点。',
+              '复现并修复新增 Provider 下载受 MATCH 规则影响的启动依赖；仅新增的手动 Provider 使用 DIRECT。占位 COMPATIBLE 节点不算加载成功。最初后台测试未达到调度期限；测试显式设置持久化期限为过去后验证独立进程，未缩短产品同步间隔。早期失败日志保留。',
+              '浏览器使用仓库真实对话框及模拟设备 API，验证 Gist 来源读取、隐藏模板替换、修改、禁用、清空及重新打开；属于 MOCK，不代表 Android WebView 或生产配置应用。']
     lines+=['','## F50 本轮实测','',
             '用户已授权备份后安装升级，不切换模式。完整备份位于设备 root 专用目录，指针 `/data/local/tmp/maomao-rc4-backup.path`。',
             '完整包升级及事务收尾成功；配置、来源、策略哈希与备份一致。核心只有一个，API HTTP 200，保持 TProxy。',
@@ -77,6 +83,10 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
             '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试。随后设备保存的私钥通过真实 Gist 只读解密与配置校验，未应用生产配置，证据见 `device-saved-test.json`。','']
     evidence=[json.loads(x) for x in (REPORTS/'evidence.jsonl').read_text(encoding='utf-8').splitlines() if x]
     names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','deploy compact 30px interval with single Apply action','verify compact interval matches actual Apply button','validate real saved Gist with device-held identity without applying','upgrade single Apply worker with original installer','verify core and configuration after Apply upgrade','actual F50 Apply button encrypted request and wrong-key protection','genuine initial status and full transaction regression','Raw URL boundary regression'}
+    names.update({'backup F50 current saved settings before source merge upgrade','backup current host plugins before source merge upgrade',
+                  'upgrade complete components with persistent source merge','verify upgraded source merge components and original network mode',
+                  'deploy source merge UI preserving other plugins','validate saved real Gist including manual source overlay without applying',
+                  'verify production source settings preserved after merge upgrade'})
     for row in evidence:
         if row['name'] not in names:continue
         lines += [f"- **{row['name']}** — {row['category']} / {row['result']}；退出码 `{row['exit_code']}`。",

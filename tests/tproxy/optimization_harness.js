@@ -52,6 +52,7 @@ const subContext = {
   SUB_CONVERT_MODE_PROVIDER: 'provider', SUB_CONVERT_MODE_LOCAL: 'local',
   SUB_DISABLED_MARKER: '# KANO_DISABLED_SUB=', CLASH_CONFIG: '/data/clash/Proxy/config.yaml',
   CLASH_SUB_URLS: '/data/clash/Proxy/subscription_urls.txt',
+  f50GistManaged: async () => null,
   isHttpUrl: value => /^https?:\/\//.test(value),
   operationStage() {}, operationFinish() {}, createToast() {}, appendTemplateFlowDebug() {},
   safeTextToHtml: String, escapeHtml: String, sanitizeSubscriptionSecrets: String,

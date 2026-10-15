@@ -81,6 +81,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   async function f50GistDispatch(action, request = {}) {
     try {
       const key = await f50GistExec(['request-key'],15000);
+      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
       const sealed=f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -120,7 +121,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
 
     test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
     settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
-    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'\u914d\u7f6e\u5df2\u52a0\u8f7d\uff0c\u7b56\u7565\u68c0\u67e5\u901a\u8fc7',
+    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
     saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',

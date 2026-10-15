@@ -145,6 +145,20 @@ def inside():
         def loaded_commit():
             f.remote(2);out=f.action('sync',expect='synced');assert out['loaded'] and out['runtimeVerified'];assert (f.test/'core.pid').read_text()==pid;assert f.api()['mode']=='rule'
         check('genuine Mihomo hot reload and runtime confirmation',loaded_commit)
+        def one_click_apply():
+            f.remote(21)
+            before=f.cli('status');req={'url':URL,'identity':f.identity,'auto':True,'intervalHours':1,'revision':before['settings']['revision'],'replaceLocal':True,'expectedLocal':before['currentFingerprint']}
+            out=f.action('apply',req,expect='synced')
+            assert out['ok'] and out['settingsSaved'] and out['written'] and out['loaded'] and out['runtimeVerified']
+            assert (f.test/'core.pid').read_text()==pid
+            status=f.cli('status');assert status['settings']['auto'] and status['settings']['intervalHours']==1 and status['schedulerRunning']
+            state=json.loads((f.clash/'Tools/gist-sync/state.json').read_text());assert state['candidateHash']==state['applied']['config']
+            req['revision']=status['settings']['revision'];req['identity']='';out=f.action('apply',req,expect='up_to_date');assert out['settingsSaved'] and out['loaded']
+            bad=dict(req,identity='AGE-SECRET-KEY-1'+'A'*58,revision=f.cli('status')['settings']['revision'])
+            stable=f.config_hash();saved=f.cli('status')['settings'];out=f.action('apply',bad,expect='age_decrypt_failed')
+            assert not out['ok'] and not out.get('settingsSaved') and f.config_hash()==stable and f.cli('status')['settings']==saved
+            f.action('disable',expect='auto_disabled');f.remote(2);f.action('apply',dict(req,auto=False,revision=f.cli('status')['settings']['revision']),expect='synced')
+        check('single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys',one_click_apply)
         def unchanged():
             f.remote(2);out=f.action('sync',expect='up_to_date');assert out['loaded'];assert (f.test/'core.pid').read_text()==pid
         check('reencrypted unchanged config keeps genuine core PID',unchanged)

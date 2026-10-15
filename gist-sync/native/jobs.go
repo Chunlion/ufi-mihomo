@@ -24,7 +24,7 @@ type Job struct {
 
 func validAction(action string) bool {
 	switch action {
-	case "test", "save", "sync", "disable", "delete":
+	case "test", "save", "apply", "sync", "disable", "delete":
 		return true
 	}
 	return false
@@ -153,6 +153,8 @@ func (a *App) worker(ctx context.Context, id, action string) error {
 			out, err = a.validateSave(ctx, req, false)
 		case "save":
 			out, err = a.validateSave(ctx, req, true)
+		case "apply":
+			out, err = a.applyConfig(ctx, req)
 		case "sync":
 			out, err = a.syncConfig(ctx, req, false)
 		case "disable":

@@ -259,7 +259,7 @@ func TestOldDownloadAfterSourceSwitch(t *testing.T) {
 	}
 	before, _ := fileHash(a.cfg())
 	setRemote(a, fixtureKey, remoteConfig(2))
-	out, e := a.validateSave(context.Background(), Request{URL: strings.Replace(goodURL, "Bettbox.yaml.age", "switched.age", 1)}, true)
+	out, e := a.validateSave(context.Background(), Request{URL: strings.Replace(goodURL, "config.yaml.age", "switched.age", 1)}, true)
 	if e != nil || !out.Saved {
 		t.Fatal(out, e)
 	}

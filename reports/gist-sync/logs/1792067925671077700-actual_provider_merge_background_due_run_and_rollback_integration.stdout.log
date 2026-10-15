@@ -1,0 +1,14 @@
+PASS INTEGRATION post-install initialization makes first read-only fingerprint available
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+PASS INTEGRATION real files, backup, atomic commit and matching state while stopped
+PASS INTEGRATION genuine Mihomo hot reload and runtime confirmation
+PASS INTEGRATION single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys
+PASS INTEGRATION reencrypted unchanged config keeps genuine core PID
+DIAGNOSTIC commit.stdout YAML_COMMIT_OK=1
+YAML_BACKUP=
+YAML_OLD_HASH=cdb2905cc8997576e5185d4941d7c7450f91d5623cd6b68cc5407ed34e38fde5
+YAML_NEW_HASH=87489080811e1e1a50424fc9bfcd8c3d8a0a7ca1ae7e756f28ce382cb27e83a1
+YAML_OLD_SIZE=2569
+YAML_NEW_SIZE=1952
+
+DIAGNOSTIC commit.stderr 

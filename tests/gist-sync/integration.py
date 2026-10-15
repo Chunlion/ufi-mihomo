@@ -43,7 +43,7 @@ class Fixture:
         with zipfile.ZipFile(ROOT/'tproxy-yq.zip') as z:
             for name in ['Proxy/GeoIP.dat','Proxy/GeoSite.dat']:
                 if name in z.namelist():(self.clash/name).write_bytes(z.read(name))
-        call(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(self.test/'tls.key'),'-out',str(self.test/'tls.crt'),'-days','1','-subj','/CN=gist.githubusercontent.com','-addext','subjectAltName=DNS:gist.githubusercontent.com'])
+        call(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(self.test/'tls.key'),'-out',str(self.test/'tls.crt'),'-days','1','-subj','/CN=gist.githubusercontent.com','-addext','subjectAltName=DNS:gist.githubusercontent.com,IP:93.184.216.34'])
         shutil.copyfile(self.test/'tls.crt',self.jail/'etc/ssl/certs/ca-certificates.crt')
         call([str(CACHE/'age-amd64/age-keygen'),'-o',str(self.test/'identity.txt')]);os.chmod(self.test/'identity.txt',0o600)
         self.identity=next(s for s in (self.test/'identity.txt').read_text().splitlines() if s.startswith('AGE-SECRET-KEY-1'))
@@ -54,8 +54,11 @@ class Fixture:
                 fixture.requests+=1
                 if getattr(fixture,'hold',False) and '/held.age' in self.path:
                     (fixture.test/'download-held').write_text('1');fixture.release.wait(30)
-                data=fixture.payload
-                self.send_response(fixture.http_status);self.send_header('Content-Length',str(len(data)));self.end_headers()
+                data=fixture.payload;status=fixture.http_status
+                if self.path.startswith('/manual.yaml'):
+                    if 'unavailable' in self.path:status=503
+                    data=json.dumps({'proxies':[{'name':'manual-node','type':'ss','server':'example.test','port':443,'cipher':'aes-128-gcm','password':'isolated-fixture'}]}).encode()
+                self.send_response(status);self.send_header('Content-Length',str(len(data)));self.end_headers()
                 try:self.wfile.write(data)
                 except (BrokenPipeError,ssl.SSLError):pass
             def log_message(self,*args):pass
@@ -93,6 +96,10 @@ class Fixture:
     def remote(self,generation,plain=None,wrong=False):
         self.plain=(plain if plain is not None else json.dumps({'proxies':[],'rules':['MATCH,DIRECT'],'log-level':'silent','x-fixture-generation':generation}).encode())
         self.payload=call([str(CACHE/'age-amd64/age'),'-r',self.recipient],input=self.plain)
+    def due(self):
+        # Exercise an actually due run without waiting an hour or changing the production clock.
+        for name,field in [('settings.conf','savedAt'),('state.json','lastChecked')]:
+            path=self.clash/'Tools/gist-sync'/name;value=json.loads(path.read_text());value[field]='2020-01-01T00:00:00Z';staged=path.with_suffix('.test-new');staged.write_text(json.dumps(value));os.chmod(staged,0o600);os.replace(staged,path)
     def config_hash(self):return SHA((self.clash/'Proxy/config.yaml').read_bytes())
     def wait_file(self,name,timeout=15):
         deadline=time.monotonic()+timeout
@@ -100,8 +107,8 @@ class Fixture:
             if (self.test/name).exists():return
             time.sleep(.05)
         raise RuntimeError('Expected observation missing: '+name)
-    def api(self):
-        req=urllib.request.Request('http://127.0.0.1:7788/configs',headers={'Authorization':'Bearer isolated-fixture-secret'})
+    def api(self,path='/configs'):
+        req=urllib.request.Request('http://127.0.0.1:7788'+path,headers={'Authorization':'Bearer isolated-fixture-secret'})
         with urllib.request.urlopen(req,timeout=3) as r:return json.load(r)
     def service(self,*args):return call(['chroot',str(self.jail),'python3','/test/service.py',*args])
     def close(self):
@@ -162,6 +169,43 @@ def inside():
         def unchanged():
             f.remote(2);out=f.action('sync',expect='up_to_date');assert out['loaded'];assert (f.test/'core.pid').read_text()==pid
         check('reencrypted unchanged config keeps genuine core PID',unchanged)
+        def manual_merge():
+            u='https://93.184.216.34/manual.yaml'
+            document={'proxies':[{'name':'remote-node','type':'ss','server':'remote.example.test','port':443,'cipher':'aes-128-gcm','password':'isolated-fixture'}],
+                'proxy-groups':[{'name':'Proxy','type':'select','proxies':['remote-node','DIRECT']}],'rules':['MATCH,Proxy'],'x-fixture-generation':30}
+            def config():return json.loads(call([str(CACHE/'yq-linux-amd64'),'e','-o=json','.',str(f.clash/'Proxy/config.yaml')]))
+            def update(sources,expect='synced'):
+                return f.action('sync',{'revision':f.cli('status')['settings']['revision'],'manualSources':sources},expect=expect)
+            f.remote(30,plain=json.dumps(document).encode())
+            out=update([{'url':u,'enabled':True},{'url':u+'#duplicate','enabled':True}]);assert out['loaded'] and out['runtimeVerified']
+            c=config();names=c['x-f50-gist-manual-providers'];assert len(names)==1 and len(c['proxy-providers'])==1
+            assert c['proxies']==document['proxies'] and c['rules']==document['rules'] and c['proxy-groups'][0]['use']==names
+            assert f.cli('status')['gistActive'];stable=f.config_hash()
+            observed=f.api('/providers/proxies')['providers'][names[0]]['proxies'];assert [p['name'] for p in observed]==['manual-node']
+            for _ in range(3):f.action('sync',expect='up_to_date');assert f.config_hash()==stable
+            assert (f.test/'core.pid').read_text()==pid
+            old=f.config_hash();failed=update([{'url':u+'?unavailable=1','enabled':True}],expect='manual_provider_update_failed')
+            assert not failed['ok'] and failed['warning']=='old_config_restored' and f.config_hash()==old
+            assert 'unavailable' in (f.clash/'Proxy/subscription_urls.txt').read_text()
+            update([{'url':u,'enabled':True}],expect='up_to_date')
+            # Background scheduler executes the same production merge without a browser.
+            document['x-fixture-generation']=31;f.remote(31,plain=json.dumps(document).encode());f.save(auto=True,intervalHours=1);f.due()
+            deadline=time.monotonic()+20
+            while time.monotonic()<deadline:
+                if config().get('x-fixture-generation')==31:break
+                time.sleep(.1)
+            else:raise AssertionError('background merge not observed')
+            assert config()['x-f50-gist-manual-providers']==names and len(config()['proxy-providers'])==1
+            f.action('disable',expect='auto_disabled')
+            # When upstream gains the same URL, prefer its definition and remove the overlay reference.
+            document['proxy-providers']={'remote-provider':{'type':'http','url':u,'path':'./proxies/remote-provider.yaml','interval':3600,'proxy':'DIRECT'}}
+            document['proxy-groups'][0]['use']=['remote-provider'];f.remote(32,plain=json.dumps(document).encode());f.action('sync',expect='synced')
+            c=config();assert list(c['proxy-providers'])==['remote-provider'] and 'x-f50-gist-manual-providers' not in c
+            assert c['proxy-groups'][0]['use']==['remote-provider']
+            update([{'url':u,'enabled':False}],expect='up_to_date');assert list(config()['proxy-providers'])==['remote-provider']
+            update([],expect='up_to_date');assert config()['proxies']==document['proxies']
+            f.remote(2);f.action('sync',expect='synced');assert 'proxy-providers' not in config()
+        check('manual sources survive background Gist updates; URL deduplication, upstream adoption, disable and removal preserve remote nodes and rules',manual_merge)
         stable=f.config_hash()
         def invalid_yaml():
             f.remote(3,plain=b'rules: [\n');out=f.action('sync');assert not out['ok'];assert f.config_hash()==stable
@@ -252,10 +296,7 @@ def inside():
             record=json.loads(records[0].read_text());pid=record['pid'];os.kill(pid,0)
             # Persisted deadlines are moved into the past, without changing the
             # production clock or shortening the production scheduling interval.
-            def due():
-                settings=f.clash/'Tools/gist-sync/settings.conf';s=json.loads(settings.read_text());s['savedAt']='2020-01-01T00:00:00Z';settings.write_text(json.dumps(s));os.chmod(settings,0o600)
-                state=f.clash/'Tools/gist-sync/state.json';st=json.loads(state.read_text());st['lastChecked']='2020-01-01T00:00:00Z';state.write_text(json.dumps(st));os.chmod(state,0o600)
-            due();deadline=time.monotonic()+15
+            f.due();deadline=time.monotonic()+15
             while time.monotonic()<deadline:
                 st=json.loads((f.clash/'Tools/gist-sync/state.json').read_text())
                 if st['last'].get('code') in ['synced','up_to_date'] and st.get('applied',{})==f.cli('status')['currentFingerprint']:
@@ -282,7 +323,7 @@ def inside():
         (ROOT/'reports/gist-sync/integration.json').write_text(json.dumps({'binary_sha256':SHA((BUILD/'bin/kano-gist-sync-linux-amd64').read_bytes()),'components':'genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service adapter','tests':RESULTS},indent=2)+'\n')
     except Exception:
         if fixture:
-            for name in ['commit.stdout','commit.stderr']:
+            for name in ['commit.stdout','commit.stderr','mihomo.log']:
                 p=fixture.test/name
                 if p.exists():print('DIAGNOSTIC '+name+' '+p.read_text()[-2500:],flush=True)
         raise

@@ -1,0 +1,14 @@
+PASS INTEGRATION post-install initialization makes first read-only fingerprint available
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+PASS INTEGRATION real files, backup, atomic commit and matching state while stopped
+PASS INTEGRATION genuine Mihomo hot reload and runtime confirmation
+PASS INTEGRATION single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys
+PASS INTEGRATION reencrypted unchanged config keeps genuine core PID
+DIAGNOSTIC commit.stdout YAML_COMMIT_OK=1
+YAML_BACKUP=/data/clash/Proxy/config.yaml.before_gist_sync_20261015123622_2619
+YAML_OLD_HASH=87489080811e1e1a50424fc9bfcd8c3d8a0a7ca1ae7e756f28ce382cb27e83a1
+YAML_NEW_HASH=dc9676b431dc1348c7ee3bce491c0840a163e4c39bda83e839ef42d448571643
+YAML_OLD_SIZE=1952
+YAML_NEW_SIZE=2582
+
+DIAGNOSTIC commit.stderr 

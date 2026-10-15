@@ -82,6 +82,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     try {
       const key = await f50GistExec(['request-key'],15000);
       if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
+      if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
       const sealed=f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -90,6 +91,12 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
+    manual_source_invalid:'手动订阅链接无效。',
+    manual_source_limit:'手动订阅最多保存 100 条。',
+    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
+    manual_sources_changed:'手动订阅已变更，请重新同步。',
+    manual_provider_update_failed:'手动订阅下载失败。',
+    manual_provider_empty:'手动订阅没有可用节点。',
     invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
     invalid_gist_path:'Gist Raw 链接路径不正确。',
     invalid_gist_revision:'Gist 版本号无效。',
@@ -139,6 +146,48 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
+
+  async function f50GistManaged() {
+    const st = await f50GistExec(['status'], 15000);
+    if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
+    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!read.ok) throw Error(read.message || '读取配置失败');
+    if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
+      throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
+    }
+    return null;
+  }
+
+  async function f50GistUpdateSources(st, sources) {
+    const op = activeCriticalOperation;
+    if (op) {
+      await f50ReleaseLease(op);
+      if (op.uncertain || op.token.cancelled) return false;
+    }
+    const request = {revision:st.settings.revision};
+    if (sources !== undefined) request.manualSources = normalizeStoredSubSourceList(sources).map(s=>({url:s.url,enabled:s.enabled}));
+    const started = await f50GistDispatch('sync', request);
+    if (!started.ok || !started.job) { createToast(safeTextToHtml(f50GistMessage(started.code)), 'red'); return false; }
+    const deadline = Date.now() + 180000;
+    while (Date.now() < deadline) {
+      if (op?.token.cancelled) { await f50GistExec(['cancel',started.job],15000); return false; }
+      const job = await f50GistExec(['job',started.job],8000);
+      if (job.status === 'finished') {
+        invalidateStatusSnapshot();
+        const ok = job.result?.ok === true;
+        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
+        operationFinish(ok,message);
+        createToast(safeTextToHtml(message),ok?'green':'red');
+        return ok;
+      }
+      if (!job.ok || job.status === 'completion_unknown') {
+        createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
+      }
+      await new Promise(resolve=>setTimeout(resolve,700));
+    }
+    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
+    return false;
+  }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
   const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
   const f50GistValidUrl = value => {

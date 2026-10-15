@@ -1,0 +1,44 @@
+✔ Gist refresh bypasses template replacement and ProviderN assumptions (2.7016ms)
+✔ Gist source saves, disabled-only and empty removal all use native merge (4.3346ms)
+✖ Gist detection protects local edits and detects unsupported components (1.6574ms)
+✖ Manual source update releases frontend lease, fences source revision and checks real receipt (2.2165ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 185.0951
+
+✖ failing tests:
+
+test at tests\tproxy\gist_sources.test.js:38:1
+✖ Gist detection protects local edits and detects unsupported components (1.6574ms)
+  ReferenceError: crypto is not defined
+      at f50GistExec (evalmachine.<anonymous>:140:28)
+      at Object.f50GistManaged [as managed] (evalmachine.<anonymous>:257:22)
+      at TestContext.<anonymous> (C:\Users\Cuty\Desktop\Github\Tproxy-F50\tests\tproxy\gist_sources.test.js:41:25)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+test at tests\tproxy\gist_sources.test.js:46:1
+✖ Manual source update releases frontend lease, fences source revision and checks real receipt (2.2165ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (C:\Users\Cuty\Desktop\Github\Tproxy-F50\tests\tproxy\gist_sources.test.js:54:9)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

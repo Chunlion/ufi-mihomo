@@ -1,0 +1,13 @@
+{
+  "category": "DEVICE",
+  "result": "PASS",
+  "sourceSettingsPreserved": true,
+  "productionConfigPreserved": true,
+  "manualSources": 1,
+  "gistActive": false,
+  "configured": true,
+  "identitySet": true,
+  "auto": false,
+  "intervalHours": 6,
+  "checks": "SOURCES_PRESERVED=1"
+}

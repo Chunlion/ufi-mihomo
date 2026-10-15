@@ -1,0 +1,30 @@
+TAP version 13
+# Subtest: Gist refresh bypasses template replacement and ProviderN assumptions
+ok 1 - Gist refresh bypasses template replacement and ProviderN assumptions
+  ---
+  duration_ms: 4.723244
+  ...
+# Subtest: Gist source saves, disabled-only and empty removal all use native merge
+ok 2 - Gist source saves, disabled-only and empty removal all use native merge
+  ---
+  duration_ms: 5.350189
+  ...
+# Subtest: Gist detection protects local edits and detects unsupported components
+ok 3 - Gist detection protects local edits and detects unsupported components
+  ---
+  duration_ms: 4.853265
+  ...
+# Subtest: Manual source update releases frontend lease, fences source revision and checks real receipt
+ok 4 - Manual source update releases frontend lease, fences source revision and checks real receipt
+  ---
+  duration_ms: 4.709882
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 277.008153

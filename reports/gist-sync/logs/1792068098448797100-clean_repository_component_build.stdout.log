@@ -1,0 +1,13 @@
+Gist modules, shared transaction, profiles synchronized
+Gist modules, shared transaction, profiles and component pins synchronized
+{
+  "version": "1.0.0-rc4",
+  "go": "go version go1.26.3 windows/amd64",
+  "published": false,
+  "plugin_sha256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f",
+  "package_sha256": "be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04",
+  "native_sha256": {
+    "arm64": "c3961e618a8aab4a68c8707d36182aa990bee6ecc3e31c654d077de63c44b476",
+    "amd64": "679ac61c7a59fc9bd0ef4429f3aefac18352c7b0aca18bc2d5699f13aa7373a7"
+  }
+}

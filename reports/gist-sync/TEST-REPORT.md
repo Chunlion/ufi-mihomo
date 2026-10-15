@@ -1,93 +1,123 @@
 # 本轮构建与测试报告
 
-源码 SHA-256：`d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180`
-完整包 SHA-256：`8a72a33f0e8a57e44311197aa82b113e059416a796d9d40005c70462bb6b8f3e`
+源码 SHA-256：`47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f`
+完整包 SHA-256：`be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04`
 
-原功能回归：412 PASS，0 FAIL，0 NOT RUN。
+原功能回归：416 PASS，0 FAIL，0 NOT RUN。
 Go 测试的硬件占位项仍为 BLOCKED，不计为设备通过。
 
-本次为用户精简界面的定向验证；未重跑的组件测试保留原记录，程序哈希与集成测试一致。
+以下为最后一次完整构建验证。
 所有失败尝试保留在 `evidence.jsonl` 和 `logs/`。
 
-- **clean repository component build** — STATIC / PASS；退出码 `0`；9.742 秒。
+- **clean repository component build** — STATIC / PASS；退出码 `0`；10.009 秒。
   命令：`D:\Python\Python313\python.exe scripts/build_gist_sync.py`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066219637952700-clean_repository_component_build.stdout.log`；stderr：`reports\gist-sync\logs\1792066219637952700-clean_repository_component_build.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068098448797100-clean_repository_component_build.stdout.log`；stderr：`reports\gist-sync\logs\1792068098448797100-clean_repository_component_build.stderr.log`。
 
-- **pinned genuine test tools** — STATIC / PASS；退出码 `0`；3.271 秒。
+- **pinned genuine test tools** — STATIC / PASS；退出码 `0`；3.191 秒。
   命令：`D:\Python\Python313\python.exe scripts/gist_test_tools.py`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066222910604100-pinned_genuine_test_tools.stdout.log`；stderr：`reports\gist-sync\logs\1792066222910604100-pinned_genuine_test_tools.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068101641187500-pinned_genuine_test_tools.stdout.log`；stderr：`reports\gist-sync\logs\1792068101641187500-pinned_genuine_test_tools.stderr.log`。
 
-- **ZIP reader permission** — STATIC / PASS；退出码 `0`；0.153 秒。
+- **ZIP reader permission** — STATIC / PASS；退出码 `0`；0.19 秒。
   命令：`wsl -d Debian -- chmod 755 /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/bin/tar`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223066058800-ZIP_reader_permission.stdout.log`；stderr：`reports\gist-sync\logs\1792066223066058800-ZIP_reader_permission.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068101832658100-ZIP_reader_permission.stdout.log`；stderr：`reports\gist-sync\logs\1792068101832658100-ZIP_reader_permission.stderr.log`。
 
-- **syntax 猫猫TProxy.js** — STATIC / PASS；退出码 `0`；0.073 秒。
+- **syntax 猫猫TProxy.js** — STATIC / PASS；退出码 `0`；0.077 秒。
   命令：`node --check 猫猫TProxy.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223140791900-syntax___TProxy_js.stdout.log`；stderr：`reports\gist-sync\logs\1792066223140791900-syntax___TProxy_js.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068101910460200-syntax___TProxy_js.stdout.log`；stderr：`reports\gist-sync\logs\1792068101910460200-syntax___TProxy_js.stderr.log`。
 
-- **syntax gist-sync/plugin-gist.js** — STATIC / PASS；退出码 `0`；0.065 秒。
+- **syntax gist-sync/plugin-gist.js** — STATIC / PASS；退出码 `0`；0.062 秒。
   命令：`node --check gist-sync/plugin-gist.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223206605900-syntax_gist-sync_plugin-gist_js.stdout.log`；stderr：`reports\gist-sync\logs\1792066223206605900-syntax_gist-sync_plugin-gist_js.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068101973973900-syntax_gist-sync_plugin-gist_js.stdout.log`；stderr：`reports\gist-sync\logs\1792068101973973900-syntax_gist-sync_plugin-gist_js.stderr.log`。
 
-- **syntax gist-sync/ui-gist.js** — STATIC / PASS；退出码 `0`；0.061 秒。
+- **syntax gist-sync/ui-gist.js** — STATIC / PASS；退出码 `0`；0.064 秒。
   命令：`node --check gist-sync/ui-gist.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223268817200-syntax_gist-sync_ui-gist_js.stdout.log`；stderr：`reports\gist-sync\logs\1792066223268817200-syntax_gist-sync_ui-gist_js.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068102039407000-syntax_gist-sync_ui-gist_js.stdout.log`；stderr：`reports\gist-sync\logs\1792068102039407000-syntax_gist-sync_ui-gist_js.stderr.log`。
 
-- **Shell syntax Clash.GistSync** — STATIC / PASS；退出码 `0`；0.161 秒。
+- **Shell syntax Clash.GistSync** — STATIC / PASS；退出码 `0`；0.147 秒。
   命令：`wsl -d Debian -- sh -n /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.GistSync`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223430315300-Shell_syntax_Clash_GistSync.stdout.log`；stderr：`reports\gist-sync\logs\1792066223430315300-Shell_syntax_Clash_GistSync.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068102188294800-Shell_syntax_Clash_GistSync.stdout.log`；stderr：`reports\gist-sync\logs\1792068102188294800-Shell_syntax_Clash_GistSync.stderr.log`。
 
-- **BusyBox syntax Clash.GistSync** — STATIC / PASS；退出码 `0`；0.165 秒。
+- **BusyBox syntax Clash.GistSync** — STATIC / PASS；退出码 `0`；0.159 秒。
   命令：`wsl -d Debian -- busybox ash -n /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.GistSync`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223598208000-BusyBox_syntax_Clash_GistSync.stdout.log`；stderr：`reports\gist-sync\logs\1792066223598208000-BusyBox_syntax_Clash_GistSync.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068102348613500-BusyBox_syntax_Clash_GistSync.stdout.log`；stderr：`reports\gist-sync\logs\1792068102348613500-BusyBox_syntax_Clash_GistSync.stderr.log`。
 
-- **Shell syntax Clash.ConfigCommit** — STATIC / PASS；退出码 `0`；0.146 秒。
+- **Shell syntax Clash.ConfigCommit** — STATIC / PASS；退出码 `0`；0.163 秒。
   命令：`wsl -d Debian -- sh -n /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.ConfigCommit`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223745976100-Shell_syntax_Clash_ConfigCommit.stdout.log`；stderr：`reports\gist-sync\logs\1792066223745976100-Shell_syntax_Clash_ConfigCommit.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068102513106000-Shell_syntax_Clash_ConfigCommit.stdout.log`；stderr：`reports\gist-sync\logs\1792068102513106000-Shell_syntax_Clash_ConfigCommit.stderr.log`。
 
-- **BusyBox syntax Clash.ConfigCommit** — STATIC / PASS；退出码 `0`；0.178 秒。
+- **BusyBox syntax Clash.ConfigCommit** — STATIC / PASS；退出码 `0`；0.154 秒。
   命令：`wsl -d Debian -- busybox ash -n /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.ConfigCommit`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066223925952900-BusyBox_syntax_Clash_ConfigCommit.stdout.log`；stderr：`reports\gist-sync\logs\1792066223925952900-BusyBox_syntax_Clash_ConfigCommit.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068102667945000-BusyBox_syntax_Clash_ConfigCommit.stdout.log`；stderr：`reports\gist-sync\logs\1792068102667945000-BusyBox_syntax_Clash_ConfigCommit.stderr.log`。
 
-- **Gist UI and protocol rc3-ui.js** — MOCK / PASS；退出码 `0`；0.304 秒。
+- **Go vet current source** — STATIC / PASS；退出码 `0`；0.669 秒。
+  命令：`go -C gist-sync/native vet ./...`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068103338705500-Go_vet_current_source.stdout.log`；stderr：`reports\gist-sync\logs\1792068103338705500-Go_vet_current_source.stderr.log`。
+
+- **compile current Go tests** — STATIC / PASS；退出码 `0`；1.241 秒。
+  命令：`go -C gist-sync/native test -c -o ../../build/gist-sync/bin/native.test .`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068104580836000-compile_current_Go_tests.stdout.log`；stderr：`reports\gist-sync\logs\1792068104580836000-compile_current_Go_tests.stderr.log`。
+
+- **Go unit and process tests** — UNIT / PASS；退出码 `0`；23.478 秒。
+  命令：`wsl -d Debian --cd /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/gist-sync/native -- ../../build/gist-sync/bin/native.test -test.v -test.timeout=240s`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068128057630100-Go_unit_and_process_tests.stdout.log`；stderr：`reports\gist-sync\logs\1792068128057630100-Go_unit_and_process_tests.stderr.log`。
+
+- **production CLI real transactions and daemon** — INTEGRATION / PASS；退出码 `0`；41.371 秒。
+  命令：`wsl -d Debian -- python3 /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068169433019200-production_CLI_real_transactions_and_daemon.stdout.log`；stderr：`reports\gist-sync\logs\1792068169433019200-production_CLI_real_transactions_and_daemon.stderr.log`。
+
+- **shipped ARM64 age real decryption under QEMU** — INTEGRATION / PASS；退出码 `0`；1.514 秒。
+  命令：`wsl -d Debian -- python3 /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/arm64-components.py`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068170949543200-shipped_ARM64_age_real_decryption_under_QEMU.stdout.log`；stderr：`reports\gist-sync\logs\1792068170949543200-shipped_ARM64_age_real_decryption_under_QEMU.stderr.log`。
+
+- **Gist UI and protocol rc3-ui.js** — MOCK / PASS；退出码 `0`；0.329 秒。
   命令：`wsl -d Debian -- node /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/rc3-ui.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066224237679000-Gist_UI_and_protocol_rc3-ui_js.stdout.log`；stderr：`reports\gist-sync\logs\1792066224237679000-Gist_UI_and_protocol_rc3-ui_js.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068171281249900-Gist_UI_and_protocol_rc3-ui_js.stdout.log`；stderr：`reports\gist-sync\logs\1792068171281249900-Gist_UI_and_protocol_rc3-ui_js.stderr.log`。
 
-- **Gist UI and protocol ui-logic.js** — MOCK / PASS；退出码 `0`；0.193 秒。
+- **Gist UI and protocol ui-logic.js** — MOCK / PASS；退出码 `0`；0.259 秒。
   命令：`wsl -d Debian -- node /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/ui-logic.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066224432409600-Gist_UI_and_protocol_ui-logic_js.stdout.log`；stderr：`reports\gist-sync\logs\1792066224432409600-Gist_UI_and_protocol_ui-logic_js.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068171543301700-Gist_UI_and_protocol_ui-logic_js.stdout.log`；stderr：`reports\gist-sync\logs\1792068171543301700-Gist_UI_and_protocol_ui-logic_js.stderr.log`。
 
-- **full original regression including ARM64 emulation** — MOCK / PASS；退出码 `0`；99.108 秒。
+- **full original regression including ARM64 emulation** — MOCK / PASS；退出码 `0`；101.955 秒。
   命令：`wsl -d Debian -- env PATH=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin F50_TEST_YQ=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/tools/yq-linux-amd64 F50_TEST_QEMU=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/tools/qemu-aarch64 node /mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/scripts/verify_plugin.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066323542274400-full_original_regression_including_ARM64_emulation.stdout.log`；stderr：`reports\gist-sync\logs\1792066323542274400-full_original_regression_including_ARM64_emulation.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068273500097400-full_original_regression_including_ARM64_emulation.stdout.log`；stderr：`reports\gist-sync\logs\1792068273500097400-full_original_regression_including_ARM64_emulation.stderr.log`。
 
-- **package hashes, ELF and original component preservation** — STATIC / PASS；退出码 `0`；2.991 秒。
+- **package hashes, ELF and original component preservation** — STATIC / PASS；退出码 `0`；4.193 秒。
   命令：`D:\Python\Python313\python.exe tests/gist-sync/package-check.py`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066326535064100-package_hashes__ELF_and_original_component_preservation.stdout.log`；stderr：`reports\gist-sync\logs\1792066326535064100-package_hashes__ELF_and_original_component_preservation.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068277695638600-package_hashes__ELF_and_original_component_preservation.stdout.log`；stderr：`reports\gist-sync\logs\1792068277695638600-package_hashes__ELF_and_original_component_preservation.stderr.log`。
 
-- **Tabbit real interactions with simulated device API** — MOCK / PASS；退出码 `0`；16.851 秒。
-  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id final-browser-1792066326537339400 --timeout-ms 120000`。
+- **Tabbit real interactions with simulated device API** — MOCK / PASS；退出码 `0`；15.439 秒。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync repo verification" --request-id final-browser-1792068277699964200 --timeout-ms 120000`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066343387312100-Tabbit_real_interactions_with_simulated_device_API.stdout.log`；stderr：`reports\gist-sync\logs\1792066343387312100-Tabbit_real_interactions_with_simulated_device_API.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068293136949300-Tabbit_real_interactions_with_simulated_device_API.stdout.log`；stderr：`reports\gist-sync\logs\1792068293136949300-Tabbit_real_interactions_with_simulated_device_API.stderr.log`。
 
-- **final source size report** — STATIC / PASS；退出码 `0`；0.626 秒。
+- **Gist and manual source dialog interaction** — MOCK / PASS；退出码 `0`；9.493 秒。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync repo verification" --request-id sources-1792068293145491700`。
+  环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
+  stdout：`reports\gist-sync\logs\1792068302636742600-Gist_and_manual_source_dialog_interaction.stdout.log`；stderr：`reports\gist-sync\logs\1792068302636742600-Gist_and_manual_source_dialog_interaction.stderr.log`。
+
+- **final source size report** — STATIC / PASS；退出码 `0`；1.055 秒。
   命令：`node scripts/report_plugin.js`。
   环境：Windows；wsl 命令运行于 Debian；Tabbit 为普通 Chromium。
-  stdout：`reports\gist-sync\logs\1792066344017104800-final_source_size_report.stdout.log`；stderr：`reports\gist-sync\logs\1792066344017104800-final_source_size_report.stderr.log`。
+  stdout：`reports\gist-sync\logs\1792068303698921300-final_source_size_report.stdout.log`；stderr：`reports\gist-sync\logs\1792068303698921300-final_source_size_report.stderr.log`。
 
 ## 真实组件覆盖
 
@@ -99,6 +129,7 @@ genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service
 - INTEGRATION PASS：genuine Mihomo hot reload and runtime confirmation。
 - INTEGRATION PASS：single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys。
 - INTEGRATION PASS：reencrypted unchanged config keeps genuine core PID。
+- INTEGRATION PASS：manual sources survive background Gist updates; URL deduplication, upstream adoption, disable and removal preserve remote nodes and rules。
 - INTEGRATION PASS：real age decrypt followed by invalid YAML preserves current files。
 - INTEGRATION PASS：corrupt ciphertext never reaches commit。
 - INTEGRATION PASS：local edit conflict is never silently overwritten。
@@ -116,6 +147,13 @@ genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service
 - INTEGRATION PASS：genuine API connection loss, denied restart, rollback and later recovery。
 - INTEGRATION PASS：detached daemon, due work, repeated saves, boot hook and disable。
 - INTEGRATION PASS：private identity absent from logs, receipts and leftover work。
+
+## Gist 与手动订阅合并
+
+从当前源码重新构建。订阅设置读取 Gist 的 Provider 和内置节点；手动来源沿用 subscription_urls.txt，经加密请求在设备锁内保存。每次同步从 Gist 原文重新合并，按规范化 URL 去重，不替换原规则、策略组或同名 Provider。
+真实 age/yq/Mihomo 测试覆盖连续同步、后台到期更新、上游新增同一 URL、禁用及删除、节点实际加载和下载失败后的配置恢复。不同 URL 可能包含同一节点，不跨来源删除节点。
+复现并修复新增 Provider 下载受 MATCH 规则影响的启动依赖；仅新增的手动 Provider 使用 DIRECT。占位 COMPATIBLE 节点不算加载成功。最初后台测试未达到调度期限；测试显式设置持久化期限为过去后验证独立进程，未缩短产品同步间隔。早期失败日志保留。
+浏览器使用仓库真实对话框及模拟设备 API，验证 Gist 来源读取、隐藏模板替换、修改、禁用、清空及重新打开；属于 MOCK，不代表 Android WebView 或生产配置应用。
 
 ## F50 本轮实测
 
@@ -196,6 +234,34 @@ genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service
 - **verify compact interval matches actual Apply button** — DEVICE / PASS；退出码 `0`。
   命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id compact-ui-device-71 --timeout-ms 120000`；环境：Tabbit / F50 Android 13 ARM64。
   stdout：`reports\gist-sync\logs\1792066313979100800-verify_compact_interval_matches_actual_Apply_button.stdout.log`；stderr：`reports\gist-sync\logs\1792066313979100800-verify_compact_interval_matches_actual_Apply_button.stderr.log`。
+
+- **backup F50 current saved settings before source merge upgrade** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id sources-1792068155814292400 --timeout-ms 90000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068161263015400-backup_F50_current_saved_settings_before_source_merge_upgrade.stdout.log`；stderr：`reports\gist-sync\logs\1792068161263015400-backup_F50_current_saved_settings_before_source_merge_upgrade.stderr.log`。
+
+- **backup current host plugins before source merge upgrade** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id sources-1792068161266349000 --timeout-ms 90000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068161528042400-backup_current_host_plugins_before_source_merge_upgrade.stdout.log`；stderr：`reports\gist-sync\logs\1792068161528042400-backup_current_host_plugins_before_source_merge_upgrade.stderr.log`。
+
+- **upgrade complete components with persistent source merge** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id source-upgrade-1792068345390703800 --timeout-ms 180000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068392570677800-upgrade_complete_components_with_persistent_source_merge.stdout.log`；stderr：`reports\gist-sync\logs\1792068392570677800-upgrade_complete_components_with_persistent_source_merge.stderr.log`。
+
+- **verify upgraded source merge components and original network mode** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id source-upgrade-1792068392575086900 --timeout-ms 180000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068399684324200-verify_upgraded_source_merge_components_and_original_network_mode.stdout.log`；stderr：`reports\gist-sync\logs\1792068399684324200-verify_upgraded_source_merge_components_and_original_network_mode.stderr.log`。
+
+- **verify production source settings preserved after merge upgrade** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id source-upgrade-1792068399688607900 --timeout-ms 180000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068399934523900-verify_production_source_settings_preserved_after_merge_upgrade.stdout.log`；stderr：`reports\gist-sync\logs\1792068399934523900-verify_production_source_settings_preserved_after_merge_upgrade.stderr.log`。
+
+- **deploy source merge UI preserving other plugins** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id source-front-1792068429540777200 --timeout-ms 180000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068483116812500-deploy_source_merge_UI_preserving_other_plugins.stdout.log`；stderr：`reports\gist-sync\logs\1792068483116812500-deploy_source_merge_UI_preserving_other_plugins.stderr.log`。
+
+- **validate saved real Gist including manual source overlay without applying** — DEVICE / PASS；退出码 `0`。
+  命令：`C:\Users\Cuty\AppData\Local\Tabbit\LocalAgent\bin\tabbit-cli.exe nodejs --task "GistSync network validation" --request-id source-front-1792068483121831600 --timeout-ms 180000`；环境：Tabbit / F50 Android 13 ARM64。
+  stdout：`reports\gist-sync\logs\1792068486690588800-validate_saved_real_Gist_including_manual_source_overlay_without_applying.stdout.log`；stderr：`reports\gist-sync\logs\1792068486690588800-validate_saved_real_Gist_including_manual_source_overlay_without_applying.stderr.log`。
 
 
 ## BLOCKED 与限制

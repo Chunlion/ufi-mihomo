@@ -1,4 +1,4 @@
 {
   "success": true,
-  "output": "Proxy/config.yaml: OK\nTools/config_source.conf: OK\nPolicy/options.conf: OK\nv1.3.2\n{\"goVersion\":\"go1.26.3\",\"goarch\":\"arm64\",\"goos\":\"linux\",\"ok\":true,\"protocol\":1,\"version\":\"1.0.0-rc4\"}\n{\"code\":\"\",\"completedAt\":\"2026-10-15T12:04:19.2557313Z\",\"ok\":true}\nCORE_PID=24331\nAPI_HTTP=200\nMIHOMO_VERSION=v1.19.31\ntraffic_mode=tproxy\nDEVICE_POSTCHECK_OK=1\n\nPOSTCHECK_EXIT=0"
+  "output": "Proxy/config.yaml: OK\nTools/config_source.conf: OK\nPolicy/options.conf: OK\nv1.3.2\n{\"goVersion\":\"go1.26.3\",\"goarch\":\"arm64\",\"goos\":\"linux\",\"ok\":true,\"protocol\":1,\"version\":\"1.0.0-rc4\"}\n{\"code\":\"\",\"completedAt\":\"2026-10-15T12:46:30.502291682Z\",\"ok\":true}\nCORE_PID=10203\nAPI_HTTP=200\nMIHOMO_VERSION=v1.19.31\ntraffic_mode=tproxy\nDEVICE_POSTCHECK_OK=1\n\nPOSTCHECK_EXIT=0"
 }

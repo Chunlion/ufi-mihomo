@@ -2,7 +2,7 @@
 
 仓库：`C:/Users/Cuty/Desktop/Github/Tproxy-F50`；分支 `main`；本轮基线 `adc9458d69b4caff2b6f79e8b6b773429acf0dc8`。
 初始只有用户已有的未跟踪 `AGENTS.md`，保持原样且不纳入提交。
-RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 字节一致，整合后的维护源码全部位于本仓库，没有初始化替代仓库。
+RC2/RC3 是独立交付来源；维护源码、构建和测试均已纳入本仓库，没有初始化替代仓库。
 
 - 主插件纳入 Gist 设置、下载、解密、配置事务、互斥、来源保护及恢复；Controller 协议、固定 Secret 和网络规则保留。
 - 默认完整组件包增加 age、同步程序、脚本和清单；安装前校验文件哈希、程序退出状态及版本；重复升级保留设置与私钥。在线包未发布，停止使用缺少 GistSync 的旧镜像。
@@ -10,6 +10,7 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
 - 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 - select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
 - 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
+- 订阅设置读取 Gist 的订阅与内置节点；手动订阅通过同一设备同步任务保存并合并，后续自动同步持续保留，按 URL 去重，不重建本地模板。新增手动 Provider 下载采用 DIRECT，确认实际节点后才报告加载成功；下载失败验证原配置回滚。
 - 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 
 ```text
@@ -17,47 +18,49 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  .gitignore                                         |   3 +
  README.md                                          |   8 +-
  dist/v9.0.0-delivery.json                          |  18 +-
- ...62\276\347\256\200\344\272\244\344\273\230.zip" | Bin 253933 -> 275749 bytes
- docs/gist-sync.md                                  |  59 ++
+ ...62\276\347\256\200\344\272\244\344\273\230.zip" | Bin 253933 -> 278967 bytes
+ docs/gist-sync.md                                  |  61 ++
  gist-sync/Clash.GistSync                           |   6 +
  gist-sync/age.json                                 |   7 +
- gist-sync/native/api.go                            | 149 +++++
+ gist-sync/native/api.go                            | 190 ++++++
  gist-sync/native/cli_integration_test.go           |  41 ++
- gist-sync/native/common.go                         | 414 +++++++++++++
- gist-sync/native/config.go                         | 320 ++++++++++
- gist-sync/native/daemon.go                         | 288 +++++++++
+ gist-sync/native/common.go                         | 414 ++++++++++++
+ gist-sync/native/config.go                         | 328 +++++++++
+ gist-sync/native/daemon.go                         | 288 ++++++++
  gist-sync/native/download.go                       | 297 +++++++++
- gist-sync/native/download_test.go                  | 178 ++++++
+ gist-sync/native/download_test.go                  | 178 +++++
  gist-sync/native/go.mod                            |   3 +
- gist-sync/native/hardening_test.go                 |  70 +++
+ gist-sync/native/hardening_test.go                 |  70 ++
  gist-sync/native/housekeeping.go                   |  88 +++
  gist-sync/native/housekeeping_test.go              |  88 +++
- gist-sync/native/jobs.go                           | 280 +++++++++
+ gist-sync/native/jobs.go                           | 284 ++++++++
  gist-sync/native/live_test.go                      |  38 ++
  gist-sync/native/locks.go                          | 335 ++++++++++
  gist-sync/native/main.go                           | 151 +++++
- gist-sync/native/normalize.go                      | 575 +++++++++++++++++
+ gist-sync/native/normalize.go                      | 575 ++++++++++++++++
  gist-sync/native/normalize_test.go                 |  85 +++
- gist-sync/native/process_test.go                   | 423 +++++++++++++
- gist-sync/native/profiles.json                     | 681 +++++++++++++++++++++
+ gist-sync/native/process_test.go                   | 423 ++++++++++++
+ gist-sync/native/profiles.json                     | 681 +++++++++++++++++++
  gist-sync/native/real_age_test.go                  | 114 ++++
  gist-sync/native/sealed.go                         | 164 +++++
- gist-sync/native/sealed_test.go                    | 103 ++++
- gist-sync/native/settings.go                       | 449 ++++++++++++++
- gist-sync/native/transaction.go                    | 474 ++++++++++++++
- gist-sync/native/transaction_test.go               | 459 ++++++++++++++
- gist-sync/plugin-gist.js                           | 156 +++++
+ gist-sync/native/sealed_test.go                    | 103 +++
+ gist-sync/native/settings.go                       | 450 +++++++++++++
+ gist-sync/native/sources.go                        | 207 ++++++
+ gist-sync/native/sources_test.go                   | 153 +++++
+ gist-sync/native/transaction.go                    | 492 ++++++++++++++
+ gist-sync/native/transaction_test.go               | 459 +++++++++++++
+ gist-sync/plugin-gist.js                           | 205 ++++++
  gist-sync/release.json                             |   6 +
  gist-sync/test-tools.json                          |  24 +
  gist-sync/ui-gist.js                               | 116 ++++
- reports/gist-sync/CHANGES.md                       | 557 +++++++++++++++++
+ reports/gist-sync/CHANGES.md                       | 734 +++++++++++++++++++++
  reports/gist-sync/DEVICE-PLAN.md                   |  17 +
- reports/gist-sync/TEST-REPORT.md                   | 212 +++++++
- reports/gist-sync/base-run.json                    | 678 ++++++++++++++++++++
+ reports/gist-sync/TEST-REPORT.md                   | 212 ++++++
+ reports/gist-sync/base-run.json                    | 678 +++++++++++++++++++
  reports/gist-sync/baseline.json                    |  12 +
- reports/gist-sync/browser-ui.json                  | 110 ++++
- reports/gist-sync/browser-ui.png                   | Bin 0 -> 78895 bytes
- reports/gist-sync/changes.patch                    | Bin 0 -> 509539 bytes
+ reports/gist-sync/browser-ui.json                  | 110 +++
+ reports/gist-sync/browser-ui.png                   | Bin 0 -> 78966 bytes
+ reports/gist-sync/changes.patch                    | Bin 0 -> 511960 bytes
  reports/gist-sync/device-input.json                |  30 +
  reports/gist-sync/device-input.png                 | Bin 0 -> 369570 bytes
  reports/gist-sync/device-install.json              |  14 +
@@ -65,11 +68,11 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  reports/gist-sync/device-observed-user-state.json  |  29 +
  reports/gist-sync/device-plugin-update.json        |   7 +
  reports/gist-sync/device-postcheck.json            |   4 +
- reports/gist-sync/device-saved-test.json           |  35 ++
- reports/gist-sync/evidence.jsonl                   | 284 +++++++++
+ reports/gist-sync/device-saved-test.json           |  35 +
+ reports/gist-sync/evidence.jsonl                   | 341 ++++++++++
  reports/gist-sync/git-proof.json                   |  13 +
- reports/gist-sync/integration.json                 | 144 +++++
- reports/gist-sync/latest-run.json                  | 416 +++++++++++++
+ reports/gist-sync/integration.json                 | 150 +++++
+ reports/gist-sync/latest-run.json                  | 572 ++++++++++++++++
  reports/gist-sync/live.json                        |  15 +
  ...08058188200-F50_read-only_inspection.stderr.log | Bin 0 -> 69 bytes
  ...08058188200-F50_read-only_inspection.stdout.log | Bin
@@ -639,40 +642,42 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  ..._visual_check_with_saved_link_masked.stdout.log | Bin 0 -> 1689 bytes
  ...ackage_compact_single_Apply_delivery.stderr.log | Bin 0 -> 1775 bytes
  ...ackage_compact_single_Apply_delivery.stdout.log | Bin 0 -> 242 bytes
+ ...Apply_package_integrity_verification.stderr.log | Bin
+ ...Apply_package_integrity_verification.stdout.log | Bin 0 -> 242 bytes
  .../regression/cleanup.test.js.stderr.log          | Bin
- .../regression/cleanup.test.js.stdout.log          | Bin 0 -> 7195 bytes
+ .../regression/cleanup.test.js.stdout.log          | Bin 0 -> 7220 bytes
  .../regression/compact.test.js.stderr.log          | Bin
- .../regression/compact.test.js.stdout.log          | Bin 0 -> 1425 bytes
+ .../regression/compact.test.js.stdout.log          | Bin 0 -> 1426 bytes
  .../regression/download_archive.test.js.stderr.log | Bin
- .../regression/download_archive.test.js.stdout.log | Bin 0 -> 1126 bytes
+ .../regression/download_archive.test.js.stdout.log | Bin 0 -> 1127 bytes
  .../http_subscription.test.js.stderr.log           | Bin
- .../http_subscription.test.js.stdout.log           | Bin 0 -> 2795 bytes
+ .../http_subscription.test.js.stdout.log           | Bin 0 -> 2796 bytes
  .../regression/ipv6_dns.test.js.stderr.log         | Bin
- .../regression/ipv6_dns.test.js.stdout.log         | Bin 0 -> 6303 bytes
+ .../regression/ipv6_dns.test.js.stdout.log         | Bin 0 -> 6300 bytes
  .../regression/optimization.test.js.stderr.log     | Bin
- .../regression/optimization.test.js.stdout.log     | Bin 0 -> 4396 bytes
+ .../regression/optimization.test.js.stdout.log     | Bin 0 -> 4397 bytes
  .../optimization_install.test.js.stderr.log        | Bin
- .../optimization_install.test.js.stdout.log        | Bin 0 -> 4758 bytes
+ .../optimization_install.test.js.stdout.log        | Bin 0 -> 4762 bytes
  .../optimization_network.test.js.stderr.log        | Bin
- .../optimization_network.test.js.stdout.log        | Bin 0 -> 3479 bytes
+ .../optimization_network.test.js.stdout.log        | Bin 0 -> 3485 bytes
  .../optimization_subscription.test.js.stderr.log   | Bin
- .../optimization_subscription.test.js.stdout.log   | Bin 0 -> 6823 bytes
+ .../optimization_subscription.test.js.stdout.log   | Bin 0 -> 6826 bytes
  .../regression/panel_open.test.js.stderr.log       | Bin
- .../regression/panel_open.test.js.stdout.log       | Bin 0 -> 3098 bytes
+ .../regression/panel_open.test.js.stdout.log       | Bin 0 -> 3099 bytes
  .../release_consistency.test.js.stderr.log         | Bin
  .../release_consistency.test.js.stdout.log         | Bin 0 -> 777 bytes
  .../regression/reliability.test.js.stderr.log      | Bin
- .../regression/reliability.test.js.stdout.log      | Bin 0 -> 7280 bytes
+ .../regression/reliability.test.js.stdout.log      | Bin 0 -> 7284 bytes
  .../gist-sync/regression/run_tests.js.stderr.log   | Bin
  .../gist-sync/regression/run_tests.js.stdout.log   | Bin 0 -> 5290 bytes
  .../subscription_update.test.js.stderr.log         | Bin
  .../subscription_update.test.js.stdout.log         | Bin 0 -> 7111 bytes
  .../regression/yaml_bridge.test.js.stderr.log      | Bin
- .../regression/yaml_bridge.test.js.stdout.log      | Bin 0 -> 857 bytes
+ .../regression/yaml_bridge.test.js.stdout.log      | Bin 0 -> 856 bytes
  reports/gist-sync/test-tools.json                  |  18 +
  reports/gist-sync/user-revision.json               |  13 +
- reports/v9.0.0-regression.json                     |  87 ++-
- reports/v9.0.0-size.json                           |  60 +-
+ reports/v9.0.0-regression.json                     | 116 +++-
+ reports/v9.0.0-size.json                           |  64 +-
  scripts/build_gist_sync.py                         |  76 +++
  scripts/build_helper.py                            |   2 +
  scripts/compact_plugin.js                          |   1 +
@@ -680,15 +685,16 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  scripts/gist_evidence.py                           |  45 ++
  scripts/gist_fetch.mjs                             |  16 +
  scripts/gist_live.py                               |  14 +
- scripts/gist_test_tools.py                         |  36 ++
- scripts/package_gist_sync.py                       | 117 ++++
+ scripts/gist_test_tools.py                         |  36 +
+ scripts/package_gist_sync.py                       | 127 ++++
  scripts/package_plugin.py                          |   4 +
  scripts/snapshot_gist_contracts.js                 |  20 +
  scripts/sync_gist_plugin.js                        |  57 ++
- scripts/verify_gist_sync.py                        |  79 +++
+ scripts/verify_gist_sync.py                        |  82 +++
  scripts/verify_plugin.js                           |   4 +-
  tests/gist-sync/arm64-components.py                |  15 +
- tests/gist-sync/baseline-normalizer.js             | 285 +++++++++
+ tests/gist-sync/baseline-normalizer.js             | 285 ++++++++
+ tests/gist-sync/browser-sources.js                 |  43 ++
  tests/gist-sync/browser-ui.js                      |  43 ++
  tests/gist-sync/device-backup.js                   |  39 ++
  tests/gist-sync/device-host-backup.js              |   7 +
@@ -703,11 +709,13 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  tests/gist-sync/device-postcheck.js                |  39 ++
  tests/gist-sync/device-redaction.js                |  11 +
  tests/gist-sync/device-saved-test.js               |  21 +
+ tests/gist-sync/device-source-after.js             |  17 +
+ tests/gist-sync/device-source-inventory.js         |  19 +
  tests/gist-sync/device-ui.js                       |  51 ++
  tests/gist-sync/device-upload.js                   |  18 +
- tests/gist-sync/expected-contracts.json            | 145 +++++
+ tests/gist-sync/expected-contracts.json            | 145 ++++
  tests/gist-sync/host-bridge.js                     |  10 +
- tests/gist-sync/integration.py                     | 304 +++++++++
+ tests/gist-sync/integration.py                     | 345 ++++++++++
  tests/gist-sync/live-network.py                    |  17 +
  tests/gist-sync/mock-age.py                        |  16 +
  tests/gist-sync/mock-yq.py                         |  31 +
@@ -721,14 +729,16 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  tests/gist-sync/vendor/crypto-js.js                |   1 +
  tests/tproxy/cleanup.test.js                       |  14 +-
  tests/tproxy/download_archive.test.js              |  11 +-
- tests/tproxy/optimization_harness.js               |   5 +-
+ tests/tproxy/gist_sources.test.js                  |  58 ++
+ tests/tproxy/optimization_harness.js               |   6 +-
  tests/tproxy/optimization_install.test.js          |  34 +-
  tests/tproxy/optimization_network.test.js          |  14 +-
  tests/tproxy/release_consistency.test.js           |   8 +-
  tests/tproxy/run_tests.js                          |  11 +-
- tproxy-yq.zip                                      | Bin 60632949 -> 67035027 bytes
- "\347\214\253\347\214\253TProxy.js"                | 586 ++++++++++++++----
- 715 files changed, 11931 insertions(+), 192 deletions(-)
+ tests/tproxy/subscription_update.test.js           |   1 +
+ tproxy-yq.zip                                      | Bin 60632949 -> 67043278 bytes
+ "\347\214\253\347\214\253TProxy.js"                | 674 +++++++++++++++----
+ 724 files changed, 13114 insertions(+), 202 deletions(-)
 ```
 
 完整源码差异见 `changes.patch`。F50 完整包升级已验证；真实 Gist 解密与配置校验已通过，F50 生产配置应用和 Android WebView 尚未验证。

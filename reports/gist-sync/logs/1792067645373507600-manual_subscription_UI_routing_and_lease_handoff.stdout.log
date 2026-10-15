@@ -1,0 +1,12 @@
+✔ Gist refresh bypasses template replacement and ProviderN assumptions (3.3675ms)
+✔ Gist source saves, disabled-only and empty removal all use native merge (5.6901ms)
+✔ Gist detection protects local edits and detects unsupported components (2.3032ms)
+✔ Manual source update releases frontend lease, fences source revision and checks real receipt (1.8265ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 235.2548

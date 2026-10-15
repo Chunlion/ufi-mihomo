@@ -21,13 +21,14 @@ type Settings struct {
 	Deleted       bool        `json:"deleted,omitempty"`
 }
 type Request struct {
-	URL           string       `json:"url"`
-	Identity      string       `json:"identity"`
-	Auto          *bool        `json:"auto,omitempty"`
-	IntervalHours *int         `json:"intervalHours,omitempty"`
-	Revision      *uint64      `json:"revision,omitempty"`
-	ReplaceLocal  bool         `json:"replaceLocal,omitempty"`
-	ExpectedLocal *Fingerprint `json:"expectedLocal,omitempty"`
+	URL           string          `json:"url"`
+	Identity      string          `json:"identity"`
+	Auto          *bool           `json:"auto,omitempty"`
+	IntervalHours *int            `json:"intervalHours,omitempty"`
+	Revision      *uint64         `json:"revision,omitempty"`
+	ReplaceLocal  bool            `json:"replaceLocal,omitempty"`
+	ExpectedLocal *Fingerprint    `json:"expectedLocal,omitempty"`
+	ManualSources *[]ManualSource `json:"manualSources,omitempty"`
 }
 type Outcome struct {
 	OK              bool        `json:"ok"`

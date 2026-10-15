@@ -49,10 +49,10 @@ index 4feb964..6c2216a 100644
  node scripts/patch_controller_http.js tproxy-yq.zip clashctl_arm64.http
 diff --git a/docs/gist-sync.md b/docs/gist-sync.md
 new file mode 100644
-index 0000000..dc22ad4
+index 0000000..b8cbbad
 --- /dev/null
 +++ b/docs/gist-sync.md
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,61 @@
 +# GistSync 维护与复测
 +
 +仓库中的 `猫猫TProxy.js` 是主插件，`gist-sync/plugin-gist.js` 和 `ui-gist.js` 是对应模块的维护源。构建时将模块同步回主插件，从原有事务生成 `Clash.ConfigCommit`，再从 Go 源码构建同步程序。不要只修改交付 ZIP。
@@ -83,6 +83,8 @@ index 0000000..dc22ad4
 +将配套 JS 导入宿主，再在原组件管理中导入完整 ZIP。Gist 页面填写链接和私钥，点击“应用”即保存并同步；维护操作收在“更多”中。组件校验及可执行性检查在替换旧安装前完成；升级保留 `Tools/gist-sync` 中的设置和私钥，清理任务、运行态和临时工作目录。成功安装与事务收尾分别报告；收尾失败时保留恢复线索。
 +
 +当前完整包尚未发布，`gist-sync/release.json` 的 `published=false`、下载列表为空。在线入口会说明待发布，不能使用不含 GistSync 的旧镜像。发布需要另行授权；必须先上传并验证实际包，再填入真实 URL 和发布状态并重建、复测。
++
++Gist 配置应用后，订阅设置会读取其中的订阅和内置节点；手动链接仍保存在原 `Proxy/subscription_urls.txt`。每次手动或后台同步从最新 Gist 重新合并，按 URL 去重，保留 Gist 规则及策略组；删除、禁用手动链接不会删除 Gist 原有来源。手动订阅使用 HTTP Provider，核心运行时确认实际节点加载；失败进入原事务回滚。不同 URL 的订阅可能包含相同节点，不跨来源删除节点。
 +
 +## 私钥与错误处理
 +
@@ -139,10 +141,10 @@ index 0000000..7ae6113
 +}
 diff --git a/gist-sync/native/api.go b/gist-sync/native/api.go
 new file mode 100644
-index 0000000..aa62ad4
+index 0000000..7e84b60
 --- /dev/null
 +++ b/gist-sync/native/api.go
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,190 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -151,6 +153,7 @@ index 0000000..aa62ad4
 +	"context"
 +	"io"
 +	"net/http"
++	"net/url"
 +	"regexp"
 +	"strings"
 +	"time"
@@ -224,7 +227,47 @@ index 0000000..aa62ad4
 +			return e
 +		}
 +	}
++	manual, e := stringList(m[manualMeta])
++	if e != nil {
++		return e
++	}
++	if len(manual) > 0 {
++		loaded, e := a.api(ctx, str(m["secret"]), "GET", "/providers/proxies", nil)
++		if e != nil {
++			return e
++		}
++		for _, name := range manual {
++			if manualProviderReady(obj(loaded["providers"])[name]) {
++				continue
++			}
++			if _, e = a.api(ctx, str(m["secret"]), "PUT", "/providers/proxies/"+url.PathEscape(name), nil); e != nil {
++				return fail("manual_provider_update_failed")
++			}
++			loaded, e = a.api(ctx, str(m["secret"]), "GET", "/providers/proxies", nil)
++			if e != nil {
++				return e
++			}
++			if !manualProviderReady(obj(loaded["providers"])[name]) {
++				return fail("manual_provider_empty")
++			}
++		}
++	}
 +	return nil
++}
++
++func manualProviderReady(value any) bool {
++	p := obj(value)
++	nodes, ok := p["proxies"].([]any)
++	if !ok {
++		return false
++	}
++	for _, node := range nodes {
++		n := obj(node)
++		if str(n["name"]) != "" && !(str(n["name"]) == "COMPATIBLE" && strings.EqualFold(str(n["type"]), "Direct")) {
++			return true
++		}
++	}
++	return false
 +}
 +func resolveSelection(proxies map[string]any, name string) error {
 +	seen := map[string]bool{}
@@ -761,10 +804,10 @@ index 0000000..5830fd9
 +}
 diff --git a/gist-sync/native/config.go b/gist-sync/native/config.go
 new file mode 100644
-index 0000000..3afa732
+index 0000000..130fce6
 --- /dev/null
 +++ b/gist-sync/native/config.go
-@@ -0,0 +1,320 @@
+@@ -0,0 +1,328 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -927,6 +970,14 @@ index 0000000..3afa732
 +	if e != nil {
 +		return "", "", e
 +	}
++	sources, e := a.manualSources()
++	if e != nil {
++		return "", "", e
++	}
++	if e = mergeManualSources(m, sources); e != nil {
++		return "", "", e
++	}
++	m[gistMeta] = true
 +	o, c, e := a.options(ctx)
 +	if e != nil {
 +		return "", "", e
@@ -2141,10 +2192,10 @@ index 0000000..aead310
 +}
 diff --git a/gist-sync/native/jobs.go b/gist-sync/native/jobs.go
 new file mode 100644
-index 0000000..f833e05
+index 0000000..b77ccc4
 --- /dev/null
 +++ b/gist-sync/native/jobs.go
-@@ -0,0 +1,280 @@
+@@ -0,0 +1,284 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -2422,8 +2473,12 @@ index 0000000..f833e05
 +		jobs = jobs[:20]
 +	}
 +	state, stateErr := a.readStateChecked()
++	live, liveErr := a.readYAML(ctx, a.cfg())
++	source, sourceErr := readFile(a.source(), 4096)
++	gistActive := liveErr == nil && sourceErr == nil && strings.TrimSpace(string(source)) == "KANO_CONFIG_SOURCE=uploaded_config" &&
++		(live[gistMeta] == true || (stateErr == nil && ferr == nil && state.Applied.Config != "" && state.Applied.Config == fp.Config))
 +	age, e := run(ctx, 4*time.Second, nil, filepath.Join(a.Root, "Tools/age"), "--version")
-+	return map[string]any{"ok": true, "version": version, "protocol": 1, "settings": s, "identitySet": keySet, "pinnedURL": pinned, "schedulerRunning": a.daemonAlive(), "state": state, "stateError": code(stateErr), "currentFingerprint": fp, "fingerprintError": code(ferr), "activationPending": exists(a.journalDir()), "ageReady": e == nil && strings.TrimSpace(string(age)) == ageVersion, "jobs": jobs}, nil
++	return map[string]any{"ok": true, "manualSources": 1, "gistActive": gistActive, "version": version, "protocol": 1, "settings": s, "identitySet": keySet, "pinnedURL": pinned, "schedulerRunning": a.daemonAlive(), "state": state, "stateError": code(stateErr), "currentFingerprint": fp, "fingerprintError": code(ferr), "activationPending": exists(a.journalDir()), "ageReady": e == nil && strings.TrimSpace(string(age)) == ageVersion, "jobs": jobs}, nil
 +}
 diff --git a/gist-sync/native/live_test.go b/gist-sync/native/live_test.go
 new file mode 100644
@@ -4877,7 +4932,7 @@ index 0000000..0d39b99
 +}
 diff --git a/gist-sync/native/sealed.go b/gist-sync/native/sealed.go
 new file mode 100644
-index 0000000..a503a96
+index 0000000..0594051
 --- /dev/null
 +++ b/gist-sync/native/sealed.go
 @@ -0,0 +1,164 @@
@@ -4941,7 +4996,7 @@ index 0000000..a503a96
 +	if e = atomicWrite(dir+"/"+id, x509.MarshalPKCS1PrivateKey(key), 0600); e != nil {
 +		return nil, e
 +	}
-+	return map[string]any{"ok": true, "protocol": 1, "apply": true, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
++	return map[string]any{"ok": true, "protocol": 1, "apply": true, "manualSources": 1, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
 +}
 +
 +type sealedRequest struct {
@@ -5156,10 +5211,10 @@ index 0000000..fc9620e
 +}
 diff --git a/gist-sync/native/settings.go b/gist-sync/native/settings.go
 new file mode 100644
-index 0000000..d120767
+index 0000000..c05425e
 --- /dev/null
 +++ b/gist-sync/native/settings.go
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,450 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -5183,13 +5238,14 @@ index 0000000..d120767
 +	Deleted       bool        `json:"deleted,omitempty"`
 +}
 +type Request struct {
-+	URL           string       `json:"url"`
-+	Identity      string       `json:"identity"`
-+	Auto          *bool        `json:"auto,omitempty"`
-+	IntervalHours *int         `json:"intervalHours,omitempty"`
-+	Revision      *uint64      `json:"revision,omitempty"`
-+	ReplaceLocal  bool         `json:"replaceLocal,omitempty"`
-+	ExpectedLocal *Fingerprint `json:"expectedLocal,omitempty"`
++	URL           string          `json:"url"`
++	Identity      string          `json:"identity"`
++	Auto          *bool           `json:"auto,omitempty"`
++	IntervalHours *int            `json:"intervalHours,omitempty"`
++	Revision      *uint64         `json:"revision,omitempty"`
++	ReplaceLocal  bool            `json:"replaceLocal,omitempty"`
++	ExpectedLocal *Fingerprint    `json:"expectedLocal,omitempty"`
++	ManualSources *[]ManualSource `json:"manualSources,omitempty"`
 +}
 +type Outcome struct {
 +	OK              bool        `json:"ok"`
@@ -5609,12 +5665,384 @@ index 0000000..d120767
 +	out.Code = "sync_settings_deleted"
 +	return out, nil
 +}
+diff --git a/gist-sync/native/sources.go b/gist-sync/native/sources.go
+new file mode 100644
+index 0000000..fd509bb
+--- /dev/null
++++ b/gist-sync/native/sources.go
+@@ -0,0 +1,207 @@
++// SPDX-License-Identifier: AGPL-3.0-or-later
++package main
++
++import (
++	"net/url"
++	"os"
++	"path/filepath"
++	"strings"
++)
++
++const manualMeta = "x-f50-gist-manual-providers"
++const gistMeta = "x-f50-gist-sync"
++
++type ManualSource struct {
++	URL     string `json:"url"`
++	Enabled bool   `json:"enabled"`
++}
++
++func sourceURL(raw string) (string, error) {
++	if strings.ContainsAny(raw, " \t\r\n") || len(raw) > 8192 {
++		return "", fail("manual_source_invalid")
++	}
++	u, e := url.Parse(raw)
++	if e != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.Opaque != "" {
++		return "", fail("manual_source_invalid")
++	}
++	u.Fragment = ""
++	u.Host = strings.ToLower(u.Host)
++	if (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
++		u.Host = strings.TrimSuffix(u.Host, ":"+u.Port())
++	}
++	if u.Path == "" {
++		u.Path = "/"
++	}
++	return u.String(), nil
++}
++
++func (a *App) sourcesPath() string { return a.Root + "/Proxy/subscription_urls.txt" }
++
++func (a *App) manualSources() ([]ManualSource, error) {
++	b, e := readFile(a.sourcesPath(), 1<<20)
++	if os.IsNotExist(e) {
++		return nil, nil
++	}
++	if e != nil {
++		return nil, fail("manual_sources_unreadable")
++	}
++	sources := []ManualSource{}
++	for _, line := range strings.Split(string(b), "\n") {
++		line = strings.TrimSpace(line)
++		enabled := !strings.HasPrefix(line, "# KANO_SUB_DISABLED ")
++		if !enabled {
++			line = strings.TrimPrefix(line, "# KANO_SUB_DISABLED ")
++		}
++		if line == "" || strings.HasPrefix(line, "#") {
++			continue
++		}
++		sources = append(sources, ManualSource{strings.Fields(line)[0], enabled})
++	}
++	return sources, nil
++}
++
++func (a *App) saveManualSources(sources []ManualSource) error {
++	if len(sources) > 100 {
++		return fail("manual_source_limit")
++	}
++	text := "# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=provider\n"
++	seen := map[string]bool{}
++	for _, source := range sources {
++		u, e := sourceURL(source.URL)
++		if e != nil {
++			return e
++		}
++		if seen[u] {
++			continue
++		}
++		seen[u] = true
++		if !source.Enabled {
++			text += "# KANO_SUB_DISABLED "
++		}
++		text += u + "\n"
++	}
++	return atomicWrite(a.sourcesPath(), []byte(text), 0600)
++}
++
++// Rebuild from the downloaded document, never from last sync's additions.
++func mergeManualSources(config map[string]any, sources []ManualSource) error {
++	delete(config, manualMeta)
++	providers := obj(config["proxy-providers"])
++	if has(config, "proxy-providers") && providers == nil {
++		return fail("provider_mapping_required")
++	}
++	if providers == nil {
++		providers = map[string]any{}
++	}
++	seen := map[string]bool{}
++	paths := map[string]bool{}
++	for _, raw := range providers {
++		paths[filepath.Base(str(obj(raw)["path"]))] = true
++		if u, e := sourceURL(str(obj(raw)["url"])); e == nil {
++			seen[u] = true
++		}
++	}
++	for _, raw := range obj(config["x-f50-provider-sources"]) {
++		u := str(raw)
++		if m := obj(raw); m != nil {
++			u = str(m["url"])
++		}
++		if u, e := sourceURL(u); e == nil {
++			seen[u] = true
++		}
++	}
++	added := []string{}
++	for _, source := range sources {
++		if !source.Enabled {
++			continue
++		}
++		u, e := sourceURL(source.URL)
++		if e != nil {
++			return e
++		}
++		if seen[u] {
++			continue
++		}
++		seen[u] = true
++		name := "GistManual_" + hashBytes([]byte(u))[:16]
++		for has(providers, name) || paths[name+".yaml"] {
++			name += "_"
++		}
++		providers[name] = map[string]any{"type": "http", "url": u, "path": "./proxies/" + name + ".yaml", "interval": 3600, "proxy": "DIRECT",
++			"health-check": map[string]any{"enable": true, "url": "https://www.gstatic.com/generate_204", "interval": 300, "lazy": true}}
++		added = append(added, name)
++	}
++	if len(added) == 0 {
++		return nil
++	}
++	config["proxy-providers"] = providers
++	config[manualMeta] = anyList(added)
++	groups, e := array(config["proxy-groups"])
++	if config["proxy-groups"] == nil {
++		groups, e = []any{}, nil
++	}
++	if e != nil {
++		return e
++	}
++	nodes := map[string]bool{}
++	if list, ok := config["proxies"].([]any); ok {
++		for _, p := range list {
++			nodes[str(obj(p)["name"])] = true
++		}
++	}
++	used := false
++	for _, raw := range groups {
++		g := obj(raw)
++		switch str(g["type"]) {
++		case "select", "url-test", "fallback", "load-balance":
++		default:
++			continue
++		}
++		if g["include-all"] == true || g["include-all-providers"] == true {
++			used = true
++			continue
++		}
++		refs, e := stringList(g["use"])
++		if e != nil {
++			return e
++		}
++		ps, e := stringList(g["proxies"])
++		if e != nil {
++			return e
++		}
++		eligible := len(refs) > 0
++		for _, n := range ps {
++			eligible = eligible || nodes[n]
++		}
++		if !eligible {
++			continue
++		}
++		for _, name := range added {
++			found := false
++			for _, n := range refs {
++				found = found || n == name
++			}
++			if !found {
++				refs = append(refs, name)
++			}
++		}
++		g["use"] = anyList(refs)
++		used = true
++	}
++	if !used {
++		name := "手动订阅"
++		for {
++			collision := nodes[name]
++			for _, raw := range groups {
++				collision = collision || str(obj(raw)["name"]) == name
++			}
++			if !collision {
++				break
++			}
++			name += "_"
++		}
++		groups = append(groups, map[string]any{"name": name, "type": "select", "use": anyList(added)})
++	}
++	config["proxy-groups"] = groups
++	return nil
++}
+diff --git a/gist-sync/native/sources_test.go b/gist-sync/native/sources_test.go
+new file mode 100644
+index 0000000..f683e03
+--- /dev/null
++++ b/gist-sync/native/sources_test.go
+@@ -0,0 +1,153 @@
++package main
++
++import (
++	"context"
++	"os"
++	"strings"
++	"testing"
++)
++
++func sourceConfig() map[string]any {
++	return map[string]any{
++		"proxy-providers": map[string]any{"remote": map[string]any{"type": "http", "url": "https://example.test/remote?token=a", "path": "./proxies/remote.yaml", "filter": "HK"}},
++		"proxies":         []any{map[string]any{"name": "inline", "type": "ss", "server": "example.test", "port": 443, "cipher": "aes-128-gcm", "password": "fixture"}},
++		"proxy-groups": []any{
++			map[string]any{"name": "main", "type": "select", "proxies": []any{"auto", "DIRECT"}},
++			map[string]any{"name": "auto", "type": "url-test", "use": []any{"remote"}, "proxies": []any{"inline"}, "filter": "HK", "url": "https://example.test/check", "interval": 300},
++			map[string]any{"name": "direct", "type": "select", "proxies": []any{"DIRECT"}},
++			map[string]any{"name": "all", "type": "select", "include-all": true},
++		},
++		"rules": []any{"MATCH,main"},
++	}
++}
++
++func TestManualSourcesMergePreservesGistAndDeduplicates(t *testing.T) {
++	sources := []ManualSource{{"https://EXAMPLE.test:443/remote?token=a#alias", true}, {"https://example.test/manual?token=b", true}, {"https://example.test/manual?token=b#alias", true}, {"https://example.test/disabled", false}}
++	var expected string
++	for i := 0; i < 50; i++ {
++		m := sourceConfig()
++		original := clone(m).(map[string]any)
++		if e := mergeManualSources(m, sources); e != nil {
++			t.Fatal(e)
++		}
++		providers := obj(m["proxy-providers"])
++		if len(providers) != 2 || !same(providers["remote"], obj(original["proxy-providers"])["remote"]) {
++			t.Fatal("remote overwritten or duplicate URL")
++		}
++		if !same(m["rules"], original["rules"]) || !same(m["proxies"], original["proxies"]) {
++			t.Fatal("remote rules/nodes changed")
++		}
++		groups := m["proxy-groups"].([]any)
++		refs, _ := stringList(obj(groups[1])["use"])
++		if len(refs) != 2 || refs[0] != "remote" || obj(groups[1])["filter"] != "HK" {
++			t.Fatal("group references/filter replaced")
++		}
++		for _, n := range []int{0, 2, 3} {
++			if !same(groups[n], original["proxy-groups"].([]any)[n]) {
++				t.Fatal("unrelated group modified")
++			}
++		}
++		if expected != "" && expected != canonical(m) {
++			t.Fatal("unstable overlay across syncs")
++		}
++		expected = canonical(m)
++	}
++	m := sourceConfig()
++	if e := mergeManualSources(m, nil); e != nil {
++		t.Fatal(e)
++	}
++	if len(obj(m["proxy-providers"])) != 1 || has(m, manualMeta) {
++		t.Fatal("removal left managed providers")
++	}
++}
++
++func TestManualSourcesCollisionsAndInlineOnly(t *testing.T) {
++	u := "https://example.test/manual"
++	name := "GistManual_" + hashBytes([]byte(u))[:16]
++	m := sourceConfig()
++	obj(m["proxy-providers"])[name] = map[string]any{"type": "file", "path": "./proxies/original.yaml"}
++	if e := mergeManualSources(m, []ManualSource{{u, true}}); e != nil {
++		t.Fatal(e)
++	}
++	if !has(obj(m["proxy-providers"]), name+"_") || str(obj(obj(m["proxy-providers"])[name])["path"]) != "./proxies/original.yaml" {
++		t.Fatal("provider name collision overwrote original")
++	}
++	m = sourceConfig()
++	delete(m, "proxy-providers")
++	m["proxy-groups"] = []any{map[string]any{"name": "main", "type": "select", "proxies": []any{"inline"}}}
++	if e := mergeManualSources(m, []ManualSource{{u, true}}); e != nil {
++		t.Fatal(e)
++	}
++	if len(obj(m["proxy-groups"].([]any)[0])["use"].([]any)) != 1 || len(m["proxies"].([]any)) != 1 {
++		t.Fatal("inline nodes not retained/connected")
++	}
++}
++
++func TestManualSourcesStoredOnceAndValidated(t *testing.T) {
++	a := fixture(t)
++	if e := a.saveManualSources([]ManualSource{{"https://EXAMPLE.test:443/a#one", true}, {"https://example.test/a#two", true}, {"https://example.test/off", false}}); e != nil {
++		t.Fatal(e)
++	}
++	s, e := a.manualSources()
++	if e != nil || len(s) != 2 || s[1].Enabled {
++		t.Fatal("source settings roundtrip", e)
++	}
++	st, _ := os.Stat(a.sourcesPath())
++	if st.Mode().Perm() != 0600 {
++		t.Fatal("source credentials permissions")
++	}
++	before, _ := fileHash(a.sourcesPath())
++	for _, u := range []string{"", "file:///tmp/x", "https://example.test/a\nhttps://evil.test/", "https://", "http://a.test/a b"} {
++		if e := a.saveManualSources([]ManualSource{{u, true}}); code(e) != "manual_source_invalid" {
++			t.Fatal("invalid source accepted")
++		}
++		after, _ := fileHash(a.sourcesPath())
++		if after != before {
++			t.Fatal("invalid save replaced settings")
++		}
++	}
++	if e := os.Remove(a.sourcesPath()); e != nil {
++		t.Fatal(e)
++	}
++	if e := os.Symlink(a.cfg(), a.sourcesPath()); e != nil {
++		t.Fatal(e)
++	}
++	if _, e := a.manualSources(); code(e) != "manual_sources_unreadable" {
++		t.Fatal("symlink read accepted")
++	}
++}
++
++func TestManualSourcesConcurrentFileEditCannotCommit(t *testing.T) {
++	a := fixture(t)
++	ctx := context.Background()
++	saveFixture(t, a)
++	a.Hook = func(point string) error {
++		if point == "before_commit" {
++			return os.WriteFile(a.sourcesPath(), []byte("https://example.test/changed\n"), 0600)
++		}
++		return nil
++	}
++	before, _ := fileHash(a.cfg())
++	out, e := a.syncConfig(ctx, Request{}, false)
++	if code(e) != "manual_sources_changed" || out.Written {
++		t.Fatalf("race result: %s %+v", code(e), out)
++	}
++	after, _ := fileHash(a.cfg())
++	if before != after {
++		t.Fatal("race changed config")
++	}
++	if b, _ := os.ReadFile(a.sourcesPath()); !strings.Contains(string(b), "changed") {
++		t.Fatal("new desired sources lost")
++	}
++}
++
++func TestManualProviderPlaceholderIsNotALoadedNode(t *testing.T) {
++	for _, v := range []any{nil, map[string]any{}, map[string]any{"proxies": []any{}}, map[string]any{"proxies": []any{map[string]any{"name": "COMPATIBLE", "type": "Direct"}}}} {
++		if manualProviderReady(v) {
++			t.Fatal("missing/placeholder nodes reported loaded")
++		}
++	}
++	if !manualProviderReady(map[string]any{"proxies": []any{map[string]any{"name": "actual", "type": "Shadowsocks"}}}) {
++		t.Fatal("real node rejected")
++	}
++}
 diff --git a/gist-sync/native/transaction.go b/gist-sync/native/transaction.go
 new file mode 100644
-index 0000000..58d3dda
+index 0000000..bf847b8
 --- /dev/null
 +++ b/gist-sync/native/transaction.go
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,492 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -5952,6 +6380,18 @@ index 0000000..58d3dda
 +			return out, fail("local_config_conflict")
 +		}
 +	}
++	if req.ManualSources != nil {
++		if req.Revision == nil {
++			return out, fail("settings_changed")
++		}
++		if e = a.saveManualSources(*req.ManualSources); e != nil {
++			return out, e
++		}
++	}
++	sourcesHash, e := fileHash(a.sourcesPath())
++	if e != nil {
++		return out, e
++	}
 +	candidate, hash, e := a.candidate(ctx, plain, work)
 +	if e != nil {
 +		return out, e
@@ -5964,6 +6404,9 @@ index 0000000..58d3dda
 +	}
 +	if after != before {
 +		return out, fail("local_config_changed")
++	}
++	if h, e := fileHash(a.sourcesPath()); e != nil || h != sourcesHash {
++		return out, fail("manual_sources_changed")
 +	}
 +	source, _ := readFile(a.source(), 4096)
 +	if before.Config == hash && strings.TrimSpace(string(source)) == "KANO_CONFIG_SOURCE=uploaded_config" {
@@ -6017,6 +6460,9 @@ index 0000000..58d3dda
 +	}()
 +	if e = a.point("before_commit"); e != nil {
 +		return out, e
++	}
++	if h, e := fileHash(a.sourcesPath()); e != nil || h != sourcesHash {
++		return out, fail("manual_sources_changed")
 +	}
 +	if e = a.commitPair(ctx, l, candidate, "", false, true, true, j.ID); e != nil {
 +		return out, e
@@ -6556,10 +7002,10 @@ index 0000000..06fc70e
 +}
 diff --git a/gist-sync/plugin-gist.js b/gist-sync/plugin-gist.js
 new file mode 100644
-index 0000000..8a780ee
+index 0000000..3b3941d
 --- /dev/null
 +++ b/gist-sync/plugin-gist.js
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,205 @@
 +  const F50_GIST_HELPER = '/data/clash/Tools/kano-gist-sync';
 +  function f50GistParse(response, tag, command) {
 +    const candidates = [response?.content, response?.data?.content, response?.data?.result, response?.result];
@@ -6644,6 +7090,7 @@ index 0000000..8a780ee
 +    try {
 +      const key = await f50GistExec(['request-key'],15000);
 +      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
++      if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
 +      if (!key.ok) return key;
 +      const sealed=f50GistSeal(key,action,request);
 +      return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -6652,6 +7099,12 @@ index 0000000..8a780ee
 +  }
 +
 +  const F50_GIST_MESSAGES = {
++    manual_source_invalid:'手动订阅链接无效。',
++    manual_source_limit:'手动订阅最多保存 100 条。',
++    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
++    manual_sources_changed:'手动订阅已变更，请重新同步。',
++    manual_provider_update_failed:'手动订阅下载失败。',
++    manual_provider_empty:'手动订阅没有可用节点。',
 +    invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
 +    invalid_gist_path:'Gist Raw 链接路径不正确。',
 +    invalid_gist_revision:'Gist 版本号无效。',
@@ -6701,6 +7154,48 @@ index 0000000..8a780ee
 +    auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
 +  };
 +  const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
++
++  async function f50GistManaged() {
++    const st = await f50GistExec(['status'], 15000);
++    if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
++    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
++    if (!read.ok) throw Error(read.message || '读取配置失败');
++    if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
++      throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
++    }
++    return null;
++  }
++
++  async function f50GistUpdateSources(st, sources) {
++    const op = activeCriticalOperation;
++    if (op) {
++      await f50ReleaseLease(op);
++      if (op.uncertain || op.token.cancelled) return false;
++    }
++    const request = {revision:st.settings.revision};
++    if (sources !== undefined) request.manualSources = normalizeStoredSubSourceList(sources).map(s=>({url:s.url,enabled:s.enabled}));
++    const started = await f50GistDispatch('sync', request);
++    if (!started.ok || !started.job) { createToast(safeTextToHtml(f50GistMessage(started.code)), 'red'); return false; }
++    const deadline = Date.now() + 180000;
++    while (Date.now() < deadline) {
++      if (op?.token.cancelled) { await f50GistExec(['cancel',started.job],15000); return false; }
++      const job = await f50GistExec(['job',started.job],8000);
++      if (job.status === 'finished') {
++        invalidateStatusSnapshot();
++        const ok = job.result?.ok === true;
++        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
++        operationFinish(ok,message);
++        createToast(safeTextToHtml(message),ok?'green':'red');
++        return ok;
++      }
++      if (!job.ok || job.status === 'completion_unknown') {
++        createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
++      }
++      await new Promise(resolve=>setTimeout(resolve,700));
++    }
++    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
++    return false;
++  }
 +  // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
 +  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
 +  const f50GistValidUrl = value => {
@@ -7151,10 +7646,10 @@ index 0000000..ae25b40
 +if __name__=='__main__':main()
 diff --git a/scripts/package_gist_sync.py b/scripts/package_gist_sync.py
 new file mode 100644
-index 0000000..b654b94
+index 0000000..e8847f3
 --- /dev/null
 +++ b/scripts/package_gist_sync.py
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,127 @@
 +"""Write source-bound evidence and a complete user delivery."""
 +from pathlib import Path
 +import hashlib,json,shutil,subprocess,zipfile
@@ -7192,7 +7687,7 @@ index 0000000..b654b94
 +
 +仓库：`{proof['root']}`；分支 `{proof['branch']}`；本轮基线 `{baseline['head']}`。
 +初始只有用户已有的未跟踪 `AGENTS.md`，保持原样且不纳入提交。
-+RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 字节一致，整合后的维护源码全部位于本仓库，没有初始化替代仓库。
++RC2/RC3 是独立交付来源；维护源码、构建和测试均已纳入本仓库，没有初始化替代仓库。
 +
 +- 主插件纳入 Gist 设置、下载、解密、配置事务、互斥、来源保护及恢复；Controller 协议、固定 Secret 和网络规则保留。
 +- 默认完整组件包增加 age、同步程序、脚本和清单；安装前校验文件哈希、程序退出状态及版本；重复升级保留设置与私钥。在线包未发布，停止使用缺少 GistSync 的旧镜像。
@@ -7200,6 +7695,7 @@ index 0000000..b654b94
 +- 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 +- select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
 +- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
++- 订阅设置读取 Gist 的订阅与内置节点；手动订阅通过同一设备同步任务保存并合并，后续自动同步持续保留，按 URL 去重，不重建本地模板。新增手动 Provider 下载采用 DIRECT，确认实际节点后才报告加载成功；下载失败验证原配置回滚。
 +- 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 +
 +```text
@@ -7226,6 +7722,11 @@ index 0000000..b654b94
 +    integration=json.loads((REPORTS/'integration.json').read_text(encoding='utf-8'))
 +    lines+=['## 真实组件覆盖','',integration['components'],'']
 +    lines += [f"- INTEGRATION PASS：{x['name']}。" for x in integration['tests']]
++    lines += ['', '## Gist 与手动订阅合并', '',
++              '从当前源码重新构建。订阅设置读取 Gist 的 Provider 和内置节点；手动来源沿用 subscription_urls.txt，经加密请求在设备锁内保存。每次同步从 Gist 原文重新合并，按规范化 URL 去重，不替换原规则、策略组或同名 Provider。',
++              '真实 age/yq/Mihomo 测试覆盖连续同步、后台到期更新、上游新增同一 URL、禁用及删除、节点实际加载和下载失败后的配置恢复。不同 URL 可能包含同一节点，不跨来源删除节点。',
++              '复现并修复新增 Provider 下载受 MATCH 规则影响的启动依赖；仅新增的手动 Provider 使用 DIRECT。占位 COMPATIBLE 节点不算加载成功。最初后台测试未达到调度期限；测试显式设置持久化期限为过去后验证独立进程，未缩短产品同步间隔。早期失败日志保留。',
++              '浏览器使用仓库真实对话框及模拟设备 API，验证 Gist 来源读取、隐藏模板替换、修改、禁用、清空及重新打开；属于 MOCK，不代表 Android WebView 或生产配置应用。']
 +    lines+=['','## F50 本轮实测','',
 +            '用户已授权备份后安装升级，不切换模式。完整备份位于设备 root 专用目录，指针 `/data/local/tmp/maomao-rc4-backup.path`。',
 +            '完整包升级及事务收尾成功；配置、来源、策略哈希与备份一致。核心只有一个，API HTTP 200，保持 TProxy。',
@@ -7234,6 +7735,10 @@ index 0000000..b654b94
 +            '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试。随后设备保存的私钥通过真实 Gist 只读解密与配置校验，未应用生产配置，证据见 `device-saved-test.json`。','']
 +    evidence=[json.loads(x) for x in (REPORTS/'evidence.jsonl').read_text(encoding='utf-8').splitlines() if x]
 +    names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','deploy compact 30px interval with single Apply action','verify compact interval matches actual Apply button','validate real saved Gist with device-held identity without applying','upgrade single Apply worker with original installer','verify core and configuration after Apply upgrade','actual F50 Apply button encrypted request and wrong-key protection','genuine initial status and full transaction regression','Raw URL boundary regression'}
++    names.update({'backup F50 current saved settings before source merge upgrade','backup current host plugins before source merge upgrade',
++                  'upgrade complete components with persistent source merge','verify upgraded source merge components and original network mode',
++                  'deploy source merge UI preserving other plugins','validate saved real Gist including manual source overlay without applying',
++                  'verify production source settings preserved after merge upgrade'})
 +    for row in evidence:
 +        if row['name'] not in names:continue
 +        lines += [f"- **{row['name']}** — {row['category']} / {row['result']}；退出码 `{row['exit_code']}`。",
@@ -7375,10 +7880,10 @@ index 0000000..d74f87f
 +console.log('Gist modules, shared transaction, profiles'+(process.argv.includes('--finalize')?' and component pins':'')+' synchronized');
 diff --git a/scripts/verify_gist_sync.py b/scripts/verify_gist_sync.py
 new file mode 100644
-index 0000000..250329d
+index 0000000..d57a147
 --- /dev/null
 +++ b/scripts/verify_gist_sync.py
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,82 @@
 +"""Fresh repository build and classified release verification; never updates expected tests."""
 +from pathlib import Path
 +import argparse,hashlib,json,os,shutil,subprocess,sys,time
@@ -7449,6 +7954,9 @@ index 0000000..250329d
 +            row=check('Tabbit real interactions with simulated device API','MOCK',[cli,'nodejs','--task',task,'--request-id','final-browser-'+str(time.time_ns()),'--timeout-ms','120000'],input=(ROOT/'tests/gist-sync/browser-ui.js').read_bytes(),timeout=135)
 +            receipt=json.loads((ROOT/row['stdout']).read_text(encoding='utf-8').splitlines()[-1]);screens=receipt.get('result',{}).get('screenshotsDelta',[])
 +            if screens:shutil.copyfile(screens[-1]['path'],REPORTS/'browser-ui.png')
++            row=check('Gist and manual source dialog interaction','MOCK',[cli,'nodejs','--task',task,'--request-id','sources-'+str(time.time_ns())],input=(ROOT/'tests/gist-sync/browser-sources.js').read_bytes(),timeout=100)
++            receipt=json.loads((ROOT/row['stdout']).read_text(encoding='utf-8').splitlines()[-1]);screens=receipt.get('result',{}).get('screenshotsDelta',[])
++            if screens:shutil.copyfile(screens[-1]['path'],REPORTS/'browser-sources.png')
 +        check('final source size report','STATIC',['node','scripts/report_plugin.js'])
 +        state='LOCAL_PASS_EXTERNAL_BLOCKED'
 +    except Exception as e:
@@ -7792,6 +8300,55 @@ index 0000000..b71ddfb
 +}
 +
 +module.exports={profiles:F50_FIXED_PROFILES,KPR:createPrivateRouteLogic()};
+diff --git a/tests/gist-sync/browser-sources.js b/tests/gist-sync/browser-sources.js
+new file mode 100644
+index 0000000..753b520
+--- /dev/null
++++ b/tests/gist-sync/browser-sources.js
+@@ -0,0 +1,43 @@
++const fs=await import('node:fs/promises');
++const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
++const source=await fs.readFile(root+'猫猫TProxy.js','utf8');
++const body=source.slice(source.indexOf('    const importSub = async'),source.indexOf('    const subBtn =',source.indexOf('    const importSub = async')));
++assert.ok(body.includes('const importSub'));
++const previous=page,preview=await context.newPage();await usePage(preview);
++await page.setContent('<html><head><title>Gist subscription merge fixture</title></head><body style="background:#111827;color:white;font:16px Arial"></body></html>');
++await page.evaluate(body=>{
++ const SUB_RULE_MODE_TEMPLATE='template',SUB_CONVERT_MODE_PROVIDER='provider',SUB_CONVERT_MODE_LOCAL='local';
++ const CLASH_CONFIG='fixture';let saved=[{url:'https://example.test/manual',enabled:true}],calls=[];
++ const config={'proxy-providers':{remote:{url:'https://example.test/remote'},manual:{url:'https://example.test/manual'}},'x-f50-gist-manual-providers':['manual'],proxies:[{name:'Gist node <one>'},{name:'Gist node two'}]};
++ const operationStage=()=>{},operationFinish=()=>{},createToast=()=>{};
++ const readCurrentSubSources=async()=>structuredClone(saved),readSavedSubConvertMode=async()=>'local',readCurrentSubRuleMode=async()=>'template',readConfigSource=async()=>'uploaded_config';
++ const f50GistManaged=async()=>({settings:{revision:1}}),readYamlObject=async()=>({ok:true,value:config});
++ const safeTextToHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
++ const createFixedToast=(id,html)=>{document.getElementById(id)?.remove();const el=document.createElement('div');el.id=id;el.innerHTML=html;document.body.append(el);return {el,close:()=>el.remove()};};
++ const setText=(el,text)=>{el.textContent=text;},resetChildren=el=>el.replaceChildren();
++ const askConfirm=async()=>true,showSuspiciousSubSourcesError=()=>false;
++ const acquireCriticalOperation=()=>({}),releaseCriticalOperation=async()=>{},setButtonBusy=(b,v)=>{b.disabled=v;};
++ const clearSubSourceFile=()=>{throw Error('must remove through Gist sync');};
++ const saveSubSources=async sources=>{calls.push(sources);saved=sources.filter(s=>s.url.trim());return true;};
++ eval(body+'\nwindow.openSources=importSub;');
++ window.sourceFixture=()=>({saved,calls});
++},body);
++const checks=[];const check=name=>checks.push({name,result:'PASS',category:'MOCK',environment:'Tabbit Chromium, real repository dialog, fixture device API'});
++await page.evaluate(()=>window.openSources());
++await expect(page.locator('summary')).toHaveText('Gist：1 个订阅 · 2 个节点');
++await page.locator('summary').click();await expect(page.getByText('Gist node <one>、Gist node two',{exact:true})).toBeVisible();
++await expect(page.getByText('remote · https://example.test/remote',{exact:true})).toBeVisible();
++await expect(page.locator('#mm_sub_rule_mode')).toBeHidden();await expect(page.locator('#mm_sub_convert_mode')).toBeHidden();
++assert.equal(await page.locator('#mm_sub_replace_custom').count(),0);check('read Gist providers and inline nodes without exposing template replacement');
++await page.locator('.mm_sub_toggle_btn').click();await page.locator('#mm_sub_submit_btn').click();
++assert.equal((await page.evaluate(()=>window.sourceFixture())).saved[0].enabled,false);check('disable manual source without editing remote rows');
++await page.evaluate(()=>window.openSources());await expect(page.locator('.mm_sub_toggle_btn')).toHaveText('启用');
++await page.locator('.mm_sub_url_input').fill('https://example.test/new');await page.locator('.mm_sub_toggle_btn').click();await page.locator('#mm_sub_submit_btn').click();
++await page.evaluate(()=>window.openSources());await expect(page.locator('.mm_sub_url_input')).toHaveValue('https://example.test/new');check('save changed manual URL and restore on reopen');
++await page.locator('.mm_sub_remove_btn').click();await page.locator('#mm_sub_submit_btn').click();
++assert.equal((await page.evaluate(()=>window.sourceFixture())).saved.length,0);
++await page.evaluate(()=>window.openSources());await expect(page.locator('summary')).toHaveText('Gist：1 个订阅 · 2 个节点');check('remove all manual links through merge and preserve Gist sources');
++await fs.writeFile(root+'reports/gist-sync/browser-sources.json',JSON.stringify({checks},null,2)+'\n');
++await page.screenshot({path:root+'reports/gist-sync/browser-sources.png',fullPage:true});
++await preview.close();await usePage(previous);
++return {passed:checks.length,checks};
 diff --git a/tests/gist-sync/browser-ui.js b/tests/gist-sync/browser-ui.js
 new file mode 100644
 index 0000000..5654e25
@@ -8253,6 +8810,54 @@ index 0000000..503b739
 +assert.equal(result.outcome.downloaded,true);assert.equal(result.outcome.decrypted,true);assert.equal(result.outcome.validated,true);assert.equal(result.outcome.written,false);
 +await fs.writeFile(root+'reports/gist-sync/device-saved-test.json',JSON.stringify({category:'DEVICE/LIVE',result:'PASS',coverage:'real saved Gist and device-held identity; actual age decryption, YAML and Mihomo validation; no settings or production configuration write',...result},null,2)+'\n');
 +return result;
+diff --git a/tests/gist-sync/device-source-after.js b/tests/gist-sync/device-source-after.js
+new file mode 100644
+index 0000000..1a4e911
+--- /dev/null
++++ b/tests/gist-sync/device-source-after.js
+@@ -0,0 +1,17 @@
++const fs=await import('node:fs/promises');
++const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
++const before=JSON.parse(await fs.readFile(root+'build/gist-sync/device-source-before.json','utf8'));
++const lines=before.hashes.split('\n').filter(line=>/^[a-f0-9]{64}  \/data\/clash\//.test(line));
++assert.equal(lines.length,5);
++const quote=v=>"'"+String(v).replace(/'/g,"'\\''")+"'";
++const proof=await page.evaluate(async({manifest,before})=>{
++ const hashes=await runShellWithRoot(`set -e\nprintf '%s\\n' ${manifest} | sha256sum -c\necho SOURCES_PRESERVED=1`,12000);
++ if(!hashes.success||!hashes.content?.includes('SOURCES_PRESERVED=1'))throw Error('Production configuration or saved source settings changed');
++ const r=await runShellWithRoot('/data/clash/Tools/kano-gist-sync status',15000);
++ let st;try{st=JSON.parse(String(r.content).trim());}catch{throw Error('Device status format invalid');}
++ if(!r.success||!st.ok||st.manualSources!==1||!st.identitySet||st.settings.auto!==before.auto||st.settings.intervalHours!==before.intervalHours)throw Error('Source merge capability or preserved settings unavailable');
++ return {category:'DEVICE',result:'PASS',sourceSettingsPreserved:true,productionConfigPreserved:true,manualSources:st.manualSources,gistActive:st.gistActive,
++  configured:!!st.settings.generation,identitySet:st.identitySet,auto:st.settings.auto,intervalHours:st.settings.intervalHours,checks:hashes.content};
++},{manifest:quote(lines.join('\n')),before});
++await fs.writeFile(root+'reports/gist-sync/device-source-upgrade.json',JSON.stringify(proof,null,2)+'\n');
++return proof;
+diff --git a/tests/gist-sync/device-source-inventory.js b/tests/gist-sync/device-source-inventory.js
+new file mode 100644
+index 0000000..6427722
+--- /dev/null
++++ b/tests/gist-sync/device-source-inventory.js
+@@ -0,0 +1,19 @@
++const fs=await import('node:fs/promises');
++const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
++await page.waitForFunction(()=>typeof runShellWithRoot==='function');
++const proof=await page.evaluate(async()=>{
++ const r=await runShellWithRoot('/data/clash/Tools/kano-gist-sync status',15000);
++ if(!r.success)throw Error('Device Gist status unavailable');
++ let st;try{st=JSON.parse(String(r.content).trim());}catch{throw Error('Device status format invalid');}
++ if(!st.ok)throw Error('Device status rejected');
++ const hashes=await runShellWithRoot(`set -e
++for path in Proxy/config.yaml Tools/config_source.conf Policy/options.conf Proxy/subscription_urls.txt Tools/gist-sync/settings.conf; do
++ if [ -f "/data/clash/$path" ]; then sha256sum "/data/clash/$path"; else printf 'absent  /data/clash/%s\\n' "$path"; fi
++done
++echo SOURCE_INVENTORY_OK=1`,10000);
++ if(!hashes.success||!hashes.content?.includes('SOURCE_INVENTORY_OK=1'))throw Error('Device source hashes unavailable');
++ return {configured:!!st.settings?.generation,identitySet:st.identitySet,auto:st.settings.auto,intervalHours:st.settings.intervalHours,
++  gistActive:st.gistActive??null,lastSuccess:st.state?.lastSuccess,hashes:hashes.content};
++});
++await fs.writeFile(root+'build/gist-sync/device-source-before.json',JSON.stringify(proof,null,2)+'\n');
++return proof;
 diff --git a/tests/gist-sync/device-ui.js b/tests/gist-sync/device-ui.js
 new file mode 100644
 index 0000000..dc5692f
@@ -8336,7 +8941,7 @@ index 0000000..852c501
 +return result;
 diff --git a/tests/gist-sync/expected-contracts.json b/tests/gist-sync/expected-contracts.json
 new file mode 100644
-index 0000000..600406a
+index 0000000..ce2f6ec
 --- /dev/null
 +++ b/tests/gist-sync/expected-contracts.json
 @@ -0,0 +1,145 @@
@@ -8425,7 +9030,7 @@ index 0000000..600406a
 +    },
 +    "buildF50InstallScript[\"/data/upload.zip\"]": {
 +      "before": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867",
-+      "after": "2f514d934e577c2c2b890984d745a5f2bbbf9481bc730ec1bc88b9b2d9638cff"
++      "after": "14540080f32f243f723bd371faf0c43a7edd83a42e78b55c007c2b1a314bd0b8"
 +    },
 +    "buildF50CleanupScript[]": {
 +      "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
@@ -8483,7 +9088,7 @@ index 0000000..600406a
 +    "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
 +    "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
 +  },
-+  "sourceSHA256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
++  "sourceSHA256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f"
 +}
 diff --git a/tests/gist-sync/host-bridge.js b/tests/gist-sync/host-bridge.js
 new file mode 100644
@@ -8504,10 +9109,10 @@ index 0000000..d3be8e7
 \ No newline at end of file
 diff --git a/tests/gist-sync/integration.py b/tests/gist-sync/integration.py
 new file mode 100644
-index 0000000..1247b0a
+index 0000000..cf848c3
 --- /dev/null
 +++ b/tests/gist-sync/integration.py
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,345 @@
 +"""Run the unmodified production CLI with real age/yq/Mihomo inside Linux namespaces."""
 +from pathlib import Path
 +import argparse,contextlib,hashlib,http.server,json,os,shutil,signal,ssl,subprocess,sys,tempfile,threading,time,urllib.request,zipfile
@@ -8553,7 +9158,7 @@ index 0000000..1247b0a
 +        with zipfile.ZipFile(ROOT/'tproxy-yq.zip') as z:
 +            for name in ['Proxy/GeoIP.dat','Proxy/GeoSite.dat']:
 +                if name in z.namelist():(self.clash/name).write_bytes(z.read(name))
-+        call(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(self.test/'tls.key'),'-out',str(self.test/'tls.crt'),'-days','1','-subj','/CN=gist.githubusercontent.com','-addext','subjectAltName=DNS:gist.githubusercontent.com'])
++        call(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(self.test/'tls.key'),'-out',str(self.test/'tls.crt'),'-days','1','-subj','/CN=gist.githubusercontent.com','-addext','subjectAltName=DNS:gist.githubusercontent.com,IP:93.184.216.34'])
 +        shutil.copyfile(self.test/'tls.crt',self.jail/'etc/ssl/certs/ca-certificates.crt')
 +        call([str(CACHE/'age-amd64/age-keygen'),'-o',str(self.test/'identity.txt')]);os.chmod(self.test/'identity.txt',0o600)
 +        self.identity=next(s for s in (self.test/'identity.txt').read_text().splitlines() if s.startswith('AGE-SECRET-KEY-1'))
@@ -8564,8 +9169,11 @@ index 0000000..1247b0a
 +                fixture.requests+=1
 +                if getattr(fixture,'hold',False) and '/held.age' in self.path:
 +                    (fixture.test/'download-held').write_text('1');fixture.release.wait(30)
-+                data=fixture.payload
-+                self.send_response(fixture.http_status);self.send_header('Content-Length',str(len(data)));self.end_headers()
++                data=fixture.payload;status=fixture.http_status
++                if self.path.startswith('/manual.yaml'):
++                    if 'unavailable' in self.path:status=503
++                    data=json.dumps({'proxies':[{'name':'manual-node','type':'ss','server':'example.test','port':443,'cipher':'aes-128-gcm','password':'isolated-fixture'}]}).encode()
++                self.send_response(status);self.send_header('Content-Length',str(len(data)));self.end_headers()
 +                try:self.wfile.write(data)
 +                except (BrokenPipeError,ssl.SSLError):pass
 +            def log_message(self,*args):pass
@@ -8603,6 +9211,10 @@ index 0000000..1247b0a
 +    def remote(self,generation,plain=None,wrong=False):
 +        self.plain=(plain if plain is not None else json.dumps({'proxies':[],'rules':['MATCH,DIRECT'],'log-level':'silent','x-fixture-generation':generation}).encode())
 +        self.payload=call([str(CACHE/'age-amd64/age'),'-r',self.recipient],input=self.plain)
++    def due(self):
++        # Exercise an actually due run without waiting an hour or changing the production clock.
++        for name,field in [('settings.conf','savedAt'),('state.json','lastChecked')]:
++            path=self.clash/'Tools/gist-sync'/name;value=json.loads(path.read_text());value[field]='2020-01-01T00:00:00Z';staged=path.with_suffix('.test-new');staged.write_text(json.dumps(value));os.chmod(staged,0o600);os.replace(staged,path)
 +    def config_hash(self):return SHA((self.clash/'Proxy/config.yaml').read_bytes())
 +    def wait_file(self,name,timeout=15):
 +        deadline=time.monotonic()+timeout
@@ -8610,8 +9222,8 @@ index 0000000..1247b0a
 +            if (self.test/name).exists():return
 +            time.sleep(.05)
 +        raise RuntimeError('Expected observation missing: '+name)
-+    def api(self):
-+        req=urllib.request.Request('http://127.0.0.1:7788/configs',headers={'Authorization':'Bearer isolated-fixture-secret'})
++    def api(self,path='/configs'):
++        req=urllib.request.Request('http://127.0.0.1:7788'+path,headers={'Authorization':'Bearer isolated-fixture-secret'})
 +        with urllib.request.urlopen(req,timeout=3) as r:return json.load(r)
 +    def service(self,*args):return call(['chroot',str(self.jail),'python3','/test/service.py',*args])
 +    def close(self):
@@ -8672,6 +9284,43 @@ index 0000000..1247b0a
 +        def unchanged():
 +            f.remote(2);out=f.action('sync',expect='up_to_date');assert out['loaded'];assert (f.test/'core.pid').read_text()==pid
 +        check('reencrypted unchanged config keeps genuine core PID',unchanged)
++        def manual_merge():
++            u='https://93.184.216.34/manual.yaml'
++            document={'proxies':[{'name':'remote-node','type':'ss','server':'remote.example.test','port':443,'cipher':'aes-128-gcm','password':'isolated-fixture'}],
++                'proxy-groups':[{'name':'Proxy','type':'select','proxies':['remote-node','DIRECT']}],'rules':['MATCH,Proxy'],'x-fixture-generation':30}
++            def config():return json.loads(call([str(CACHE/'yq-linux-amd64'),'e','-o=json','.',str(f.clash/'Proxy/config.yaml')]))
++            def update(sources,expect='synced'):
++                return f.action('sync',{'revision':f.cli('status')['settings']['revision'],'manualSources':sources},expect=expect)
++            f.remote(30,plain=json.dumps(document).encode())
++            out=update([{'url':u,'enabled':True},{'url':u+'#duplicate','enabled':True}]);assert out['loaded'] and out['runtimeVerified']
++            c=config();names=c['x-f50-gist-manual-providers'];assert len(names)==1 and len(c['proxy-providers'])==1
++            assert c['proxies']==document['proxies'] and c['rules']==document['rules'] and c['proxy-groups'][0]['use']==names
++            assert f.cli('status')['gistActive'];stable=f.config_hash()
++            observed=f.api('/providers/proxies')['providers'][names[0]]['proxies'];assert [p['name'] for p in observed]==['manual-node']
++            for _ in range(3):f.action('sync',expect='up_to_date');assert f.config_hash()==stable
++            assert (f.test/'core.pid').read_text()==pid
++            old=f.config_hash();failed=update([{'url':u+'?unavailable=1','enabled':True}],expect='manual_provider_update_failed')
++            assert not failed['ok'] and failed['warning']=='old_config_restored' and f.config_hash()==old
++            assert 'unavailable' in (f.clash/'Proxy/subscription_urls.txt').read_text()
++            update([{'url':u,'enabled':True}],expect='up_to_date')
++            # Background scheduler executes the same production merge without a browser.
++            document['x-fixture-generation']=31;f.remote(31,plain=json.dumps(document).encode());f.save(auto=True,intervalHours=1);f.due()
++            deadline=time.monotonic()+20
++            while time.monotonic()<deadline:
++                if config().get('x-fixture-generation')==31:break
++                time.sleep(.1)
++            else:raise AssertionError('background merge not observed')
++            assert config()['x-f50-gist-manual-providers']==names and len(config()['proxy-providers'])==1
++            f.action('disable',expect='auto_disabled')
++            # When upstream gains the same URL, prefer its definition and remove the overlay reference.
++            document['proxy-providers']={'remote-provider':{'type':'http','url':u,'path':'./proxies/remote-provider.yaml','interval':3600,'proxy':'DIRECT'}}
++            document['proxy-groups'][0]['use']=['remote-provider'];f.remote(32,plain=json.dumps(document).encode());f.action('sync',expect='synced')
++            c=config();assert list(c['proxy-providers'])==['remote-provider'] and 'x-f50-gist-manual-providers' not in c
++            assert c['proxy-groups'][0]['use']==['remote-provider']
++            update([{'url':u,'enabled':False}],expect='up_to_date');assert list(config()['proxy-providers'])==['remote-provider']
++            update([],expect='up_to_date');assert config()['proxies']==document['proxies']
++            f.remote(2);f.action('sync',expect='synced');assert 'proxy-providers' not in config()
++        check('manual sources survive background Gist updates; URL deduplication, upstream adoption, disable and removal preserve remote nodes and rules',manual_merge)
 +        stable=f.config_hash()
 +        def invalid_yaml():
 +            f.remote(3,plain=b'rules: [\n');out=f.action('sync');assert not out['ok'];assert f.config_hash()==stable
@@ -8762,10 +9411,7 @@ index 0000000..1247b0a
 +            record=json.loads(records[0].read_text());pid=record['pid'];os.kill(pid,0)
 +            # Persisted deadlines are moved into the past, without changing the
 +            # production clock or shortening the production scheduling interval.
-+            def due():
-+                settings=f.clash/'Tools/gist-sync/settings.conf';s=json.loads(settings.read_text());s['savedAt']='2020-01-01T00:00:00Z';settings.write_text(json.dumps(s));os.chmod(settings,0o600)
-+                state=f.clash/'Tools/gist-sync/state.json';st=json.loads(state.read_text());st['lastChecked']='2020-01-01T00:00:00Z';state.write_text(json.dumps(st));os.chmod(state,0o600)
-+            due();deadline=time.monotonic()+15
++            f.due();deadline=time.monotonic()+15
 +            while time.monotonic()<deadline:
 +                st=json.loads((f.clash/'Tools/gist-sync/state.json').read_text())
 +                if st['last'].get('code') in ['synced','up_to_date'] and st.get('applied',{})==f.cli('status')['currentFingerprint']:
@@ -8792,7 +9438,7 @@ index 0000000..1247b0a
 +        (ROOT/'reports/gist-sync/integration.json').write_text(json.dumps({'binary_sha256':SHA((BUILD/'bin/kano-gist-sync-linux-amd64').read_bytes()),'components':'genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service adapter','tests':RESULTS},indent=2)+'\n')
 +    except Exception:
 +        if fixture:
-+            for name in ['commit.stdout','commit.stderr']:
++            for name in ['commit.stdout','commit.stderr','mihomo.log']:
 +                p=fixture.test/name
 +                if p.exists():print('DIAGNOSTIC '+name+' '+p.read_text()[-2500:],flush=True)
 +        raise
@@ -9240,8 +9886,72 @@ index 4695cc9..f8c9e73 100644
  });
 +
 +test('unpublished complete component release never contacts old mirrors',async()=>{ const {download,calls}=downloader([],false); const result=await download(); assert.equal(result.ok,false);assert.equal(result.stage,'unpublished');assert.equal(calls.length,0); });
+diff --git a/tests/tproxy/gist_sources.test.js b/tests/tproxy/gist_sources.test.js
+new file mode 100644
+index 0000000..8245808
+--- /dev/null
++++ b/tests/tproxy/gist_sources.test.js
+@@ -0,0 +1,58 @@
++'use strict';
++const test=require('node:test');
++const {fs,assert,vm,slice,run,subscriptionApi,plain}=require('./optimization_harness');
++
++test('Gist refresh bypasses template replacement and ProviderN assumptions',async()=>{
++ const gist={settings:{revision:7}},calls=[];
++ const fn=subscriptionApi(slice('const updateSubProviders = async','const readCurrentSubSources = async')+'updateSubProviders',{
++  ensureCompatBackend:async()=>true,readConfigSource:async()=> 'uploaded_config',
++  f50GistManaged:async()=>gist,f50GistUpdateSources:async(...args)=>{calls.push(args);return true;},
++  readYamlObject:()=>{throw Error('legacy provider-only path');},writeSubConfigByMode:()=>{throw Error('template overwrite');}
++ });
++ assert.equal(await fn([]),true);assert.deepEqual(calls,[[gist]]);
++});
++
++test('Gist source saves, disabled-only and empty removal all use native merge',async()=>{
++ for(const input of [[],[{url:'https://example.test/sub',enabled:false}],[{url:'https://example.test/sub',enabled:true}]]) {
++  let merged;const gist={settings:{revision:7}};
++  const fn=subscriptionApi(slice('function validateSubscriptionMode','function buildF50CleanupScript')+slice('const saveSubSources = async','const overwriteConfigByTemplate')+'saveSubSources',{
++   validateLocalSubscriptionUrl:()=>({ok:true}),showSuspiciousSubSourcesError:()=>false,
++   readConfigSource:async()=> 'uploaded_config',f50GistManaged:async()=>gist,
++   f50GistUpdateSources:async(st,sources)=>{assert.equal(st,gist);merged=plain(sources);return true;},
++   persistSubSourceState:()=>{throw Error('source policy changed outside native lease');},
++   writeSubConfigByMode:()=>{throw Error('Gist replaced by template');}
++  });
++  assert.equal(await fn(input),true);assert.equal(merged.length,input.length);
++  if(input.length)assert.equal(merged[0].enabled,input[0].enabled);
++ }
++});
++
++function glueApi(extra={}) {
++ const glue=fs.readFileSync('gist-sync/plugin-gist.js','utf8');
++ return run(glue.slice(glue.indexOf('  const F50_GIST_MESSAGES'),glue.indexOf('  const f50GistCleanUrl'))+'\n({managed:f50GistManaged,update:f50GistUpdateSources})',{
++  activeCriticalOperation:null,CLASH_CONFIG:'fixture',Date,Promise,setTimeout,
++  normalizeStoredSubSourceList:s=>s,createToast(){},safeTextToHtml:String,operationFinish(){},invalidateStatusSnapshot(){},...extra
++ });
++}
++
++test('Gist detection protects local edits and detects unsupported components',async()=>{
++ let status={ok:true,manualSources:1,gistActive:true};
++ const api=glueApi({f50GistExec:async()=>status,readYamlObject:async()=>({ok:true,value:{'x-f50-gist-sync':true}})});
++ assert.equal(await api.managed(),status);
++ status={ok:true,manualSources:1,gistActive:false};assert.equal(await api.managed(),null);
++ status={ok:false,code:'components_missing'};await assert.rejects(api.managed(),/组件/);
++});
++
++test('Manual source update releases frontend lease, fences source revision and checks real receipt',async()=>{
++ const calls=[],messages=[],op={token:{cancelled:false},leaseOwned:true};let result={ok:true,code:'synced'};
++ const api=glueApi({activeCriticalOperation:op,
++  f50ReleaseLease:async()=>{calls.push('release');op.leaseOwned=false;},
++  f50GistDispatch:async(action,request)=>{assert.equal(op.leaseOwned,false);calls.push([action,plain(request)]);return {ok:true,job:'a'.repeat(32)};},
++  f50GistExec:async()=>({ok:true,status:'finished',result}),createToast:(message,color)=>messages.push([message,color])
++ });
++ const st={settings:{revision:42}},sources=[{url:'https://example.test/sub',enabled:true}];
++ assert.equal(await api.update(st,sources),true);
++ assert.deepEqual(calls.slice(0,2),['release',['sync',{revision:42,manualSources:sources}]]);
++ result={ok:false,code:'local_config_conflict'};assert.equal(await api.update(st,[]),false);assert.equal(messages.at(-1)[1],'red');
++ result={ok:false,code:'source_changed'};assert.equal(await api.update(st,sources),false);
++});
 diff --git a/tests/tproxy/optimization_harness.js b/tests/tproxy/optimization_harness.js
-index e23308f..4f7585e 100644
+index e23308f..00cd55d 100644
 --- a/tests/tproxy/optimization_harness.js
 +++ b/tests/tproxy/optimization_harness.js
 @@ -20,7 +20,7 @@ function slice(start, end, text = source) {
@@ -9270,6 +9980,14 @@ index e23308f..4f7585e 100644
      });
  }
  const subContext = {
+@@ -51,6 +52,7 @@ const subContext = {
+   SUB_CONVERT_MODE_PROVIDER: 'provider', SUB_CONVERT_MODE_LOCAL: 'local',
+   SUB_DISABLED_MARKER: '# KANO_DISABLED_SUB=', CLASH_CONFIG: '/data/clash/Proxy/config.yaml',
+   CLASH_SUB_URLS: '/data/clash/Proxy/subscription_urls.txt',
++  f50GistManaged: async () => null,
+   isHttpUrl: value => /^https?:\/\//.test(value),
+   operationStage() {}, operationFinish() {}, createToast() {}, appendTemplateFlowDebug() {},
+   safeTextToHtml: String, escapeHtml: String, sanitizeSubscriptionSecrets: String,
 diff --git a/tests/tproxy/optimization_install.test.js b/tests/tproxy/optimization_install.test.js
 index 5046270..2bc82bc 100644
 --- a/tests/tproxy/optimization_install.test.js
@@ -9445,8 +10163,20 @@ index ee4b144..966a07f 100644
      if (scenario === 'patch') check(logged.includes('F50_START_CODE=service_patch_failed') &&
        fs.readFileSync(service, 'utf8') === '#!/bin/sh\nexit 0\n', '包装器补丁失败不覆盖原文件或继续启动');
    }
+diff --git a/tests/tproxy/subscription_update.test.js b/tests/tproxy/subscription_update.test.js
+index 0e1a24a..9fd8ae1 100644
+--- a/tests/tproxy/subscription_update.test.js
++++ b/tests/tproxy/subscription_update.test.js
+@@ -38,6 +38,7 @@ for (const configSource of ['uploaded_config', 'subscription_original']) {
+         operationFinish: (ok) => finished.push(ok),
+         ensureReady: async () => true,
+         ensureCompatBackend: async () => true,
++        f50GistManaged: async () => null,
+         readConfigSource: async () => configSource,
+         readCurrentSubRuleMode: async () => 'original',
+         readSavedSubConvertMode: async () => 'local',
 diff --git "a/\347\214\253\347\214\253TProxy.js" "b/\347\214\253\347\214\253TProxy.js"
-index 8c30b52..0888ab2 100644
+index 8c30b52..a9d31d5 100644
 --- "a/\347\214\253\347\214\253TProxy.js"
 +++ "b/\347\214\253\347\214\253TProxy.js"
 @@ -1,4 +1,5 @@
@@ -9699,12 +10429,12 @@ index 8c30b52..0888ab2 100644
 +# GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
 +f50_gist_verify_bundle() {
 +  groot=$1
-+  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = '1c1ab84e4e9ba20151ac2b857d47f5f2e90bfc37a0968df4e090d4a5360f5f6b' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
++  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'cf9311a9b9f59799c37c83db0149fd7bcaf7f89cd7bdc93fda72f781c91601b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
 +  [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-+  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '3c30efa0fbed5e6c51f938efa00f66eae39e52770153158712a397812fdb13a7' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
++  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = 'c3961e618a8aab4a68c8707d36182aa990bee6ecc3e31c654d077de63c44b476' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
 +  sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
 +  gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
@@ -9797,11 +10527,11 @@ index 8c30b52..0888ab2 100644
    const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
 -  // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
 -  // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
-+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"8a72a33f0e8a57e44311197aa82b113e059416a796d9d40005c70462bb6b8f3e","published":false});
++  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04","published":false});
    const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
    const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
    const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
-@@ -3232,6 +3393,163 @@ exit "$delete_rc"
+@@ -3232,6 +3393,212 @@ exit "$delete_rc"
    const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
    const KANO_HELPER_SNAPSHOT_TTL = 1500;
  
@@ -9889,6 +10619,7 @@ index 8c30b52..0888ab2 100644
 +    try {
 +      const key = await f50GistExec(['request-key'],15000);
 +      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
++      if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
 +      if (!key.ok) return key;
 +      const sealed=f50GistSeal(key,action,request);
 +      return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -9897,6 +10628,12 @@ index 8c30b52..0888ab2 100644
 +  }
 +
 +  const F50_GIST_MESSAGES = {
++    manual_source_invalid:'手动订阅链接无效。',
++    manual_source_limit:'手动订阅最多保存 100 条。',
++    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
++    manual_sources_changed:'手动订阅已变更，请重新同步。',
++    manual_provider_update_failed:'手动订阅下载失败。',
++    manual_provider_empty:'手动订阅没有可用节点。',
 +    invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
 +    invalid_gist_path:'Gist Raw 链接路径不正确。',
 +    invalid_gist_revision:'Gist 版本号无效。',
@@ -9946,6 +10683,48 @@ index 8c30b52..0888ab2 100644
 +    auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
 +  };
 +  const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
++
++  async function f50GistManaged() {
++    const st = await f50GistExec(['status'], 15000);
++    if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
++    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
++    if (!read.ok) throw Error(read.message || '读取配置失败');
++    if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
++      throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
++    }
++    return null;
++  }
++
++  async function f50GistUpdateSources(st, sources) {
++    const op = activeCriticalOperation;
++    if (op) {
++      await f50ReleaseLease(op);
++      if (op.uncertain || op.token.cancelled) return false;
++    }
++    const request = {revision:st.settings.revision};
++    if (sources !== undefined) request.manualSources = normalizeStoredSubSourceList(sources).map(s=>({url:s.url,enabled:s.enabled}));
++    const started = await f50GistDispatch('sync', request);
++    if (!started.ok || !started.job) { createToast(safeTextToHtml(f50GistMessage(started.code)), 'red'); return false; }
++    const deadline = Date.now() + 180000;
++    while (Date.now() < deadline) {
++      if (op?.token.cancelled) { await f50GistExec(['cancel',started.job],15000); return false; }
++      const job = await f50GistExec(['job',started.job],8000);
++      if (job.status === 'finished') {
++        invalidateStatusSnapshot();
++        const ok = job.result?.ok === true;
++        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
++        operationFinish(ok,message);
++        createToast(safeTextToHtml(message),ok?'green':'red');
++        return ok;
++      }
++      if (!job.ok || job.status === 'completion_unknown') {
++        createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
++      }
++      await new Promise(resolve=>setTimeout(resolve,700));
++    }
++    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
++    return false;
++  }
 +  // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
 +  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
 +  const f50GistValidUrl = value => {
@@ -9965,7 +10744,7 @@ index 8c30b52..0888ab2 100644
    // ===== Basic helpers =====
      let transientShellOperation = null;
    let deviceTaskUncertain = false;
-@@ -3311,7 +3629,7 @@ exit "$delete_rc"
+@@ -3311,7 +3678,7 @@ exit "$delete_rc"
        if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
        if (op.token.cancelled || op.closing) throw operationCancelled();
        const request = tag + '.' + (++taskCommandSequence);
@@ -9974,7 +10753,7 @@ index 8c30b52..0888ab2 100644
        const command = `set +e
  exec 2>&1
  umask 077
-@@ -3939,12 +4257,14 @@ KANO_YQ_SMOKE_EOF
+@@ -3939,12 +4306,14 @@ KANO_YQ_SMOKE_EOF
    const downloadCoreArchive = async ({ allowCached = false } = {}) => {
      // UFI root-shell requests have a finite request window. Keep every foreground
      // download attempt below that window and try sources one-by-one from JS.
@@ -9989,7 +10768,7 @@ index 8c30b52..0888ab2 100644
          command -v unzip >/dev/null 2>&1 || exit 1
          unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
          echo "ARCHIVE_READY=cached"
-@@ -3983,6 +4303,7 @@ KANO_YQ_SMOKE_EOF
+@@ -3983,6 +4352,7 @@ KANO_YQ_SMOKE_EOF
            echo "ARCHIVE_VERIFY_FAILED=empty"
            exit 1
          }
@@ -9997,7 +10776,7 @@ index 8c30b52..0888ab2 100644
          size="$(wc -c < "$NEW" 2>/dev/null || echo 0)"
          unzip -t "$NEW" >"$LOG.verify" 2>&1 || {
            rm -f "$NEW" 2>/dev/null || true
-@@ -5126,106 +5447,7 @@ PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
+@@ -5126,106 +5496,7 @@ PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
  BACKUP_REQUESTED=${backup ? 1 : 0}
  BACKUP_TAG=${shellQuote(safeTag)}
  YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
@@ -10105,7 +10884,111 @@ index 8c30b52..0888ab2 100644
  `;
    const res = await runShellWithRoot(script, 45000);
    if (res.success) invalidateStatusSnapshot();
-@@ -11559,6 +11781,122 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+@@ -10245,6 +10516,10 @@ btn_disabled.onclick = async () => {
+ 
+     const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
+   if (!(await ensureCompatBackend())) return false;
++  if (await readConfigSource() === 'uploaded_config') {
++    const gist = await f50GistManaged();
++    if (gist) return await f50GistUpdateSources(gist);
++  }
+   const cleanMode = normalizeSubRuleModeValue(mode);
+   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+   const cleanSources = normalizeSubSourceList(sources);
+@@ -10367,7 +10642,7 @@ btn_disabled.onclick = async () => {
+   let storedSources, cleanSources;
+   try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
+   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
+-  if (!storedSources.length || storedSources.some((source) => !isHttpUrl(source.url))) {
++  if (storedSources.some((source) => !isHttpUrl(source.url))) {
+     operationFinish(false, '请输入有效订阅链接');
+     return false;
+   }
+@@ -10383,6 +10658,11 @@ btn_disabled.onclick = async () => {
+   if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
+   operationStage('检查订阅和配置来源', 0, 5);
+   const configSource = await readConfigSource();
++  if (configSource === 'uploaded_config') {
++    const gist = await f50GistManaged();
++    if (gist) return await f50GistUpdateSources(gist, storedSources);
++  }
++  if (!storedSources.length) { operationFinish(false, '请输入有效订阅链接'); return false; }
+   const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
+   if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
+     createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
+@@ -10908,34 +11188,48 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+         readCurrentSubRuleMode(),
+         readConfigSource(),
+       ]);
++      const gist = configSource === 'uploaded_config' ? await f50GistManaged() : null;
++      let gistOverview = '';
++      if (gist) {
++        const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
++        if (!read.ok) throw Error(read.message || '读取配置失败');
++        const config = read.value, manual = new Set(config['x-f50-gist-manual-providers'] || []);
++        const providers = Object.entries(config['proxy-providers'] || {}).filter(([name])=>!manual.has(name)).map(([name,p])=>{
++          const source = config['x-f50-provider-sources']?.[name];
++          return [name,{...p,url:p.url || (typeof source === 'string' ? source : source?.url)}];
++        });
++        const nodes = (config.proxies || []).map(p=>p.name).filter(Boolean);
++        gistOverview = `<details style="font-size:.64rem;overflow-wrap:anywhere"><summary>Gist：${providers.length} 个订阅 · ${nodes.length} 个节点</summary>${providers.map(([name,p])=>`<div>${safeTextToHtml(name)}${p.url?' · '+safeTextToHtml(p.url):''}</div>`).join('')}<div>${safeTextToHtml(nodes.join('、'))}</div></details>`;
++      }
+       const { el, close } = createFixedToast(
+         'mm_sub_input_toast',
+         `
+             <div style="pointer-events:all;width:80vw;max-width:800px;">
+                 <div class="title" style="margin:0">订阅设置</div>
+                 <div style="margin:14px 0;display:flex;flex-direction:column;gap:10px;">
++                    ${gistOverview}
+                     <div id="mm_sub_rows" style="display:flex;flex-direction:column;gap:8px;"></div>
+                     <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
+                       <button style="font-size:.64rem" id="mm_sub_add_btn">添加订阅</button>
+                       <button style="font-size:.64rem" id="mm_sub_clear_btn">清空订阅</button>
+                     </div>
+-                    <label style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
++                    <label style="display:${gist ? 'none' : 'flex'};align-items:center;gap:8px;font-size:.64rem;">
+                       <span>配置来源</span>
+                       <select id="mm_sub_rule_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
+                         <option value="${SUB_RULE_MODE_TEMPLATE}">使用本地模板</option>
+                       </select>
+                     </label>
+-                    ${configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
++                    ${!gist && configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
+                     <div id="mm_sub_mode_hint" role="status" style="font-size:.64rem;line-height:1.6;color:#a6c8ee"></div>
+-                    <label id="mm_sub_convert_label" style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
++                    <label id="mm_sub_convert_label" style="display:${gist ? 'none' : 'flex'};align-items:center;gap:8px;font-size:.64rem;">
+                       <span>节点处理</span>
+                       <select id="mm_sub_convert_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
+                         <option value="${SUB_CONVERT_MODE_PROVIDER}">HTTP Provider（默认，失败时自动本地转换）</option>
+                         <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（支持分享链接）</option>
+                       </select>
+                     </label>
+-                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。</div>
+-                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
++                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">${gist ? '手动链接会随每次 Gist 同步自动合并；相同链接不重复添加。' : '每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。'}</div>
++                    <div style="display:${gist ? 'none' : 'block'};font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
+                 </div>
+                 <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
+                     <button style="font-size:.64rem" id="mm_sub_submit_btn">保存并更新</button>
+@@ -10955,7 +11249,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+       ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
+       const syncRuleMode = () => {
+         const note = el.querySelector('#mm_sub_mode_hint');
+-        setText(note, currentRuleMode === 'original' || configSource === 'subscription_original'
++        setText(note, gist ? '追加到 Gist 配置' : currentRuleMode === 'original' || configSource === 'subscription_original'
+           ? '旧订阅原配置已保留；保存并更新时需确认迁移，旧文件会备份'
+           : '使用插件本地模板的规则和策略组');
+       };
+@@ -11064,7 +11358,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+         setButtonBusy(submitBtn, true, '处理中\u2026');
+ 
+         try {
+-          if (!hasSubscriptionUrl) {
++          if (!hasSubscriptionUrl && !gist) {
+             const success = await clearSubSourceFile();
+             if (success) close();
+             return;
+@@ -11559,6 +11853,122 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
   return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
  };
  
@@ -10228,7 +11111,7 @@ index 8c30b52..0888ab2 100644
      const mmBox = document.querySelector('#mm_action_box');
  
      const appendActionGroup = (title, buttons, openGroup = false) => {
-@@ -11579,7 +11917,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+@@ -11579,7 +11989,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
      };
  
      const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);

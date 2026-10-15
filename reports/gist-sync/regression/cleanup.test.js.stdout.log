@@ -3,197 +3,197 @@ TAP version 13
 # Subtest: cleanup preserves generated output / buildF50EmergencyScript
 ok 1 - cleanup preserves generated output / buildF50EmergencyScript
   ---
-  duration_ms: 30.76934
+  duration_ms: 39.085857
   ...
 # Subtest: cleanup preserves generated output / buildF50RecoveryEligibilityFunctions
 ok 2 - cleanup preserves generated output / buildF50RecoveryEligibilityFunctions
   ---
-  duration_ms: 9.153952
+  duration_ms: 10.886062
   ...
 # Subtest: cleanup preserves generated output / buildF50LeaseFunctions
 ok 3 - cleanup preserves generated output / buildF50LeaseFunctions
   ---
-  duration_ms: 13.529719
+  duration_ms: 19.028002
   ...
 # Subtest: cleanup preserves generated output / buildF50ServiceLeaseGate
 ok 4 - cleanup preserves generated output / buildF50ServiceLeaseGate
   ---
-  duration_ms: 7.676723
+  duration_ms: 8.650129
   ...
 # Subtest: cleanup preserves generated output / buildF50ConfigTransactionFunctions
 ok 5 - cleanup preserves generated output / buildF50ConfigTransactionFunctions
   ---
-  duration_ms: 7.773297
+  duration_ms: 9.118538
   ...
 # Subtest: cleanup preserves generated output / buildF50RedactFunction
 ok 6 - cleanup preserves generated output / buildF50RedactFunction
   ---
-  duration_ms: 8.453654
+  duration_ms: 8.957777
   ...
 # Subtest: cleanup preserves generated output / buildF50PanelConfigCheck
 ok 7 - cleanup preserves generated output / buildF50PanelConfigCheck
   ---
-  duration_ms: 0.338805
+  duration_ms: 0.394209
   ...
 # Subtest: cleanup preserves generated output / buildF50HttpSubscriptionPatchScript
 ok 8 - cleanup preserves generated output / buildF50HttpSubscriptionPatchScript
   ---
-  duration_ms: 7.335022
+  duration_ms: 9.320728
   ...
 # Subtest: cleanup preserves generated output / buildF50OriginalConfigFunctions
 ok 9 - cleanup preserves generated output / buildF50OriginalConfigFunctions
   ---
-  duration_ms: 6.773439
+  duration_ms: 9.207142
   ...
 # Subtest: cleanup preserves generated output / buildF50CurlLocator
 ok 10 - cleanup preserves generated output / buildF50CurlLocator
   ---
-  duration_ms: 7.007469
+  duration_ms: 9.658142
   ...
 # Subtest: cleanup preserves generated output / buildF50ServiceCurlPatchScript
 ok 11 - cleanup preserves generated output / buildF50ServiceCurlPatchScript
   ---
-  duration_ms: 6.427059
+  duration_ms: 10.015585
   ...
 # Subtest: cleanup preserves generated output / buildF50OriginalServicePatchScript
 ok 12 - cleanup preserves generated output / buildF50OriginalServicePatchScript
   ---
-  duration_ms: 8.074814
+  duration_ms: 10.873542
   ...
 # Subtest: cleanup preserves generated output / buildF50StartScript
 ok 13 - cleanup preserves generated output / buildF50StartScript
   ---
-  duration_ms: 17.350269
+  duration_ms: 21.13324
   ...
 # Subtest: cleanup preserves generated output / buildF50ZashboardValidationFunction
 ok 14 - cleanup preserves generated output / buildF50ZashboardValidationFunction
   ---
-  duration_ms: 7.382942
+  duration_ms: 9.562137
   ...
 # Subtest: cleanup preserves generated output / buildF50MaintenanceFunctions
 ok 15 - cleanup preserves generated output / buildF50MaintenanceFunctions
   ---
-  duration_ms: 53.14727
+  duration_ms: 81.277061
   ...
 # Subtest: cleanup preserves generated output / buildF50ShellBase
 ok 16 - cleanup preserves generated output / buildF50ShellBase
   ---
-  duration_ms: 7.02596
+  duration_ms: 10.109937
   ...
 # Subtest: cleanup preserves generated output / buildF50ProcessHelpers
 ok 17 - cleanup preserves generated output / buildF50ProcessHelpers
   ---
-  duration_ms: 6.277124
+  duration_ms: 9.991219
   ...
 # Subtest: cleanup preserves generated output / buildF50NetworkHelpers
 ok 18 - cleanup preserves generated output / buildF50NetworkHelpers
   ---
-  duration_ms: 6.337111
+  duration_ms: 10.144788
   ...
 # Subtest: cleanup preserves generated output / buildF50NetworkCompatHelpers
 ok 19 - cleanup preserves generated output / buildF50NetworkCompatHelpers
   ---
-  duration_ms: 6.703432
+  duration_ms: 11.125699
   ...
 # Subtest: cleanup preserves generated output / buildF50Tun6CompatFunctions
 ok 20 - cleanup preserves generated output / buildF50Tun6CompatFunctions
   ---
-  duration_ms: 6.644291
+  duration_ms: 11.240257
   ...
 # Subtest: cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions
 ok 21 - cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions
   ---
-  duration_ms: 7.479188
+  duration_ms: 11.449837
   ...
 # Subtest: cleanup preserves generated output / buildF50InspectHelpers
 ok 22 - cleanup preserves generated output / buildF50InspectHelpers
   ---
-  duration_ms: 7.280196
+  duration_ms: 10.081468
   ...
 # Subtest: cleanup preserves generated output / buildF50CleanupHelpers
 ok 23 - cleanup preserves generated output / buildF50CleanupHelpers
   ---
-  duration_ms: 6.93523
+  duration_ms: 11.603426
   ...
 # Subtest: cleanup preserves generated output / buildF50ArtifactHelpers
 ok 24 - cleanup preserves generated output / buildF50ArtifactHelpers
   ---
-  duration_ms: 6.497192
+  duration_ms: 10.203
   ...
 # Subtest: cleanup preserves generated output / buildF50InstallHelpers
 ok 25 - cleanup preserves generated output / buildF50InstallHelpers
   ---
-  duration_ms: 6.654978
+  duration_ms: 11.513882
   ...
 # Subtest: cleanup preserves generated output / buildF50RemovalHelpers
 ok 26 - cleanup preserves generated output / buildF50RemovalHelpers
   ---
-  duration_ms: 6.866437
+  duration_ms: 10.498523
   ...
 # Subtest: cleanup preserves generated output / buildF50FinalProbeHelpers
 ok 27 - cleanup preserves generated output / buildF50FinalProbeHelpers
   ---
-  duration_ms: 6.038998
+  duration_ms: 10.872544
   ...
 # Subtest: cleanup preserves generated output / buildF50PanelHelpers
 ok 28 - cleanup preserves generated output / buildF50PanelHelpers
   ---
-  duration_ms: 6.946548
+  duration_ms: 10.099943
   ...
 # Subtest: cleanup preserves generated output / buildF50StartHelpers
 ok 29 - cleanup preserves generated output / buildF50StartHelpers
   ---
-  duration_ms: 8.700881
+  duration_ms: 11.082221
   ...
 # Subtest: cleanup preserves generated output / buildF50InspectScript
 ok 30 - cleanup preserves generated output / buildF50InspectScript
   ---
-  duration_ms: 7.56198
+  duration_ms: 11.543325
   ...
 # Subtest: cleanup preserves generated output / buildF50InstallScript
 ok 31 - cleanup preserves generated output / buildF50InstallScript
   ---
-  duration_ms: 10.539753
+  duration_ms: 15.181251
   ...
 # Subtest: cleanup preserves generated output / buildStatusSnapshotCommand
 ok 32 - cleanup preserves generated output / buildStatusSnapshotCommand
   ---
-  duration_ms: 7.031713
+  duration_ms: 10.787874
   ...
 # Subtest: cleanup preserves generated output / buildF50CleanupScript
 ok 33 - cleanup preserves generated output / buildF50CleanupScript
   ---
-  duration_ms: 7.111104
+  duration_ms: 11.728838
   ...
 # Subtest: cleanup preserves generated output / buildF50FinalCheckScript
 ok 34 - cleanup preserves generated output / buildF50FinalCheckScript
   ---
-  duration_ms: 7.484588
+  duration_ms: 12.168361
   ...
 # Subtest: cleanup preserves generated output / buildUninstallStages
 ok 35 - cleanup preserves generated output / buildUninstallStages
   ---
-  duration_ms: 19.708465
+  duration_ms: 36.485754
   ...
 # Subtest: cleanup preserves generated output / buildOwnedCoreFunctions
 ok 36 - cleanup preserves generated output / buildOwnedCoreFunctions
   ---
-  duration_ms: 6.57615
+  duration_ms: 11.528744
   ...
 # Subtest: cleanup preserves generated output / buildApiCurl
 ok 37 - cleanup preserves generated output / buildApiCurl
   ---
-  duration_ms: 13.07296
+  duration_ms: 21.343059
   ...
 # Subtest: cleanup baseline and reviewed Gist integration have the exact source contract
 ok 38 - cleanup baseline and reviewed Gist integration have the exact source contract
   ---
-  duration_ms: 300.83261
+  duration_ms: 421.257807
   ...
 # Subtest: cleanup preserves all diagnostic labels and result fields
 ok 39 - cleanup preserves all diagnostic labels and result fields
   ---
-  duration_ms: 19.828832
+  duration_ms: 30.903533
   ...
 1..39
 # tests 39
@@ -203,4 +203,4 @@ ok 39 - cleanup preserves all diagnostic labels and result fields
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1069.926362
+# duration_ms 1485.987669

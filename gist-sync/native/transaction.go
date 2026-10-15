@@ -335,6 +335,18 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 			return out, fail("local_config_conflict")
 		}
 	}
+	if req.ManualSources != nil {
+		if req.Revision == nil {
+			return out, fail("settings_changed")
+		}
+		if e = a.saveManualSources(*req.ManualSources); e != nil {
+			return out, e
+		}
+	}
+	sourcesHash, e := fileHash(a.sourcesPath())
+	if e != nil {
+		return out, e
+	}
 	candidate, hash, e := a.candidate(ctx, plain, work)
 	if e != nil {
 		return out, e
@@ -347,6 +359,9 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 	}
 	if after != before {
 		return out, fail("local_config_changed")
+	}
+	if h, e := fileHash(a.sourcesPath()); e != nil || h != sourcesHash {
+		return out, fail("manual_sources_changed")
 	}
 	source, _ := readFile(a.source(), 4096)
 	if before.Config == hash && strings.TrimSpace(string(source)) == "KANO_CONFIG_SOURCE=uploaded_config" {
@@ -400,6 +415,9 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 	}()
 	if e = a.point("before_commit"); e != nil {
 		return out, e
+	}
+	if h, e := fileHash(a.sourcesPath()); e != nil || h != sourcesHash {
+		return out, fail("manual_sources_changed")
 	}
 	if e = a.commitPair(ctx, l, candidate, "", false, true, true, j.ID); e != nil {
 		return out, e

@@ -2245,12 +2245,12 @@ mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install
 # GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
 f50_gist_verify_bundle() {
   groot=$1
-  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = '1c1ab84e4e9ba20151ac2b857d47f5f2e90bfc37a0968df4e090d4a5360f5f6b' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
+  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'cf9311a9b9f59799c37c83db0149fd7bcaf7f89cd7bdc93fda72f781c91601b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
   [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '3c30efa0fbed5e6c51f938efa00f66eae39e52770153158712a397812fdb13a7' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = 'c3961e618a8aab4a68c8707d36182aa990bee6ecc3e31c654d077de63c44b476' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
   sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
   gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
@@ -3360,7 +3360,7 @@ exit "$delete_rc"
   const CLASH_PACKAGE_REPO_URL = '';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
-  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"8a72a33f0e8a57e44311197aa82b113e059416a796d9d40005c70462bb6b8f3e","published":false});
+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04","published":false});
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
@@ -3477,6 +3477,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     try {
       const key = await f50GistExec(['request-key'],15000);
       if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
+      if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
       const sealed=f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -3485,6 +3486,12 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
+    manual_source_invalid:'手动订阅链接无效。',
+    manual_source_limit:'手动订阅最多保存 100 条。',
+    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
+    manual_sources_changed:'手动订阅已变更，请重新同步。',
+    manual_provider_update_failed:'手动订阅下载失败。',
+    manual_provider_empty:'手动订阅没有可用节点。',
     invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
     invalid_gist_path:'Gist Raw 链接路径不正确。',
     invalid_gist_revision:'Gist 版本号无效。',
@@ -3534,6 +3541,48 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
+
+  async function f50GistManaged() {
+    const st = await f50GistExec(['status'], 15000);
+    if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
+    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!read.ok) throw Error(read.message || '读取配置失败');
+    if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
+      throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
+    }
+    return null;
+  }
+
+  async function f50GistUpdateSources(st, sources) {
+    const op = activeCriticalOperation;
+    if (op) {
+      await f50ReleaseLease(op);
+      if (op.uncertain || op.token.cancelled) return false;
+    }
+    const request = {revision:st.settings.revision};
+    if (sources !== undefined) request.manualSources = normalizeStoredSubSourceList(sources).map(s=>({url:s.url,enabled:s.enabled}));
+    const started = await f50GistDispatch('sync', request);
+    if (!started.ok || !started.job) { createToast(safeTextToHtml(f50GistMessage(started.code)), 'red'); return false; }
+    const deadline = Date.now() + 180000;
+    while (Date.now() < deadline) {
+      if (op?.token.cancelled) { await f50GistExec(['cancel',started.job],15000); return false; }
+      const job = await f50GistExec(['job',started.job],8000);
+      if (job.status === 'finished') {
+        invalidateStatusSnapshot();
+        const ok = job.result?.ok === true;
+        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
+        operationFinish(ok,message);
+        createToast(safeTextToHtml(message),ok?'green':'red');
+        return ok;
+      }
+      if (!job.ok || job.status === 'completion_unknown') {
+        createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
+      }
+      await new Promise(resolve=>setTimeout(resolve,700));
+    }
+    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
+    return false;
+  }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
   const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
   const f50GistValidUrl = value => {
@@ -10467,6 +10516,10 @@ btn_disabled.onclick = async () => {
 
     const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
   if (!(await ensureCompatBackend())) return false;
+  if (await readConfigSource() === 'uploaded_config') {
+    const gist = await f50GistManaged();
+    if (gist) return await f50GistUpdateSources(gist);
+  }
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const cleanSources = normalizeSubSourceList(sources);
@@ -10589,7 +10642,7 @@ btn_disabled.onclick = async () => {
   let storedSources, cleanSources;
   try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
-  if (!storedSources.length || storedSources.some((source) => !isHttpUrl(source.url))) {
+  if (storedSources.some((source) => !isHttpUrl(source.url))) {
     operationFinish(false, '请输入有效订阅链接');
     return false;
   }
@@ -10605,6 +10658,11 @@ btn_disabled.onclick = async () => {
   if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
   operationStage('检查订阅和配置来源', 0, 5);
   const configSource = await readConfigSource();
+  if (configSource === 'uploaded_config') {
+    const gist = await f50GistManaged();
+    if (gist) return await f50GistUpdateSources(gist, storedSources);
+  }
+  if (!storedSources.length) { operationFinish(false, '请输入有效订阅链接'); return false; }
   const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
   if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
     createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
@@ -11130,34 +11188,48 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         readCurrentSubRuleMode(),
         readConfigSource(),
       ]);
+      const gist = configSource === 'uploaded_config' ? await f50GistManaged() : null;
+      let gistOverview = '';
+      if (gist) {
+        const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+        if (!read.ok) throw Error(read.message || '读取配置失败');
+        const config = read.value, manual = new Set(config['x-f50-gist-manual-providers'] || []);
+        const providers = Object.entries(config['proxy-providers'] || {}).filter(([name])=>!manual.has(name)).map(([name,p])=>{
+          const source = config['x-f50-provider-sources']?.[name];
+          return [name,{...p,url:p.url || (typeof source === 'string' ? source : source?.url)}];
+        });
+        const nodes = (config.proxies || []).map(p=>p.name).filter(Boolean);
+        gistOverview = `<details style="font-size:.64rem;overflow-wrap:anywhere"><summary>Gist：${providers.length} 个订阅 · ${nodes.length} 个节点</summary>${providers.map(([name,p])=>`<div>${safeTextToHtml(name)}${p.url?' · '+safeTextToHtml(p.url):''}</div>`).join('')}<div>${safeTextToHtml(nodes.join('、'))}</div></details>`;
+      }
       const { el, close } = createFixedToast(
         'mm_sub_input_toast',
         `
             <div style="pointer-events:all;width:80vw;max-width:800px;">
                 <div class="title" style="margin:0">订阅设置</div>
                 <div style="margin:14px 0;display:flex;flex-direction:column;gap:10px;">
+                    ${gistOverview}
                     <div id="mm_sub_rows" style="display:flex;flex-direction:column;gap:8px;"></div>
                     <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
                       <button style="font-size:.64rem" id="mm_sub_add_btn">添加订阅</button>
                       <button style="font-size:.64rem" id="mm_sub_clear_btn">清空订阅</button>
                     </div>
-                    <label style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
+                    <label style="display:${gist ? 'none' : 'flex'};align-items:center;gap:8px;font-size:.64rem;">
                       <span>配置来源</span>
                       <select id="mm_sub_rule_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
                         <option value="${SUB_RULE_MODE_TEMPLATE}">使用本地模板</option>
                       </select>
                     </label>
-                    ${configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
+                    ${!gist && configSource == 'uploaded_config' ? '<label style="font-size:.64rem;"><input type="checkbox" id="mm_sub_replace_custom"> 将所选订阅配置应用到当前自定义配置（不勾选则只保存订阅设置）</label>' : ''}
                     <div id="mm_sub_mode_hint" role="status" style="font-size:.64rem;line-height:1.6;color:#a6c8ee"></div>
-                    <label id="mm_sub_convert_label" style="display:flex;align-items:center;gap:8px;font-size:.64rem;">
+                    <label id="mm_sub_convert_label" style="display:${gist ? 'none' : 'flex'};align-items:center;gap:8px;font-size:.64rem;">
                       <span>节点处理</span>
                       <select id="mm_sub_convert_mode" style="flex:1;min-width:0;padding:8px;border-radius:8px;background:#111827;color:#dbeafe;">
                         <option value="${SUB_CONVERT_MODE_PROVIDER}">HTTP Provider（默认，失败时自动本地转换）</option>
                         <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（支持分享链接）</option>
                       </select>
                     </label>
-                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。</div>
-                    <div style="font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
+                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">${gist ? '手动链接会随每次 Gist 同步自动合并；相同链接不重复添加。' : '每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。'}</div>
+                    <div style="display:${gist ? 'none' : 'block'};font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
                 </div>
                 <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
                     <button style="font-size:.64rem" id="mm_sub_submit_btn">保存并更新</button>
@@ -11177,7 +11249,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       const syncRuleMode = () => {
         const note = el.querySelector('#mm_sub_mode_hint');
-        setText(note, currentRuleMode === 'original' || configSource === 'subscription_original'
+        setText(note, gist ? '追加到 Gist 配置' : currentRuleMode === 'original' || configSource === 'subscription_original'
           ? '旧订阅原配置已保留；保存并更新时需确认迁移，旧文件会备份'
           : '使用插件本地模板的规则和策略组');
       };
@@ -11286,7 +11358,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         setButtonBusy(submitBtn, true, '处理中\u2026');
 
         try {
-          if (!hasSubscriptionUrl) {
+          if (!hasSubscriptionUrl && !gist) {
             const success = await clearSubSourceFile();
             if (success) close();
             return;

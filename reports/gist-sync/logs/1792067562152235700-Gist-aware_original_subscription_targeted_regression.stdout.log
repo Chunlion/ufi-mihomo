@@ -1,0 +1,375 @@
+TAP version 13
+# Subtest: provider update, runtime matches=true
+ok 1 - provider update, runtime matches=true
+  ---
+  duration_ms: 4.818558
+  ...
+# Subtest: provider update, runtime matches=false
+ok 2 - provider update, runtime matches=false
+  ---
+  duration_ms: 1.45664
+  ...
+# Subtest: local update, runtime matches=true
+ok 3 - local update, runtime matches=true
+  ---
+  duration_ms: 1.695791
+  ...
+# Subtest: local update, runtime matches=false
+ok 4 - local update, runtime matches=false
+  ---
+  duration_ms: 1.337854
+  ...
+# Subtest: uploaded_config retains its dedicated update path
+ok 5 - uploaded_config retains its dedicated update path
+  ---
+  duration_ms: 1.636208
+  ...
+# Subtest: subscription_original retains its dedicated update path
+ok 6 - subscription_original retains its dedicated update path
+  ---
+  duration_ms: 1.393775
+  ...
+# Subtest: uploaded local provider downloads its saved subscription / success
+ok 7 - uploaded local provider downloads its saved subscription / success
+  ---
+  duration_ms: 2.821847
+  ...
+# Subtest: uploaded local provider downloads its saved subscription / download
+ok 8 - uploaded local provider downloads its saved subscription / download
+  ---
+  duration_ms: 1.734622
+  ...
+# Subtest: uploaded local provider downloads its saved subscription / stale
+ok 9 - uploaded local provider downloads its saved subscription / stale
+  ---
+  duration_ms: 1.988427
+  ...
+# Subtest: uploaded local provider downloads its saved subscription / other-provider
+ok 10 - uploaded local provider downloads its saved subscription / other-provider
+  ---
+  duration_ms: 2.973573
+  ...
+# Subtest: local refresh keeps observed cache state / provider_count_mismatch
+ok 11 - local refresh keeps observed cache state / provider_count_mismatch
+  ---
+  duration_ms: 1.838562
+  ...
+# Subtest: local refresh keeps observed cache state / provider_update_failed
+ok 12 - local refresh keeps observed cache state / provider_update_failed
+  ---
+  duration_ms: 1.301133
+  ...
+# Subtest: local refresh keeps observed cache state / provider_snapshot_failed
+ok 13 - local refresh keeps observed cache state / provider_snapshot_failed
+  ---
+  duration_ms: 1.31257
+  ...
+# Subtest: local refresh keeps observed cache state / provider_reload_missing
+ok 14 - local refresh keeps observed cache state / provider_reload_missing
+  ---
+  duration_ms: 1.300733
+  ...
+# Subtest: uploaded_config does not promise cache preservation for an unconfirmed download
+ok 15 - uploaded_config does not promise cache preservation for an unconfirmed download
+  ---
+  duration_ms: 1.762215
+  ...
+# Subtest: template.yaml does not promise cache preservation for an unconfirmed download
+ok 16 - template.yaml does not promise cache preservation for an unconfirmed download
+  ---
+  duration_ms: 1.364929
+  ...
+# Subtest: template local refresh reports the provider and both mismatched counts
+ok 17 - template local refresh reports the provider and both mismatched counts
+  ---
+  duration_ms: 2.64711
+  ...
+# Subtest: refreshing a subset keeps its existing provider filename
+ok 18 - refreshing a subset keeps its existing provider filename
+  ---
+  duration_ms: 2.344362
+  ...
+# Subtest: a configuration without providers cannot report a successful subscription refresh
+ok 19 - a configuration without providers cannot report a successful subscription refresh
+  ---
+  duration_ms: 1.794655
+  ...
+# Subtest: Mihomo HTTP Provider API status 200
+ok 20 - Mihomo HTTP Provider API status 200
+  ---
+  duration_ms: 2.298476
+  ...
+# Subtest: Mihomo HTTP Provider API status 390
+ok 21 - Mihomo HTTP Provider API status 390
+  ---
+  duration_ms: 1.786242
+  ...
+# Subtest: Mihomo HTTP Provider API status 500
+ok 22 - Mihomo HTTP Provider API status 500
+  ---
+  duration_ms: 3.204487
+  ...
+# Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
+ok 23 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
+  ---
+  duration_ms: 6.599465
+  ...
+# Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
+ok 24 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
+  ---
+  duration_ms: 45.293312
+  ...
+# Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
+ok 25 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
+  ---
+  duration_ms: 71.170696
+  ...
+# Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
+ok 26 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
+  ---
+  duration_ms: 70.653059
+  ...
+# Subtest: an original header with no URLs prevents automatic legacy-source migration
+ok 27 - an original header with no URLs prevents automatic legacy-source migration
+  ---
+  duration_ms: 2.089464
+  ...
+# Subtest: HTTP 390 fallback transaction / success
+ok 28 - HTTP 390 fallback transaction / success
+  ---
+  duration_ms: 44.214156
+  ...
+# Subtest: HTTP 390 fallback transaction / download
+ok 29 - HTTP 390 fallback transaction / download
+  ---
+  duration_ms: 76.531654
+  ...
+# Subtest: HTTP 390 fallback transaction / write
+ok 30 - HTTP 390 fallback transaction / write
+  ---
+  duration_ms: 76.511046
+  ...
+# Subtest: HTTP 390 fallback transaction / start
+ok 31 - HTTP 390 fallback transaction / start
+  ---
+  duration_ms: 73.926429
+  ...
+# Subtest: HTTP 390 fallback transaction / reload
+ok 32 - HTTP 390 fallback transaction / reload
+  ---
+  duration_ms: 70.179859
+  ...
+# Subtest: subscription save protections {"disabled":true}
+ok 33 - subscription save protections {"disabled":true}
+  ---
+  duration_ms: 20.809665
+  ...
+# Subtest: subscription save protections {"custom":true}
+ok 34 - subscription save protections {"custom":true}
+  ---
+  duration_ms: 20.189372
+  ...
+# Subtest: subscription save protections {"running":false}
+ok 35 - subscription save protections {"running":false}
+  ---
+  duration_ms: 38.756934
+  ...
+# Subtest: subscription save protections {"ruleMode":"original"}
+ok 36 - subscription save protections {"ruleMode":"original"}
+  ---
+  duration_ms: 2.301123
+  ...
+# Subtest: subscription save protections {"convertMode":"provider"}
+ok 37 - subscription save protections {"convertMode":"provider"}
+  ---
+  duration_ms: 40.114701
+  ...
+# Subtest: subscription save protections {"ruleMode":"original","convertMode":"provider"}
+ok 38 - subscription save protections {"ruleMode":"original","convertMode":"provider"}
+  ---
+  duration_ms: 2.413052
+  ...
+# Subtest: legacy config protection / custom provider refresh from uploaded_config, providerOK=true
+ok 39 - legacy config protection / custom provider refresh from uploaded_config, providerOK=true
+  ---
+  duration_ms: 3.265107
+  ...
+# Subtest: legacy config protection / custom provider refresh from uploaded_config, providerOK=false
+ok 40 - legacy config protection / custom provider refresh from uploaded_config, providerOK=false
+  ---
+  duration_ms: 1.045895
+  ...
+# Subtest: legacy config protection / custom provider refresh from subscription_original, providerOK=true
+ok 41 - legacy config protection / custom provider refresh from subscription_original, providerOK=true
+  ---
+  duration_ms: 1.025241
+  ...
+# Subtest: legacy config protection / custom provider refresh from subscription_original, providerOK=false
+ok 42 - legacy config protection / custom provider refresh from subscription_original, providerOK=false
+  ---
+  duration_ms: 1.60637
+  ...
+# Subtest: uploaded config in template mode only refreshes its providers
+ok 43 - uploaded config in template mode only refreshes its providers
+  ---
+  duration_ms: 1.243276
+  ...
+# Subtest: cleared node DNS policy stays empty after save and reopen before applying
+ok 44 - cleared node DNS policy stays empty after save and reopen before applying
+  ---
+  duration_ms: 3.694433
+  ...
+# Subtest: deleting an edited node DNS entry clears its draft before saving
+ok 45 - deleting an edited node DNS entry clears its draft before saving
+  ---
+  duration_ms: 2.299054
+  ...
+# Subtest: deleting another node DNS entry preserves the current edit
+ok 46 - deleting another node DNS entry preserves the current edit
+  ---
+  duration_ms: 2.434695
+  ...
+# Subtest: empty saved node DNS policy imports the running policy only on request
+ok 47 - empty saved node DNS policy imports the running policy only on request
+  ---
+  duration_ms: 2.221241
+  ...
+# Subtest: airport DNS edits preserve the rest of the template and survive runtime generation
+ok 48 - airport DNS edits preserve the rest of the template and survive runtime generation
+  ---
+  duration_ms: 2.573647
+  ...
+# Subtest: airport DNS supplies required node resolver defaults only when missing
+ok 49 - airport DNS supplies required node resolver defaults only when missing
+  ---
+  duration_ms: 0.911818
+  ...
+# Subtest: airport DNS imports full configuration, named section and domain mapping
+ok 50 - airport DNS imports full configuration, named section and domain mapping
+  ---
+  duration_ms: 2.45845
+  ...
+# Subtest: airport DNS saves only the base template, preserving its generation marker
+ok 51 - airport DNS saves only the base template, preserving its generation marker
+  ---
+  duration_ms: 1.16081
+  ...
+# Subtest: airport DNS does not write when reading the template fails
+ok 52 - airport DNS does not write when reading the template fails
+  ---
+  duration_ms: 0.941824
+  ...
+# Subtest: airport DNS can create a base template from the current configuration
+ok 53 - airport DNS can create a base template from the current configuration
+  ---
+  duration_ms: 1.072311
+  ...
+# Subtest: airport DNS paste errors are readable and temporary files are cleaned
+ok 54 - airport DNS paste errors are readable and temporary files are cleaned
+  ---
+  duration_ms: 1.730247
+  ...
+# Subtest: local subscription failure 302 has a readable message and cleans its request
+ok 55 - local subscription failure 302 has a readable message and cleans its request
+  ---
+  duration_ms: 1.579344
+  ...
+# Subtest: local subscription failure 403 has a readable message and cleans its request
+ok 56 - local subscription failure 403 has a readable message and cleans its request
+  ---
+  duration_ms: 1.160096
+  ...
+# Subtest: local subscription failure 404 has a readable message and cleans its request
+ok 57 - local subscription failure 404 has a readable message and cleans its request
+  ---
+  duration_ms: 0.907555
+  ...
+# Subtest: local subscription failure 500 has a readable message and cleans its request
+ok 58 - local subscription failure 500 has a readable message and cleans its request
+  ---
+  duration_ms: 1.358266
+  ...
+# Subtest: local subscription failure 200 has a readable message and cleans its request
+ok 59 - local subscription failure 200 has a readable message and cleans its request
+  ---
+  duration_ms: 1.244023
+  ...
+# Subtest: local subscription failure 0 has a readable message and cleans its request
+ok 60 - local subscription failure 0 has a readable message and cleans its request
+  ---
+  duration_ms: 2.510588
+  ...
+# Subtest: local subscription transport exceptions report an unconfirmed result
+ok 61 - local subscription transport exceptions report an unconfirmed result
+  ---
+  duration_ms: 1.262751
+  ...
+# Subtest: original config retains custom settings in tproxy mode
+ok 62 - original config retains custom settings in tproxy mode
+  ---
+  duration_ms: 0.868369
+  ...
+# Subtest: original config retains custom settings in tun mode
+ok 63 - original config retains custom settings in tun mode
+  ---
+  duration_ms: 0.914449
+  ...
+# Subtest: original config retains custom settings in off mode
+ok 64 - original config retains custom settings in off mode
+  ---
+  duration_ms: 0.397847
+  ...
+# Subtest: template mode retains node DNS policies alongside its fixed defaults
+ok 65 - template mode retains node DNS policies alongside its fixed defaults
+  ---
+  duration_ms: 0.436063
+  ...
+# Subtest: original config uses rule mode regardless of its source mode
+ok 66 - original config uses rule mode regardless of its source mode
+  ---
+  duration_ms: 0.591126
+  ...
+# Subtest: policy reapplication synchronizes core mode and stops on API failure
+ok 67 - policy reapplication synchronizes core mode and stops on API failure
+  ---
+  duration_ms: 1.77212
+  ...
+# Subtest: panel guard detects runtime delay settings that differ from the saved config
+ok 68 - panel guard detects runtime delay settings that differ from the saved config
+  ---
+  duration_ms: 3.207184
+  ...
+# Subtest: switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses
+ok 69 - switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses
+  ---
+  duration_ms: 0.397102
+  ...
+# Subtest: first original config write and later network changes select preservation
+ok 70 - first original config write and later network changes select preservation
+  ---
+  duration_ms: 1.127683
+  ...
+# Subtest: YAML validation rejects duplicate mapping keys
+ok 71 - YAML validation rejects duplicate mapping keys # SKIP
+  ---
+  duration_ms: 0.189912
+  ...
+# Subtest: restored config validation failures include the core reason in diagnostics
+ok 72 - restored config validation failures include the core reason in diagnostics
+  ---
+  duration_ms: 1.994979
+  ...
+# Subtest: service preserves original YAML after controller preparation and reloads it
+ok 73 - service preserves original YAML after controller preparation and reloads it # SKIP
+  ---
+  duration_ms: 0.111571
+  ...
+1..73
+# tests 73
+# suites 0
+# pass 71
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 996.124382

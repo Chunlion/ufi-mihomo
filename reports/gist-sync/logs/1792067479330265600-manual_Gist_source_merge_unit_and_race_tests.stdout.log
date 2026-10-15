@@ -1,0 +1,9 @@
+=== RUN   TestManualSourcesMergePreservesGistAndDeduplicates
+--- PASS: TestManualSourcesMergePreservesGistAndDeduplicates (0.01s)
+=== RUN   TestManualSourcesCollisionsAndInlineOnly
+--- PASS: TestManualSourcesCollisionsAndInlineOnly (0.00s)
+=== RUN   TestManualSourcesStoredOnceAndValidated
+--- PASS: TestManualSourcesStoredOnceAndValidated (0.01s)
+=== RUN   TestManualSourcesConcurrentFileEditCannotCommit
+--- PASS: TestManualSourcesConcurrentFileEditCannotCommit (0.57s)
+PASS

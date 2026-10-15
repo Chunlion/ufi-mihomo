@@ -68,6 +68,9 @@ def main():
             row=check('Tabbit real interactions with simulated device API','MOCK',[cli,'nodejs','--task',task,'--request-id','final-browser-'+str(time.time_ns()),'--timeout-ms','120000'],input=(ROOT/'tests/gist-sync/browser-ui.js').read_bytes(),timeout=135)
             receipt=json.loads((ROOT/row['stdout']).read_text(encoding='utf-8').splitlines()[-1]);screens=receipt.get('result',{}).get('screenshotsDelta',[])
             if screens:shutil.copyfile(screens[-1]['path'],REPORTS/'browser-ui.png')
+            row=check('Gist and manual source dialog interaction','MOCK',[cli,'nodejs','--task',task,'--request-id','sources-'+str(time.time_ns())],input=(ROOT/'tests/gist-sync/browser-sources.js').read_bytes(),timeout=100)
+            receipt=json.loads((ROOT/row['stdout']).read_text(encoding='utf-8').splitlines()[-1]);screens=receipt.get('result',{}).get('screenshotsDelta',[])
+            if screens:shutil.copyfile(screens[-1]['path'],REPORTS/'browser-sources.png')
         check('final source size report','STATIC',['node','scripts/report_plugin.js'])
         state='LOCAL_PASS_EXTERNAL_BLOCKED'
     except Exception as e:

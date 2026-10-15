@@ -2,217 +2,217 @@ TAP version 13
 # Subtest: all final operation shells parse in sh and BusyBox ash
 ok 1 - all final operation shells parse in sh and BusyBox ash
   ---
-  duration_ms: 84.253927
+  duration_ms: 101.146323
   ...
 # Subtest: Service candidate failure at tun preserves the complete original
 ok 2 - Service candidate failure at tun preserves the complete original
   ---
-  duration_ms: 27.210097
+  duration_ms: 32.799915
   ...
 # Subtest: Service candidate failure at original preserves the complete original
 ok 3 - Service candidate failure at original preserves the complete original
   ---
-  duration_ms: 36.574912
+  duration_ms: 46.056958
   ...
 # Subtest: Service candidate failure at audit5 preserves the complete original
 ok 4 - Service candidate failure at audit5 preserves the complete original
   ---
-  duration_ms: 44.56112
+  duration_ms: 56.541479
   ...
 # Subtest: Service candidate failure at tun6 preserves the complete original
 ok 5 - Service candidate failure at tun6 preserves the complete original
   ---
-  duration_ms: 52.702402
+  duration_ms: 66.198162
   ...
 # Subtest: Service candidate failure at dns preserves the complete original
 ok 6 - Service candidate failure at dns preserves the complete original
   ---
-  duration_ms: 56.080119
+  duration_ms: 70.965182
   ...
 # Subtest: Service patch is idempotent and preserves file permissions
 ok 7 - Service patch is idempotent and preserves file permissions
   ---
-  duration_ms: 124.401448
+  duration_ms: 152.697762
   ...
 # Subtest: manifest JSON identity {"name":"zashboard","short_name":"zashboard"}
 ok 8 - manifest JSON identity {"name":"zashboard","short_name":"zashboard"}
   ---
-  duration_ms: 82.711505
+  duration_ms: 104.52864
   ...
 # Subtest: manifest JSON identity {"short_name":"zashboard","extra":1,"name":"zashboard"}
 ok 9 - manifest JSON identity {"short_name":"zashboard","extra":1,"name":"zashboard"}
   ---
-  duration_ms: 81.614579
+  duration_ms: 101.275262
   ...
 # Subtest: manifest JSON identity {"name":"\\u007aashboard","short_name":"zashboard"}
 ok 10 - manifest JSON identity {"name":"\\u007aashboard","short_name":"zashboard"}
   ---
-  duration_ms: 83.777074
+  duration_ms: 21.980326
   ...
 # Subtest: manifest JSON identity {"name":"zash board","short_name":"zashboard"}
 ok 11 - manifest JSON identity {"name":"zash board","short_name":"zashboard"}
   ---
-  duration_ms: 86.372599
+  duration_ms: 108.956924
   ...
 # Subtest: manifest JSON identity {"name":"metacubexd","short_name":"zashboard"}
 ok 12 - manifest JSON identity {"name":"metacubexd","short_name":"zashboard"}
   ---
-  duration_ms: 94.007234
+  duration_ms: 114.203674
   ...
 # Subtest: manifest JSON identity {"name":"zashboard","short_name":"zashboard"
 ok 13 - manifest JSON identity {"name":"zashboard","short_name":"zashboard"
   ---
-  duration_ms: 73.555922
+  duration_ms: 107.03487
   ...
 # Subtest: template/base pair commit commits both files
 ok 14 - template/base pair commit commits both files
   ---
-  duration_ms: 269.500098
+  duration_ms: 358.210027
   ...
 # Subtest: template/base pair commit rolls back both files
 ok 15 - template/base pair commit rolls back both files
   ---
-  duration_ms: 246.302428
+  duration_ms: 359.212806
   ...
 # Subtest: template regeneration candidate / success
 ok 16 - template regeneration candidate / success
   ---
-  duration_ms: 10.937247
+  duration_ms: 20.065177
   ...
 # Subtest: template regeneration candidate / normalize
 ok 17 - template regeneration candidate / normalize
   ---
-  duration_ms: 10.626033
+  duration_ms: 18.293636
   ...
 # Subtest: template regeneration candidate / override
 ok 18 - template regeneration candidate / override
   ---
-  duration_ms: 15.313888
+  duration_ms: 20.265676
   ...
 # Subtest: template regeneration candidate / commit
 ok 19 - template regeneration candidate / commit
   ---
-  duration_ms: 15.880115
+  duration_ms: 18.775525
   ...
 # Subtest: override Worker entry point function main(config) { config.rules 
 ok 20 - override Worker entry point function main(config) { config.rules 
   ---
-  duration_ms: 31.004399
+  duration_ms: 42.692827
   ...
 # Subtest: override Worker entry point module.exports 
 ok 21 - override Worker entry point module.exports 
   ---
-  duration_ms: 28.847386
+  duration_ms: 33.078707
   ...
 # Subtest: override Worker entry point module.exports.default 
 ok 22 - override Worker entry point module.exports.default 
   ---
-  duration_ms: 25.262986
+  duration_ms: 34.63052
   ...
 # Subtest: override Worker entry point exports.default 
 ok 23 - override Worker entry point exports.default 
   ---
-  duration_ms: 23.609246
+  duration_ms: 33.059218
   ...
 # Subtest: override Worker entry point export default function main(config) { config.rules 
 ok 24 - override Worker entry point export default function main(config) { config.rules 
   ---
-  duration_ms: 23.862447
+  duration_ms: 32.067527
   ...
 # Subtest: override validation blocks import, self and escaped spellings while accepting UTF-8 strings
 ok 25 - override validation blocks import, self and escaped spellings while accepting UTF-8 strings
   ---
-  duration_ms: 1.664782
+  duration_ms: 2.241957
   ...
 # Subtest: override rejects invalid result / function main() { throw new Error("override failure"); }
 ok 26 - override rejects invalid result / function main() { throw new Error("override failure"); }
   ---
-  duration_ms: 24.17222
+  duration_ms: 35.400108
   ...
 # Subtest: override rejects invalid result / function main() { return []; }
 ok 27 - override rejects invalid result / function main() { return []; }
   ---
-  duration_ms: 24.461057
+  duration_ms: 34.925455
   ...
 # Subtest: override rejects invalid result / function main() { return {rules:"bad"}; }
 ok 28 - override rejects invalid result / function main() { return {rules:"bad"}; }
   ---
-  duration_ms: 24.605323
+  duration_ms: 32.707493
   ...
 # Subtest: recovery registry / {}
 ok 29 - recovery registry / {}
   ---
-  duration_ms: 19.097945
+  duration_ms: 16.720769
   ...
 # Subtest: recovery registry / {"reclaim":true}
 ok 30 - recovery registry / {"reclaim":true}
   ---
-  duration_ms: 20.787368
+  duration_ms: 25.186917
   ...
 # Subtest: recovery registry / {"active":true}
 ok 31 - recovery registry / {"active":true}
   ---
-  duration_ms: 8.480045
+  duration_ms: 7.696124
   ...
 # Subtest: recovery registry / {"reused":true}
 ok 32 - recovery registry / {"reused":true}
   ---
-  duration_ms: 17.545289
+  duration_ms: 19.417961
   ...
 # Subtest: recovery registry / {"receipt":false}
 ok 33 - recovery registry / {"receipt":false}
   ---
-  duration_ms: 6.631245
+  duration_ms: 8.645376
   ...
 # Subtest: recovery registry / {"foreign":true}
 ok 34 - recovery registry / {"foreign":true}
   ---
-  duration_ms: 6.121671
+  duration_ms: 7.590306
   ...
 # Subtest: recovery registry / {"transaction":true}
 ok 35 - recovery registry / {"transaction":true}
   ---
-  duration_ms: 10.344943
+  duration_ms: 12.683563
   ...
 # Subtest: recovery registry / {"legacy":true}
 ok 36 - recovery registry / {"legacy":true}
   ---
-  duration_ms: 6.252937
+  duration_ms: 8.458087
   ...
 # Subtest: recovery registry / {"background":true}
 ok 37 - recovery registry / {"background":true}
   ---
-  duration_ms: 13.854576
+  duration_ms: 20.919145
   ...
 # Subtest: browser task ownership and receipt / completed
 ok 38 - browser task ownership and receipt / completed
   ---
-  duration_ms: 2.291352
+  duration_ms: 2.512108
   ...
 # Subtest: browser task ownership and receipt / cancelled_before
 ok 39 - browser task ownership and receipt / cancelled_before
   ---
-  duration_ms: 1.232391
+  duration_ms: 1.563181
   ...
 # Subtest: browser task ownership and receipt / cancelled_during
 ok 40 - browser task ownership and receipt / cancelled_during
   ---
-  duration_ms: 1.133726
+  duration_ms: 1.307778
   ...
 # Subtest: browser task ownership and receipt / missing_receipt
 ok 41 - browser task ownership and receipt / missing_receipt
   ---
-  duration_ms: 1.081799
+  duration_ms: 1.509821
   ...
 # Subtest: browser task ownership and receipt / timeout
 ok 42 - browser task ownership and receipt / timeout
   ---
-  duration_ms: 0.876596
+  duration_ms: 1.35089
   ...
 # Subtest: browser task ownership and receipt / other_page_busy
 ok 43 - browser task ownership and receipt / other_page_busy
   ---
-  duration_ms: 1.040672
+  duration_ms: 1.358077
   ...
 1..43
 # tests 43
@@ -222,4 +222,4 @@ ok 43 - browser task ownership and receipt / other_page_busy
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2105.660534
+# duration_ms 2629.957391

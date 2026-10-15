@@ -2,177 +2,177 @@ TAP version 13
 # Subtest: legacy config protection / custom provider refresh from uploaded_config, providerOK=true
 ok 1 - legacy config protection / custom provider refresh from uploaded_config, providerOK=true
   ---
-  duration_ms: 2.566326
+  duration_ms: 3.911726
   ...
 # Subtest: legacy config protection / custom provider refresh from uploaded_config, providerOK=false
 ok 2 - legacy config protection / custom provider refresh from uploaded_config, providerOK=false
   ---
-  duration_ms: 0.770393
+  duration_ms: 1.67486
   ...
 # Subtest: legacy config protection / custom provider refresh from subscription_original, providerOK=true
 ok 3 - legacy config protection / custom provider refresh from subscription_original, providerOK=true
   ---
-  duration_ms: 0.551664
+  duration_ms: 0.995829
   ...
 # Subtest: legacy config protection / custom provider refresh from subscription_original, providerOK=false
 ok 4 - legacy config protection / custom provider refresh from subscription_original, providerOK=false
   ---
-  duration_ms: 1.474803
+  duration_ms: 1.581145
   ...
 # Subtest: uploaded config in template mode only refreshes its providers
 ok 5 - uploaded config in template mode only refreshes its providers
   ---
-  duration_ms: 0.793192
+  duration_ms: 1.25633
   ...
 # Subtest: cleared node DNS policy stays empty after save and reopen before applying
 ok 6 - cleared node DNS policy stays empty after save and reopen before applying
   ---
-  duration_ms: 2.673637
+  duration_ms: 3.669972
   ...
 # Subtest: deleting an edited node DNS entry clears its draft before saving
 ok 7 - deleting an edited node DNS entry clears its draft before saving
   ---
-  duration_ms: 4.482802
+  duration_ms: 2.236247
   ...
 # Subtest: deleting another node DNS entry preserves the current edit
 ok 8 - deleting another node DNS entry preserves the current edit
   ---
-  duration_ms: 2.129681
+  duration_ms: 2.34373
   ...
 # Subtest: empty saved node DNS policy imports the running policy only on request
 ok 9 - empty saved node DNS policy imports the running policy only on request
   ---
-  duration_ms: 2.326953
+  duration_ms: 2.571178
   ...
 # Subtest: airport DNS edits preserve the rest of the template and survive runtime generation
 ok 10 - airport DNS edits preserve the rest of the template and survive runtime generation
   ---
-  duration_ms: 1.758415
+  duration_ms: 2.880257
   ...
 # Subtest: airport DNS supplies required node resolver defaults only when missing
 ok 11 - airport DNS supplies required node resolver defaults only when missing
   ---
-  duration_ms: 0.872189
+  duration_ms: 1.042284
   ...
 # Subtest: airport DNS imports full configuration, named section and domain mapping
 ok 12 - airport DNS imports full configuration, named section and domain mapping
   ---
-  duration_ms: 2.101243
+  duration_ms: 2.373209
   ...
 # Subtest: airport DNS saves only the base template, preserving its generation marker
 ok 13 - airport DNS saves only the base template, preserving its generation marker
   ---
-  duration_ms: 0.824075
+  duration_ms: 1.007019
   ...
 # Subtest: airport DNS does not write when reading the template fails
 ok 14 - airport DNS does not write when reading the template fails
   ---
-  duration_ms: 0.729934
+  duration_ms: 0.987968
   ...
 # Subtest: airport DNS can create a base template from the current configuration
 ok 15 - airport DNS can create a base template from the current configuration
   ---
-  duration_ms: 0.889514
+  duration_ms: 1.018118
   ...
 # Subtest: airport DNS paste errors are readable and temporary files are cleaned
 ok 16 - airport DNS paste errors are readable and temporary files are cleaned
   ---
-  duration_ms: 1.025905
+  duration_ms: 1.645735
   ...
 # Subtest: local subscription failure 302 has a readable message and cleans its request
 ok 17 - local subscription failure 302 has a readable message and cleans its request
   ---
-  duration_ms: 1.515513
+  duration_ms: 1.56795
   ...
 # Subtest: local subscription failure 403 has a readable message and cleans its request
 ok 18 - local subscription failure 403 has a readable message and cleans its request
   ---
-  duration_ms: 1.338964
+  duration_ms: 1.553642
   ...
 # Subtest: local subscription failure 404 has a readable message and cleans its request
 ok 19 - local subscription failure 404 has a readable message and cleans its request
   ---
-  duration_ms: 1.02714
+  duration_ms: 2.627281
   ...
 # Subtest: local subscription failure 500 has a readable message and cleans its request
 ok 20 - local subscription failure 500 has a readable message and cleans its request
   ---
-  duration_ms: 1.95315
+  duration_ms: 0.799123
   ...
 # Subtest: local subscription failure 200 has a readable message and cleans its request
 ok 21 - local subscription failure 200 has a readable message and cleans its request
   ---
-  duration_ms: 0.971191
+  duration_ms: 0.920883
   ...
 # Subtest: local subscription failure 0 has a readable message and cleans its request
 ok 22 - local subscription failure 0 has a readable message and cleans its request
   ---
-  duration_ms: 0.700639
+  duration_ms: 0.811531
   ...
 # Subtest: local subscription transport exceptions report an unconfirmed result
 ok 23 - local subscription transport exceptions report an unconfirmed result
   ---
-  duration_ms: 0.983806
+  duration_ms: 1.328649
   ...
 # Subtest: original config retains custom settings in tproxy mode
 ok 24 - original config retains custom settings in tproxy mode
   ---
-  duration_ms: 0.680244
+  duration_ms: 0.747029
   ...
 # Subtest: original config retains custom settings in tun mode
 ok 25 - original config retains custom settings in tun mode
   ---
-  duration_ms: 0.592707
+  duration_ms: 0.680922
   ...
 # Subtest: original config retains custom settings in off mode
 ok 26 - original config retains custom settings in off mode
   ---
-  duration_ms: 0.278515
+  duration_ms: 0.371883
   ...
 # Subtest: template mode retains node DNS policies alongside its fixed defaults
 ok 27 - template mode retains node DNS policies alongside its fixed defaults
   ---
-  duration_ms: 0.402881
+  duration_ms: 0.419197
   ...
 # Subtest: original config uses rule mode regardless of its source mode
 ok 28 - original config uses rule mode regardless of its source mode
   ---
-  duration_ms: 0.476725
+  duration_ms: 0.499669
   ...
 # Subtest: policy reapplication synchronizes core mode and stops on API failure
 ok 29 - policy reapplication synchronizes core mode and stops on API failure
   ---
-  duration_ms: 1.432259
+  duration_ms: 1.751481
   ...
 # Subtest: panel guard detects runtime delay settings that differ from the saved config
 ok 30 - panel guard detects runtime delay settings that differ from the saved config
   ---
-  duration_ms: 2.466928
+  duration_ms: 3.310333
   ...
 # Subtest: switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses
 ok 31 - switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses
   ---
-  duration_ms: 0.502199
+  duration_ms: 0.436361
   ...
 # Subtest: first original config write and later network changes select preservation
 ok 32 - first original config write and later network changes select preservation
   ---
-  duration_ms: 0.792559
+  duration_ms: 1.017947
   ...
 # Subtest: YAML validation rejects duplicate mapping keys
 ok 33 - YAML validation rejects duplicate mapping keys
   ---
-  duration_ms: 152.133549
+  duration_ms: 191.239118
   ...
 # Subtest: restored config validation failures include the core reason in diagnostics
 ok 34 - restored config validation failures include the core reason in diagnostics
   ---
-  duration_ms: 2.114384
+  duration_ms: 2.422112
   ...
 # Subtest: service preserves original YAML after controller preparation and reloads it
 ok 35 - service preserves original YAML after controller preparation and reloads it
   ---
-  duration_ms: 8306.74766
+  duration_ms: 10141.24774
   ...
 1..35
 # tests 35
@@ -182,4 +182,4 @@ ok 35 - service preserves original YAML after controller preparation and reloads
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 8645.087315
+# duration_ms 10579.053671

@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-15T12:12:03.439Z",
+  "date": "2026-10-15T12:44:33.496Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "69952204314d3a1c5f73e8e1f2f3d19d28514fa4",
-    "bytes": 617656,
-    "sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
+    "baseCommit": "66f933dc9836dcf61d107d0b6d570ddece5315ce",
+    "bytes": 622116,
+    "sha256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 412,
+    "passed": 416,
     "failed": 0,
     "notRun": 0
   },
@@ -664,6 +664,35 @@
         },
         {
           "name": "unpublished complete component release never contacts old mirrors",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/gist_sources.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/gist_sources.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/gist_sources.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/gist_sources.test.js.stderr.log",
+      "passed": 4,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "Gist refresh bypasses template replacement and ProviderN assumptions",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source saves, disabled-only and empty removal all use native merge",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist detection protects local edits and detects unsupported components",
+          "status": "PASS"
+        },
+        {
+          "name": "Manual source update releases frontend lease, fences source revision and checks real receipt",
           "status": "PASS"
         }
       ]

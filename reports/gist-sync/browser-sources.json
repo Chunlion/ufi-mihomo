@@ -1,0 +1,28 @@
+{
+  "checks": [
+    {
+      "name": "read Gist providers and inline nodes without exposing template replacement",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "Tabbit Chromium, real repository dialog, fixture device API"
+    },
+    {
+      "name": "disable manual source without editing remote rows",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "Tabbit Chromium, real repository dialog, fixture device API"
+    },
+    {
+      "name": "save changed manual URL and restore on reopen",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "Tabbit Chromium, real repository dialog, fixture device API"
+    },
+    {
+      "name": "remove all manual links through merge and preserve Gist sources",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "Tabbit Chromium, real repository dialog, fixture device API"
+    }
+  ]
+}

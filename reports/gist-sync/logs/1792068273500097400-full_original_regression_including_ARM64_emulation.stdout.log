@@ -1,0 +1,17 @@
+PASS run_tests.js: 103 passed, 0 failed, 0 not run
+PASS cleanup.test.js: 39 passed, 0 failed, 0 not run
+PASS compact.test.js: 2 passed, 0 failed, 0 not run
+PASS download_archive.test.js: 6 passed, 0 failed, 0 not run
+PASS gist_sources.test.js: 4 passed, 0 failed, 0 not run
+PASS http_subscription.test.js: 15 passed, 0 failed, 0 not run
+PASS ipv6_dns.test.js: 37 passed, 0 failed, 0 not run
+PASS optimization.test.js: 25 passed, 0 failed, 0 not run
+PASS optimization_install.test.js: 25 passed, 0 failed, 0 not run
+PASS optimization_network.test.js: 19 passed, 0 failed, 0 not run
+PASS optimization_subscription.test.js: 38 passed, 0 failed, 0 not run
+PASS panel_open.test.js: 16 passed, 0 failed, 0 not run
+PASS release_consistency.test.js: 5 passed, 0 failed, 0 not run
+PASS reliability.test.js: 43 passed, 0 failed, 0 not run
+PASS subscription_update.test.js: 35 passed, 0 failed, 0 not run
+PASS yaml_bridge.test.js: 4 passed, 0 failed, 0 not run
+{"passed":416,"failed":0,"notRun":0}

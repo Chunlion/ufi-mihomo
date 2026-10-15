@@ -1,144 +1,150 @@
 {
-  "binary_sha256": "43feb7e3ad0f81abe89dd552b01f4af9c933f1b7bc2e5a1e10082d0df3ffe6bc",
+  "binary_sha256": "679ac61c7a59fc9bd0ef4429f3aefac18352c7b0aca18bc2d5699f13aa7373a7",
   "components": "genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service adapter",
   "tests": [
     {
       "name": "post-install initialization makes first read-only fingerprint available",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.017
+      "seconds": 0.04
     },
     {
       "name": "production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.365
+      "seconds": 0.613
     },
     {
       "name": "real files, backup, atomic commit and matching state while stopped",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.335
+      "seconds": 0.521
     },
     {
       "name": "genuine Mihomo hot reload and runtime confirmation",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.425
+      "seconds": 0.619
     },
     {
       "name": "single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 1.891
+      "seconds": 2.383
     },
     {
       "name": "reencrypted unchanged config keeps genuine core PID",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.319
+      "seconds": 0.51
+    },
+    {
+      "name": "manual sources survive background Gist updates; URL deduplication, upstream adoption, disable and removal preserve remote nodes and rules",
+      "category": "INTEGRATION",
+      "result": "PASS",
+      "seconds": 10.413
     },
     {
       "name": "real age decrypt followed by invalid YAML preserves current files",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.196
+      "seconds": 0.244
     },
     {
       "name": "corrupt ciphertext never reaches commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.251
+      "seconds": 0.231
     },
     {
       "name": "local edit conflict is never silently overwritten",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.187
+      "seconds": 0.308
     },
     {
       "name": "genuine age rejects wrong identity without a configuration write",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.195
+      "seconds": 0.296
     },
     {
       "name": "genuine age rejects truncated authenticated ciphertext",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.197
+      "seconds": 0.266
     },
     {
       "name": "real HTTPS 503 retries then preserves configuration",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 3.207
+      "seconds": 3.26
     },
     {
       "name": "real in-flight HTTPS cancellation cannot commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.909
+      "seconds": 0.957
     },
     {
       "name": "source revision change fences the old downloader before commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 1.046
+      "seconds": 1.195
     },
     {
       "name": "SIGKILL recovery at download_complete",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.372
+      "seconds": 0.456
     },
     {
       "name": "SIGKILL recovery at decrypt_complete",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.405
+      "seconds": 0.446
     },
     {
       "name": "SIGKILL recovery at before_commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.801
+      "seconds": 0.646
     },
     {
       "name": "SIGKILL recovery at after_commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.716
+      "seconds": 0.71
     },
     {
       "name": "SIGKILL recovery at before_state_record",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.631
+      "seconds": 0.729
     },
     {
       "name": "actual read-only configuration filesystem fails safely and recovers",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.434
+      "seconds": 0.519
     },
     {
       "name": "genuine API connection loss, denied restart, rollback and later recovery",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.871
+      "seconds": 1.003
     },
     {
       "name": "detached daemon, due work, repeated saves, boot hook and disable",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 12.357
+      "seconds": 13.012
     },
     {
       "name": "private identity absent from logs, receipts and leftover work",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.045
+      "seconds": 0.066
     }
   ]
 }

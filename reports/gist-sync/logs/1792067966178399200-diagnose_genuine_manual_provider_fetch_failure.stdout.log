@@ -1,0 +1,27 @@
+PASS INTEGRATION post-install initialization makes first read-only fingerprint available
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+PASS INTEGRATION real files, backup, atomic commit and matching state while stopped
+PASS INTEGRATION genuine Mihomo hot reload and runtime confirmation
+PASS INTEGRATION single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys
+PASS INTEGRATION reencrypted unchanged config keeps genuine core PID
+DIAGNOSTIC commit.stdout YAML_COMMIT_OK=1
+YAML_BACKUP=
+YAML_OLD_HASH=cdb2905cc8997576e5185d4941d7c7450f91d5623cd6b68cc5407ed34e38fde5
+YAML_NEW_HASH=87489080811e1e1a50424fc9bfcd8c3d8a0a7ca1ae7e756f28ce382cb27e83a1
+YAML_OLD_SIZE=2569
+YAML_NEW_SIZE=1952
+
+DIAGNOSTIC commit.stderr 
+DIAGNOSTIC mihomo.log ps://doh.pub:443/dns-query?dns=AAABAAABAAAAAAAABnJlbW90ZQdleGFtcGxlBHRlc3QAAAEAAQ\": dns resolve failed: all DNS requests failed, first error: dial udp 119.29.29.29:53: connect: network is unreachable (resErr:<nil>)"
+time="2026-10-15T12:39:21.813419117Z" level=warning msg="[TCP] dial Proxy (match Match/) mihomo --> 93.184.216.34:443 error: remote.example.test:443 connect error: dns resolve failed: all DNS requests failed, first error: requesting https://doh.pub:443/dns-query: Get \"https://doh.pub:443/dns-query?dns=AAABAAABAAAAAAAABnJlbW90ZQdleGFtcGxlBHRlc3QAAAEAAQ\": dns resolve failed: all DNS requests failed, first error: dial udp 119.29.29.29:53: connect: network is unreachable (resErr:<nil>)"
+time="2026-10-15T12:39:22.347713454Z" level=warning msg="[TCP] dial Proxy (match Match/) mihomo --> 93.184.216.34:443 error: remote.example.test:443 connect error: dns resolve failed: all DNS requests failed, first error: requesting https://doh.pub:443/dns-query: Get \"https://doh.pub:443/dns-query?dns=AAABAAABAAAAAAAABnJlbW90ZQdleGFtcGxlBHRlc3QAAAEAAQ\": dns resolve failed: all DNS requests failed, first error: dial udp 119.29.29.29:53: connect: network is unreachable (resErr:<nil>)"
+time="2026-10-15T12:39:22.852534030Z" level=error msg="[Provider] GistManual_c31a9238aa48c65b pull error: Get \"https://93.184.216.34/manual.yaml\": EOF"
+time="2026-10-15T12:39:23.348907763Z" level=warning msg="[TCP] dial Proxy (match Match/) mihomo --> 93.184.216.34:443 error: remote.example.test:443 connect error: dns resolve failed: all DNS requests failed, first error: requesting https://doh.pub:443/dns-query: Get \"https://doh.pub:443/dns-query?dns=AAABAAABAAAAAAAABnJlbW90ZQdleGFtcGxlBHRlc3QAAAEAAQ\": dns resolve failed: all DNS requests failed, first error: dial udp 119.29.29.29:53: connect: network is unreachable (resErr:<nil>)"
+time="2026-10-15T12:39:24.424113632Z" level=info msg="Start initial configuration in progress"
+time="2026-10-15T12:39:24.424153744Z" level=info msg="Geodata Loader mode: memconservative"
+time="2026-10-15T12:39:24.424156674Z" level=info msg="Geosite Matcher implementation: succinct"
+time="2026-10-15T12:39:24.424204451Z" level=info msg="Initial configuration complete, total time: 0ms"
+time="2026-10-15T12:39:24.425579100Z" level=info msg="Sniffer is loaded and working"
+time="2026-10-15T12:39:24.425629084Z" level=info msg="Start initial compatible provider default"
+time="2026-10-15T12:39:24.426621272Z" level=info msg="UI already exists, skip downloading"
+

@@ -3,3 +3,6 @@ tests/boot-fix/sbxc/
 tests/boot-fix/compat/
 node_modules/
 scripts/__pycache__/
+.cache/
+build/
+dist/gist-sync/

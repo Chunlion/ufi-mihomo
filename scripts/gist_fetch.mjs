@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+const [url,output,expected]=process.argv.slice(2);
+if(!url||!output)throw Error('Usage: node scripts/gist_fetch.mjs HTTPS_URL OUTPUT [SHA256]');
+const parsed=new URL(url);
+if(parsed.protocol!=='https:'||parsed.username||parsed.password)throw Error('HTTPS without embedded credentials required');
+const headers=parsed.pathname==='/dns-query'?{Accept:'application/dns-json'}:parsed.hostname==='api.github.com'&&parsed.pathname.includes('/releases/assets/')?{Accept:'application/octet-stream'}:{};
+const response=await fetch(url,{headers,signal:AbortSignal.timeout(90000)});
+if(!response.ok)throw Error('HTTP '+response.status);
+const data=Buffer.from(await response.arrayBuffer());
+if(data.length>128*1024*1024)throw Error('Artifact exceeds 128 MiB');
+const digest=crypto.createHash('sha256').update(data).digest('hex');
+if(expected&&digest!==expected)throw Error('Artifact checksum mismatch');
+fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,data);
+console.log(JSON.stringify({bytes:data.length,sha256:digest,tlsVerified:true,status:response.status}));

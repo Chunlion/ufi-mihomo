@@ -18,6 +18,7 @@ function visit(node, callback, parent = null) {
 }
 function semantics(ast) {
   return JSON.stringify(ast, (key, value) => {
+    if (typeof value === 'bigint') return { bigint: value.toString() };
     if (['start', 'end', 'loc', 'range', 'raw'].includes(key)) return undefined;
     if (value instanceof RegExp) return String(value);
     return value;

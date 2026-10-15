@@ -1,4 +1,5 @@
 //<script>
+// GistSync 1.0.0-rc4; complete components; encrypted request protocol 1; RC2 baseline.
 // Boot curl, final lease status and recovery concurrency fixes audit.5, 2026-10-11; based on audit.4; controller protocol unchanged.
 // 猫猫TProxy v9.0.0 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
@@ -110,6 +111,9 @@ f50_stop_recorded "$F50_WORK/pids" || exit 1
 f50_scan "$F50_WORK/after.pids" || exit 1
 [ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; exit 1; }
 config_recovery_failed=0
+if [ -d "$F50_ROOT/Tools/gist-sync/activation" ]; then
+  [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && "$F50_ROOT/Tools/kano-gist-sync" recover-stopped >/dev/null 2>&1 || config_recovery_failed=1
+fi
 for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
   config_source_file="$F50_ROOT/Tools/config_source.conf"
   if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
@@ -360,6 +364,10 @@ case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|
   if [ -d "\${CLASH_ROOT%/*}/clash.install.lock.d" ] && [ -z "\${F50_INSTALL_TRANSACTION:-}" ]; then
     echo F50_ERROR=install_transaction_pending; exit 1
   fi
+  GIST_TX="$CLASH_ROOT/Tools/gist-sync/activation"
+  if [ -e "$GIST_TX" ] || [ -L "$GIST_TX" ]; then
+    [ ! -L "$GIST_TX" ] && [ -n "\${KANO_GIST_TRANSACTION:-}" ] && [ "\${KANO_GIST_TRANSACTION:-}" = "$(cat "$GIST_TX/id" 2>/dev/null)" ] || { echo F50_ERROR=gist_transaction_pending; exit 1; }
+  fi
   for pending_config in "$CLASH_ROOT/Proxy/config.yaml.kano_tx" "$CLASH_ROOT/Tools/template.yaml.kano_tx" "$CLASH_ROOT/Tools/template.base.yaml.kano_tx"; do
     [ ! -d "$pending_config" ] || { echo F50_ERROR=config_transaction_pending; exit 1; }
   done
@@ -390,6 +398,114 @@ function buildF50ConfigTransactionFunctions() { return `f50_config_tx_recover() 
   fi
   rm -rf "$tx" || exit 1
 )
+`; }
+
+function buildF50GistFence(root = '/data/clash') { return 'GIST_TX=' + shellQuote(root + '/Tools/gist-sync/activation') + '\n' + `if [ -e "$GIST_TX" ] || [ -L "$GIST_TX" ]; then
+  [ ! -L "$GIST_TX" ] && [ -n "\${KANO_GIST_TRANSACTION:-}" ] &&
+    [ "\${KANO_GIST_TRANSACTION:-}" = "$(cat "$GIST_TX/id" 2>/dev/null)" ] || { echo F50_ERROR=gist_transaction_pending; exit 1; }
+fi
+`; }
+
+function buildF50YamlCommitBody(withBase = false) { return `${prepareYqRuntimeCmd()}
+${buildF50ConfigTransactionFunctions()}
+f50_config_tx_recover "$TARGET" "$SOURCE_FILE" || exit 1
+TX="$TARGET.kano_tx"
+PARSE_OUT="$STAGE.kano_parse.$$"
+NORMALIZED="$STAGE.kano_secret.$$"
+SOURCE_NEW="$SOURCE_FILE.kano_source.$$"
+TX_OWNED=0
+COMMITTED=0
+finish_yaml_commit() {
+  rc=$?; trap - EXIT HUP INT TERM
+  if [ "$TX_OWNED" = 1 ]; then
+    if ! f50_config_tx_recover "$TARGET" "$SOURCE_FILE"; then rc=1; fi
+  fi
+  rm -f "$PARSE_OUT" "$NORMALIZED" "$SOURCE_NEW"
+  [ "$COMMITTED" = 1 ] || rm -f "$STAGE"
+  exit "$rc"
+}
+trap finish_yaml_commit EXIT
+trap 'exit 130' HUP INT TERM
+[ -s "$STAGE" ] && [ ! -L "$STAGE" ] && [ ! -L "$TARGET" ] && [ ! -L "$SOURCE_FILE" ] || { echo F50_ERROR=yaml_path_invalid; exit 1; }
+${yqVersionCheckCmd()}
+"$YQ" e -e 'tag == "!!map"' "$STAGE" >/dev/null 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
+if [ "$PROTECT_SECRET" = 1 ]; then
+  old_secret=
+  if [ -s "$TARGET" ]; then old_secret=$("$YQ" e -r '.secret // ""' "$TARGET" 2>"$PARSE_OUT") || { echo F50_ERROR=live_secret_read_failed; exit 1; }; fi
+  if [ -n "$old_secret" ]; then
+    export F50_LIVE_CONFIG="$TARGET"
+    "$YQ" e '.secret = load(strenv(F50_LIVE_CONFIG)).secret' "$STAGE" > "$NORMALIZED" || exit 1
+    unset F50_LIVE_CONFIG
+  else
+    export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
+    "$YQ" e '.secret = strenv(F50_FIXED_SECRET)' "$STAGE" > "$NORMALIZED" || exit 1
+    unset F50_FIXED_SECRET
+  fi
+  unset old_secret
+  chmod 600 "$NORMALIZED" && mv -f "$NORMALIZED" "$STAGE" || exit 1
+fi
+hash_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
+command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=yaml_hash_tool_missing; exit 1; }
+old_hash=$(hash_file "$TARGET")
+old_size=0; [ ! -f "$TARGET" ] || old_size=$(wc -c < "$TARGET")
+source_same=1
+if [ "$WITH_SOURCE" = 1 ]; then
+  mkdir -p "\${SOURCE_FILE%/*}"
+  if [ "$SOURCE_DELETE" = 1 ]; then
+    [ ! -e "$SOURCE_FILE" ] || source_same=0
+  else
+    if [ -n "$SOURCE_STAGE" ]; then
+      [ -f "$SOURCE_STAGE" ] && [ ! -L "$SOURCE_STAGE" ] && cp -p "$SOURCE_STAGE" "$SOURCE_NEW" || exit 1
+      ${withBase ? '"$YQ" e -e \'tag == "!!map"\' "$SOURCE_NEW" >/dev/null 2>&1 || exit 1' : ''}
+    else
+      printf 'KANO_CONFIG_SOURCE=%s\\n' "$SOURCE_VALUE" > "$SOURCE_NEW" || exit 1
+    fi
+    cmp -s "$SOURCE_FILE" "$SOURCE_NEW" || source_same=0
+  fi
+fi
+if cmp -s "$TARGET" "$STAGE" && [ "$source_same" = 1 ]; then
+  rm -f "$STAGE"
+  echo YAML_COMMIT_UNCHANGED=1
+  printf 'YAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\n' "$old_hash" "$old_hash"
+  exit 0
+fi
+mkdir "$TX" || { echo F50_ERROR=config_transaction_busy; exit 1; }
+TX_OWNED=1
+printf '%s\\n' F50_CONFIG_TX_V1 > "$TX/format" || exit 1
+snapshot_pair_file() {
+  name=$1; src=$2
+  if [ -e "$src" ]; then cp -p "$src" "$TX/$name" && chmod 600 "$TX/$name" && touch "$TX/$name.had" || return 1
+  else touch "$TX/$name.absent" || return 1; fi
+}
+snapshot_pair_file config "$TARGET" || exit 1
+if [ "$WITH_SOURCE" = 1 ]; then snapshot_pair_file source "$SOURCE_FILE" && touch "$TX/with_source" || exit 1; fi
+${withBase ? 'touch "$TX/with_base" || exit 1' : ''}
+backup_path=
+if [ "$BACKUP_REQUESTED" = 1 ] && [ -f "$TARGET" ]; then
+  backup_path="$TARGET.before_\${BACKUP_TAG}_$(date +%Y%m%d%H%M%S)_$$"
+  cp -p "$TX/config" "$backup_path" && chmod 600 "$backup_path" || exit 1
+  if [ "$WITH_SOURCE" = 1 ]; then
+    if [ -f "$TX/source.had" ]; then cp -p "$TX/source" "$backup_path.source" || exit 1
+    else touch "$backup_path.source.absent" || exit 1; fi
+  fi
+fi
+touch "$TX/ready" || exit 1
+sync
+stage_hash=$(hash_file "$STAGE")
+[ -n "$stage_hash" ] || exit 1
+if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then source_hash=$(hash_file "$SOURCE_NEW"); [ -n "$source_hash" ] || exit 1; fi
+chmod 600 "$STAGE" && mv -f "$STAGE" "$TARGET" || exit 1
+if [ "$WITH_SOURCE" = 1 ]; then
+  if [ "$SOURCE_DELETE" = 1 ]; then rm -f "$SOURCE_FILE" || exit 1
+  else chmod 600 "$SOURCE_NEW" && mv -f "$SOURCE_NEW" "$SOURCE_FILE" || exit 1; fi
+fi
+new_hash=$(hash_file "$TARGET")
+[ "$stage_hash" = "$new_hash" ] || { echo F50_ERROR=yaml_commit_checksum_mismatch; exit 1; }
+if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then [ "$source_hash" = "$(hash_file "$SOURCE_FILE")" ] || { echo F50_ERROR=yaml_source_checksum_mismatch; exit 1; }; fi
+touch "$TX/committed" || exit 1
+sync
+COMMITTED=1
+printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\nYAML_OLD_SIZE=%s\\nYAML_NEW_SIZE=%s\\n' "$backup_path" "$old_hash" "$new_hash" "$old_size" "$(wc -c < "$TARGET")"
 `; }
 
 function f50AssertSafeJsonNumbers(value) {
@@ -550,7 +666,7 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=13
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=14
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -743,14 +859,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=13' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=14' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -863,6 +979,15 @@ sh /data/clash/Scripts/Clash.Service version`, 15000);
 
 let lastInstallDiagnostic = null;
 const F50_DIAGNOSTIC_LABELS = {
+  gist_components_missing: '此完整组件包不含 Gist 同步，请导入随附的 RC4 完整组件包。原组件未替换。',
+  gist_manifest_mismatch: 'Gist 组件清单版本不匹配，请重新获取配套完整组件包。',
+  gist_component_hash_mismatch: 'Gist 组件缺失或校验失败，请重新获取完整组件包。',
+  gist_runtime_probe_failed: 'Gist 程序无法在设备执行，请检查 ARM64 架构和配套版本。',
+  gist_age_runtime_probe_failed: '完整组件中的 age 无法执行或版本不匹配，请重新导入配套完整组件包。',
+  gist_permission_failed: '无法设置 Gist 组件执行权限，未完成安装。',
+  gist_script_invalid: 'Gist 组件脚本校验失败，未完成安装。',
+  gist_backup_cleanup_failed: '组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。',
+  gist_transient_cleanup_failed: '同步临时数据清理失败，未替换原组件。',
   zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
   archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
   data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
@@ -1141,7 +1266,7 @@ f50_scan() {
     case "$F50_STAT_STATE" in Z|X) ps_excluded=1 ;; esac
     if [ "$ps_excluded" = 0 ]; then
       case "$ps_name" in
-        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)
+        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)
           ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)
           ps_exe=\${ps_exe% (deleted)}
           if f50_owned_exe "$ps_exe"; then
@@ -1149,25 +1274,25 @@ f50_scan() {
             case "\${ps_exe##*/}" in Clash.Core|mihomo) ps_kind=core ;; esac
           fi
           case "\${ps_exe##*/}" in
-            clashctl*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)
+            clashctl*|kano-gist-sync|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)
               ps_args=$(tr '\\000' '\\n' < "$ps_dir/cmdline" 2>/dev/null)
               ps_index=0; ps_script=0; ps_action=
               while IFS= read -r ps_arg; do
                 if [ "$ps_kind" = core ]; then case "$ps_arg" in -t|--test) ps_kind=config_test ;; esac; fi
                 if [ "$ps_index" = 1 ]; then
-                  case "\${ps_exe##*/}" in clashctl*) ps_action=$ps_arg ;; esac
+                  case "\${ps_exe##*/}" in clashctl*|kano-gist-sync) ps_action=$ps_arg ;; esac
                 fi
                 [ "$ps_script" = 2 ] && { ps_action=$ps_arg; ps_script=3; }
                 case "$ps_arg" in
                   -c) break ;;
-                  */Scripts/Clash.Service|*/Scripts/Clash.Inotify|*/Scripts/Clash.KanoStart|*/Scripts/Clash.PolicyTools|*/Scripts/Clash.MacBypass)
+                  */Scripts/Clash.Service|*/Scripts/Clash.GistSync|*/Scripts/Clash.Inotify|*/Scripts/Clash.KanoStart|*/Scripts/Clash.PolicyTools|*/Scripts/Clash.MacBypass)
                     if f50_owned_exe "$ps_arg"; then ps_owned=1; ps_kind=service; ps_script=2; fi ;;
                 esac
                 ps_index=$((ps_index+1))
               done <<EOF_F50_ARGS
 $ps_args
 EOF_F50_ARGS
-              case "$ps_action" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped) ps_owned=0; ps_excluded=1 ;; esac
+              case "$ps_action" in snapshot|status|version|--version|help|--help|profile|job|verify-clean|verify-stopped) ps_owned=0; ps_excluded=1 ;; esac
               ;;
           esac
           if [ "$ps_owned:$ps_excluded" = 0:0 ]; then
@@ -1677,7 +1802,7 @@ function buildF50ArtifactHelpers() { return `f50_artifact_paths() {
     "$F50_DATA"/.f50-check.* "$F50_DATA"/.f50-clean.* "$F50_DATA"/.f50-delete.* \\
     "$F50_DATA"/.f50-verify.* "$F50_DATA"/.f50-install.* \\
     "$F50_DATA"/clash.install.lock "$F50_DATA"/clash.install.lock.d \\
-    "$F50_DATA"/kano_tproxy_tools "$F50_DATA"/kano_yq_runtime \\
+    "$F50_DATA"/kano_tproxy_tools "$F50_DATA"/kano_yq_runtime /dev/kano_gist_sync \\
     "$F50_DATA"/kano_clash.zip "$F50_DATA"/kano_clash.zip.new.* "$F50_DATA"/kano_clash.source \\
     "$F50_DATA"/kano_mihomo_latest.dlog "$F50_DATA"/kano_mihomo_latest.dlog.verify \\
     "$F50_DATA"/kano_subscription_config.raw "$F50_DATA"/kano_subscription_config.yaml \\
@@ -1726,7 +1851,7 @@ function buildF50RemovalHelpers() { return `f50_runtime_guard() {
   if [ -s "$F50_WORK/guard.net/plan" ]; then echo F50_DELETE_BLOCKED=owned_network_active; return 1; fi
 }
 f50_remove_artifacts() {
-  for recovery_tx in "$F50_ROOT"/Proxy/config.yaml.kano_tx "$F50_ROOT"/Tools/template.yaml.kano_tx "$F50_ROOT"/Tools/template.base.yaml.kano_tx "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_config_package_restore_*_rollback "$F50_DATA"/.f50-install.*/install.journal; do
+  for recovery_tx in "$F50_ROOT"/Tools/gist-sync/activation "$F50_ROOT"/Proxy/config.yaml.kano_tx "$F50_ROOT"/Tools/template.yaml.kano_tx "$F50_ROOT"/Tools/template.base.yaml.kano_tx "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_config_package_restore_*_rollback "$F50_DATA"/.f50-install.*/install.journal; do
     [ ! -e "$recovery_tx" ] || { echo "F50_DELETE_BLOCKED=recovery_data:$recovery_tx"; return 1; }
   done
   delete_failed=0
@@ -2117,8 +2242,26 @@ if [ ! -s "$PKG/Proxy/Clash.Core" ]; then
   PKG=$MERGED
 fi
 mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install_fail package_directory_failed; exit 1; }
-[ -s "$PKG/Scripts/Clash.Service" ] || { f50_install_fail missing_service_wrapper; exit 1; }
-for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
+# GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
+f50_gist_verify_bundle() {
+  groot=$1
+  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'e4dc4c4ae38fca82ac998860f2af203fa984361f2960edf57e51df491097c0b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
+  [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '496bc79bf2ba6653960827d757757975a0521b28599c955d7b87af06dbf69efa' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
+  sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
+  gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
+  printf '%s' "$gist_probe" | grep -q '"version":"1.0.0-rc4"' && printf '%s' "$gist_probe" | grep -Eq '"protocol":1([,}])' || { f50_install_fail gist_runtime_probe_failed; return 1; }
+  age_probe=$(f50_limit 5 "$groot/Tools/age" --version 2>/dev/null) && [ "$age_probe" = v1.3.2 ] || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
+}
+[ -f "$PKG/Tools/gist-sync-component.json" ] || { f50_install_fail gist_components_missing; exit 1; }
+f50_gist_verify_bundle "$PKG" || exit 1
+GIST_COMPONENTS=installed
+
+for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/kano-gist-sync "$PKG"/Tools/age "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
   [ ! -f "$file" ] || chmod 755 "$file" || { f50_install_fail executable_permission_failed; exit 1; }
 done
 ${buildF50HttpSubscriptionPatchScript('"$PKG"')} || { f50_install_fail controller_http_patch_failed; exit 1; }
@@ -2146,7 +2289,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Tools/gist-sync Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -2160,6 +2303,12 @@ for src in "$F50_ROOT"/Proxy/*; do
   dst="$PKG/Proxy/\${src##*/}"
   rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
 done
+# Work files and queued uploads are not durable settings and must not migrate.
+if [ -d "$PKG/Tools/gist-sync" ]; then
+  for transient in work jobs yq-runtime; do
+    [ ! -L "$PKG/Tools/gist-sync/$transient" ] && rm -rf "$PKG/Tools/gist-sync/$transient" || { f50_install_fail gist_transient_cleanup_failed; return 1; }
+  done
+fi
 }
 f50_preserve_user_data || exit 1
 
@@ -2289,6 +2438,10 @@ else
 fi
 # Component completion is independent of journal, receipt and lock finalization.
 SUCCESS=1
+# Do not retain age identities in ordinary component rollback folders.
+if [ -n "$BACKUP" ] && [ -d "$BACKUP/Tools/gist-sync" ]; then
+  [ ! -L "$BACKUP/Tools/gist-sync" ] && rm -rf "$BACKUP/Tools/gist-sync" || { KEEP_WORK=1; f50_install_fail gist_backup_cleanup_failed; exit 1; }
+fi
 f50_install_record complete || { KEEP_WORK=1; f50_install_fail journal_write_failed; exit 1; }
 if [ -n "$BACKUP" ]; then
   cp "$F50_WORK/install.journal" "$BACKUP/.f50-install-receipt" || { KEEP_WORK=1; f50_install_fail backup_receipt_failed; exit 1; }
@@ -2330,10 +2483,18 @@ async function installF50PackageAtDevicePath(uploaded) {
     const recoveredWithFallback = /^F50_CLEAN_WARNING=/m.test(output);
     if (recoveredWithFallback) message += '；旧恢复报错后已通过兜底清理复查';
     if (warning) message += warning === 'previous_components_retained' ? '；已保留旧组件回滚目录' : '；安装告警：' + warning;
-    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
-    operationFinish(true, message);
-    createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
-    return true;
+    const gistVersion = await f50GistExec(['version'], 8000);
+    let gistReady = gistVersion.ok;
+    if (!gistVersion.ok) message += '；Gist 状态未确认：' + f50GistMessage(gistVersion.code);
+    if (gistVersion.ok && gistVersion.version === '1.0.0-rc4') {
+      const gistResume = await f50GistExec(['start-daemon'], 8000);
+      if (!gistResume.ok) gistReady = false;
+      if (!gistResume.ok) message += '；Gist 调度恢复未确认：' + (gistResume.code || 'unknown');
+    }
+    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: gistReady};
+    operationFinish(gistReady, message);
+    createToast(safeTextToHtml(message), !gistReady || warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
+    return gistReady;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
     lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装未完成');
@@ -3131,6 +3292,7 @@ function buildUninstallStages() { return [
 if [ -f ${shellQuote(BOOT_FILE)} ]; then
   ${removeBootLinesCmd()}
 fi
+if [ -x /data/clash/Tools/kano-gist-sync ]; then /data/clash/Tools/kano-gist-sync remove-boot || exit 1; fi
 if [ -f /data/f50_boot_fix/clash_boot.sh ]; then rm -f /data/f50_boot_fix/clash_boot.sh; fi
 echo F50_BOOT_REMOVED
 `},
@@ -3193,13 +3355,12 @@ exit "$delete_rc"
   const LOG_FILE = '/data/clash/Proxy/Clash.log';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
-  const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
-  const CLASH_PACKAGE_FALLBACK_URL = 'https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip';
-  const CLASH_PACKAGE_REPO_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip';
+  const CLASH_PACKAGE_URL = '';
+  const CLASH_PACKAGE_FALLBACK_URL = '';
+  const CLASH_PACKAGE_REPO_URL = '';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
-  // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
-  // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"29a48b34825b7404e4c1823a69ebf7ed54ed7f5f969cfe0c21de56a80a2aec10","published":false});
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
@@ -3231,6 +3392,162 @@ exit "$delete_rc"
   const ADVANCED_ACCESS_FAILURE_CACHE_TTL = 2 * 1000;
   const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
   const KANO_HELPER_SNAPSHOT_TTL = 1500;
+
+  const F50_GIST_HELPER = '/data/clash/Tools/kano-gist-sync';
+  function f50GistParse(response, tag, command) {
+    const candidates = [response?.content, response?.data?.content, response?.data?.result, response?.result];
+    const pattern = new RegExp('(?:^|\\n)F50_GIST_BEGIN_' + tag + '\\r?\\n([\\s\\S]*?)\\r?\\nF50_GIST_END_' + tag + '=(\\d+)\\s*$');
+    for (const content of candidates) {
+      if (typeof content !== 'string') continue;
+      const match = content.match(pattern);
+      if (!match) continue;
+      let value;
+      try { value = JSON.parse(match[1].trim()); } catch (_) { return {ok:false,code:'response_format_invalid'}; }
+      if (!value || Array.isArray(value) || typeof value !== 'object') return {ok:false,code:'response_format_invalid'};
+      const exitCode = Number(match[2]);
+      if (value.ok === false && typeof value.code === 'string' && value.code) return value;
+      if (exitCode !== 0) return {ok:false,code:exitCode===124?'operation_timeout':'device_execution_failed',exitCode};
+      if (response?.success === false) return {ok:false,code:'device_state_unknown'};
+      if (command === 'job') {
+        if (!/^[a-f0-9]{32}$/.test(value.id || '') || !['queued','running','finished','completion_unknown'].includes(value.status) ||
+            (value.status === 'finished' && typeof value.result?.ok !== 'boolean')) return {ok:false,code:'response_format_invalid'};
+        return {...value,ok:true};
+      }
+      if (value.ok !== true) return {ok:false,code:'response_format_invalid'};
+      if (['status','version'].includes(command) && (value.version !== '1.0.0-rc4' || value.protocol !== 1)) return {ok:false,code:'component_version_mismatch'};
+      if (command === 'status' && (!value.settings || typeof value.settings !== 'object' ||
+          ![1,6,12,24].includes(value.settings.intervalHours) || typeof value.ageReady !== 'boolean')) return {ok:false,code:'response_format_invalid'};
+      return value;
+    }
+    const text = String(response?.content || '');
+    if (/timeout|timed out|aborted/i.test(text)) return {ok:false,code:'operation_timeout'};
+    return {ok:false,code:text.trim()?'response_format_invalid':'device_state_unknown'};
+  }
+  async function f50GistExec(args, timeout = 10000, input = '') {
+    const tag = Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,'0')).join('');
+    const invocation = shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') +
+      (input ? ' <<\'F50_SEALED_REQUEST\'\n' + input + '\nF50_SEALED_REQUEST\n' : '\n');
+    const script = `umask 077
+printf '\\nF50_GIST_BEGIN_${tag}\\n'
+(
+if [ ! -f ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; fi
+if [ ! -x ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"component_not_executable"}'; exit 126; fi
+v=$(${shellQuote(F50_GIST_HELPER)} version 2>/dev/null) || { printf '%s\\n' '{"ok":false,"code":"device_execution_failed"}'; exit 126; }
+printf '%s' "$v" | grep -q '"version":"1.0.0-rc4"' && printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
+for rel in Tools/age Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
+  [ -f "/data/clash/$rel" ] && [ -x "/data/clash/$rel" ] || { printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; }
+done
+${invocation}) 2>/dev/null
+rc=$?
+printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
+`;
+    try { return f50GistParse(await hostRunShellWithRoot.call(globalThis,script,timeout),tag,args[0]); }
+    catch (error) { return {ok:false,code:error?.name==='AbortError' || /timeout/i.test(error?.message || '')?'operation_timeout':'device_state_unknown'}; }
+  }
+  function f50GistSeal(key, action, request) {
+    if (typeof CryptoJS === 'undefined' || typeof BigInt === 'undefined' || !crypto?.getRandomValues) throw Error('secure_transport_unavailable');
+    if (key.protocol !== 1 || !/^[a-f0-9]{32}$/.test(key.id || '') || !/^[a-f0-9]{512}$/.test(key.modulus || '') || key.exponent !== 65537) throw Error('component_version_mismatch');
+    const hex = bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+    const wa = bytes=>CryptoJS.enc.Hex.parse(hex(bytes));
+    const bytes = word=>Uint8Array.from(word.toString(CryptoJS.enc.Hex).match(/../g)||[],v=>parseInt(v,16));
+    const hash = data=>bytes(CryptoJS.SHA256(wa(data)));
+    const mask = (seed,length)=>{
+      const out=new Uint8Array(length);
+      for(let i=0;i<Math.ceil(length/32);i++){
+        const input=new Uint8Array(seed.length+4);input.set(seed);new DataView(input.buffer).setUint32(seed.length,i);
+        out.set(hash(input).slice(0,Math.min(32,length-i*32)),i*32);
+      }return out;
+    };
+    const secret=crypto.getRandomValues(new Uint8Array(64)),seed=crypto.getRandomValues(new Uint8Array(32));
+    const db=new Uint8Array(223);db.set(hash(new TextEncoder().encode('Maomao-GistSync-RC3')));db[158]=1;db.set(secret,159);
+    const dbMask=mask(seed,223);for(let i=0;i<223;i++)db[i]^=dbMask[i];
+    const seedMask=mask(db,32);for(let i=0;i<32;i++)seed[i]^=seedMask[i];
+    const encoded=new Uint8Array(256);encoded.set(seed,1);encoded.set(db,33);
+    const modulus=BigInt('0x'+key.modulus);let base=BigInt('0x'+hex(encoded)),exponent=65537n,encrypted=1n;
+    while(exponent){if(exponent&1n)encrypted=encrypted*base%modulus;base=base*base%modulus;exponent>>=1n;}
+    const wrapped=CryptoJS.enc.Hex.parse(encrypted.toString(16).padStart(512,'0')).toString(CryptoJS.enc.Base64);
+    const iv=crypto.getRandomValues(new Uint8Array(16));
+    const data=CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(JSON.stringify(request)),wa(secret.slice(0,32)),{iv:wa(iv),mode:CryptoJS.mode.CBC,padding:CryptoJS.pad.Pkcs7}).ciphertext.toString(CryptoJS.enc.Base64);
+    const iv64=wa(iv).toString(CryptoJS.enc.Base64);
+    const mac=CryptoJS.HmacSHA256('1\n'+key.id+'\n'+action+'\n'+wrapped+'\n'+iv64+'\n'+data,wa(secret.slice(32))).toString(CryptoJS.enc.Base64);
+    secret.fill(0);
+    return {protocol:1,id:key.id,key:wrapped,iv:iv64,data,mac};
+  }
+  async function f50GistDispatch(action, request = {}) {
+    try {
+      const key = await f50GistExec(['request-key'],15000);
+      if (!key.ok) return key;
+      const sealed=f50GistSeal(key,action,request);
+      return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
+    } catch (error) { return {ok:false,code:['secure_transport_unavailable','component_version_mismatch'].includes(error?.message)?error.message:'request_encryption_failed'}; }
+    finally { request.identity=''; }
+  }
+
+  const F50_GIST_MESSAGES = {
+    invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
+    invalid_gist_path:'Gist Raw 链接路径不正确。',
+    invalid_gist_revision:'Gist 版本号无效。',
+    invalid_gist_filename:'Gist 链接应指向 .age 加密文件。',
+    invalid_age_identity:'age 私钥格式不正确。',
+    age_identity_missing:'请先填写 age 私钥。',
+    http_404:'Gist 文件不存在或无法访问。',
+    http_403:'Gist 访问被拒绝。',
+    download_timeout:'Gist 下载超时，请重试。',
+    download_transport_failed:'Gist 下载失败，请检查网络。',
+    yaml_runtime_not_ready:'组件初始化未完成，请在组件管理中重新导入配套完整组件包。',
+    no_transaction_pending:'没有待恢复的同步事务。',
+    components_missing:'当前完整组件版本不支持 Gist 同步，请在组件管理中更新。',
+    base_components_missing:'原组件缺失，请在组件管理中更新完整组件包。',
+    component_version_mismatch:'Gist 组件与页面版本不匹配，请更新配套 JS 和完整组件包。',
+    component_not_executable:'Gist 程序无法执行，请在组件管理中重新导入完整组件包。',
+    device_execution_failed:'设备端执行失败，请检查组件架构、权限和设备状态。',
+    response_format_invalid:'设备返回数据格式不正确，请刷新状态；持续出现时更新配套 JS 和组件。',
+    operation_timeout:'操作超时，设备任务可能仍在运行；请刷新状态后确认。',
+    device_state_unknown:'设备状态暂时无法确认，请检查连接后刷新状态。',
+    secure_transport_unavailable:'当前宿主缺少加密能力，未传输私钥；请更新宿主。',
+    request_encryption_failed:'同步请求加密失败，未发送明文私钥。',
+    request_key_expired:'一次性请求密钥已过期，请刷新状态后重试。',
+    sealed_request_invalid:'加密请求校验失败，未执行操作。',
+    root_required:'设备未授予 root 执行权限。',
+    too_many_tasks:'同步任务正在运行，请等待或在高级维护中取消任务。',
+    timeout:'设备操作超时，请刷新状态确认结果。',
+    idle:'等待同步',
+
+    test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
+    settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
+    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'\u914d\u7f6e\u5df2\u52a0\u8f7d\uff0c\u7b56\u7565\u68c0\u67e5\u901a\u8fc7',
+    saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
+    local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
+    local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
+    source_changed:'\u540c\u6b65\u6e90\u5df2\u66f4\u6362\uff0c\u65e7\u4efb\u52a1\u672a\u63d0\u4ea4',
+    settings_changed:'\u8bbe\u7f6e\u5df2\u88ab\u5176\u4ed6\u9875\u9762\u66f4\u6539\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u8868\u5355',
+    operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
+    blocked_dns_address:'DNS 返回了内网或 Fake-IP 地址，已拒绝下载。请让 Gist 域名使用真实公网 DNS。',
+    dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
+    age_missing_or_wrong_version:'完整组件中的 age 缺失或版本不匹配，请在组件管理中更新',
+    age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
+    committed_pending_finalize:'\u914d\u7f6e\u5df2\u63d0\u4ea4\uff0c\u4e8b\u52a1\u6536\u5c3e\u5f85\u786e\u8ba4\uff1b\u8bf7\u5148\u6062\u590d\u540c\u6b65\u4e8b\u52a1',
+    sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
+    auto_disabled:'\u81ea\u52a8\u540c\u6b65\u5df2\u5173\u95ed',
+    task_receipt_missing:'\u4efb\u52a1\u56de\u6267\u4e22\u5931\uff0c\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u4e0d\u4ee3\u8868\u5df2\u56de\u6eda',
+    auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
+  };
+  const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
+  // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
+  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
+  const f50GistValidUrl = value => {
+    try {
+      if (value.length > 2048 || !value.startsWith('https://gist.githubusercontent.com/') || /[\s\u200B-\u200D\u2060\uFEFF\\]/.test(value)) return false;
+      const u = new URL(value);
+      if (u.protocol !== 'https:' || u.hostname !== 'gist.githubusercontent.com' || u.port || u.username || u.password || u.search || u.hash) return false;
+      const parts = value.slice('https://gist.githubusercontent.com'.length).split('/');
+      if (parts.length !== 5 && parts.length !== 6) return false;
+      if (parts[0] || !/^[a-z0-9][a-z0-9-]{0,38}$/i.test(parts[1]) || !/^[a-f0-9]{5,64}$/i.test(parts[2]) || parts[3] !== 'raw') return false;
+      if (parts.length === 6 && !/^[a-f0-9]{40}$/i.test(parts[4])) return false;
+      const file = decodeURIComponent(parts[parts.length - 1]);
+      return file.length > 0 && new TextEncoder().encode(file).length <= 255 && !/[\/\\\x00-\x1f\x7f]/.test(file) && /\.age$/i.test(file);
+    } catch (_) { return false; }
+  };
 
   // ===== Basic helpers =====
     let transientShellOperation = null;
@@ -3311,7 +3628,7 @@ exit "$delete_rc"
       if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
       if (op.token.cancelled || op.closing) throw operationCancelled();
       const request = tag + '.' + (++taskCommandSequence);
-      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${script}`;
+      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${buildF50GistFence()}\n${script}`;
       const command = `set +e
 exec 2>&1
 umask 077
@@ -3939,12 +4256,14 @@ KANO_YQ_SMOKE_EOF
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
     // UFI root-shell requests have a finite request window. Keep every foreground
     // download attempt below that window and try sources one-by-one from JS.
+    if (!F50_FULL_COMPONENT_RELEASE.published) return {ok:false,stage:'unpublished',message:'RC4 完整组件包尚未发布，请在组件管理中导入随附的完整组件 ZIP。',content:'RC4 完整组件包尚未发布，请在组件管理中导入随附的完整组件 ZIP。'};
     operationStage('检查安装包缓存');
     if (allowCached) {
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
         LOG=${shellQuote(DOWNLOAD_LOG)}
         [ -s "$ZIP" ] || exit 1
+        [ "$(sha256sum "$ZIP" | awk '{print $1}')" = ${shellQuote(F50_FULL_COMPONENT_RELEASE.sha256)} ] || exit 1
         command -v unzip >/dev/null 2>&1 || exit 1
         unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
         echo "ARCHIVE_READY=cached"
@@ -3983,6 +4302,7 @@ KANO_YQ_SMOKE_EOF
           echo "ARCHIVE_VERIFY_FAILED=empty"
           exit 1
         }
+        [ "$(sha256sum "$NEW" | awk '{print $1}')" = ${shellQuote(F50_FULL_COMPONENT_RELEASE.sha256)} ] || { rm -f "$NEW"; echo ARCHIVE_VERIFY_FAILED=sha256; exit 1; }
         size="$(wc -c < "$NEW" 2>/dev/null || echo 0)"
         unzip -t "$NEW" >"$LOG.verify" 2>&1 || {
           rm -f "$NEW" 2>/dev/null || true
@@ -5126,106 +5446,7 @@ PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
 BACKUP_REQUESTED=${backup ? 1 : 0}
 BACKUP_TAG=${shellQuote(safeTag)}
 YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
-${prepareYqRuntimeCmd()}
-${buildF50ConfigTransactionFunctions()}
-f50_config_tx_recover "$TARGET" "$SOURCE_FILE" || exit 1
-TX="$TARGET.kano_tx"
-PARSE_OUT="$STAGE.kano_parse.$$"
-NORMALIZED="$STAGE.kano_secret.$$"
-SOURCE_NEW="$SOURCE_FILE.kano_source.$$"
-TX_OWNED=0
-COMMITTED=0
-finish_yaml_commit() {
-  rc=$?; trap - EXIT HUP INT TERM
-  if [ "$TX_OWNED" = 1 ]; then
-    if ! f50_config_tx_recover "$TARGET" "$SOURCE_FILE"; then rc=1; fi
-  fi
-  rm -f "$PARSE_OUT" "$NORMALIZED" "$SOURCE_NEW"
-  [ "$COMMITTED" = 1 ] || rm -f "$STAGE"
-  exit "$rc"
-}
-trap finish_yaml_commit EXIT
-trap 'exit 130' HUP INT TERM
-[ -s "$STAGE" ] && [ ! -L "$STAGE" ] && [ ! -L "$TARGET" ] && [ ! -L "$SOURCE_FILE" ] || { echo F50_ERROR=yaml_path_invalid; exit 1; }
-${yqVersionCheckCmd()}
-"$YQ" e -e 'tag == "!!map"' "$STAGE" >/dev/null 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
-if [ "$PROTECT_SECRET" = 1 ]; then
-  old_secret=
-  if [ -s "$TARGET" ]; then old_secret=$("$YQ" e -r '.secret // ""' "$TARGET" 2>"$PARSE_OUT") || { echo F50_ERROR=live_secret_read_failed; exit 1; }; fi
-  if [ -n "$old_secret" ]; then
-    export F50_LIVE_CONFIG="$TARGET"
-    "$YQ" e '.secret = load(strenv(F50_LIVE_CONFIG)).secret' "$STAGE" > "$NORMALIZED" || exit 1
-    unset F50_LIVE_CONFIG
-  else
-    export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
-    "$YQ" e '.secret = strenv(F50_FIXED_SECRET)' "$STAGE" > "$NORMALIZED" || exit 1
-    unset F50_FIXED_SECRET
-  fi
-  unset old_secret
-  chmod 600 "$NORMALIZED" && mv -f "$NORMALIZED" "$STAGE" || exit 1
-fi
-hash_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
-command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=yaml_hash_tool_missing; exit 1; }
-old_hash=$(hash_file "$TARGET")
-old_size=0; [ ! -f "$TARGET" ] || old_size=$(wc -c < "$TARGET")
-source_same=1
-if [ "$WITH_SOURCE" = 1 ]; then
-  mkdir -p "\${SOURCE_FILE%/*}"
-  if [ "$SOURCE_DELETE" = 1 ]; then
-    [ ! -e "$SOURCE_FILE" ] || source_same=0
-  else
-    if [ -n "$SOURCE_STAGE" ]; then
-      [ -f "$SOURCE_STAGE" ] && [ ! -L "$SOURCE_STAGE" ] && cp -p "$SOURCE_STAGE" "$SOURCE_NEW" || exit 1
-      ${withBase ? '"$YQ" e -e \'tag == "!!map"\' "$SOURCE_NEW" >/dev/null 2>&1 || exit 1' : ''}
-    else
-      printf 'KANO_CONFIG_SOURCE=%s\\n' "$SOURCE_VALUE" > "$SOURCE_NEW" || exit 1
-    fi
-    cmp -s "$SOURCE_FILE" "$SOURCE_NEW" || source_same=0
-  fi
-fi
-if cmp -s "$TARGET" "$STAGE" && [ "$source_same" = 1 ]; then
-  rm -f "$STAGE"
-  echo YAML_COMMIT_UNCHANGED=1
-  printf 'YAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\n' "$old_hash" "$old_hash"
-  exit 0
-fi
-mkdir "$TX" || { echo F50_ERROR=config_transaction_busy; exit 1; }
-TX_OWNED=1
-printf '%s\\n' F50_CONFIG_TX_V1 > "$TX/format" || exit 1
-snapshot_pair_file() {
-  name=$1; src=$2
-  if [ -e "$src" ]; then cp -p "$src" "$TX/$name" && chmod 600 "$TX/$name" && touch "$TX/$name.had" || return 1
-  else touch "$TX/$name.absent" || return 1; fi
-}
-snapshot_pair_file config "$TARGET" || exit 1
-if [ "$WITH_SOURCE" = 1 ]; then snapshot_pair_file source "$SOURCE_FILE" && touch "$TX/with_source" || exit 1; fi
-${withBase ? 'touch "$TX/with_base" || exit 1' : ''}
-backup_path=
-if [ "$BACKUP_REQUESTED" = 1 ] && [ -f "$TARGET" ]; then
-  backup_path="$TARGET.before_\${BACKUP_TAG}_$(date +%Y%m%d%H%M%S)_$$"
-  cp -p "$TX/config" "$backup_path" && chmod 600 "$backup_path" || exit 1
-  if [ "$WITH_SOURCE" = 1 ]; then
-    if [ -f "$TX/source.had" ]; then cp -p "$TX/source" "$backup_path.source" || exit 1
-    else touch "$backup_path.source.absent" || exit 1; fi
-  fi
-fi
-touch "$TX/ready" || exit 1
-sync
-stage_hash=$(hash_file "$STAGE")
-[ -n "$stage_hash" ] || exit 1
-if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then source_hash=$(hash_file "$SOURCE_NEW"); [ -n "$source_hash" ] || exit 1; fi
-chmod 600 "$STAGE" && mv -f "$STAGE" "$TARGET" || exit 1
-if [ "$WITH_SOURCE" = 1 ]; then
-  if [ "$SOURCE_DELETE" = 1 ]; then rm -f "$SOURCE_FILE" || exit 1
-  else chmod 600 "$SOURCE_NEW" && mv -f "$SOURCE_NEW" "$SOURCE_FILE" || exit 1; fi
-fi
-new_hash=$(hash_file "$TARGET")
-[ "$stage_hash" = "$new_hash" ] || { echo F50_ERROR=yaml_commit_checksum_mismatch; exit 1; }
-if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then [ "$source_hash" = "$(hash_file "$SOURCE_FILE")" ] || { echo F50_ERROR=yaml_source_checksum_mismatch; exit 1; }; fi
-touch "$TX/committed" || exit 1
-sync
-COMMITTED=1
-printf 'YAML_COMMIT_OK=1\\nYAML_BACKUP=%s\\nYAML_OLD_HASH=%s\\nYAML_NEW_HASH=%s\\nYAML_OLD_SIZE=%s\\nYAML_NEW_SIZE=%s\\n' "$backup_path" "$old_hash" "$new_hash" "$old_size" "$(wc -c < "$TARGET")"
+${buildF50YamlCommitBody(withBase)}
 `;
   const res = await runShellWithRoot(script, 45000);
   if (res.success) invalidateStatusSnapshot();
@@ -11559,6 +11780,131 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
  return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
 };
 
+    const gistSyncBtn = document.createElement('button');
+    gistSyncBtn.classList.add('btn');
+    gistSyncBtn.textContent = 'Gist \u52a0\u5bc6\u540c\u6b65';
+    gistSyncBtn.onclick = async () => {
+      if (!(await ensureAdvanced())) return;
+      const {el, close} = createFixedToast('mm_gist_sync_dialog', `
+        <div style="pointer-events:all;width:92vw;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
+          <div class="title" style="margin:0 0 12px">Gist 同步</div>
+          <label for="mm_gist_url">Gist Raw 链接</label>
+          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
+          <label for="mm_gist_key" style="display:block;margin-top:10px">age 私钥</label>
+          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
+          <small id="mm_gist_key_hint" style="display:block;margin:4px 0 8px;color:#94a3b8"></small>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0;">
+            <label><input id="mm_gist_auto" type="checkbox"> 自动同步</label>
+            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:light!important;background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;min-height:42px;padding:6px;border:1px solid #64748b;border-radius:6px;">
+              <option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="1">1 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="6" selected>6 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="12">12 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="24">24 小时</option>
+            </select></label>
+          </div>
+          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:3">
+            <button id="mm_gist_test">测试</button><button id="mm_gist_save">保存</button><button id="mm_gist_sync">立即同步</button>
+          </div>
+          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
+          <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
+          <details style="margin-top:8px"><summary>更多</summary>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+              <button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
+              <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
+              <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
+            </div>
+          </details>
+          <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
+        </div>`);
+      const q = id => el.querySelector('#mm_gist_'+id);
+      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, savedUrl='';
+
+      const result = text => { if(opened) q('result').textContent=text; };
+      const fmt = value => value && !String(value).startsWith('0001-') ? new Date(value).toLocaleString() : '\u65e0';
+      q('url').onblur=()=>{q('url').value=f50GistCleanUrl(q('url').value);};
+      q('key').oninput=()=>{pendingKey=q('key').value.trim();};
+      const refresh = async (loadForm=false) => {
+        const sequence=++refreshSequence;
+        const st=await f50GistExec(['status'],15000);
+        if(!opened || sequence!==refreshSequence)return null;
+        if(!st.ok){settingsLoaded=false;q('status').textContent=f50GistMessage(st.code);return null;}
+        if(loadForm || !settingsLoaded){
+          const saved=st.settings || {};
+          q('url').value=saved.deleted?'':saved.url || '';
+          q('auto').checked=!!saved.auto;
+          q('interval').value=String(saved.intervalHours || 6);
+          revision=saved.revision || 0; settingsLoaded=true; savedUrl=saved.url || '';
+          pendingKey='';q('key').value='';
+        }
+        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
+        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
+        const state=st.state?.generation===st.settings?.generation?st.state:null;
+        const last=state?.last;
+        const recent=(st.jobs||[])[0];
+        if(!foreground && recent && ['queued','running'].includes(recent.status)) currentJob=recent.id;
+        const syncMode=st.settings.auto
+          ? (st.schedulerRunning ? '自动同步开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步开启 · 设备调度未运行')
+          : '自动同步关闭';
+        const lastTime=state?.lastSuccess ? '上次同步 '+fmt(state.lastSuccess) : '尚未同步';
+        const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_missing_or_wrong_version' : '') || (last && !last.ok ? last.code : '');
+        q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
+        return st;
+      };
+      const busy=on=>{foreground=on;for(const name of ['test','save','sync','disable','delete','recover','read'])q(name).disabled=on;};
+      const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
+      const launch=async (action,request={})=>{
+        if(foreground)return;
+        busy(true);result('\u6b63\u5728\u63d0\u4ea4\u8bbe\u5907\u4efb\u52a1\u2026');
+        try{
+          const started=await f50GistDispatch(action,request);
+          if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
+          currentJob=started.job;
+          result('\u8bbe\u5907\u4efb\u52a1 '+currentJob+' \u5df2\u63d0\u4ea4\uff1b\u53ef\u5173\u95ed\u9875\u9762\u3002');
+          while(opened){
+            const job=await f50GistExec(['job',currentJob],8000);
+            if(!opened)break;
+            if(job.status==='finished'){
+              const out=job.result;result(describe(out));
+              if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
+              if(action==='sync' && out?.code==='local_config_conflict'){
+                const expected=out.applied;
+                if(expected && window.confirm('\u5df2\u68c0\u6d4b\u5230\u672c\u5730\u914d\u7f6e\u6216\u7f51\u7edc\u8bbe\u7f6e\u4fee\u6539\u3002\u786e\u8ba4\u7528 Gist \u66ff\u6362\u5f53\u524d\u914d\u7f6e\uff1f\u672c\u5730\u7f51\u7edc\u53c2\u6570\u4ecd\u6309\u732b\u732b\u89c4\u5219\u4fdd\u7559\u3002')){
+                  busy(false);return await launch('sync',{replaceLocal:true,expectedLocal:expected});
+                }
+              }
+              break;
+            }
+            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
+            await new Promise(resolve=>setTimeout(resolve,1500));
+          }
+        }catch(_){result('\u4efb\u52a1\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u8bf7\u5237\u65b0\u72b6\u6001\u3002');}
+        finally{if(opened)busy(false);}
+      };
+      const formAction=async action=>{
+        if(!settingsLoaded){result('无法读取设置，请稍后重试。');return;}
+        const url=f50GistCleanUrl(q('url').value);
+        if(!f50GistValidUrl(url)){
+          result(url?'请填写完整的 Gist Raw .age 下载链接。':'请先填写 Gist Raw 链接。');
+          return;
+        }
+        q('url').value=url;
+        if(q('key').value.trim())pendingKey=q('key').value.trim();
+        q('key').value='';
+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
+      };
+      q('test').onclick=()=>formAction('test');q('save').onclick=()=>formAction('save');
+      q('sync').onclick=()=>{
+        if(f50GistCleanUrl(q('url').value)!==savedUrl || q('key').value.trim() || pendingKey){result('请先保存新链接或私钥，再同步。');return;}
+        return launch('sync');
+      };
+      q('disable').onclick=()=>launch('disable');
+      q('refresh').onclick=()=>refresh(false);
+      q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};
+      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
+      q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
+      q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
+      q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
+      const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
+      observer.observe(document.body,{childList:true,subtree:true});
+      await refresh(true);
+    };
     const mmBox = document.querySelector('#mm_action_box');
 
     const appendActionGroup = (title, buttons, openGroup = false) => {
@@ -11579,7 +11925,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
-    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn], false);
+    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
     appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
     let bootProbeLoaded = false;

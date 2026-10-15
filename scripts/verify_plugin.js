@@ -17,6 +17,8 @@ for (const file of files) {
     : ['--test', '--test-reporter=tap', '--test-concurrency=1', path.join(directory, file)];
   const run = spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
   const output = (run.stdout || '') + (run.stderr || '');
+  const logs=path.join(root,'reports/gist-sync/regression');fs.mkdirSync(logs,{recursive:true});
+  fs.writeFileSync(path.join(logs,file+'.stdout.log'),run.stdout||'');fs.writeFileSync(path.join(logs,file+'.stderr.log'),run.stderr||'');
   let passed, failed, skipped = 0;
   const cases = [];
   if (file === 'run_tests.js') {
@@ -37,7 +39,7 @@ for (const file of files) {
   }
   if (run.error || run.status !== 0 || cases.length === 0) failed = Math.max(failed, 1);
   const result = { file: 'tests/tproxy/' + file, command: 'node ' + args.map(arg => arg.replace(root + path.sep, '').replace(/\\/g, '/')).join(' '),
-    status: failed ? 'FAIL' : 'PASS', passed, failed, notRun: skipped, cases };
+    status: failed ? 'FAIL' : 'PASS', exitCode:run.status, stdout:'reports/gist-sync/regression/'+file+'.stdout.log',stderr:'reports/gist-sync/regression/'+file+'.stderr.log', passed, failed, notRun: skipped, cases };
   results.push(result);
   console.log(`${result.status} ${file}: ${passed} passed, ${failed} failed, ${skipped} not run`);
   if (failed) console.log((run.error?.message || output.match(/\n  error:[\s\S]{0,1800}/)?.[0] || output.slice(-1500)).trim());

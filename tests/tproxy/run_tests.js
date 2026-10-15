@@ -160,8 +160,15 @@ try {
   check(preserved.status === 0 && fs.readFileSync(path.join(stagedRoot, 'Tools/config_source.conf'), 'utf8') === original,
     '重装同时保留原配置和配置来源标记', preserved.stderr.trim());
   fs.mkdirSync(path.join(oldRoot, 'Scripts'), { recursive: true });
+  // The current Service patch restores real preservation helpers, so provide
+  // their fixture dependencies instead of relying on overwritten stubs.
+  fs.copyFileSync(process.env.F50_TEST_YQ, path.join(oldRoot,'Tools/yq_linux_arm64'));fs.chmodSync(path.join(oldRoot,'Tools/yq_linux_arm64'),0o755);
+  fs.writeFileSync(path.join(oldRoot,'Proxy/Clash.Core'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  fs.mkdirSync(path.join(oldRoot,'Policy'));fs.writeFileSync(path.join(oldRoot,'Policy/options.conf'),'traffic_mode=off\nipv6=off\n');
   const service = path.join(oldRoot, 'Scripts/Clash.Service');
   const startLog = path.join(reinstallDir, 'kano_clash_start.log');
+  const fixtureBin=path.join(reinstallDir,'bin');fs.mkdirSync(fixtureBin);
+  fs.writeFileSync(path.join(fixtureBin,'curl'),'#!/bin/sh\n[ "$1" != --version ] || { echo fixture-curl; exit 0; }\nprintf 204\n',{mode:0o755});
   for (const scenario of ['preflight', 'controller', 'success', 'patch']) {
     const controller = path.join(oldRoot, 'Scripts/clashctl');
     fs.writeFileSync(controller, `#!/bin/sh\n${scenario === 'controller'
@@ -170,7 +177,7 @@ try {
     fs.chmodSync(controller, 0o755);
     fs.writeFileSync(service, scenario === 'patch' ? '#!/bin/sh\nexit 0\n' : packageService.stdout.replace('\naction=$1\n',
       '\nf50_save_original_config() { return 0; }\nf50_restore_original_config() { return 0; }\nrepair_panel_config() { return 0; }\naction=$1\n'));
-    const command = `F50_ROOT=${quotePath(oldRoot)}\nexport F50_OPERATION_LOCK=${quotePath(path.join(reinstallDir, 'operation.lock'))}\nexport F50_TASK_DIR=${quotePath(path.join(reinstallDir, 'tasks'))}\n${maintenanceShell}
+    const command = `export PATH=${quotePath(fixtureBin)}:$PATH\nF50_ROOT=${quotePath(oldRoot)}\nexport F50_OPERATION_LOCK=${quotePath(path.join(reinstallDir, 'operation.lock'))}\nexport F50_TASK_DIR=${quotePath(path.join(reinstallDir, 'tasks'))}\n${maintenanceShell}
 f50_ensure_live_secret() { ${scenario === 'preflight' ? 'echo password=test-start-password; return 1' : 'return 0'}; }
 f50_ensure_live_panel_config() { return 0; }
 f50_disable_unsupported_ipv6_dns_hijack() { return 0; }
@@ -181,7 +188,7 @@ f50_start_service restart 5`;
     const logged = fs.existsSync(startLog) ? fs.readFileSync(startLog, 'utf8') : '';
     check(result.status === (scenario === 'success' ? 0 : 1) && logged === result.stdout &&
       logged.includes(scenario === 'success' ? 'F50_START_OK=1' : 'F50_START_OK=0') &&
-      !logged.includes('test-start-password'), `启动 ${scenario} 保留返回状态并保存脱敏日志`, result.stderr.trim());
+      !logged.includes('test-start-password'), `启动 ${scenario} 保留返回状态并保存脱敏日志`, result.stderr.trim()+result.stdout);
     if (scenario === 'patch') check(logged.includes('F50_START_CODE=service_patch_failed') &&
       fs.readFileSync(service, 'utf8') === '#!/bin/sh\nexit 0\n', '包装器补丁失败不覆盖原文件或继续启动');
   }

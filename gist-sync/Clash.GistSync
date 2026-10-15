@@ -1,0 +1,6 @@
+#!/system/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+umask 077
+[ ! -d /data/kano_tproxy_tools/bin ] || PATH="/data/kano_tproxy_tools/bin:$PATH"
+export PATH
+exec /data/clash/Tools/kano-gist-sync "$@"

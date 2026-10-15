@@ -3,6 +3,8 @@
 const test = require('node:test');
 const { parse, semantics } = require('../../scripts/compact_plugin');
 const { fs, assert, slice, run, shell, shellApi, source, original, plain, quote, temp, write } = require('./optimization_harness');
+const contracts=require('../gist-sync/expected-contracts.json');
+const hash=value=>require('node:crypto').createHash('sha256').update(value).digest('hex');
 const api = shellApi(), baseline = shellApi(original);
 function privateApi(text) {
   return run(slice('const F50_ZASHBOARD_UI_URL', 'const F50_COMPAT_VERSION', text)
@@ -21,7 +23,9 @@ test('private routing implementation and firewall/process ownership functions ar
     'routes_plan', 'network_snapshot', 'execute_plan', 'clean_environment', 'artifact_paths', 'runtime_guard',
     'remove_artifacts', 'final_probe']) {
     const extract = text => slice('f50_' + name + '() {', '\n}\n', text);
-    assert.equal(extract(api.maintenance()), extract(baseline.maintenance()), name);
+    const extension=contracts.network[name];
+    if(extension){assert.equal(hash(extract(baseline.maintenance())),extension.before);assert.equal(hash(extract(api.maintenance())),extension.after);}
+    else assert.equal(extract(api.maintenance()), extract(baseline.maintenance()), name);
   }
 });
 
@@ -76,7 +80,7 @@ test('operation composition includes every transitive helper and reduces shell p
       if (known.has(match[1])) assert.ok(declared.has(match[1]), operation + ': missing ' + match[1]);
     }
     if (operation === 'install') assert.ok(Buffer.byteLength(script) < Buffer.byteLength(originalScript) - 25000, operation);
-    else if (['inspect', 'cleanup', 'final', 'uninstall'].includes(operation)) assert.equal(Buffer.byteLength(script), Buffer.byteLength(originalScript), operation);
+    else if (['inspect', 'cleanup', 'final', 'uninstall'].includes(operation)) {assert.equal(hash(originalScript),contracts.operations[operation].before);assert.equal(hash(script),contracts.operations[operation].after);}
     else assert.ok(script.includes('f50_service_patch_finish'), 'start retains the new atomic patch transaction');
   }
 });
@@ -125,8 +129,10 @@ for (const state of ['clean', 'residual', 'unknown']) {
 
 test('UI controls and event entry points retain their IDs and handler counts', () => {
   const ids = text => [...text.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]);
-  assert.deepEqual(ids(source), ids(original));
-  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length);
+  assert.deepEqual(ids(source).filter(id=>!id.startsWith('mm_gist_')), ids(original));
+  const ui=fs.readFileSync(require('node:path').resolve(__dirname,'../../gist-sync/ui-gist.js'),'utf8');
+  assert.deepEqual(ids(source).filter(id=>id.startsWith('mm_gist_')),ids(ui));
+  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length+(ui.match(/\.onclick\s*=/g)||[]).length);
 });
 
 for (const outcome of ['success', 'error', 'cancel']) {

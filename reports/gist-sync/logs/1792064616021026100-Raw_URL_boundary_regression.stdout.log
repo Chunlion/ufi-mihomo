@@ -1,0 +1,43 @@
+=== RUN   TestURLValidation
+=== RUN   TestURLValidation/valid_fig.yaml.age
+=== RUN   TestURLValidation/valid_fig.yaml.age#01
+=== RUN   TestURLValidation/valid_er..name.age
+=== RUN   TestURLValidation/valid_E7%BD%AE.age
+=== RUN   TestURLValidation/IP
+=== RUN   TestURLValidation/bad_id
+=== RUN   TestURLValidation/traversal
+=== RUN   TestURLValidation/no_age
+=== RUN   TestURLValidation/page
+=== RUN   TestURLValidation/backslash
+=== RUN   TestURLValidation/CRLF
+=== RUN   TestURLValidation/http
+=== RUN   TestURLValidation/userinfo
+=== RUN   TestURLValidation/port
+=== RUN   TestURLValidation/slash
+=== RUN   TestURLValidation/evil_host
+=== RUN   TestURLValidation/NUL
+=== RUN   TestURLValidation/bad_revision
+=== RUN   TestURLValidation/query
+=== RUN   TestURLValidation/fragment
+--- PASS: TestURLValidation (0.00s)
+    --- PASS: TestURLValidation/valid_fig.yaml.age (0.00s)
+    --- PASS: TestURLValidation/valid_fig.yaml.age#01 (0.00s)
+    --- PASS: TestURLValidation/valid_er..name.age (0.00s)
+    --- PASS: TestURLValidation/valid_E7%BD%AE.age (0.00s)
+    --- PASS: TestURLValidation/IP (0.00s)
+    --- PASS: TestURLValidation/bad_id (0.00s)
+    --- PASS: TestURLValidation/traversal (0.00s)
+    --- PASS: TestURLValidation/no_age (0.00s)
+    --- PASS: TestURLValidation/page (0.00s)
+    --- PASS: TestURLValidation/backslash (0.00s)
+    --- PASS: TestURLValidation/CRLF (0.00s)
+    --- PASS: TestURLValidation/http (0.00s)
+    --- PASS: TestURLValidation/userinfo (0.00s)
+    --- PASS: TestURLValidation/port (0.00s)
+    --- PASS: TestURLValidation/slash (0.00s)
+    --- PASS: TestURLValidation/evil_host (0.00s)
+    --- PASS: TestURLValidation/NUL (0.00s)
+    --- PASS: TestURLValidation/bad_revision (0.00s)
+    --- PASS: TestURLValidation/query (0.00s)
+    --- PASS: TestURLValidation/fragment (0.00s)
+PASS

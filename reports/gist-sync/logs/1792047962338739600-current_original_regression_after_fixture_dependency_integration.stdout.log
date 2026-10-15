@@ -1,0 +1,50 @@
+PASS run_tests.js: 103 passed, 0 failed, 0 not run
+FAIL cleanup.test.js: 38 passed, 1 failed, 0 not run
+error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '5bc121622ddf7fcd6ffe0235e20ccadd47d92337a959f427e6d108f4e937200f'
+    - '7e7bebb2a2aac1b94276eec5c0861c060ea93f3ce9568177d517c508f977310c'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '7e7bebb2a2aac1b94276eec5c0861c060ea93f3ce9568177d517c508f977310c'
+  actual: '5bc121622ddf7fcd6ffe0235e20ccadd47d92337a959f427e6d108f4e937200f'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/cleanup.test.js:65:10)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cleanup preserves all diagnostic labels and result fields
+ok 39 - cleanup preserves all diagnostic labels and result fields
+  ---
+  duration_ms: 19.651897
+  ...
+1..39
+# tests 39
+# suites 0
+# pass 38
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 913.359951
+PASS compact.test.js: 2 passed, 0 failed, 0 not run
+PASS download_archive.test.js: 6 passed, 0 failed, 0 not run
+PASS http_subscription.test.js: 8 passed, 0 failed, 7 not run
+PASS ipv6_dns.test.js: 37 passed, 0 failed, 0 not run
+PASS optimization.test.js: 25 passed, 0 failed, 0 not run
+PASS optimization_install.test.js: 20 passed, 0 failed, 0 not run
+PASS optimization_network.test.js: 19 passed, 0 failed, 0 not run
+PASS optimization_subscription.test.js: 38 passed, 0 failed, 0 not run
+PASS panel_open.test.js: 16 passed, 0 failed, 0 not run
+PASS release_consistency.test.js: 5 passed, 0 failed, 0 not run
+PASS reliability.test.js: 43 passed, 0 failed, 0 not run
+PASS subscription_update.test.js: 35 passed, 0 failed, 0 not run
+PASS yaml_bridge.test.js: 4 passed, 0 failed, 0 not run
+{"passed":399,"failed":1,"notRun":7}

@@ -115,9 +115,15 @@ for (const scenario of ['stopped upgrade', 'invalid wrapper', 'lock cleanup fail
       write(pkg, 'Proxy/WebUI/zashboard/manifest.webmanifest', '{"name":"zashboard","short_name":"zashboard"}');
       write(pkg, 'Proxy/WebUI/zashboard/registerSW.js', 'register');
       write(pkg, 'Proxy/WebUI/zashboard/assets/main.js', 'zashboard');
+      for(const rel of ['Tools/age','Tools/kano-gist-sync','Tools/age.LICENSE','Tools/gist-sync-component.json','Scripts/Clash.GistSync','Scripts/Clash.ConfigCommit']) write(pkg,rel,fs.readFileSync(path.join(root,'build/gist-sync/clash',rel)));
       const zip = write(dir, 'upload.zip', 'mock archive');
       const mocks = `
-f50_limit() { shift; "$@"; }
+f50_limit() { shift
+ case "$1" in
+ */Tools/kano-gist-sync) shift; ${quote(path.join(root,'build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
+ */Tools/age) shift; ${quote(path.join(root,'.cache/gist-sync/tools/age-amd64/age'))} "$@";;
+ *) "$@";; esac
+}
 unzip() {
   if [ "$1" = -Z1 ]; then echo Scripts/clashctl_arm64; return 0; fi
   if [ "$1" = -l ]; then echo '4096 10 files'; return 0; fi

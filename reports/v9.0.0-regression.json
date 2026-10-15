@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-14T14:45:17.096Z",
+  "date": "2026-10-15T11:41:45.825Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "b21155e51515b779b8d4df1120acedb29fba8c3c",
-    "bytes": 589080,
-    "sha256": "51708e32860c8bb2f969981c94abf1dcad8231f15b902116a8ed6821a60caaf7"
+    "baseCommit": "adc9458d69b4caff2b6f79e8b6b773429acf0dc8",
+    "bytes": 618405,
+    "sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
   },
-  "invocation": "node scripts/verify_plugin.js; node tests/tproxy/run_tests.js (failed-suite rerun); node --test tests/tproxy/optimization_install.test.js (interruption-case rerun)",
+  "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 406,
+    "passed": 412,
     "failed": 0,
     "notRun": 0
   },
@@ -20,6 +20,9 @@
       "file": "tests/tproxy/run_tests.js",
       "command": "node tests/tproxy/run_tests.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/run_tests.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/run_tests.js.stderr.log",
       "passed": 103,
       "failed": 0,
       "notRun": 0,
@@ -442,6 +445,9 @@
       "file": "tests/tproxy/cleanup.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/cleanup.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/cleanup.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/cleanup.test.js.stderr.log",
       "passed": 39,
       "failed": 0,
       "notRun": 0,
@@ -595,7 +601,7 @@
           "status": "PASS"
         },
         {
-          "name": "cleanup changes only patch registry, diagnostic labels and Service text composition",
+          "name": "cleanup baseline and reviewed Gist integration have the exact source contract",
           "status": "PASS"
         },
         {
@@ -608,6 +614,9 @@
       "file": "tests/tproxy/compact.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/compact.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/compact.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/compact.test.js.stderr.log",
       "passed": 2,
       "failed": 0,
       "notRun": 0,
@@ -626,7 +635,10 @@
       "file": "tests/tproxy/download_archive.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/download_archive.test.js",
       "status": "PASS",
-      "passed": 5,
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/download_archive.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/download_archive.test.js.stderr.log",
+      "passed": 6,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -649,6 +661,10 @@
         {
           "name": "all download failures retain diagnostics and report failure",
           "status": "PASS"
+        },
+        {
+          "name": "unpublished complete component release never contacts old mirrors",
+          "status": "PASS"
         }
       ]
     },
@@ -656,6 +672,9 @@
       "file": "tests/tproxy/http_subscription.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/http_subscription.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/http_subscription.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/http_subscription.test.js.stderr.log",
       "passed": 15,
       "failed": 0,
       "notRun": 0,
@@ -726,6 +745,9 @@
       "file": "tests/tproxy/ipv6_dns.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/ipv6_dns.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/ipv6_dns.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/ipv6_dns.test.js.stderr.log",
       "passed": 37,
       "failed": 0,
       "notRun": 0,
@@ -884,6 +906,9 @@
       "file": "tests/tproxy/optimization.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/optimization.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/optimization.test.js.stderr.log",
       "passed": 25,
       "failed": 0,
       "notRun": 0,
@@ -994,7 +1019,10 @@
       "file": "tests/tproxy/optimization_install.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_install.test.js",
       "status": "PASS",
-      "passed": 20,
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/optimization_install.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/optimization_install.test.js.stderr.log",
+      "passed": 25,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1032,6 +1060,22 @@
         },
         {
           "name": "missing controller preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing Gist manifest preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing age preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing sync worker preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "nonzero worker exit with success JSON preserves failure code and old installation",
           "status": "PASS"
         },
         {
@@ -1077,6 +1121,10 @@
         {
           "name": "successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry",
           "status": "PASS"
+        },
+        {
+          "name": "repeated full update preserves private identity and exact settings bytes",
+          "status": "PASS"
         }
       ]
     },
@@ -1084,6 +1132,9 @@
       "file": "tests/tproxy/optimization_network.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_network.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/optimization_network.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/optimization_network.test.js.stderr.log",
       "passed": 19,
       "failed": 0,
       "notRun": 0,
@@ -1170,6 +1221,9 @@
       "file": "tests/tproxy/optimization_subscription.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_subscription.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
       "passed": 38,
       "failed": 0,
       "notRun": 0,
@@ -1332,6 +1386,9 @@
       "file": "tests/tproxy/panel_open.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/panel_open.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/panel_open.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/panel_open.test.js.stderr.log",
       "passed": 16,
       "failed": 0,
       "notRun": 0,
@@ -1406,6 +1463,9 @@
       "file": "tests/tproxy/release_consistency.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/release_consistency.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/release_consistency.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/release_consistency.test.js.stderr.log",
       "passed": 5,
       "failed": 0,
       "notRun": 0,
@@ -1436,6 +1496,9 @@
       "file": "tests/tproxy/reliability.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/reliability.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
       "passed": 43,
       "failed": 0,
       "notRun": 0,
@@ -1618,6 +1681,9 @@
       "file": "tests/tproxy/subscription_update.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/subscription_update.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/subscription_update.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/subscription_update.test.js.stderr.log",
       "passed": 35,
       "failed": 0,
       "notRun": 0,
@@ -1768,6 +1834,9 @@
       "file": "tests/tproxy/yaml_bridge.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/yaml_bridge.test.js",
       "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/yaml_bridge.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/yaml_bridge.test.js.stderr.log",
       "passed": 4,
       "failed": 0,
       "notRun": 0,

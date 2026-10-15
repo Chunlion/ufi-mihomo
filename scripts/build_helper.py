@@ -7,6 +7,7 @@ import argparse
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -77,6 +78,7 @@ def main() -> None:
     outputs = build_helpers()
     if not args.skip_package:
         refresh_package(outputs)
+        subprocess.run([sys.executable, str(ROOT / 'scripts/build_gist_sync.py')], cwd=ROOT, check=True)
     print("built " + ", ".join(str(path.relative_to(ROOT)) for path in outputs.values()))
 
 

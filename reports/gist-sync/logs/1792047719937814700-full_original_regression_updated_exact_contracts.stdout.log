@@ -1,0 +1,202 @@
+FAIL run_tests.js: 102 passed, 1 failed, 0 not run
+定 Zashboard 配置
+  ✅ 面板配置无法固定时拒绝启动
+  ✅ 启动验收拒绝 HTTP 返回 MetaCubeXD 或未知面板
+  ✅ 安装事务 Shell 通过 sh -n
+  ✅ 安装和内核升级前强制固定 Zashboard 配置
+  ✅ 重装同时保留原配置和配置来源标记
+  ✅ 启动 preflight 保留返回状态并保存脱敏日志
+  ✅ 启动 controller 保留返回状态并保存脱敏日志
+  ❌ 启动 success 保留返回状态并保存脱敏日志
+  ✅ 启动 patch 保留返回状态并保存脱敏日志
+  ✅ 包装器补丁失败不覆盖原文件或继续启动
+  ✅ 面板打开前可通过固定源修复错误面板
+  ✅ 在线更新结果身份错误时阻止加载
+  ✅ 正常面板使用单次快速探针
+  ✅ 快速探针通过时不读取和重写 YAML
+  ✅ 新标签页不再因页面内存 PID 为空而热加载配置
+  ✅ 含 [detached] 的 TUN 规则生成可执行删除计划
+  ✅ TProxy 规则同样忽略展示附加字段
+  ✅ 启动兜底能删除带 [detached] 的 TUN 规则
+  ✅ 缺少 IPv6 NAT 时保留 DNS 劫持设置
+  ✅ 临时 ip6tables 错误不会关闭 DNS 劫持
+  ✅ 卸载包含最终清洁状态
+--- subscription sources ---
+  ✅ 本地订阅允许公网 HTTPS 地址
+  ✅ 本地订阅允许公网 HTTP 地址并使用默认端口 80
+  ✅ 订阅保留 HTTPS 默认端口和 HTTP 自定义端口
+  ✅ 订阅仍拒绝其他协议和 URL 账号信息
+  ✅ 本地订阅拒绝常规和整数形式的回环地址
+  ✅ 本地转换前校验全部订阅地址
+  ✅ 保存订阅前校验启用地址
+  ✅ 任意多个订阅按顺序生成 Provider
+  ✅ 所有 Provider 保留各自订阅地址
+  ✅ 所有 Provider 使用独立缓存文件
+  ✅ 订阅文件连续命名全部启用来源
+  ✅ 订阅文件保留禁用来源
+  ✅ 订阅文件可无损读回全部启用状态
+  ✅ 界面只提供本地模板模式
+--- provider groups and traffic modes ---
+  ✅ 策略组同时引用全部 Provider
+  ✅ 固定配置覆盖三种模式和双栈
+  ✅ 所有固定配置使用同一面板目录
+  ✅ 固定配置深合并后不共享可变对象
+  ✅ 生成模板与全部运行配置关闭未使用的 Redir 端口
+  ✅ TProxy IPv4 使用固定端口并关闭 TUN
+  ✅ TUN IPv6 配置完整
+  ✅ TUN 协议栈选择覆盖自动值
+  ✅ 关闭接管时停用 TUN 和 TProxy
+  ✅ 私网定向代理规则位于规则首部
+  ✅ 私网定向代理写入可回滚元数据
+  ✅ TUN 私网定向代理使用 TUN 整形分支
+  ✅ TUN 路由排除保留普通私网并放行目标私网
+  ✅ TUN 私网定向代理不启用核心全局 DNS 劫持
+  ✅ 从 TUN 切回 TProxy 清理 TUN 私网整形
+  ✅ 订阅地址检查识别十进制和十六进制回环地址
+--- diagnostics and uninstall verdict ---
+  ✅ 启动结果必须包含稳定进程和成功标记
+  ✅ 面板 404 不会被报告为启动成功
+  ✅ 卸载仅在最终复查干净时成功
+  ✅ 卸载发现残留时失败
+
+================ 102 passed / 1 failed ================
+FAIL cleanup.test.js: 38 passed, 1 failed, 0 not run
+error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '307b5adeac01d153e29b353c271f02a0e42c225c2692c7c0c7480b3b59969c43'
+    - '50cd6a4508d549f74444668b2015a7296d8802c7b69a4c716fe5a57cf4fcf739'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '50cd6a4508d549f74444668b2015a7296d8802c7b69a4c716fe5a57cf4fcf739'
+  actual: '307b5adeac01d153e29b353c271f02a0e42c225c2692c7c0c7480b3b59969c43'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/cleanup.test.js:65:10)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cleanup preserves all diagnostic labels and result fields
+ok 39 - cleanup preserves all diagnostic labels and result fields
+  ---
+  duration_ms: 20.439275
+  ...
+1..39
+# tests 39
+# suites 0
+# pass 38
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1039.875244
+PASS compact.test.js: 2 passed, 0 failed, 0 not run
+PASS download_archive.test.js: 6 passed, 0 failed, 0 not run
+PASS http_subscription.test.js: 8 passed, 0 failed, 7 not run
+PASS ipv6_dns.test.js: 37 passed, 0 failed, 0 not run
+PASS optimization.test.js: 25 passed, 0 failed, 0 not run
+PASS optimization_install.test.js: 20 passed, 0 failed, 0 not run
+PASS optimization_network.test.js: 19 passed, 0 failed, 0 not run
+PASS optimization_subscription.test.js: 38 passed, 0 failed, 0 not run
+PASS panel_open.test.js: 16 passed, 0 failed, 0 not run
+FAIL release_consistency.test.js: 2 passed, 3 failed, 0 not run
+error: |-
+    F50_INSTALL_CODE=gist_components_missing
+    F50_INSTALL_COMPONENTS_OK=0
+    F50_INSTALL_TRANSACTION_STATE=failed
+    KANO_INSTALL_OK=0
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/release_consistency.test.js:135:14)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: invalid wrapper
+not ok 4 - invalid wrapper
+  ---
+  duration_ms: 33.450754
+  location: '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/release_consistency.test.js:71:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /^F50_INSTALL_CODE=service_patch_failed$/m. Input:
+    
+    'F50_INSTALL_CODE=gist_components_missing\n' +
+      'F50_INSTALL_COMPONENTS_OK=0\n' +
+      'F50_INSTALL_TRANSACTION_STATE=failed\n' +
+      'KANO_INSTALL_OK=0\n'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    F50_INSTALL_CODE=gist_components_missing
+    F50_INSTALL_COMPONENTS_OK=0
+    F50_INSTALL_TRANSACTION_STATE=failed
+    KANO_INSTALL_OK=0
+    
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/release_consistency.test.js:140:16)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (nod
+FAIL reliability.test.js: 37 passed, 6 failed, 0 not run
+error: 'buildF50YamlCommitBody is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    commitStagedYaml (evalmachine.<anonymous>:31:6)
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/reliability.test.js:94:26)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: template/base pair commit rolls back both files
+not ok 15 - template/base pair commit rolls back both files
+  ---
+  duration_ms: 1.075462
+  location: '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/reliability.test.js:85:35'
+  failureType: 'testCodeFailure'
+  error: 'buildF50YamlCommitBody is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    commitStagedYaml (evalmachine.<anonymous>:31:6)
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/reliability.test.js:94:26)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: template regeneration candidate / success
+ok 16 - template regeneration candidate / success
+  ---
+  duration_ms: 9.235719
+  ...
+# Subtest: template regeneration candidate / normalize
+ok 17 - template regeneration candidate / n
+PASS subscription_update.test.js: 35 passed, 0 failed, 0 not run
+PASS yaml_bridge.test.js: 4 passed, 0 failed, 0 not run
+{"passed":389,"failed":11,"notRun":7}

@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/live-network.py", line 6, in <module>
+    subprocess.run(['unshare','-m',sys.executable,str(Path(__file__).resolve()),'--inside'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['unshare', '-m', '/usr/bin/python3', '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/live-network.py', '--inside']' returned non-zero exit status 1.

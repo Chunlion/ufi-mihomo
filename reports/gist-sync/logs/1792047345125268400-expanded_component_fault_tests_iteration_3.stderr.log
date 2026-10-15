@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 260, in <module>
+    if args.inside:inside()
+                   ~~~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in inside
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 114, in check
+    start=time.monotonic();body();RESULTS.append({'name':name,'category':'INTEGRATION','result':'PASS','seconds':round(time.monotonic()-start,3)});print('PASS INTEGRATION '+name,flush=True)
+                           ~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in <lambda>
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+                                                          ~~~~~^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 183, in crash
+    shutil.copyfile(BUILD/'bin/native.test',f.clash/'Tools/kano-gist-sync')
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/shutil.py", line 262, in copyfile
+    with open(dst, 'wb') as fdst:
+         ~~~~^^^^^^^^^^^
+OSError: [Errno 26] Text file busy: '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/integration-2sgr8j2s/root/data/clash/Tools/kano-gist-sync'
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 263, in <module>
+    subprocess.run(['unshare','-m','-n','-p','-f','--mount-proc',sys.executable,str(Path(__file__).resolve()),'--inside'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['unshare', '-m', '-n', '-p', '-f', '--mount-proc', '/usr/bin/python3', '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py', '--inside']' returned non-zero exit status 1.

@@ -1,0 +1,4 @@
+=== RUN   TestLiveGistDownload
+    live_test.go:24: LIVE_DOWNLOAD_FAILED code=blocked_dns_address status=0
+--- FAIL: TestLiveGistDownload (0.05s)
+FAIL

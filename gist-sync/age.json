@@ -1,0 +1,7 @@
+{
+  "version": "v1.3.2",
+  "source": "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-arm64.tar.gz",
+  "archive_sha256": "6b8dc4333c53a5a57c9e5834e3a48f92605d7154014cd07269ff3327db5d37f4",
+  "binary_sha256": "41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f",
+  "license_sha256": "afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2"
+}

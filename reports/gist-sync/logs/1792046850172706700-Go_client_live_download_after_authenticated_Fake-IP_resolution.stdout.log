@@ -1,0 +1,4 @@
+=== RUN   TestLiveGistDownload
+    live_test.go:18: LIVE_DOWNLOAD_FAILED code=dns_failed status=0
+--- FAIL: TestLiveGistDownload (13.07s)
+FAIL

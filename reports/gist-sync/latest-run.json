@@ -1,0 +1,416 @@
+{
+  "status": "LOCAL_PASS_EXTERNAL_BLOCKED",
+  "scope": "UI revision",
+  "reused_integration": {
+    "report": "reports/gist-sync/integration.json",
+    "binary_sha256": "0fe691d4cb1b1203dc2aa1f53c5737a952f4c8dc62fa309e4ac3ce6042016d61",
+    "rerun": false
+  },
+  "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa",
+  "rows": [
+    {
+      "name": "clean repository component build",
+      "category": "STATIC",
+      "command": [
+        "D:\\Python\\Python313\\python.exe",
+        "scripts/build_gist_sync.py"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:19.844805+00:00",
+      "elapsed_seconds": 10.101,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064429943138900-clean_repository_component_build.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064429943138900-clean_repository_component_build.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "pinned genuine test tools",
+      "category": "STATIC",
+      "command": [
+        "D:\\Python\\Python313\\python.exe",
+        "scripts/gist_test_tools.py"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:29.947611+00:00",
+      "elapsed_seconds": 2.975,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064432921905600-pinned_genuine_test_tools.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064432921905600-pinned_genuine_test_tools.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "ZIP reader permission",
+      "category": "STATIC",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "chmod",
+        "755",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/bin/tar"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:32.924575+00:00",
+      "elapsed_seconds": 0.147,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433069283300-ZIP_reader_permission.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433069283300-ZIP_reader_permission.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "syntax 猫猫TProxy.js",
+      "category": "STATIC",
+      "command": [
+        "node",
+        "--check",
+        "猫猫TProxy.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.073169+00:00",
+      "elapsed_seconds": 0.09,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433161617400-syntax___TProxy_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433161617400-syntax___TProxy_js.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "syntax gist-sync/plugin-gist.js",
+      "category": "STATIC",
+      "command": [
+        "node",
+        "--check",
+        "gist-sync/plugin-gist.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.165319+00:00",
+      "elapsed_seconds": 0.094,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433257383400-syntax_gist-sync_plugin-gist_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433257383400-syntax_gist-sync_plugin-gist_js.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "syntax gist-sync/ui-gist.js",
+      "category": "STATIC",
+      "command": [
+        "node",
+        "--check",
+        "gist-sync/ui-gist.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.261512+00:00",
+      "elapsed_seconds": 0.099,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433358357000-syntax_gist-sync_ui-gist_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433358357000-syntax_gist-sync_ui-gist_js.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "Shell syntax Clash.GistSync",
+      "category": "STATIC",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "sh",
+        "-n",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.GistSync"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.362081+00:00",
+      "elapsed_seconds": 0.143,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433503502000-Shell_syntax_Clash_GistSync.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433503502000-Shell_syntax_Clash_GistSync.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "BusyBox syntax Clash.GistSync",
+      "category": "STATIC",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "busybox",
+        "ash",
+        "-n",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.GistSync"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.507098+00:00",
+      "elapsed_seconds": 0.154,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433659808400-BusyBox_syntax_Clash_GistSync.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433659808400-BusyBox_syntax_Clash_GistSync.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "Shell syntax Clash.ConfigCommit",
+      "category": "STATIC",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "sh",
+        "-n",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.ConfigCommit"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.663613+00:00",
+      "elapsed_seconds": 0.137,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433799095400-Shell_syntax_Clash_ConfigCommit.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433799095400-Shell_syntax_Clash_ConfigCommit.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "BusyBox syntax Clash.ConfigCommit",
+      "category": "STATIC",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "busybox",
+        "ash",
+        "-n",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/build/gist-sync/clash/Scripts/Clash.ConfigCommit"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.802397+00:00",
+      "elapsed_seconds": 0.163,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064433963690700-BusyBox_syntax_Clash_ConfigCommit.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064433963690700-BusyBox_syntax_Clash_ConfigCommit.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "Gist UI and protocol rc3-ui.js",
+      "category": "MOCK",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "node",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/rc3-ui.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:33.974310+00:00",
+      "elapsed_seconds": 0.277,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064434249354200-Gist_UI_and_protocol_rc3-ui_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064434249354200-Gist_UI_and_protocol_rc3-ui_js.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "Gist UI and protocol ui-logic.js",
+      "category": "MOCK",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "node",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/ui-logic.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:34.253330+00:00",
+      "elapsed_seconds": 0.189,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064434440281100-Gist_UI_and_protocol_ui-logic_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064434440281100-Gist_UI_and_protocol_ui-logic_js.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "full original regression including ARM64 emulation",
+      "category": "MOCK",
+      "command": [
+        "wsl",
+        "-d",
+        "Debian",
+        "--",
+        "env",
+        "PATH=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "F50_TEST_YQ=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/tools/yq-linux-amd64",
+        "F50_TEST_QEMU=/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/.cache/gist-sync/tools/qemu-aarch64",
+        "node",
+        "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/scripts/verify_plugin.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:40:34.444155+00:00",
+      "elapsed_seconds": 73.111,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064507553267000-full_original_regression_including_ARM64_emulation.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064507553267000-full_original_regression_including_ARM64_emulation.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "package hashes, ELF and original component preservation",
+      "category": "STATIC",
+      "command": [
+        "D:\\Python\\Python313\\python.exe",
+        "tests/gist-sync/package-check.py"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:41:47.557699+00:00",
+      "elapsed_seconds": 2.885,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064510439472600-package_hashes__ELF_and_original_component_preservation.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064510439472600-package_hashes__ELF_and_original_component_preservation.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "Tabbit real interactions with simulated device API",
+      "category": "MOCK",
+      "command": [
+        "C:\\Users\\Cuty\\AppData\\Local\\Tabbit\\LocalAgent\\bin\\tabbit-cli.exe",
+        "nodejs",
+        "--task",
+        "GistSync network validation",
+        "--request-id",
+        "final-browser-1792064510444118400",
+        "--timeout-ms",
+        "120000"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:41:50.444796+00:00",
+      "elapsed_seconds": 59.527,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064569970275700-Tabbit_real_interactions_with_simulated_device_API.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064569970275700-Tabbit_real_interactions_with_simulated_device_API.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    },
+    {
+      "name": "final source size report",
+      "category": "STATIC",
+      "command": [
+        "node",
+        "scripts/report_plugin.js"
+      ],
+      "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
+      "platform": "nt",
+      "started": "2026-10-15T11:42:49.974537+00:00",
+      "elapsed_seconds": 0.641,
+      "exit_code": 0,
+      "result": "PASS",
+      "stdout": "reports\\gist-sync\\logs\\1792064570613774500-final_source_size_report.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792064570613774500-final_source_size_report.stderr.log",
+      "environment": {
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      },
+      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "mihomo-linux-amd64": {
+    "sha256": "08787faafea19c1ab0f83fa5a1b22363b7d03ea78da18091a4c883aecaaa5979",
+    "bytes": 61825150
+  },
+  "yq-linux-amd64": {
+    "sha256": "fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4",
+    "bytes": 13750434
+  },
+  "age-amd64/age": {
+    "sha256": "eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c",
+    "bytes": 6977014
+  },
+  "age-amd64/age-keygen": {
+    "sha256": "0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899",
+    "bytes": 4051278
+  }
+}

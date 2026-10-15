@@ -1,0 +1,145 @@
+{
+  "review": "Intentional GistSync additions; unchanged outputs still compare directly to historical baseline. Regeneration is never part of verification.",
+  "generated": {
+    "buildF50EmergencyScript[]": {
+      "before": "fb630aea37630aacbef3a7b14c65c89e7c4ba41972fe5263414db12636f07200",
+      "after": "86c3187487ff5b9a72782ad649bee32674224b5a4fb1dc55f8b02475235e3e4c"
+    },
+    "buildF50EmergencyScript[\"\",true]": {
+      "before": "0125491ecffb5af237f9b6d97a1652a7d331d86022b421669dda858b10508879",
+      "after": "dbffdf2f03a2ab5980c151c93a87f8cd32d2e60d79368ccc7069c2d2d91f6ab5"
+    },
+    "buildF50EmergencyScript[\"mm_fixture\",true]": {
+      "before": "18abe9e8bc4230dcf9e5482bab1564c4d1cad56c20a1ad2af1db83d9c5716b1e",
+      "after": "f63846668dcde6edb411ad86e7f3a3d88d616a3b5185c0372d443a8db051bd83"
+    },
+    "buildF50ServiceLeaseGate[]": {
+      "before": "fedf3bb997f246f4981fb5ab6822ad953879d24d4d8b9843d27cf0db6d2411cc",
+      "after": "80b515f784a5c76c5941a81e8e90e96beda53b51cefa09256adb5c38ad32c382"
+    },
+    "buildF50OriginalConfigFunctions[]": {
+      "before": "ec97cc237cae51703109a76d1803bd3a538e6deb87b395fe6367ec9ae328de5b",
+      "after": "57a91997b158ebc5ca80969f4e0d353e66c737b48c2d30e8ea3a5f6402841443"
+    },
+    "buildF50OriginalServicePatchScript[\"'/data/clash/Scripts/Clash.Service'\"]": {
+      "before": "e0facacdca0fd1a74fa99ff9cfbcb6072640d56abaec9deb89208fe4355de6d0",
+      "after": "5765dc1a0a30b6d5ca5c2d71df7c247724534081467a67bb888284415543c721"
+    },
+    "buildF50StartScript[\"start\"]": {
+      "before": "b73e83a2a4fdf39b4f25f1aa3ab0f4e2945347b5f675bdb440609158b25e28cf",
+      "after": "7fa31dfb176bbad27dbeb30ad2991099423d9df073f6fb1f44d355ed40e6a1b7"
+    },
+    "buildF50StartScript[\"restart\"]": {
+      "before": "4cad91b9c7c08b6bb57119afec0df9cfb96f98dae08a5bfebc78ed88a7a8df1d",
+      "after": "4962066b4954c2881ca859b5fb50e21ca8491b851c6d019ce35057f33191103d"
+    },
+    "buildF50MaintenanceFunctions[\"all\"]": {
+      "before": "f772617b8306a45b1cd6a86f410b075811e68c139229bc36db6eb9b5ba370d85",
+      "after": "e5833681ced349750c32bcf2caea9efda9b44e2ef4447b0e1d0790725e303b41"
+    },
+    "buildF50MaintenanceFunctions[\"start\"]": {
+      "before": "011b765c7d1a2335ac9b318a2c9386794596caddb9a6bff61adbc784fe8855fa",
+      "after": "94975788722d6760a572d78b12466779b62aaa9a39685dcc85da9ce886fe635d"
+    },
+    "buildF50MaintenanceFunctions[\"inspect\"]": {
+      "before": "1bed9167f07fa04203c853530bdaa78504fc004dc3c18a74275dcc82058eac64",
+      "after": "b874842323e7f7e21b84262d2f02912f7db1102878273a23627e7eee9fab6e3f"
+    },
+    "buildF50MaintenanceFunctions[\"install\"]": {
+      "before": "59675725b0197c10bdc3fe1074d165653da102136afd51eee7a388e39b930ca5",
+      "after": "e2dfa22aba67d235deb526ea47ac5ceba9b46c49d058b9bb9a1d1de7bbba823c"
+    },
+    "buildF50MaintenanceFunctions[\"cleanup\"]": {
+      "before": "e51d9437c4dd88a0fd65733493936b079caf1ddd20ee7e01250385a19fb87559",
+      "after": "063d9ccaba304e9e89d845263218c82742435971e9c9b64746996eeea7645fda"
+    },
+    "buildF50MaintenanceFunctions[\"final\"]": {
+      "before": "3fd0a907f49646381b955e6abf09a3ade9e8d93ddeeeda228c88d7beacc45525",
+      "after": "633bd87ffae21f7b5f730c7529896191e5b01f8147040d44f53e4476e312f86b"
+    },
+    "buildF50MaintenanceFunctions[\"remove\"]": {
+      "before": "832b6ad9058fbec9a5e2d7274fa53319c272676ac04b28eea78aa6082ca19cc7",
+      "after": "361883339c4eb9c00381b9c2ba0caa29905353603cd1eb997b5991eae831de12"
+    },
+    "buildF50ProcessHelpers[]": {
+      "before": "91670798145c9c08adbbec1c725f4e101a24854857dc4cadab5402bad3b451e9",
+      "after": "03927217255baade0f51f033583273312b8136883c5e0f070db616188307bd2b"
+    },
+    "buildF50ArtifactHelpers[]": {
+      "before": "c12e4ed816ac5fe3afe348e1992e7473531b534ca46e02401a9751f828972711",
+      "after": "99bc07acb3b2668f7fa000d07ae54c9e2dd4e2bd0a96e0b5434d1d55a0f09a17"
+    },
+    "buildF50RemovalHelpers[]": {
+      "before": "5f72d2fa77b4307d6bdaf93a05a28223b0f4a939050e7db7efa454d596e9b54e",
+      "after": "048ecb2b97fe8b0999bd8603c1a664d3c10935b2ff691e0d7d8be295ba55a1d1"
+    },
+    "buildF50StartHelpers[]": {
+      "before": "537670e916d482c9337534dfac4667c0137fe3d330e8f61b31e1588207116854",
+      "after": "7e101949212987596d7cff9ed332a867b30e825dc5c05ca5eab383f741148923"
+    },
+    "buildF50InspectScript[]": {
+      "before": "a16eb3d7e45f1874a5559f7b8d3646629d5c9eeb0fc67ba50ab0105b52dfb7c8",
+      "after": "e8f132eae5a045fb263703ff5c188677046dcc019022b71acb1e2cac2914292d"
+    },
+    "buildF50InstallScript[\"/data/upload.zip\"]": {
+      "before": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867",
+      "after": "59d391698b57da5818869511f602ac78739379e17b4025f3c6b80c2871ea1e67"
+    },
+    "buildF50CleanupScript[]": {
+      "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
+      "after": "74b2ff0c056ad250846feea0656c4dcd5ff6d1a5fddccf43dd43d091836962b1"
+    },
+    "buildF50FinalCheckScript[]": {
+      "before": "b42c7d9ba116c2aba0c4a043b6b9b16d8a10464ea4895719faf8781b5d2df1e0",
+      "after": "251c43b147f5094b79e3f0e2967ac65b8ef6303d8cbc83965b6eeb612ee325a1"
+    },
+    "buildUninstallStages[]": {
+      "before": "f8bc5651c42c3c60e631341450db91da8d0b6d9de72e097b1dce17ffe5f6bbcd",
+      "after": "8d5108814ca82514896781bdb0102408c9f282b13e5f13fe34d954a3e4351296"
+    }
+  },
+  "network": {
+    "scan": {
+      "before": "04d2c5799270b54a5dc36a5009430717000c117dfda3b0222e45f87b94e39655",
+      "after": "6588f058dad43f4e1ac4cffce9020796d04db9a8fcabf1cf2b9898108c4c4555"
+    },
+    "artifact_paths": {
+      "before": "0693984381de59b9c96e7c1a3da2f960d415e48f9e7e9a40012b00beea328aa2",
+      "after": "162c42ebe0b5a601d6d1e5e4ab82decd92bb7e78bf8592e29d10d8273f89e251"
+    },
+    "remove_artifacts": {
+      "before": "b0c51290bd379f1a0bafc4f1300d3aba30f9e0867d6992b4b8654d346f4f6373",
+      "after": "4d219661fce1e91e19cb11277efb47ae557de1c6815b6b391e421c12030e0c5b"
+    }
+  },
+  "operations": {
+    "inspect": {
+      "before": "a16eb3d7e45f1874a5559f7b8d3646629d5c9eeb0fc67ba50ab0105b52dfb7c8",
+      "after": "e8f132eae5a045fb263703ff5c188677046dcc019022b71acb1e2cac2914292d"
+    },
+    "cleanup": {
+      "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
+      "after": "74b2ff0c056ad250846feea0656c4dcd5ff6d1a5fddccf43dd43d091836962b1"
+    },
+    "final": {
+      "before": "b42c7d9ba116c2aba0c4a043b6b9b16d8a10464ea4895719faf8781b5d2df1e0",
+      "after": "251c43b147f5094b79e3f0e2967ac65b8ef6303d8cbc83965b6eeb612ee325a1"
+    },
+    "uninstall": {
+      "before": "7e7378f896aaf8b8b504fddabd8d0fc8a0ee13d8f1889af6458c907831f89827",
+      "after": "98585c31785277f0ec411a32abcded45b354da75e80cffc00be1c96141bad152"
+    }
+  },
+  "labels": {
+    "gist_components_missing": "此完整组件包不含 Gist 同步，请导入随附的 RC4 完整组件包。原组件未替换。",
+    "gist_manifest_mismatch": "Gist 组件清单版本不匹配，请重新获取配套完整组件包。",
+    "gist_component_hash_mismatch": "Gist 组件缺失或校验失败，请重新获取完整组件包。",
+    "gist_runtime_probe_failed": "Gist 程序无法在设备执行，请检查 ARM64 架构和配套版本。",
+    "gist_age_runtime_probe_failed": "完整组件中的 age 无法执行或版本不匹配，请重新导入配套完整组件包。",
+    "gist_permission_failed": "无法设置 Gist 组件执行权限，未完成安装。",
+    "gist_script_invalid": "Gist 组件脚本校验失败，未完成安装。",
+    "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
+    "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
+  },
+  "sourceSHA256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+}

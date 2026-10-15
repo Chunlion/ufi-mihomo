@@ -38,3 +38,7 @@ delivery = {'source': results['source'], 'regressionDate': results['date'], 'tot
 (root / 'dist/v9.0.0-delivery.json').write_text(json.dumps(delivery, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 print(f'{output.name}: {delivery["zip"]["bytes"]} bytes, {len(files)} files; contents verified')
 print(f'SHA-256: {delivery["zip"]["sha256"]}')
+
+# The full GistSync delivery is generated from the same source-bound reports.
+import subprocess, sys
+subprocess.run([sys.executable, str(root / 'scripts/package_gist_sync.py')], cwd=root, check=True)

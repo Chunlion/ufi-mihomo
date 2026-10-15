@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 166, in <module>
+    if args.inside:inside()
+                   ~~~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 128, in inside
+    check('real files, backup, atomic commit and matching state while stopped',stopped_commit)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 106, in check
+    start=time.monotonic();body();RESULTS.append({'name':name,'category':'INTEGRATION','result':'PASS','seconds':round(time.monotonic()-start,3)});print('PASS INTEGRATION '+name,flush=True)
+                           ~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 122, in stopped_commit
+    out=f.action('sync',expect='saved_stopped');assert out['written'] and not out['loaded']
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 85, in action
+    if expect is not None and out.get('code')!=expect:raise RuntimeError('Expected '+expect+', got '+str(out.get('code'))+' warning '+str(out.get('warning')))
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Expected saved_stopped, got config_commit_failed warning rollback_write_failed
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 169, in <module>
+    subprocess.run(['unshare','-m','-n','-p','-f','--mount-proc',sys.executable,str(Path(__file__).resolve()),'--inside'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['unshare', '-m', '-n', '-p', '-f', '--mount-proc', '/usr/bin/python3', '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py', '--inside']' returned non-zero exit status 1.

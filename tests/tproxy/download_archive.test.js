@@ -10,9 +10,14 @@ const constants = source.match(/  const CLASH_PACKAGE_(?:URL|FALLBACK_URL|REPO_U
 const start = source.indexOf('  const downloadCoreArchive = async');
 const end = source.indexOf('  const setButtonBusy =', start);
 
-function downloader(responses) {
+function downloader(responses, published = true) {
+  // Published mirrors are fixtures; the actual release remains unpublished.
+  const mirrors = ['https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip'];
+  let index = 0;
+  const fixtureConstants = constants.replace(/= [^;]*;/g, () => "= " + JSON.stringify(mirrors[index++]) + ";");
   const calls = [];
-  const download = vm.runInNewContext(constants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
+  const download = vm.runInNewContext(fixtureConstants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
+    F50_FULL_COMPONENT_RELEASE: {published,sha256:'fixture-only'},
     DOWNLOAD_ZIP: '/data/package.zip', DOWNLOAD_LOG: '/data/package.log', DOWNLOAD_SOURCE_FILE: '/data/package.source',
     shellQuote: value => `'${value}'`, operationStage() {}, getCurlBinCmd: () => '', dataSpaceGuardCmd: () => '',
     runShellWithRoot: async script => {
@@ -75,3 +80,5 @@ test('all download failures retain diagnostics and report failure', async () => 
   assert.match(result.content, /Load failed/);
   assert.match(result.content, /HTTP 500/);
 });
+
+test('unpublished complete component release never contacts old mirrors',async()=>{ const {download,calls}=downloader([],false); const result=await download(); assert.equal(result.ok,false);assert.equal(result.stage,'unpublished');assert.equal(calls.length,0); });

@@ -1,0 +1,41 @@
+const fs=await import('node:fs/promises');
+const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
+const ui=await fs.readFile(root+'gist-sync/ui-gist.js','utf8');
+const glue=await fs.readFile(root+'gist-sync/plugin-gist.js','utf8');
+const hostCSS=await page.evaluate(()=>[...document.querySelectorAll('style')].map(e=>e.textContent).join('\n'));
+const preview=await context.newPage();await usePage(preview);
+await page.setContent('<html><head><title>GistSync browser regression fixture</title></head><body></body></html>');
+await page.addStyleTag({content:hostCSS+'\nhtml{font-size:24px;color-scheme:dark}body{background:#111827;color:#e2e8f0}button{padding:8px 14px;margin:4px;background:#334155;color:white;border:1px solid #94a3b8;border-radius:6px}input,select{box-sizing:border-box}'});
+await page.addScriptTag({content:'(()=>{'+glue+`\nwindow.gistMessage=f50GistMessage;window.gistCleanUrl=f50GistCleanUrl;window.gistValidUrl=f50GistValidUrl;})();`});
+await page.addScriptTag({content:`
+let saved={revision:1,generation:'fixture',url:'https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/one.age',auto:false,intervalHours:6},missing=false,lastAction='',calls=[],jobNumber=0;
+const ensureAdvanced=async()=>true;
+const createFixedToast=(id,html)=>{document.getElementById(id)?.remove();const el=document.createElement('section');el.id=id;el.innerHTML=html;el.style.cssText='margin:20px auto;width:max-content';document.body.append(el);return {el,close:()=>el.remove()};};
+const f50GistMessage=window.gistMessage;
+const f50GistCleanUrl=window.gistCleanUrl,f50GistValidUrl=window.gistValidUrl;
+const f50GistExec=async args=>args[0]==='status'?(missing?{ok:false,code:'components_missing'}:{ok:true,version:'1.0.0-rc4',protocol:1,settings:{...saved},identitySet:true,ageReady:true,schedulerRunning:saved.auto,jobs:[]}):args[0]==='job'?{id:args[1],status:'finished',result:{ok:true,code:lastAction==='save'?'settings_saved':lastAction==='test'?'test_passed':lastAction==='disable'?'auto_disabled':'up_to_date',settingsSaved:['save','disable'].includes(lastAction),downloaded:true,decrypted:true,validated:true}}:{ok:true};
+const f50GistDispatch=async(action,request)=>{lastAction=action;calls.push({action,hasIdentity:!!request.identity,url:request.url,intervalHours:request.intervalHours,auto:request.auto});if(action==='save')saved={...saved,url:request.url,auto:request.auto,intervalHours:request.intervalHours,revision:saved.revision+1};if(action==='disable')saved.auto=false;return {ok:true,job:(++jobNumber).toString(16).padStart(32,'0')};};
+window.fixtureState=()=>({saved:{...saved},calls:structuredClone(calls)});window.fixtureMissing=()=>missing=true;
+`+ui+'\nwindow.openGist=()=>gistSyncBtn.onclick();'});
+await page.evaluate(()=>window.openGist());
+const checked=[];const check=(name)=>checked.push({name,result:'PASS',category:'MOCK',environment:'real Tabbit Chromium; simulated device API'});
+await expect(page.locator('#mm_gist_url')).toHaveValue(/one\.age$/);check('saved link restored');
+await page.locator('#mm_gist_url').fill('https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/two.age');
+await page.locator('#mm_gist_key').fill('fixture-key-not-production');await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
+await expect(page.locator('#mm_gist_key')).toHaveValue('');check('test connection clears password field');
+await page.locator('#mm_gist_auto').check();
+for(const value of ['1','6','12','24']){
+ await page.locator('#mm_gist_interval').selectOption(value);await page.locator('#mm_gist_save').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
+ await page.locator('#mm_gist_close').click();await page.evaluate(()=>window.openGist());await expect(page.locator('#mm_gist_interval')).toHaveValue(value);await expect(page.locator('#mm_gist_auto')).toBeChecked();check('interval '+value+' saves and restores after reopen');
+}
+await page.locator('#mm_gist_key').fill('replacement-fixture-key');await page.locator('#mm_gist_save').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
+await page.locator('#mm_gist_sync').click();await expect(page.locator('#mm_gist_sync')).toBeEnabled();check('replace identity and manual sync');
+await page.getByText('更多',{exact:true}).click();await page.locator('#mm_gist_disable').click();await expect(page.locator('#mm_gist_auto')).not.toBeChecked();check('disable automatic sync');
+const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,select:{color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor},options:[...e.options].map(o=>({text:o.textContent,value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
+assert.equal(styles.options.length,4);assert.ok(styles.height>=42);for(const o of styles.options){assert.ok(o.text);assert.notEqual(o.color,o.background);}check('all four options have explicit readable colors and adequate height');
+await page.screenshot({path:root+'reports/gist-sync/browser-ui.png',fullPage:true});
+const state=await page.evaluate(()=>window.fixtureState());assert.equal(state.calls[0].action,'test');assert.equal(state.calls[0].hasIdentity,true);assert.ok(state.calls.some(c=>c.action==='sync'));assert.equal(state.saved.intervalHours,24);
+await page.evaluate(()=>window.fixtureMissing());await page.locator('#mm_gist_refresh').click();await expect(page.locator('#mm_gist_status')).toHaveText('当前完整组件版本不支持 Gist 同步，请在组件管理中更新。');check('missing component actionable message');
+assert.equal(await page.getByRole('button',{name:'联网安装 age'}).count(),0);assert.equal(await page.getByRole('button',{name:'导入完整组件包（含 Gist）'}).count(),0);check('no independent component installation controls');
+await fs.writeFile(root+'reports/gist-sync/browser-ui.json',JSON.stringify({userAgent:await page.evaluate(()=>navigator.userAgent),checks:checked,styles},null,2)+'\n');
+await page.close();return {checks:checked,styles};

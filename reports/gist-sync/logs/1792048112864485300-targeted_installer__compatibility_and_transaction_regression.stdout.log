@@ -1,0 +1,571 @@
+TAP version 13
+# diagnostic equivalence: 1029 inputs
+# Subtest: cleanup preserves generated output / buildF50EmergencyScript
+ok 1 - cleanup preserves generated output / buildF50EmergencyScript
+  ---
+  duration_ms: 33.042875
+  ...
+# Subtest: cleanup preserves generated output / buildF50RecoveryEligibilityFunctions
+ok 2 - cleanup preserves generated output / buildF50RecoveryEligibilityFunctions
+  ---
+  duration_ms: 7.303241
+  ...
+# Subtest: cleanup preserves generated output / buildF50LeaseFunctions
+ok 3 - cleanup preserves generated output / buildF50LeaseFunctions
+  ---
+  duration_ms: 12.276001
+  ...
+# Subtest: cleanup preserves generated output / buildF50ServiceLeaseGate
+ok 4 - cleanup preserves generated output / buildF50ServiceLeaseGate
+  ---
+  duration_ms: 5.512501
+  ...
+# Subtest: cleanup preserves generated output / buildF50ConfigTransactionFunctions
+ok 5 - cleanup preserves generated output / buildF50ConfigTransactionFunctions
+  ---
+  duration_ms: 5.788575
+  ...
+# Subtest: cleanup preserves generated output / buildF50RedactFunction
+ok 6 - cleanup preserves generated output / buildF50RedactFunction
+  ---
+  duration_ms: 6.441679
+  ...
+# Subtest: cleanup preserves generated output / buildF50PanelConfigCheck
+ok 7 - cleanup preserves generated output / buildF50PanelConfigCheck
+  ---
+  duration_ms: 0.300108
+  ...
+# Subtest: cleanup preserves generated output / buildF50HttpSubscriptionPatchScript
+ok 8 - cleanup preserves generated output / buildF50HttpSubscriptionPatchScript
+  ---
+  duration_ms: 5.684537
+  ...
+# Subtest: cleanup preserves generated output / buildF50OriginalConfigFunctions
+ok 9 - cleanup preserves generated output / buildF50OriginalConfigFunctions
+  ---
+  duration_ms: 6.675264
+  ...
+# Subtest: cleanup preserves generated output / buildF50CurlLocator
+ok 10 - cleanup preserves generated output / buildF50CurlLocator
+  ---
+  duration_ms: 5.874601
+  ...
+# Subtest: cleanup preserves generated output / buildF50ServiceCurlPatchScript
+ok 11 - cleanup preserves generated output / buildF50ServiceCurlPatchScript
+  ---
+  duration_ms: 6.116284
+  ...
+# Subtest: cleanup preserves generated output / buildF50OriginalServicePatchScript
+ok 12 - cleanup preserves generated output / buildF50OriginalServicePatchScript
+  ---
+  duration_ms: 7.578358
+  ...
+# Subtest: cleanup preserves generated output / buildF50StartScript
+ok 13 - cleanup preserves generated output / buildF50StartScript
+  ---
+  duration_ms: 13.482319
+  ...
+# Subtest: cleanup preserves generated output / buildF50ZashboardValidationFunction
+ok 14 - cleanup preserves generated output / buildF50ZashboardValidationFunction
+  ---
+  duration_ms: 4.993294
+  ...
+# Subtest: cleanup preserves generated output / buildF50MaintenanceFunctions
+ok 15 - cleanup preserves generated output / buildF50MaintenanceFunctions
+  ---
+  duration_ms: 41.893236
+  ...
+# Subtest: cleanup preserves generated output / buildF50ShellBase
+ok 16 - cleanup preserves generated output / buildF50ShellBase
+  ---
+  duration_ms: 4.4398
+  ...
+# Subtest: cleanup preserves generated output / buildF50ProcessHelpers
+ok 17 - cleanup preserves generated output / buildF50ProcessHelpers
+  ---
+  duration_ms: 4.753161
+  ...
+# Subtest: cleanup preserves generated output / buildF50NetworkHelpers
+ok 18 - cleanup preserves generated output / buildF50NetworkHelpers
+  ---
+  duration_ms: 4.788026
+  ...
+# Subtest: cleanup preserves generated output / buildF50NetworkCompatHelpers
+ok 19 - cleanup preserves generated output / buildF50NetworkCompatHelpers
+  ---
+  duration_ms: 4.675648
+  ...
+# Subtest: cleanup preserves generated output / buildF50Tun6CompatFunctions
+ok 20 - cleanup preserves generated output / buildF50Tun6CompatFunctions
+  ---
+  duration_ms: 5.740501
+  ...
+# Subtest: cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions
+ok 21 - cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions
+  ---
+  duration_ms: 5.444717
+  ...
+# Subtest: cleanup preserves generated output / buildF50InspectHelpers
+ok 22 - cleanup preserves generated output / buildF50InspectHelpers
+  ---
+  duration_ms: 4.89046
+  ...
+# Subtest: cleanup preserves generated output / buildF50CleanupHelpers
+ok 23 - cleanup preserves generated output / buildF50CleanupHelpers
+  ---
+  duration_ms: 15.102473
+  ...
+# Subtest: cleanup preserves generated output / buildF50ArtifactHelpers
+ok 24 - cleanup preserves generated output / buildF50ArtifactHelpers
+  ---
+  duration_ms: 7.408633
+  ...
+# Subtest: cleanup preserves generated output / buildF50InstallHelpers
+ok 25 - cleanup preserves generated output / buildF50InstallHelpers
+  ---
+  duration_ms: 6.314708
+  ...
+# Subtest: cleanup preserves generated output / buildF50RemovalHelpers
+ok 26 - cleanup preserves generated output / buildF50RemovalHelpers
+  ---
+  duration_ms: 5.715838
+  ...
+# Subtest: cleanup preserves generated output / buildF50FinalProbeHelpers
+ok 27 - cleanup preserves generated output / buildF50FinalProbeHelpers
+  ---
+  duration_ms: 5.83304
+  ...
+# Subtest: cleanup preserves generated output / buildF50PanelHelpers
+ok 28 - cleanup preserves generated output / buildF50PanelHelpers
+  ---
+  duration_ms: 5.524813
+  ...
+# Subtest: cleanup preserves generated output / buildF50StartHelpers
+ok 29 - cleanup preserves generated output / buildF50StartHelpers
+  ---
+  duration_ms: 7.388742
+  ...
+# Subtest: cleanup preserves generated output / buildF50InspectScript
+ok 30 - cleanup preserves generated output / buildF50InspectScript
+  ---
+  duration_ms: 6.228568
+  ...
+# Subtest: cleanup preserves generated output / buildF50InstallScript
+ok 31 - cleanup preserves generated output / buildF50InstallScript
+  ---
+  duration_ms: 9.04886
+  ...
+# Subtest: cleanup preserves generated output / buildStatusSnapshotCommand
+ok 32 - cleanup preserves generated output / buildStatusSnapshotCommand
+  ---
+  duration_ms: 7.652156
+  ...
+# Subtest: cleanup preserves generated output / buildF50CleanupScript
+ok 33 - cleanup preserves generated output / buildF50CleanupScript
+  ---
+  duration_ms: 8.023624
+  ...
+# Subtest: cleanup preserves generated output / buildF50FinalCheckScript
+ok 34 - cleanup preserves generated output / buildF50FinalCheckScript
+  ---
+  duration_ms: 6.592116
+  ...
+# Subtest: cleanup preserves generated output / buildUninstallStages
+ok 35 - cleanup preserves generated output / buildUninstallStages
+  ---
+  duration_ms: 19.159535
+  ...
+# Subtest: cleanup preserves generated output / buildOwnedCoreFunctions
+ok 36 - cleanup preserves generated output / buildOwnedCoreFunctions
+  ---
+  duration_ms: 6.326359
+  ...
+# Subtest: cleanup preserves generated output / buildApiCurl
+ok 37 - cleanup preserves generated output / buildApiCurl
+  ---
+  duration_ms: 12.851697
+  ...
+# Subtest: cleanup baseline and reviewed Gist integration have the exact source contract
+ok 38 - cleanup baseline and reviewed Gist integration have the exact source contract
+  ---
+  duration_ms: 288.572711
+  ...
+# Subtest: cleanup preserves all diagnostic labels and result fields
+ok 39 - cleanup preserves all diagnostic labels and result fields
+  ---
+  duration_ms: 20.430827
+  ...
+# Subtest: failed rollback retains the old backup and reports blocked cleanup
+ok 40 - failed rollback retains the old backup and reports blocked cleanup
+  ---
+  duration_ms: 1116.663547
+  ...
+# Subtest: installation interruption preserves the old configuration and permits a complete retry
+ok 41 - installation interruption preserves the old configuration and permits a complete retry
+  ---
+  duration_ms: 1830.337433
+  ...
+# Subtest: new installation
+ok 42 - new installation
+  ---
+  duration_ms: 943.75067
+  ...
+# Subtest: running upgrade
+ok 43 - running upgrade
+  ---
+  duration_ms: 1133.439329
+  ...
+# Subtest: explicitly stopped upgrade
+ok 44 - explicitly stopped upgrade
+  ---
+  duration_ms: 1167.846426
+  ...
+# Subtest: running upgrade with stale stop latch
+ok 45 - running upgrade with stale stop latch
+  ---
+  duration_ms: 1752.612037
+  ...
+# Subtest: old installation without explicit stop latch
+ok 46 - old installation without explicit stop latch
+  ---
+  duration_ms: 1396.306722
+  ...
+# Subtest: unsafe ZIP path preserves failure code and old installation
+ok 47 - unsafe ZIP path preserves failure code and old installation
+  ---
+  duration_ms: 77.932794
+  ...
+# Subtest: missing controller preserves failure code and old installation
+ok 48 - missing controller preserves failure code and old installation
+  ---
+  duration_ms: 100.5147
+  ...
+# Subtest: missing Gist manifest preserves failure code and old installation
+ok 49 - missing Gist manifest preserves failure code and old installation
+  ---
+  duration_ms: 82.76112
+  ...
+# Subtest: missing age preserves failure code and old installation
+ok 50 - missing age preserves failure code and old installation
+  ---
+  duration_ms: 113.327905
+  ...
+# Subtest: missing sync worker preserves failure code and old installation
+ok 51 - missing sync worker preserves failure code and old installation
+  ---
+  duration_ms: 109.835542
+  ...
+# Subtest: nonzero worker exit with success JSON preserves failure code and old installation
+ok 52 - nonzero worker exit with success JSON preserves failure code and old installation
+  ---
+  duration_ms: 126.208344
+  ...
+# Subtest: missing fresh core preserves failure code and old installation
+ok 53 - missing fresh core preserves failure code and old installation
+  ---
+  duration_ms: 93.176974
+  ...
+# Subtest: missing YAML component preserves failure code and old installation
+ok 54 - missing YAML component preserves failure code and old installation
+  ---
+  duration_ms: 211.935117
+  ...
+# Subtest: invalid YAML preserves failure code and old installation
+ok 55 - invalid YAML preserves failure code and old installation
+  ---
+  duration_ms: 378.095905
+  ...
+# Subtest: start timeout preserves failure code and old installation
+ok 56 - start timeout preserves failure code and old installation
+  ---
+  duration_ms: 1160.666471
+  ...
+# Subtest: invalid core config preserves failure code and old installation
+ok 57 - invalid core config preserves failure code and old installation
+  ---
+  duration_ms: 1466.224433
+  ...
+# Subtest: network application failure preserves failure code and old installation
+ok 58 - network application failure preserves failure code and old installation
+  ---
+  duration_ms: 1404.260253
+  ...
+# Subtest: service patch failure preserves failure code and old installation
+ok 59 - service patch failure preserves failure code and old installation
+  ---
+  duration_ms: 229.17927
+  ...
+# Subtest: panel HTTP failure reports a warning and retains successfully started components
+ok 60 - panel HTTP failure reports a warning and retains successfully started components
+  ---
+  duration_ms: 1204.985044
+  ...
+# Subtest: successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
+ok 61 - successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
+  ---
+  duration_ms: 1007.735196
+  ...
+# Subtest: successful installation with unknownLockEntry reports finalization failure and permits only safe retry
+ok 62 - successful installation with unknownLockEntry reports finalization failure and permits only safe retry
+  ---
+  duration_ms: 1784.28135
+  ...
+# Subtest: successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
+ok 63 - successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
+  ---
+  duration_ms: 2250.244748
+  ...
+# Subtest: repeated full update preserves private identity and exact settings bytes
+ok 64 - repeated full update preserves private identity and exact settings bytes
+  ---
+  duration_ms: 2823.587281
+  ...
+# Subtest: 9.0.0 retains the bundled controller and wrapper protocol
+ok 65 - 9.0.0 retains the bundled controller and wrapper protocol
+  ---
+  duration_ms: 57.7272
+  ...
+# Subtest: legacy sources migrate once; saved and custom configurations bypass migration
+ok 66 - legacy sources migrate once; saved and custom configurations bypass migration
+  ---
+  duration_ms: 2.538497
+  ...
+# Subtest: stopped upgrade
+ok 67 - stopped upgrade
+  ---
+  duration_ms: 1427.077169
+  ...
+# Subtest: invalid wrapper
+ok 68 - invalid wrapper
+  ---
+  duration_ms: 216.118165
+  ...
+# Subtest: lock cleanup failure
+ok 69 - lock cleanup failure
+  ---
+  duration_ms: 1392.868206
+  ...
+# Subtest: all final operation shells parse in sh and BusyBox ash
+ok 70 - all final operation shells parse in sh and BusyBox ash
+  ---
+  duration_ms: 57.694007
+  ...
+# Subtest: Service candidate failure at tun preserves the complete original
+ok 71 - Service candidate failure at tun preserves the complete original
+  ---
+  duration_ms: 19.197936
+  ...
+# Subtest: Service candidate failure at original preserves the complete original
+ok 72 - Service candidate failure at original preserves the complete original
+  ---
+  duration_ms: 25.382466
+  ...
+# Subtest: Service candidate failure at audit5 preserves the complete original
+ok 73 - Service candidate failure at audit5 preserves the complete original
+  ---
+  duration_ms: 32.825785
+  ...
+# Subtest: Service candidate failure at tun6 preserves the complete original
+ok 74 - Service candidate failure at tun6 preserves the complete original
+  ---
+  duration_ms: 36.41713
+  ...
+# Subtest: Service candidate failure at dns preserves the complete original
+ok 75 - Service candidate failure at dns preserves the complete original
+  ---
+  duration_ms: 42.27771
+  ...
+# Subtest: Service patch is idempotent and preserves file permissions
+ok 76 - Service patch is idempotent and preserves file permissions
+  ---
+  duration_ms: 97.09566
+  ...
+# Subtest: manifest JSON identity {"name":"zashboard","short_name":"zashboard"}
+ok 77 - manifest JSON identity {"name":"zashboard","short_name":"zashboard"}
+  ---
+  duration_ms: 51.892762
+  ...
+# Subtest: manifest JSON identity {"short_name":"zashboard","extra":1,"name":"zashboard"}
+ok 78 - manifest JSON identity {"short_name":"zashboard","extra":1,"name":"zashboard"}
+  ---
+  duration_ms: 50.777622
+  ...
+# Subtest: manifest JSON identity {"name":"\\u007aashboard","short_name":"zashboard"}
+ok 79 - manifest JSON identity {"name":"\\u007aashboard","short_name":"zashboard"}
+  ---
+  duration_ms: 53.809206
+  ...
+# Subtest: manifest JSON identity {"name":"zash board","short_name":"zashboard"}
+ok 80 - manifest JSON identity {"name":"zash board","short_name":"zashboard"}
+  ---
+  duration_ms: 56.862436
+  ...
+# Subtest: manifest JSON identity {"name":"metacubexd","short_name":"zashboard"}
+ok 81 - manifest JSON identity {"name":"metacubexd","short_name":"zashboard"}
+  ---
+  duration_ms: 50.610495
+  ...
+# Subtest: manifest JSON identity {"name":"zashboard","short_name":"zashboard"
+ok 82 - manifest JSON identity {"name":"zashboard","short_name":"zashboard"
+  ---
+  duration_ms: 46.514804
+  ...
+# Subtest: template/base pair commit commits both files
+ok 83 - template/base pair commit commits both files
+  ---
+  duration_ms: 144.374353
+  ...
+# Subtest: template/base pair commit rolls back both files
+ok 84 - template/base pair commit rolls back both files
+  ---
+  duration_ms: 168.725494
+  ...
+# Subtest: template regeneration candidate / success
+ok 85 - template regeneration candidate / success
+  ---
+  duration_ms: 10.029023
+  ...
+# Subtest: template regeneration candidate / normalize
+ok 86 - template regeneration candidate / normalize
+  ---
+  duration_ms: 10.312327
+  ...
+# Subtest: template regeneration candidate / override
+ok 87 - template regeneration candidate / override
+  ---
+  duration_ms: 9.499202
+  ...
+# Subtest: template regeneration candidate / commit
+ok 88 - template regeneration candidate / commit
+  ---
+  duration_ms: 9.531812
+  ...
+# Subtest: override Worker entry point function main(config) { config.rules 
+ok 89 - override Worker entry point function main(config) { config.rules 
+  ---
+  duration_ms: 26.326141
+  ...
+# Subtest: override Worker entry point module.exports 
+ok 90 - override Worker entry point module.exports 
+  ---
+  duration_ms: 21.728415
+  ...
+# Subtest: override Worker entry point module.exports.default 
+ok 91 - override Worker entry point module.exports.default 
+  ---
+  duration_ms: 21.890152
+  ...
+# Subtest: override Worker entry point exports.default 
+ok 92 - override Worker entry point exports.default 
+  ---
+  duration_ms: 21.566288
+  ...
+# Subtest: override Worker entry point export default function main(config) { config.rules 
+ok 93 - override Worker entry point export default function main(config) { config.rules 
+  ---
+  duration_ms: 22.038644
+  ...
+# Subtest: override validation blocks import, self and escaped spellings while accepting UTF-8 strings
+ok 94 - override validation blocks import, self and escaped spellings while accepting UTF-8 strings
+  ---
+  duration_ms: 1.547298
+  ...
+# Subtest: override rejects invalid result / function main() { throw new Error("override failure"); }
+ok 95 - override rejects invalid result / function main() { throw new Error("override failure"); }
+  ---
+  duration_ms: 22.801167
+  ...
+# Subtest: override rejects invalid result / function main() { return []; }
+ok 96 - override rejects invalid result / function main() { return []; }
+  ---
+  duration_ms: 22.244822
+  ...
+# Subtest: override rejects invalid result / function main() { return {rules:"bad"}; }
+ok 97 - override rejects invalid result / function main() { return {rules:"bad"}; }
+  ---
+  duration_ms: 22.775974
+  ...
+# Subtest: recovery registry / {}
+ok 98 - recovery registry / {}
+  ---
+  duration_ms: 9.633256
+  ...
+# Subtest: recovery registry / {"reclaim":true}
+ok 99 - recovery registry / {"reclaim":true}
+  ---
+  duration_ms: 20.860533
+  ...
+# Subtest: recovery registry / {"active":true}
+ok 100 - recovery registry / {"active":true}
+  ---
+  duration_ms: 4.618935
+  ...
+# Subtest: recovery registry / {"reused":true}
+ok 101 - recovery registry / {"reused":true}
+  ---
+  duration_ms: 11.495868
+  ...
+# Subtest: recovery registry / {"receipt":false}
+ok 102 - recovery registry / {"receipt":false}
+  ---
+  duration_ms: 4.641091
+  ...
+# Subtest: recovery registry / {"foreign":true}
+ok 103 - recovery registry / {"foreign":true}
+  ---
+  duration_ms: 4.949771
+  ...
+# Subtest: recovery registry / {"transaction":true}
+ok 104 - recovery registry / {"transaction":true}
+  ---
+  duration_ms: 15.101619
+  ...
+# Subtest: recovery registry / {"legacy":true}
+ok 105 - recovery registry / {"legacy":true}
+  ---
+  duration_ms: 6.36626
+  ...
+# Subtest: recovery registry / {"background":true}
+ok 106 - recovery registry / {"background":true}
+  ---
+  duration_ms: 12.165975
+  ...
+# Subtest: browser task ownership and receipt / completed
+ok 107 - browser task ownership and receipt / completed
+  ---
+  duration_ms: 1.831768
+  ...
+# Subtest: browser task ownership and receipt / cancelled_before
+ok 108 - browser task ownership and receipt / cancelled_before
+  ---
+  duration_ms: 0.923015
+  ...
+# Subtest: browser task ownership and receipt / cancelled_during
+ok 109 - browser task ownership and receipt / cancelled_during
+  ---
+  duration_ms: 0.808148
+  ...
+# Subtest: browser task ownership and receipt / missing_receipt
+ok 110 - browser task ownership and receipt / missing_receipt
+  ---
+  duration_ms: 0.866164
+  ...
+# Subtest: browser task ownership and receipt / timeout
+ok 111 - browser task ownership and receipt / timeout
+  ---
+  duration_ms: 0.807568
+  ...
+# Subtest: browser task ownership and receipt / other_page_busy
+ok 112 - browser task ownership and receipt / other_page_busy
+  ---
+  duration_ms: 0.822004
+  ...
+1..112
+# tests 112
+# suites 0
+# pass 112
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29862.828767

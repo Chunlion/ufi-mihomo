@@ -1,0 +1,50 @@
+const fs=await import('node:fs/promises');
+const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
+const inputPath=root+'.cache/gist-sync/device-live-input.json',keyPath=root+'.cache/gist-sync/device-test-identity.txt';
+const input=JSON.parse(await fs.readFile(inputPath,'utf8'));
+let identity=(await fs.readFile(keyPath,'utf8')).split(/\r?\n/).find(s=>s.startsWith('AGE-SECRET-KEY-1'));
+const glue=await fs.readFile(root+'gist-sync/plugin-gist.js','utf8');
+const snapshot=()=>page.evaluate(async glue=>{
+ const api=new Function('hostRunShellWithRoot','shellQuote','CryptoJS',glue+'\nreturn f50GistExec;')(runShellWithRoot,v=>"'"+String(v).replace(/'/g,"'\\''")+"'",CryptoJS);
+ const st=await api(['status']);
+ if(!st.ok||st.fingerprintError||Object.keys(st.currentFingerprint||{}).length===0||!Object.values(st.currentFingerprint).every(Boolean))throw Error('Device fingerprint unconfirmed: '+(st.code||st.fingerprintError));
+ return {fingerprint:st.currentFingerprint,jobs:st.jobs,settings:st.settings};
+},glue);
+try {
+ if(await page.locator('#PluginModal').isVisible())await page.locator('#PluginModal').getByRole('button',{name:'关闭',exact:true}).click();
+ if(await page.locator('#mm_gist_sync_dialog').isVisible())await page.locator('#mm_gist_close').click();
+ const group=page.locator('#mm_action_box details').filter({has:page.locator('summary').filter({hasText:'订阅与配置'})});
+ if(!(await group.evaluate(e=>e.open)))await group.locator('summary').click();
+ await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
+ await page.waitForFunction(()=>!!document.querySelector('#mm_gist_status')?.textContent);
+ const before=await snapshot();
+ assert.equal(await page.locator('#mm_gist_url').inputValue(),'','Expected unconfigured device; do not replace user settings');
+ await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请先填写 Gist Raw 链接。');
+ await page.locator('#mm_gist_url').fill('https://gist.github.com/fixture/abcde');
+ await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请填写完整的 Gist Raw .age 下载链接。');
+ const invalid=await snapshot();await expect(invalid.jobs.map(j=>j.id)).toEqual(before.jobs.map(j=>j.id));
+ const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,options:[...e.options].map(o=>({value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
+ await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=42);
+ for(const o of styles.options){assert.notEqual(o.color,o.background);await page.locator('#mm_gist_interval').selectOption(o.value);}
+ assert.ok(!(await page.locator('#mm_gist_status').textContent()).match(/SHA-256|控制面|运行确认|未执行/));
+ await page.locator('#mm_gist_url').fill('\u200b '+input.url+' \ufeff');
+ await page.locator('#mm_gist_key').fill(identity);identity='';
+ await page.locator('#mm_gist_test').click();
+ await expect(page.locator('#mm_gist_result')).toContainText('age 解密失败',{timeout:120000});
+ await expect(page.locator('#mm_gist_key')).toHaveValue('');
+ await expect(page.locator('#mm_gist_url')).toHaveValue(input.url);
+ assert.ok(!(await page.locator('#mm_gist_result').textContent()).includes('未执行 / 未确认'));
+ const after=await snapshot();await expect(after.fingerprint).toEqual(before.fingerprint);await expect(after.settings).toEqual(before.settings);
+ const job=after.jobs.find(j=>!before.jobs.some(b=>b.id===j.id));
+ assert.ok(job);assert.equal(job.action,'test');assert.equal(job.result.code,'age_decrypt_failed');assert.equal(job.result.ok,false);
+ assert.equal(job.result.downloaded,true);assert.equal(job.result.decrypted,false);assert.equal(job.result.written,false);assert.equal(job.result.cipherHash,input.sha256);
+ await page.screenshot({fullPage:false});
+ await page.locator('#mm_gist_close').click();await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
+ await expect(page.locator('#mm_gist_interval')).toHaveValue(String(before.settings.intervalHours||6));
+ await expect(page.locator('#mm_gist_url')).toHaveValue('');await expect(page.locator('#mm_gist_key')).toHaveValue('');
+ const result={category:'DEVICE/LIVE',result:'PASS',coverage:'actual F50 UI; empty and malformed links rejected without tasks; cleaned Raw URL dispatched through encrypted request; actual ARM64 HTTPS download and independent wrong-key rejection; confirmed fingerprints and settings unchanged; readable interval options; reopen restores saved settings',styles,before:before.fingerprint,after:after.fingerprint,outcome:job.result};
+ await fs.writeFile(root+'reports/gist-sync/device-ui.json',JSON.stringify(result,null,2)+'\n');
+ await fs.writeFile(root+'reports/gist-sync/device-live.json',JSON.stringify(result,null,2)+'\n');
+ await page.evaluate(async id=>{if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid fixture job');const r=await runShellWithRoot('rm -f /data/clash/Tools/gist-sync/jobs/'+id+'.json',5000);if(!r.success)throw Error('Test receipt cleanup failed');},job.id);
+ return result;
+} finally {identity='';await fs.unlink(keyPath);await fs.unlink(inputPath);}

@@ -1,0 +1,11 @@
+const fs=await import('node:fs/promises'),vm=await import('node:vm');
+const source=await fs.readFile('C:/Users/Cuty/Desktop/Github/Tproxy-F50/猫猫TProxy.js','utf8');
+const a=source.indexOf('function buildF50RedactFunction()'),b=source.indexOf('function buildF50PanelConfigCheck()',a);
+const fn=vm.runInNewContext(source.slice(a,b)+'buildF50RedactFunction()');
+const command=fn+"\nprintf '%s\\n' safe password=fixture | f50_redact\n";
+const plain=await page.evaluate(async command=>await runShellWithRoot(command+' 2>&1',10000),command);
+const encoded=Buffer.from(command).toString('base64');
+const viaFile=await page.evaluate(async encoded=>await runShellWithRoot("printf '%s' '"+encoded+"' | base64 -d | sh 2>&1",10000),encoded);
+const platform=await page.evaluate(async()=>await runShellWithRoot("command -v awk; ls -l $(command -v awk); sed -n '/^f50_redact()/,/^}/p' /data/clash/Scripts/Clash.Service | base64",10000));
+const trustedPath=await page.evaluate(async command=>await runShellWithRoot('export PATH=/data/kano_tproxy_tools/bin:$PATH\ncommand -v awk\n'+command+' 2>&1',10000),command);
+return {plain,viaFile,platform,trustedPath};

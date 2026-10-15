@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: Gitee package succeeds without contacting the fallback
+ok 1 - Gitee package succeeds without contacting the fallback
+  ---
+  duration_ms: 1.795826
+  ...
+# Subtest: Gitee failure (Load failed) falls back to GitCode
+ok 2 - Gitee failure (Load failed) falls back to GitCode
+  ---
+  duration_ms: 0.504156
+  ...
+# Subtest: Gitee failure (ARCHIVE_VERIFY_FAILED=zip) falls back to GitCode
+ok 3 - Gitee failure (ARCHIVE_VERIFY_FAILED=zip) falls back to GitCode
+  ---
+  duration_ms: 0.385406
+  ...
+# Subtest: Gitee and GitCode failures fall back to GitHub
+ok 4 - Gitee and GitCode failures fall back to GitHub
+  ---
+  duration_ms: 0.533887
+  ...
+# Subtest: all download failures retain diagnostics and report failure
+ok 5 - all download failures retain diagnostics and report failure
+  ---
+  duration_ms: 0.470468
+  ...
+# Subtest: unpublished complete component release never contacts old mirrors
+ok 6 - unpublished complete component release never contacts old mirrors
+  ---
+  duration_ms: 0.394666
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 99.648145

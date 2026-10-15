@@ -1,0 +1,12 @@
+{
+  "root": "C:/Users/Cuty/Desktop/Github/Tproxy-F50",
+  "branch": "main",
+  "head": "adc9458d69b4caff2b6f79e8b6b773429acf0dc8",
+  "initial_status": [
+    "?? AGENTS.md"
+  ],
+  "source_sha256": "51708e32860c8bb2f969981c94abf1dcad8231f15b902116a8ed6821a60caaf7",
+  "rc3_source_sha256": "8784398f8d0b10a83ed3d337e31802371d1ab375c3092a07299c196d77f2339f",
+  "rc3_baseline_matches_head": true,
+  "remote_push_authorized": false
+}

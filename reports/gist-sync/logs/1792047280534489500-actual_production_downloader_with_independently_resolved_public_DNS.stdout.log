@@ -1,0 +1,4 @@
+=== RUN   TestLiveGistDownload
+    live_test.go:24: LIVE_DOWNLOAD_FAILED code=download_transport_failed status=0
+--- FAIL: TestLiveGistDownload (5.05s)
+FAIL

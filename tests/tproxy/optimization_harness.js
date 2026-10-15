@@ -20,7 +20,7 @@ function slice(start, end, text = source) {
   return text.slice(from, to);
 }
 function run(code, context = {}) {
-  return vm.runInNewContext(code, { console, ...context }, { timeout: 10000 });
+  return vm.runInNewContext(slice('function buildF50GistFence', 'function f50AssertSafeJsonNumbers') + code, { console, ...context }, { timeout: 10000 });
 }
 function shell(input, env = {}) {
   const result = spawnSync('sh', ['-s'], { input, encoding: 'utf8', timeout: 30000,
@@ -32,7 +32,7 @@ function syntax(input) {
   const result = spawnSync('sh', ['-n'], { input, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 }
-function shellApi(text = source, extra = '') {
+function shellApi(text = source, extra = '', contextOverrides = {}) {
   return run(slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS', text)
     + slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady', text)
     + slice('const rotateClashLogCmd', 'async function installF50PackageAtDevicePath', text)
@@ -44,6 +44,7 @@ function shellApi(text = source, extra = '') {
       KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin', BOOT_FILE: '/sdcard/ufi_tools_boot.sh',
       F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
       removeBootLinesCmd: () => ':', removePluginOwnedArtifactsCmd: () => ':',
+      ...contextOverrides,
     });
 }
 const subContext = {

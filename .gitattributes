@@ -1,1 +1,8 @@
 猫猫TProxy.js text eol=lf
+gist-sync/** text eol=lf
+tests/gist-sync/** text eol=lf
+reports/gist-sync/** text eol=lf
+reports/gist-sync/logs/** binary
+reports/gist-sync/regression/** binary
+reports/gist-sync/*.patch binary
+tests/gist-sync/vendor/CryptoJS-LICENSE whitespace=-blank-at-eol

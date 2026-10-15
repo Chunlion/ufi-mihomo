@@ -1,0 +1,24 @@
+{
+  "mihomo": {
+    "version": "v1.19.31",
+    "source": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-v1.19.31.gz",
+    "download_api": "https://api.github.com/repos/MetaCubeX/mihomo/releases/assets/563462711",
+    "archive_sha256": "d5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1"
+  },
+  "yq": {
+    "version": "v4.53.3",
+    "source": "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64",
+    "binary_sha256": "fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4"
+  },
+  "age_amd64": {
+    "version": "v1.3.2",
+    "source": "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz",
+    "binary_sha256": "eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c",
+    "keygen_sha256": "0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899"
+  },
+  "qemu": {
+    "version": "10.0.13",
+    "source": "https://deb.debian.org/debian/pool/main/q/qemu/qemu-user_10.0.13+ds-0+deb13u1_amd64.deb",
+    "archive_sha256": "ca6ede739327a20ae5a3498230c8a3a9a072c586e131bc6bcc1201eb1725e336"
+  }
+}

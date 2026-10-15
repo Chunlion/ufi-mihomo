@@ -1,0 +1,18 @@
+const fs=await import('node:fs/promises'),crypto=await import('node:crypto');
+const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
+const previous=page;const fresh=await context.newPage();await usePage(fresh);
+await page.goto('http://192.168.0.1:2333/',{waitUntil:'domcontentloaded'});
+await page.waitForFunction(()=>[...document.scripts].some(s=>s.textContent.includes('GistSync 1.0.0-rc4;')));
+await page.getByRole('button',{name:'插件功能',exact:true}).click();
+await page.waitForFunction(()=>document.getElementById('custom_head')?.value.includes('GistSync 1.0.0-rc4;'));
+const value=await page.locator('#custom_head').inputValue();
+const match=[...value.matchAll(/<script\b[^>]*>[\s\S]*?<\/script\s*>/g)].filter(m=>m[0].includes('F50_COMPAT_VERSION')&&m[0].includes('F50_PORTS'));
+assert.equal(match.length,1);
+const m=match[0],sha=s=>crypto.createHash('sha256').update(s).digest('hex');
+const proof=JSON.parse(await fs.readFile(root+'build/gist-sync/device-plugin-proof.json','utf8'));
+assert.equal(sha(value.slice(0,m.index)+value.slice(m.index+m[0].length)),proof.otherPluginsSHA256);
+const source=await fs.readFile(root+'猫猫TProxy.js','utf8');const body=source.match(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/)[1];
+assert.equal(m[0],'<script>'+body+'</script>');
+await previous.close({runBeforeUnload:false});
+const result={updated:true,sourceSHA256:sha(source),otherPluginsSHA256:proof.otherPluginsSHA256,otherPluginsPreserved:true,hostReloaded:true,storageName:'Maomao-TProxy-GistSync-1.0.0-rc2.js'};
+await fs.writeFile(root+'reports/gist-sync/device-plugin-update.json',JSON.stringify(result,null,2)+'\n');return result;

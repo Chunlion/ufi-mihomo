@@ -1,0 +1,31 @@
+TAP version 13
+# install 120668 286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387
+# start 50809 e5c59b91de81cdf59dde3f1782d6aef52d36316a0d923edecbf1053bf3267c9b
+# restart 50811 b63c1422c01ed7ec494b415221e7709a0fc435270b84463414e1a651ae7ba3b1
+# emergency 28007 f2a643e7ce83e8649a7205de6327d02a43adcf362b3e57f5286e3a63f23202b1
+# service 31265 85c44e130e0a527ef0ea6c0093032d75de7a09191218050245472c87482f8f69
+# http 4608 a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3
+# tun6 4491 ca8111dd584610bb80987eedef14385b968c53a4bd809043caf1355c2a7b55f8
+# dns 6226 fae3fd5044c86fc4689b581ff85432c974ac0f71c1e4e5c2f71b66aa8e41fc78
+# lease 3628 5790034969278be1aa6dcb8333e2abedc1d19a401029bf6f6332e09c1c328b3d
+# transaction 1228 8e3e527df3c2ad1d30a1f005a60160c218ad9155674a2cddebed366397ce2dd0
+# cleanup 16548 f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2
+# Subtest: pure compaction preserves all 11 generated shell groups byte for byte
+ok 1 - pure compaction preserves all 11 generated shell groups byte for byte
+  ---
+  duration_ms: 81.648308
+  ...
+# Subtest: compaction leaves tagged raw strings, escaped backslashes and regular expressions intact
+ok 2 - compaction leaves tagged raw strings, escaped backslashes and regular expressions intact
+  ---
+  duration_ms: 0.823556
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 676.222744

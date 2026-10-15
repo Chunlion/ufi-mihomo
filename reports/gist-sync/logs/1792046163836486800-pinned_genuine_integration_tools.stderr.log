@@ -1,0 +1,33 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: Error: Client network socket disconnected before secure TLS connection was established
+      at TLSSocket.onConnectEnd (node:internal/tls/wrap:1706:19)
+      at TLSSocket.emit (node:events:520:35)
+      at endReadableNT (node:internal/streams/readable:1729:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'ECONNRESET',
+    path: undefined,
+    host: 'github.com',
+    port: 443,
+    localAddress: null
+  }
+}
+
+Node.js v24.14.1
+Traceback (most recent call last):
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\gist_test_tools.py", line 33, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\gist_test_tools.py", line 18, in main
+    if not archive.exists() or sha(archive.read_bytes())!=core['archive_sha256']:fetch(core['source'],archive,core['archive_sha256'])
+                                                                                 ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\gist_test_tools.py", line 11, in fetch
+    subprocess.run(args,cwd=ROOT,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Python\Python313\Lib\subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['node', 'scripts/gist_fetch.mjs', 'https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-v1.19.31.gz', 'C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50\\.cache\\gist-sync\\tools\\mihomo-linux-amd64.gz', 'd5e74bbddbdfff49a1aef7775bf5911da59f0d7196ed509a0ac914b3653dd5f1']' returned non-zero exit status 1.

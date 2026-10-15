@@ -26,6 +26,8 @@ exit ${options.startRc || 0}
   writePackage('Proxy/WebUI/zashboard/manifest.webmanifest', '{"name":"zashboard","short_name":"zashboard"}');
   writePackage('Proxy/WebUI/zashboard/registerSW.js', 'register');
   writePackage('Proxy/WebUI/zashboard/assets/main.js', 'zashboard');
+  const components = path.resolve(__dirname,'../../build/gist-sync/clash');
+  for (const rel of ['Tools/age','Tools/kano-gist-sync','Tools/age.LICENSE','Tools/gist-sync-component.json','Scripts/Clash.GistSync','Scripts/Clash.ConfigCommit']) writePackage(rel,fs.readFileSync(path.join(components,rel)));
   if (options.missing) fs.rmSync(path.join(pkg, options.missing));
   if (options.old) {
     write(root, 'Proxy/config.yaml', config + 'custom-old: retained\n');
@@ -38,7 +40,14 @@ exit ${options.startRc || 0}
   const interruptFault = options.interruptDuringCleanup ? write(dir, 'interrupt-fault', 'once') : '';
   const api = shellApi(source, `buildF50HttpSubscriptionPatchScript = () => 'true'; buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; dataSpaceGuardCmd = () => '';`);
   const mocks = `
-f50_limit() { shift; "$@"; }
+f50_limit() {
+ shift
+ case "$1" in
+ */Tools/kano-gist-sync) ${options.runtimeProbeFailure ? 'echo \'{"ok":true,"version":"1.0.0-rc4","protocol":1}\'; return 1;' : ''} shift; ${quote(path.resolve(__dirname,'../../build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
+ */Tools/age) shift; ${quote(path.resolve(__dirname,'../../.cache/gist-sync/tools/age-amd64/age'))} "$@";;
+ *) "$@";;
+ esac
+}
 unzip() {
   if [ "$1" = -Z1 ]; then printf '%s\\n' ${quote(options.unsafeZip ? '../escape' : 'Scripts/clashctl_arm64')}; return 0; fi
   if [ "$1" = -l ]; then echo '4096 10 files'; return 0; fi
@@ -118,6 +127,10 @@ for (const [name, options, status] of [
 for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
+  ['missing Gist manifest', { missing: 'Tools/gist-sync-component.json' }, 'gist_components_missing'],
+  ['missing age', { missing: 'Tools/age',old:true }, 'gist_component_hash_mismatch'],
+  ['missing sync worker', { missing: 'Tools/kano-gist-sync',old:true }, 'gist_component_hash_mismatch'],
+  ['nonzero worker exit with success JSON', { runtimeProbeFailure:true,old:true }, 'gist_runtime_probe_failed'],
   ['missing fresh core', { missing: 'Proxy/Clash.Core' }, 'missing_core'],
   ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'panel_candidate_rejected'],
   ['invalid YAML', { invalidConfig: true }, 'config_probe_failed'],
@@ -133,7 +146,7 @@ for (const [name, options, code] of [
       assert.match(result.stdout, new RegExp('^F50_INSTALL_CODE=' + code + '$', 'm'));
       assert.ok(!result.stdout.includes('KANO_INSTALL_OK=1'));
       if (options.old) {
-        if (options.patchFailure) assert.ok(!result.stdout.includes('F50_ROLLBACK='), 'candidate failure never enters activation');
+        if (options.patchFailure || options.missing?.startsWith('Tools/') || options.runtimeProbeFailure) assert.ok(!result.stdout.includes('F50_ROLLBACK='), 'candidate failure never enters activation');
         else assert.match(result.stdout, /^F50_ROLLBACK=restored$/m);
         assert.equal(fs.readFileSync(path.join(root, 'Proxy/Clash.Core'), 'utf8'), 'old core');
         assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);
@@ -176,3 +189,20 @@ for (const option of ['lockCleanupFailure', 'unknownLockEntry', 'stagingCleanupF
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }
+
+test('repeated full update preserves private identity and exact settings bytes', {skip:!yq},()=>{
+ const c=installCase({old:true,stopped:true});
+ try {
+  assert.equal(c.result.status,0,c.result.stdout+c.result.stderr);
+  const settings='{"url":"https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/one.age","intervalHours":24,"auto":false}\n';
+  const key='fixture-private-identity-never-log\n';
+  write(c.root,'Tools/gist-sync/settings.conf',settings);write(c.root,'Tools/gist-sync/sources/fixture/identity.txt',key);
+  fs.chmodSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt'),0o600);
+  for(let i=0;i<2;i++){
+   const r=c.execute();assert.equal(r.status,0,r.stdout+r.stderr);
+   assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/settings.conf'),'utf8'),settings);
+   assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt'),'utf8'),key);
+   assert.equal(fs.statSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt')).mode&0o777,0o600);
+  }
+ }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
+});

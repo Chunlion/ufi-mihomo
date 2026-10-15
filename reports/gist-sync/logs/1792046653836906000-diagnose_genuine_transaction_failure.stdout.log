@@ -1,0 +1,4 @@
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+DIAGNOSTIC commit.stdout 
+DIAGNOSTIC commit.stderr /test/commit-real.sh: 123: awk: not found
+

@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 260, in <module>
+    if args.inside:inside()
+                   ~~~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in inside
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 114, in check
+    start=time.monotonic();body();RESULTS.append({'name':name,'category':'INTEGRATION','result':'PASS','seconds':round(time.monotonic()-start,3)});print('PASS INTEGRATION '+name,flush=True)
+                           ~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in <lambda>
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+                                                          ~~~~~^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 200, in crash
+    assert recovered.get('ok'),recovered;assert (f.clash/'Proxy/config.yaml').read_bytes()==old
+           ~~~~~~~~~~~~~^^^^^^
+AssertionError: {'ok': False, 'code': '', 'downloaded': False, 'decrypted': False, 'validated': False, 'written': False, 'loaded': False, 'runtimeVerified': False, 'applied': {'config': '', 'source': '', 'policy': ''}, 'completedAt': '0001-01-01T00:00:00Z'}
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 263, in <module>
+    subprocess.run(['unshare','-m','-n','-p','-f','--mount-proc',sys.executable,str(Path(__file__).resolve()),'--inside'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['unshare', '-m', '-n', '-p', '-f', '--mount-proc', '/usr/bin/python3', '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py', '--inside']' returned non-zero exit status 1.

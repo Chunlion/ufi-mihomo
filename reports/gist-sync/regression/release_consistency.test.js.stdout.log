@@ -1,0 +1,35 @@
+TAP version 13
+# Subtest: 9.0.0 retains the bundled controller and wrapper protocol
+ok 1 - 9.0.0 retains the bundled controller and wrapper protocol
+  ---
+  duration_ms: 50.010511
+  ...
+# Subtest: legacy sources migrate once; saved and custom configurations bypass migration
+ok 2 - legacy sources migrate once; saved and custom configurations bypass migration
+  ---
+  duration_ms: 2.550268
+  ...
+# Subtest: stopped upgrade
+ok 3 - stopped upgrade
+  ---
+  duration_ms: 1158.557245
+  ...
+# Subtest: invalid wrapper
+ok 4 - invalid wrapper
+  ---
+  duration_ms: 185.892931
+  ...
+# Subtest: lock cleanup failure
+ok 5 - lock cleanup failure
+  ---
+  duration_ms: 1282.43545
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2850.37578

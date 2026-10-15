@@ -1,0 +1,20 @@
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+PASS INTEGRATION real files, backup, atomic commit and matching state while stopped
+PASS INTEGRATION genuine Mihomo hot reload and runtime confirmation
+PASS INTEGRATION reencrypted unchanged config keeps genuine core PID
+PASS INTEGRATION real age decrypt followed by invalid YAML preserves current files
+PASS INTEGRATION corrupt ciphertext never reaches commit
+PASS INTEGRATION local edit conflict is never silently overwritten
+PASS INTEGRATION genuine age rejects wrong identity without a configuration write
+PASS INTEGRATION genuine age rejects truncated authenticated ciphertext
+PASS INTEGRATION real HTTPS 503 retries then preserves configuration
+PASS INTEGRATION real in-flight HTTPS cancellation cannot commit
+PASS INTEGRATION source revision change fences the old downloader before commit
+DIAGNOSTIC commit.stdout YAML_COMMIT_OK=1
+YAML_BACKUP=/data/clash/Proxy/config.yaml.before_gist_sync_20261015065115_762
+YAML_OLD_HASH=9a576c0552be340b6004f15aec060a025ef3e86e33d9bed6d1bae880167d3f6a
+YAML_NEW_HASH=7d61fe330ca5a9b8a6820201de181a5ffe8b305ca5ccb29de63c689bb8357402
+YAML_OLD_SIZE=1930
+YAML_NEW_SIZE=1930
+
+DIAGNOSTIC commit.stderr 

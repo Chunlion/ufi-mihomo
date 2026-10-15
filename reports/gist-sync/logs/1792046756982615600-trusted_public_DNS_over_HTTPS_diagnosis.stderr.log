@@ -1,0 +1,19 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: Error: Client network socket disconnected before secure TLS connection was established
+      at TLSSocket.onConnectEnd (node:internal/tls/wrap:1706:19)
+      at TLSSocket.emit (node:events:520:35)
+      at endReadableNT (node:internal/streams/readable:1729:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'ECONNRESET',
+    path: undefined,
+    host: '1.1.1.1',
+    port: 443,
+    localAddress: null
+  }
+}
+
+Node.js v24.14.1

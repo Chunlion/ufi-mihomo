@@ -1,0 +1,45 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 68, in cli
+    try:result=json.loads(proc.stdout)
+               ~~~~~~~~~~^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib/python3.13/json/decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 260, in <module>
+    if args.inside:inside()
+                   ~~~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in inside
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 114, in check
+    start=time.monotonic();body();RESULTS.append({'name':name,'category':'INTEGRATION','result':'PASS','seconds':round(time.monotonic()-start,3)});print('PASS INTEGRATION '+name,flush=True)
+                           ~~~~^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 203, in <lambda>
+    check('SIGKILL recovery at '+stage,lambda stage=stage:crash(stage))
+                                                          ~~~~~^^^^^^^
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 186, in crash
+    started=f.dispatch('sync',env=env);assert started.get('job'),started.get('code');f.wait_file('paused')
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 73, in dispatch
+    key=self.cli('request-key')
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 69, in cli
+    except Exception:raise RuntimeError('CLI response invalid: '+proc.stderr.decode(errors='replace')[-300:])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CLI response invalid: 
+Traceback (most recent call last):
+  File "/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py", line 263, in <module>
+    subprocess.run(['unshare','-m','-n','-p','-f','--mount-proc',sys.executable,str(Path(__file__).resolve()),'--inside'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['unshare', '-m', '-n', '-p', '-f', '--mount-proc', '/usr/bin/python3', '/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/gist-sync/integration.py', '--inside']' returned non-zero exit status 1.

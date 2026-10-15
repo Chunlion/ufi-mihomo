@@ -1,0 +1,7 @@
+PASS INTEGRATION production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t
+PASS INTEGRATION real files, backup, atomic commit and matching state while stopped
+PASS INTEGRATION genuine Mihomo hot reload and runtime confirmation
+PASS INTEGRATION reencrypted unchanged config keeps genuine core PID
+PASS INTEGRATION real age decrypt followed by invalid YAML preserves current files
+PASS INTEGRATION corrupt ciphertext never reaches commit
+PASS INTEGRATION local edit conflict is never silently overwritten

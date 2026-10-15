@@ -1,0 +1,681 @@
+{
+  "tproxy4": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": false,
+      "listen": "0.0.0.0:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "0.0.0.0",
+    "ipv6": false,
+    "tproxy-port": 7895,
+    "tun": {
+      "enable": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  },
+  "tproxy6": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": true,
+      "listen": "[::]:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "*",
+    "ipv6": true,
+    "tproxy-port": 7895,
+    "tun": {
+      "enable": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  },
+  "tun4": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": false,
+      "listen": "0.0.0.0:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "0.0.0.0",
+    "ipv6": false,
+    "tproxy-port": 0,
+    "tun": {
+      "auto-detect-interface": true,
+      "auto-redirect": false,
+      "auto-route": false,
+      "device": "KanoTun",
+      "dns-hijack": [],
+      "enable": true,
+      "mtu": 1500,
+      "stack": "mixed",
+      "strict-route": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  },
+  "tun6": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": true,
+      "listen": "[::]:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "*",
+    "ipv6": true,
+    "tproxy-port": 0,
+    "tun": {
+      "auto-detect-interface": true,
+      "auto-redirect": false,
+      "auto-route": false,
+      "device": "KanoTun",
+      "dns-hijack": [],
+      "enable": true,
+      "inet6-address": [
+        "fdfe:dcba:9876::1/126"
+      ],
+      "mtu": 1500,
+      "stack": "gvisor",
+      "strict-route": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  },
+  "off4": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": false,
+      "listen": "0.0.0.0:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "0.0.0.0",
+    "ipv6": false,
+    "tproxy-port": 0,
+    "tun": {
+      "enable": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  },
+  "off6": {
+    "allow-lan": true,
+    "dns": {
+      "default-nameserver": [
+        "223.5.5.5",
+        "119.29.29.29"
+      ],
+      "direct-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "direct-nameserver-follow-policy": true,
+      "enable": true,
+      "enhanced-mode": "redir-host",
+      "nameserver": [
+        "https://1.1.1.1/dns-query#RULES",
+        "https://8.8.8.8/dns-query#RULES"
+      ],
+      "nameserver-policy": {
+        "+.lan": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ],
+        "+.local": [
+          "223.5.5.5",
+          "119.29.29.29"
+        ]
+      },
+      "prefer-h3": false,
+      "proxy-server-nameserver": [
+        "https://dns.alidns.com/dns-query",
+        "https://doh.pub/dns-query"
+      ],
+      "respect-rules": false,
+      "use-hosts": true,
+      "use-system-hosts": false,
+      "ipv6": true,
+      "listen": "[::]:1053"
+    },
+    "external-controller": "0.0.0.0:7788",
+    "external-ui": "WebUI/zashboard",
+    "find-process-mode": "off",
+    "geo-auto-update": false,
+    "geodata-loader": "memconservative",
+    "geodata-mode": true,
+    "log-level": "info",
+    "mixed-port": 7892,
+    "mode": "rule",
+    "port": 7890,
+    "profile": {
+      "store-fake-ip": false,
+      "store-selected": true
+    },
+    "redir-port": 0,
+    "sniffer": {
+      "enable": true,
+      "force-dns-mapping": true,
+      "override-destination": true,
+      "parse-pure-ip": true,
+      "skip-domain": [
+        "Mijia Cloud",
+        "dlg.io.mi.com"
+      ],
+      "skip-dst-address": [
+        "0.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10"
+      ],
+      "sniff": {
+        "HTTP": {
+          "override-destination": true,
+          "ports": [
+            80,
+            "8080-8880"
+          ]
+        },
+        "QUIC": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        },
+        "TLS": {
+          "override-destination": true,
+          "ports": [
+            443,
+            8443
+          ]
+        }
+      }
+    },
+    "socks-port": 7891,
+    "secret": "123456",
+    "bind-address": "*",
+    "ipv6": true,
+    "tproxy-port": 0,
+    "tun": {
+      "enable": false
+    },
+    "external-ui-url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip",
+    "unified-delay": true
+  }
+}

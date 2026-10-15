@@ -1,0 +1,72 @@
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-regression.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-size.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/compact_plugin.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/gist-sync.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'gist-sync/test-tools.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/base-run.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/baseline.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/browser-ui.png', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/device-input.png', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/evidence.jsonl', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/latest-run.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/live.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/test-tools.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'scripts/build_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/gist_device_scripts.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/gist_fetch.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/package_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/verify_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/arm64-components.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/browser-ui.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-plugin-source.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-plugin-verify.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-redaction.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/integration.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/live-network.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/package-check.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-regression.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-size.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/compact_plugin.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/compact_plugin.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/gist-sync.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'gist-sync/test-tools.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'scripts/build_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/gist_device_scripts.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/gist_fetch.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/package_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/verify_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/arm64-components.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/browser-ui.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-plugin-source.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-plugin-verify.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/device-redaction.js', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/integration.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/live-network.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/package-check.py', CRLF will be replaced by LF the next time Git touches it
+Traceback (most recent call last):
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\package_gist_sync.py", line 117, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\package_gist_sync.py", line 113, in main
+    for line in (DIST/'SHA256SUMS').read_text().splitlines():
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python\Python313\Lib\pathlib\_local.py", line 546, in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Python\Python313\Lib\pathlib\_abc.py", line 633, in read_text
+    return f.read()
+           ~~~~~~^^
+UnicodeDecodeError: 'gbk' codec can't decode byte 0xab in position 68: illegal multibyte sequence
+Traceback (most recent call last):
+  File "C:\Users\Cuty\Desktop\Github\Tproxy-F50\scripts\package_plugin.py", line 44, in <module>
+    subprocess.run([sys.executable, str(root / 'scripts/package_gist_sync.py')], cwd=root, check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Python\Python313\Lib\subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['D:\\Python\\Python313\\python.exe', 'C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50\\scripts\\package_gist_sync.py']' returned non-zero exit status 1.

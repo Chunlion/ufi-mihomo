@@ -57,13 +57,17 @@
 
 主插件发布版本为 `9.0.0`；`F50_COMPAT_VERSION`、控制器版本文件和 Service 标记仍使用协议版本 `8.0.0-compat.2.3`，无需随发布版本修改。配置迁移按配置来源和已保存订阅判断。
 
-更新主插件后，如需使用 GitHub main 的配套组件，下载本仓库根目录的 `tproxy-yq.zip`，在猫猫面板点击“导入组件包”。“在线安装/更新”依次尝试 Gitee、GitCode、GitHub；“安装 / 启动”检测到已安装的兼容组件时只启动核心。
+完整组件包 `tproxy-yq.zip` 已包含 GistSync、age 及同步脚本。在原组件管理中点击“导入组件包”一次安装；Gist 页面无需另装组件。更新保留已有链接、私钥和同步间隔。
+
+当前 GistSync RC4 完整包尚未在线发布，“在线安装/更新”会明确提示导入随附组件包，不会下载缺少 GistSync 的旧包。“安装 / 启动”检测到已安装的兼容组件时只启动核心。
+
+GistSync 的构建、复测、安全边界和实机待验证项目见 [维护说明](docs/gist-sync.md)。
 
 原 `_Go` 版用户先停用旧插件，再上传 `猫猫TProxy.js`。完整卸载使用猫猫面板中的“完整卸载”；开机修复插件需要在自己的面板中单独卸载。
 
 ## 源码
 
-辅助程序 Go 源码在 `binary-helper/`，构建脚本为 `scripts/build_helper.py`。`clashctl` 的完整原始 Go 源码尚未取得；本次 ARM64 HTTP 兼容修复的生成代码保存在 `scripts/patch_controller_http.js`，可从仓库组件包重建修复后的控制器：
+辅助程序 Go 源码在 `binary-helper/`，构建脚本为 `scripts/build_helper.py`，默认同时构建 GistSync 并刷新完整组件 ZIP。`clashctl` 的完整原始 Go 源码尚未取得；本次 ARM64 HTTP 兼容修复的生成代码保存在 `scripts/patch_controller_http.js`，可从仓库组件包重建修复后的控制器：
 
 ```sh
 node scripts/patch_controller_http.js tproxy-yq.zip clashctl_arm64.http

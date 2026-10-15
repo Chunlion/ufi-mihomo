@@ -1,0 +1,10 @@
+{
+  "original_components_byte_identical": true,
+  "metadata_changes": [
+    "Tools/components.json"
+  ],
+  "full_manifest_members": 353,
+  "gist_manifest_members": 5,
+  "arm64_elf_verified": true,
+  "published": false
+}

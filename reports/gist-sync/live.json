@@ -1,0 +1,15 @@
+{
+  "tls_verified": true,
+  "http_status": 200,
+  "sizes": [
+    51073,
+    51073
+  ],
+  "sha256": [
+    "0db2c36b03c22f9761d09d9874d9e83a0ec7086f876c2b3e0d90ef00b1376054",
+    "0db2c36b03c22f9761d09d9874d9e83a0ec7086f876c2b3e0d90ef00b1376054"
+  ],
+  "changed_between_reads": false,
+  "production_decryption": "BLOCKED: production identity not supplied",
+  "transport": "Node fetch; production Go client tested separately"
+}

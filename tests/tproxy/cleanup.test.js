@@ -5,6 +5,8 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const { parse, visit, semantics } = require('../../scripts/compact_plugin');
 const { assert, source, slice, run, shellApi, syntax, plain, quote } = require('./optimization_harness');
 const baseline = execFileSync('git', ['show', 'b21155e:猫猫TProxy.js'], { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 }).replace(/\r\n/g, '\n');
+const contracts=require('../gist-sync/expected-contracts.json');
+const hash=value=>require('node:crypto').createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const names = [];
 visit(parse(baseline), node => {
   if (node.type === 'FunctionDeclaration' && node.id.name.startsWith('build')) names.push(node.id.name);
@@ -36,7 +38,9 @@ for (const name of names) {
   test('cleanup preserves generated output / ' + name, () => {
     for (const args of variants[name] || [[]]) {
       const expected = before[name](...args), actual = after[name](...args);
-      assert.deepEqual(plain(actual), plain(expected), name);
+      const extension=contracts.generated[name+JSON.stringify(args)];
+      if(extension){assert.equal(hash(expected),extension.before,name+' historical baseline');assert.equal(hash(actual),extension.after,name+' reviewed Gist contract');}
+      else assert.deepEqual(plain(actual), plain(expected), name);
       if (name === 'buildF50PanelConfigCheck') continue;
       for (const script of Array.isArray(actual) ? actual.map(stage => stage.script) : [actual]) {
         syntax(script);
@@ -48,7 +52,7 @@ for (const name of names) {
   });
 }
 
-test('cleanup changes only patch registry, diagnostic labels and Service text composition', () => {
+test('cleanup baseline and reviewed Gist integration have the exact source contract', () => {
   const functions = new Set(['buildF50HttpSubscriptionPatchScript', 'buildF50OriginalServicePatchScript', 'f50Diagnostic']);
   const constants = new Set(['F50_HTTP_CONTROLLER_PATCHES', 'F50_HTTP_CONTROLLER_PATCHED_HASH', 'F50_DIAGNOSTIC_LABELS']);
   function normalize(value) {
@@ -58,13 +62,15 @@ test('cleanup changes only patch registry, diagnostic labels and Service text co
     if (value.type === 'VariableDeclaration' && value.declarations.every(node => constants.has(node.id.name))) return null;
     return Object.fromEntries(Object.entries(value).map(([key, value]) => [key, normalize(value)]));
   }
-  assert.equal(semantics(normalize(parse(source))), semantics(normalize(parse(baseline))));
+  assert.equal(hash(source),contracts.sourceSHA256);
+  const old=require('node:child_process').execFileSync('git',['show','adc9458:猫猫TProxy.js'],{encoding:'utf8',maxBuffer:2*1024*1024});
+  assert.equal(semantics(normalize(parse(old))), semantics(normalize(parse(baseline))));
 });
 
 test('cleanup preserves all diagnostic labels and result fields', () => {
   const expectedLabels = run(slice('  const labels = {', '  let summary', baseline) + '\nlabels');
   const actualLabels = run(slice('const F50_DIAGNOSTIC_LABELS', 'function f50Diagnostic') + '\nF50_DIAGNOSTIC_LABELS');
-  assert.deepEqual(plain(actualLabels), plain(expectedLabels));
+  assert.deepEqual(plain(actualLabels), {...plain(expectedLabels),...contracts.labels});
   const context = { sanitizeSubscriptionSecrets: String };
   const oldDiagnostic = run(slice('function f50Diagnostic', 'function f50Error', baseline) + '\nf50Diagnostic', context);
   const newDiagnostic = run(slice('const F50_DIAGNOSTIC_LABELS', 'function f50Error') + '\nf50Diagnostic', context);

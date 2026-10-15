@@ -1,0 +1,30 @@
+{
+  "category": "DEVICE",
+  "result": "PASS",
+  "coverage": "empty/malformed links rejected locally with no new jobs; concise status; four readable options; reopen; no settings or configuration writes",
+  "styles": {
+    "height": 42,
+    "options": [
+      {
+        "value": "1",
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      {
+        "value": "6",
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      {
+        "value": "12",
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      {
+        "value": "24",
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      }
+    ]
+  }
+}

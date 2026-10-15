@@ -1,0 +1,352 @@
+=== RUN   TestURLValidation
+=== RUN   TestURLValidation/valid_box.yaml.age
+=== RUN   TestURLValidation/valid_box.yaml.age#01
+=== RUN   TestURLValidation/valid_er..name.age
+=== RUN   TestURLValidation/valid_E7%BD%AE.age
+=== RUN   TestURLValidation/fragment
+=== RUN   TestURLValidation/port
+=== RUN   TestURLValidation/bad_revision
+=== RUN   TestURLValidation/userinfo
+=== RUN   TestURLValidation/evil_host
+=== RUN   TestURLValidation/slash
+=== RUN   TestURLValidation/traversal
+=== RUN   TestURLValidation/NUL
+=== RUN   TestURLValidation/no_age
+=== RUN   TestURLValidation/query
+=== RUN   TestURLValidation/page
+=== RUN   TestURLValidation/backslash
+=== RUN   TestURLValidation/CRLF
+=== RUN   TestURLValidation/IP
+=== RUN   TestURLValidation/http
+=== RUN   TestURLValidation/bad_id
+--- PASS: TestURLValidation (0.00s)
+    --- PASS: TestURLValidation/valid_box.yaml.age (0.00s)
+    --- PASS: TestURLValidation/valid_box.yaml.age#01 (0.00s)
+    --- PASS: TestURLValidation/valid_er..name.age (0.00s)
+    --- PASS: TestURLValidation/valid_E7%BD%AE.age (0.00s)
+    --- PASS: TestURLValidation/fragment (0.00s)
+    --- PASS: TestURLValidation/port (0.00s)
+    --- PASS: TestURLValidation/bad_revision (0.00s)
+    --- PASS: TestURLValidation/userinfo (0.00s)
+    --- PASS: TestURLValidation/evil_host (0.00s)
+    --- PASS: TestURLValidation/slash (0.00s)
+    --- PASS: TestURLValidation/traversal (0.00s)
+    --- PASS: TestURLValidation/NUL (0.00s)
+    --- PASS: TestURLValidation/no_age (0.00s)
+    --- PASS: TestURLValidation/query (0.00s)
+    --- PASS: TestURLValidation/page (0.00s)
+    --- PASS: TestURLValidation/backslash (0.00s)
+    --- PASS: TestURLValidation/CRLF (0.00s)
+    --- PASS: TestURLValidation/IP (0.00s)
+    --- PASS: TestURLValidation/http (0.00s)
+    --- PASS: TestURLValidation/bad_id (0.00s)
+=== RUN   TestSSRFAddressBoundary
+=== RUN   TestSSRFAddressBoundary/127.0.0.1
+=== RUN   TestSSRFAddressBoundary/10.0.0.1
+=== RUN   TestSSRFAddressBoundary/172.16.1.1
+=== RUN   TestSSRFAddressBoundary/192.168.1.1
+=== RUN   TestSSRFAddressBoundary/169.254.169.254
+=== RUN   TestSSRFAddressBoundary/100.64.1.1
+=== RUN   TestSSRFAddressBoundary/0.0.0.0
+=== RUN   TestSSRFAddressBoundary/192.0.2.1
+=== RUN   TestSSRFAddressBoundary/198.18.0.1
+=== RUN   TestSSRFAddressBoundary/224.0.0.1
+=== RUN   TestSSRFAddressBoundary/255.255.255.255
+=== RUN   TestSSRFAddressBoundary/::1
+=== RUN   TestSSRFAddressBoundary/::ffff:127.0.0.1
+=== RUN   TestSSRFAddressBoundary/fc00::1
+=== RUN   TestSSRFAddressBoundary/fe80::1
+=== RUN   TestSSRFAddressBoundary/2001:db8::1
+=== RUN   TestSSRFAddressBoundary/2002:7f00:1::
+--- PASS: TestSSRFAddressBoundary (0.00s)
+    --- PASS: TestSSRFAddressBoundary/127.0.0.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/10.0.0.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/172.16.1.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/192.168.1.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/169.254.169.254 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/100.64.1.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/0.0.0.0 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/192.0.2.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/198.18.0.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/224.0.0.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/255.255.255.255 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/::1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/::ffff:127.0.0.1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/fc00::1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/fe80::1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/2001:db8::1 (0.00s)
+    --- PASS: TestSSRFAddressBoundary/2002:7f00:1:: (0.00s)
+=== RUN   TestDownloadPolicy
+--- PASS: TestDownloadPolicy (0.05s)
+=== RUN   TestDownloadResponses
+=== RUN   TestDownloadResponses/normal
+=== RUN   TestDownloadResponses/empty
+=== RUN   TestDownloadResponses/404
+=== RUN   TestDownloadResponses/redirect
+=== RUN   TestDownloadResponses/oversized_length
+=== RUN   TestDownloadResponses/incomplete
+=== RUN   TestDownloadResponses/oversized_chunked
+=== RUN   TestDownloadResponses/compressed
+--- PASS: TestDownloadResponses (0.00s)
+    --- PASS: TestDownloadResponses/normal (0.00s)
+    --- PASS: TestDownloadResponses/empty (0.00s)
+    --- PASS: TestDownloadResponses/404 (0.00s)
+    --- PASS: TestDownloadResponses/redirect (0.00s)
+    --- PASS: TestDownloadResponses/oversized_length (0.00s)
+    --- PASS: TestDownloadResponses/incomplete (0.00s)
+    --- PASS: TestDownloadResponses/oversized_chunked (0.00s)
+    --- PASS: TestDownloadResponses/compressed (0.00s)
+=== RUN   TestDownloadRetryAndCache
+--- PASS: TestDownloadRetryAndCache (1.00s)
+=== RUN   TestDownloadFailureTypes
+=== RUN   TestDownloadFailureTypes/network
+=== RUN   TestDownloadFailureTypes/timeout
+--- PASS: TestDownloadFailureTypes (0.00s)
+    --- PASS: TestDownloadFailureTypes/network (0.00s)
+    --- PASS: TestDownloadFailureTypes/timeout (0.00s)
+=== RUN   TestSchedule
+--- PASS: TestSchedule (0.00s)
+=== RUN   TestDirectHostToolPath
+--- PASS: TestDirectHostToolPath (0.00s)
+=== RUN   TestUnknownProcessIsNotDead
+--- PASS: TestUnknownProcessIsNotDead (0.00s)
+=== RUN   TestCoreConfigTestBlocksReclaim
+--- PASS: TestCoreConfigTestBlocksReclaim (0.00s)
+=== RUN   TestProcScanCandidateBounds
+--- PASS: TestProcScanCandidateBounds (0.00s)
+=== RUN   TestDeadPrivateWorkCleanup
+--- PASS: TestDeadPrivateWorkCleanup (0.01s)
+=== RUN   TestCompletedBackupIdentityDeletion
+--- PASS: TestCompletedBackupIdentityDeletion (0.01s)
+=== RUN   TestStaleRequestRetentionBound
+--- PASS: TestStaleRequestRetentionBound (0.01s)
+=== RUN   TestStatusReportsInvalidSyncState
+--- PASS: TestStatusReportsInvalidSyncState (0.06s)
+=== RUN   TestUnknownWorkRetainedForReview
+--- PASS: TestUnknownWorkRetainedForReview (0.01s)
+=== RUN   TestNormalizationDifferential
+=== RUN   TestNormalizationDifferential/tproxy_off_auto_private_
+=== RUN   TestNormalizationDifferential/tproxy_off_auto_private_on
+=== RUN   TestNormalizationDifferential/tproxy_off_mixed_private_
+=== RUN   TestNormalizationDifferential/tproxy_off_mixed_private_on
+=== RUN   TestNormalizationDifferential/tproxy_off_gvisor_private_
+=== RUN   TestNormalizationDifferential/tproxy_off_gvisor_private_on
+=== RUN   TestNormalizationDifferential/tproxy_off_system_private_
+=== RUN   TestNormalizationDifferential/tproxy_off_system_private_on
+=== RUN   TestNormalizationDifferential/tproxy_off_mips_private_
+=== RUN   TestNormalizationDifferential/tproxy_off_mips_private_on
+=== RUN   TestNormalizationDifferential/tproxy_on_auto_private_
+=== RUN   TestNormalizationDifferential/tproxy_on_auto_private_on
+=== RUN   TestNormalizationDifferential/tproxy_on_mixed_private_
+=== RUN   TestNormalizationDifferential/tproxy_on_mixed_private_on
+=== RUN   TestNormalizationDifferential/tproxy_on_gvisor_private_
+=== RUN   TestNormalizationDifferential/tproxy_on_gvisor_private_on
+=== RUN   TestNormalizationDifferential/tproxy_on_system_private_
+=== RUN   TestNormalizationDifferential/tproxy_on_system_private_on
+=== RUN   TestNormalizationDifferential/tproxy_on_mips_private_
+=== RUN   TestNormalizationDifferential/tproxy_on_mips_private_on
+=== RUN   TestNormalizationDifferential/tun_off_auto_private_
+=== RUN   TestNormalizationDifferential/tun_off_auto_private_on
+=== RUN   TestNormalizationDifferential/tun_off_mixed_private_
+=== RUN   TestNormalizationDifferential/tun_off_mixed_private_on
+=== RUN   TestNormalizationDifferential/tun_off_gvisor_private_
+=== RUN   TestNormalizationDifferential/tun_off_gvisor_private_on
+=== RUN   TestNormalizationDifferential/tun_off_system_private_
+=== RUN   TestNormalizationDifferential/tun_off_system_private_on
+=== RUN   TestNormalizationDifferential/tun_off_mips_private_
+=== RUN   TestNormalizationDifferential/tun_off_mips_private_on
+=== RUN   TestNormalizationDifferential/tun_on_auto_private_
+=== RUN   TestNormalizationDifferential/tun_on_auto_private_on
+=== RUN   TestNormalizationDifferential/tun_on_mixed_private_
+=== RUN   TestNormalizationDifferential/tun_on_mixed_private_on
+=== RUN   TestNormalizationDifferential/tun_on_gvisor_private_
+=== RUN   TestNormalizationDifferential/tun_on_gvisor_private_on
+=== RUN   TestNormalizationDifferential/tun_on_system_private_
+=== RUN   TestNormalizationDifferential/tun_on_system_private_on
+=== RUN   TestNormalizationDifferential/tun_on_mips_private_
+=== RUN   TestNormalizationDifferential/tun_on_mips_private_on
+=== RUN   TestNormalizationDifferential/off_off_auto_private_
+=== RUN   TestNormalizationDifferential/off_off_auto_private_on
+=== RUN   TestNormalizationDifferential/off_off_mixed_private_
+=== RUN   TestNormalizationDifferential/off_off_mixed_private_on
+=== RUN   TestNormalizationDifferential/off_off_gvisor_private_
+=== RUN   TestNormalizationDifferential/off_off_gvisor_private_on
+=== RUN   TestNormalizationDifferential/off_off_system_private_
+=== RUN   TestNormalizationDifferential/off_off_system_private_on
+=== RUN   TestNormalizationDifferential/off_off_mips_private_
+=== RUN   TestNormalizationDifferential/off_off_mips_private_on
+=== RUN   TestNormalizationDifferential/off_on_auto_private_
+=== RUN   TestNormalizationDifferential/off_on_auto_private_on
+=== RUN   TestNormalizationDifferential/off_on_mixed_private_
+=== RUN   TestNormalizationDifferential/off_on_mixed_private_on
+=== RUN   TestNormalizationDifferential/off_on_gvisor_private_
+=== RUN   TestNormalizationDifferential/off_on_gvisor_private_on
+=== RUN   TestNormalizationDifferential/off_on_system_private_
+=== RUN   TestNormalizationDifferential/off_on_system_private_on
+=== RUN   TestNormalizationDifferential/off_on_mips_private_
+=== RUN   TestNormalizationDifferential/off_on_mips_private_on
+--- PASS: TestNormalizationDifferential (0.13s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_off_mips_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tproxy_on_mips_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_off_mips_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/tun_on_mips_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_off_mips_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_auto_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_auto_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_mixed_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_mixed_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_gvisor_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_gvisor_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_system_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_system_private_on (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_mips_private_ (0.00s)
+    --- PASS: TestNormalizationDifferential/off_on_mips_private_on (0.00s)
+=== RUN   TestJSONGuards
+--- PASS: TestJSONGuards (0.00s)
+=== RUN   TestPrivateSelection
+=== RUN   TestPrivateSelection/direct
+=== RUN   TestPrivateSelection/cycle
+=== RUN   TestPrivateSelection/unloaded
+=== RUN   TestPrivateSelection/unselected
+--- PASS: TestPrivateSelection (0.00s)
+    --- PASS: TestPrivateSelection/direct (0.00s)
+    --- PASS: TestPrivateSelection/cycle (0.00s)
+    --- PASS: TestPrivateSelection/unloaded (0.00s)
+    --- PASS: TestPrivateSelection/unselected (0.00s)
+=== RUN   TestDetachedManualJobAndReceiptLoss
+--- PASS: TestDetachedManualJobAndReceiptLoss (0.88s)
+=== RUN   TestOldDownloadAfterSourceSwitch
+--- PASS: TestOldDownloadAfterSourceSwitch (0.53s)
+=== RUN   TestNativeCancellation
+--- PASS: TestNativeCancellation (0.38s)
+=== RUN   TestSIGKILLJournalRecovery
+--- PASS: TestSIGKILLJournalRecovery (1.27s)
+=== RUN   TestRunningCoreManualAndNoop
+--- PASS: TestRunningCoreManualAndNoop (0.93s)
+=== RUN   TestRuntimeFailureRollback
+=== RUN   TestRuntimeFailureRollback/hot_reload
+=== RUN   TestRuntimeFailureRollback/policy_apply
+=== RUN   TestRuntimeFailureRollback/runtime_verify
+--- PASS: TestRuntimeFailureRollback (2.71s)
+    --- PASS: TestRuntimeFailureRollback/hot_reload (0.88s)
+    --- PASS: TestRuntimeFailureRollback/policy_apply (0.96s)
+    --- PASS: TestRuntimeFailureRollback/runtime_verify (0.87s)
+=== RUN   TestDaemonSingletonAndDisable
+--- PASS: TestDaemonSingletonAndDisable (1.32s)
+=== RUN   TestBoundedProcessOutput
+--- PASS: TestBoundedProcessOutput (0.00s)
+=== RUN   TestRealAgeEndToEnd
+=== RUN   TestRealAgeEndToEnd/binary
+=== RUN   TestRealAgeEndToEnd/ASCII_Armor
+--- PASS: TestRealAgeEndToEnd (0.26s)
+    --- PASS: TestRealAgeEndToEnd/binary (0.05s)
+    --- PASS: TestRealAgeEndToEnd/ASCII_Armor (0.05s)
+=== RUN   TestRealAgeReencryptionNoEffectiveChange
+--- PASS: TestRealAgeReencryptionNoEffectiveChange (0.89s)
+=== RUN   TestSealedRequests
+=== RUN   TestSealedRequests/action
+=== RUN   TestSealedRequests/ciphertext
+=== RUN   TestSealedRequests/key
+=== RUN   TestSealedRequests/mac
+=== RUN   TestSealedRequests/expiry
+=== RUN   TestSealedRequests/permissions
+=== RUN   TestSealedRequests/unknown_field
+=== RUN   TestSealedRequests/oversized
+--- PASS: TestSealedRequests (1.75s)
+    --- PASS: TestSealedRequests/action (0.13s)
+    --- PASS: TestSealedRequests/ciphertext (0.17s)
+    --- PASS: TestSealedRequests/key (0.13s)
+    --- PASS: TestSealedRequests/mac (0.12s)
+    --- PASS: TestSealedRequests/expiry (0.16s)
+    --- PASS: TestSealedRequests/permissions (0.18s)
+    --- PASS: TestSealedRequests/unknown_field (0.15s)
+    --- PASS: TestSealedRequests/oversized (0.13s)
+=== RUN   TestSealedKeyPermissionsAndExpiryCleanup
+--- PASS: TestSealedKeyPermissionsAndExpiryCleanup (0.14s)
+=== RUN   TestManualWorkflow
+--- PASS: TestManualWorkflow (0.98s)
+=== RUN   TestSourceAndIdentityChange
+--- PASS: TestSourceAndIdentityChange (0.70s)
+=== RUN   TestConfigurationFailuresPreserveOriginal
+=== RUN   TestConfigurationFailuresPreserveOriginal/wrong_key
+=== RUN   TestConfigurationFailuresPreserveOriginal/yaml_invalid
+=== RUN   TestConfigurationFailuresPreserveOriginal/yaml_array
+=== RUN   TestConfigurationFailuresPreserveOriginal/core_invalid
+=== RUN   TestConfigurationFailuresPreserveOriginal/disk_space
+=== RUN   TestConfigurationFailuresPreserveOriginal/commit_failure
+=== RUN   TestConfigurationFailuresPreserveOriginal/after_commit_interruption
+--- PASS: TestConfigurationFailuresPreserveOriginal (2.98s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/wrong_key (0.29s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/yaml_invalid (0.36s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/yaml_array (0.36s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/core_invalid (0.44s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/disk_space (0.26s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/commit_failure (0.59s)
+    --- PASS: TestConfigurationFailuresPreserveOriginal/after_commit_interruption (0.67s)
+=== RUN   TestLocalConflictAndExplicitReplace
+--- PASS: TestLocalConflictAndExplicitReplace (0.77s)
+=== RUN   TestSourceGenerationFence
+--- PASS: TestSourceGenerationFence (0.22s)
+=== RUN   TestStateLossAfterCommit
+=== RUN   TestStateLossAfterCommit/state_write
+=== RUN   TestStateLossAfterCommit/finalize
+--- PASS: TestStateLossAfterCommit (1.69s)
+    --- PASS: TestStateLossAfterCommit/state_write (0.60s)
+    --- PASS: TestStateLossAfterCommit/finalize (1.08s)
+=== RUN   TestLeaseAndSettingsCAS
+--- PASS: TestLeaseAndSettingsCAS (0.21s)
+=== RUN   TestInterruptedJournalAndDeletedSettings
+--- PASS: TestInterruptedJournalAndDeletedSettings (0.58s)
+=== RUN   TestAutomaticDisabledAndStopped
+--- PASS: TestAutomaticDisabledAndStopped (0.23s)
+=== RUN   TestSecretNotInStatusAndRequestsConsumed
+--- PASS: TestSecretNotInStatusAndRequestsConsumed (0.24s)
+=== RUN   TestRealF50Hardware
+    transaction_test.go:425: Not executed: no real F50 Android ARM64 device accessed.
+--- SKIP: TestRealF50Hardware (0.00s)
+PASS

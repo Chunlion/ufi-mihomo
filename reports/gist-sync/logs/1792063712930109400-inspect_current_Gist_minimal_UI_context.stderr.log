@@ -1,0 +1,1 @@
+{"error":{"code":"CLI_REGISTRATION_UNAVAILABLE","message":"Tabbit CLI registration refers to unavailable browser components or user data, possibly after an upgrade. Restart the current Tabbit Browser to refresh registration, then retry.","name":"Error"},"ok":false}

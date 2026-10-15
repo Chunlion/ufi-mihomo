@@ -1,0 +1,201 @@
+FAIL run_tests.js: 98 passed, 5 failed, 0 not run
+固定 Zashboard 配置
+  ✅ 面板配置无法固定时拒绝启动
+  ✅ 启动验收拒绝 HTTP 返回 MetaCubeXD 或未知面板
+  ✅ 安装事务 Shell 通过 sh -n
+  ✅ 安装和内核升级前强制固定 Zashboard 配置
+  ✅ 重装同时保留原配置和配置来源标记
+  ✅ 启动 preflight 保留返回状态并保存脱敏日志
+  ✅ 启动 controller 保留返回状态并保存脱敏日志
+  ❌ 启动 success 保留返回状态并保存脱敏日志
+  ✅ 启动 patch 保留返回状态并保存脱敏日志
+  ✅ 包装器补丁失败不覆盖原文件或继续启动
+  ✅ 面板打开前可通过固定源修复错误面板
+  ✅ 在线更新结果身份错误时阻止加载
+  ✅ 正常面板使用单次快速探针
+  ✅ 快速探针通过时不读取和重写 YAML
+  ✅ 新标签页不再因页面内存 PID 为空而热加载配置
+  ✅ 含 [detached] 的 TUN 规则生成可执行删除计划
+  ✅ TProxy 规则同样忽略展示附加字段
+  ✅ 启动兜底能删除带 [detached] 的 TUN 规则
+  ✅ 缺少 IPv6 NAT 时保留 DNS 劫持设置
+  ✅ 临时 ip6tables 错误不会关闭 DNS 劫持
+  ✅ 卸载包含最终清洁状态
+--- subscription sources ---
+  ✅ 本地订阅允许公网 HTTPS 地址
+  ✅ 本地订阅允许公网 HTTP 地址并使用默认端口 80
+  ✅ 订阅保留 HTTPS 默认端口和 HTTP 自定义端口
+  ✅ 订阅仍拒绝其他协议和 URL 账号信息
+  ✅ 本地订阅拒绝常规和整数形式的回环地址
+  ✅ 本地转换前校验全部订阅地址
+  ✅ 保存订阅前校验启用地址
+  ✅ 任意多个订阅按顺序生成 Provider
+  ✅ 所有 Provider 保留各自订阅地址
+  ✅ 所有 Provider 使用独立缓存文件
+  ✅ 订阅文件连续命名全部启用来源
+  ✅ 订阅文件保留禁用来源
+  ✅ 订阅文件可无损读回全部启用状态
+  ✅ 界面只提供本地模板模式
+--- provider groups and traffic modes ---
+  ✅ 策略组同时引用全部 Provider
+  ✅ 固定配置覆盖三种模式和双栈
+  ✅ 所有固定配置使用同一面板目录
+  ✅ 固定配置深合并后不共享可变对象
+  ✅ 生成模板与全部运行配置关闭未使用的 Redir 端口
+  ✅ TProxy IPv4 使用固定端口并关闭 TUN
+  ✅ TUN IPv6 配置完整
+  ✅ TUN 协议栈选择覆盖自动值
+  ✅ 关闭接管时停用 TUN 和 TProxy
+  ✅ 私网定向代理规则位于规则首部
+  ✅ 私网定向代理写入可回滚元数据
+  ✅ TUN 私网定向代理使用 TUN 整形分支
+  ✅ TUN 路由排除保留普通私网并放行目标私网
+  ✅ TUN 私网定向代理不启用核心全局 DNS 劫持
+  ✅ 从 TUN 切回 TProxy 清理 TUN 私网整形
+  ✅ 订阅地址检查识别十进制和十六进制回环地址
+--- diagnostics and uninstall verdict ---
+  ✅ 启动结果必须包含稳定进程和成功标记
+  ✅ 面板 404 不会被报告为启动成功
+  ✅ 卸载仅在最终复查干净时成功
+  ✅ 卸载发现残留时失败
+
+================ 98 passed / 5 failed ================
+FAIL cleanup.test.js: 22 passed, 17 failed, 0 not run
+error: |-
+    buildF50EmergencyScript
+    + actual - expected ... Lines skipped
+    
+      '# Shared bootstrap maintenance: no installed helper is required.\n' +
+        'F50_ROOT=${F50_ROOT:-/data/clash}\n' +
+    ...
+        '    if [ "$ps_excluded" = 0 ]; then\n' +
+        '      case "$ps_name" in\n' +
+    +   '        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)\n' +
+    -   '        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)\n' +
+        '          ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)\n' +
+        '          ps_exe=${ps_exe% (deleted)}\n' +
+    ...
+        '          fi\n' +
+        '          case "${ps_exe##*/}" in\n' +
+    +   '            clashctl*|kano-gist-sync|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)\n' +
+    -   '            clashctl*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)\n' +
+        `              ps_args=$(tr '\\000' '\\n' < "$ps_dir/cmdline" 2>/dev/null)\n` +
+        '              ps_index=0; ps_script=0; ps_action=\n' +
+        '              while IFS= read -r ps_arg; do\n' +
+        '                if [ "$ps_kind" = core ]; then case "$ps_arg" in -t|--test) ps_kind=config_test ;; esac; fi\n' +
+        '                if [ "$ps_index" = 1 ]; then\n' +
+    +   '                  case "${ps_exe##*/}" in clashctl*|kano-gist-sync) ps_action=$ps_arg ;; esac\n' +
+    -   '                  case "${ps_exe##*/}" in clashctl*) ps_action=$ps_arg ;; esac\n' +
+        '                fi\n' +
+        '                [ "$ps_script" = 2 ] && { ps_action=$ps_arg; ps_script=3; }\n' +
+        '
+PASS compact.test.js: 2 passed, 0 failed, 0 not run
+PASS download_archive.test.js: 6 passed, 0 failed, 0 not run
+FAIL http_subscription.test.js: 0 passed, 1 failed, 0 not run
+error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 947.483804
+PASS ipv6_dns.test.js: 37 passed, 0 failed, 0 not run
+PASS optimization.test.js: 25 passed, 0 failed, 0 not run
+PASS optimization_install.test.js: 20 passed, 0 failed, 0 not run
+FAIL optimization_network.test.js: 16 passed, 3 failed, 0 not run
+error: |-
+    scan
+    + actual - expected ... Lines skipped
+    
+      'f50_scan() {\n' +
+        '  # Only candidate comm values incur readlink/tr. Ancestors and read-only probes are excluded.\n' +
+    ...
+        '    if [ "$ps_excluded" = 0 ]; then\n' +
+        '      case "$ps_name" in\n' +
+    +   '        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)\n' +
+    -   '        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)\n' +
+        '          ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)\n' +
+        '          ps_exe=${ps_exe% (deleted)}\n' +
+    ...
+        '          fi\n' +
+        '          case "${ps_exe##*/}" in\n' +
+    +   '            clashctl*|kano-gist-sync|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)\n' +
+    -   '            clashctl*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd)\n' +
+        `              ps_args=$(tr '\\000' '\\n' < "$ps_dir/cmdline" 2>/dev/null)\n` +
+        '              ps_index=0; ps_script=0; ps_action=\n' +
+        '              while IFS= read -r ps_arg; do\n' +
+        '                if [ "$ps_kind" = core ]; then case "$ps_arg" in -t|--test) ps_kind=config_test ;; esac; fi\n' +
+        '                if [ "$ps_index" = 1 ]; then\n' +
+    +   '                  case "${ps_exe##*/}" in clashctl*|kano-gist-sync) ps_action=$ps_arg ;; esac\n' +
+    -   '                  case "${ps_exe##*/}" in clashctl*) ps_action=$ps_arg ;; esac\n' +
+        '                fi\n' +
+        '                [ "$ps_script" = 2 ] && { ps_action=$ps_arg; ps_script=3; }\n' +
+        '                case "$
+PASS optimization_subscription.test.js: 38 passed, 0 failed, 0 not run
+PASS panel_open.test.js: 16 passed, 0 failed, 0 not run
+FAIL release_consistency.test.js: 0 passed, 1 failed, 0 not run
+error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 921.540563
+FAIL reliability.test.js: 0 passed, 1 failed, 0 not run
+error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1046.543565
+FAIL subscription_update.test.js: 34 passed, 1 failed, 0 not run
+error: |-
+    tar: This does not look like a tar archive
+    tar: Skipping to next header
+    tar: Scripts/Clash.Service: Not found in archive
+    tar: Exiting with failure status due to previous errors
+    
+    
+    2 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/mnt/c/Users/Cuty/Desktop/Github/Tproxy-F50/tests/tproxy/subscription_update.test.js:497:12)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..35
+# tests 35
+# suites 0
+# pass 34
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1625.199555
+PASS yaml_bridge.test.js: 4 passed, 0 failed, 0 not run
+{"passed":318,"failed":29,"notRun":0}

@@ -1,0 +1,1 @@
+{"result":{"elapsedMs":7,"requestId":"minimal-ui-groups-37","value":[{"open":false,"summary":"核心与面板"},{"open":false,"summary":"订阅与配置"},{"open":false,"summary":"网络与诊断"},{"open":false,"summary":"组件与维护"}]},"status":"succeeded","transition":{"closedPages":[],"documentGeneration":1,"openedPages":[],"pageCount":1,"targetEpoch":2,"url":"http://192.168.0.1:2333/","urlChanged":false}}

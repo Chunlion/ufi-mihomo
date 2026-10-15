@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "ea5821f58217ffd3df762ccada7f9166c3f278c3",
+  "sourceBaseCommit": "adc9458d69b4caff2b6f79e8b6b773429acf0dc8",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,10 +9,10 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 589080,
-  "sha256": "51708e32860c8bb2f969981c94abf1dcad8231f15b902116a8ed6821a60caaf7",
+  "final": 618405,
+  "sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa",
   "functionsBefore": 732,
-  "functionsAfter": 734,
+  "functionsAfter": 774,
   "modules": [
     {
       "module": "旧模式与显式迁移",
@@ -29,20 +29,20 @@
     {
       "module": "Service 兼容层与安装调用",
       "before": 53279,
-      "after": 55059,
-      "saved": -1780
+      "after": 58458,
+      "saved": -5179
     },
     {
       "module": "模板事务",
       "before": 22184,
-      "after": 23830,
-      "saved": -1646
+      "after": 19332,
+      "saved": 2852
     },
     {
       "module": "任务回执与恢复",
       "before": 15836,
-      "after": 19393,
-      "saved": -3557
+      "after": 19613,
+      "saved": -3777
     },
     {
       "module": "JS 覆写能力校验",
@@ -65,50 +65,50 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 437163,
-      "saved": -1459
+      "after": 467367,
+      "saved": -31663
     }
   ],
   "shell": [
     {
       "name": "install",
       "before": 120668,
-      "after": 91797,
-      "saved": 28871,
+      "after": 95568,
+      "saved": 25100,
       "beforeSHA256": "286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387",
-      "afterSHA256": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867"
+      "afterSHA256": "59d391698b57da5818869511f602ac78739379e17b4025f3c6b80c2871ea1e67"
     },
     {
       "name": "start",
       "before": 50809,
-      "after": 53143,
-      "saved": -2334,
+      "after": 53444,
+      "saved": -2635,
       "beforeSHA256": "e5c59b91de81cdf59dde3f1782d6aef52d36316a0d923edecbf1053bf3267c9b",
-      "afterSHA256": "b73e83a2a4fdf39b4f25f1aa3ab0f4e2945347b5f675bdb440609158b25e28cf"
+      "afterSHA256": "7fa31dfb176bbad27dbeb30ad2991099423d9df073f6fb1f44d355ed40e6a1b7"
     },
     {
       "name": "restart",
       "before": 50811,
-      "after": 53145,
-      "saved": -2334,
+      "after": 53446,
+      "saved": -2635,
       "beforeSHA256": "b63c1422c01ed7ec494b415221e7709a0fc435270b84463414e1a651ae7ba3b1",
-      "afterSHA256": "4cad91b9c7c08b6bb57119afec0df9cfb96f98dae08a5bfebc78ed88a7a8df1d"
+      "afterSHA256": "4962066b4954c2881ca859b5fb50e21ca8491b851c6d019ce35057f33191103d"
     },
     {
       "name": "emergency",
       "before": 28007,
-      "after": 30908,
-      "saved": -2901,
+      "after": 31178,
+      "saved": -3171,
       "beforeSHA256": "f2a643e7ce83e8649a7205de6327d02a43adcf362b3e57f5286e3a63f23202b1",
-      "afterSHA256": "0125491ecffb5af237f9b6d97a1652a7d331d86022b421669dda858b10508879"
+      "afterSHA256": "dbffdf2f03a2ab5980c151c93a87f8cd32d2e60d79368ccc7069c2d2d91f6ab5"
     },
     {
       "name": "service",
       "before": 31265,
-      "after": 33459,
-      "saved": -2194,
+      "after": 33760,
+      "saved": -2495,
       "beforeSHA256": "85c44e130e0a527ef0ea6c0093032d75de7a09191218050245472c87482f8f69",
-      "afterSHA256": "e0facacdca0fd1a74fa99ff9cfbcb6072640d56abaec9deb89208fe4355de6d0"
+      "afterSHA256": "5765dc1a0a30b6d5ca5c2d71df7c247724534081467a67bb888284415543c721"
     },
     {
       "name": "http",
@@ -153,10 +153,10 @@
     {
       "name": "cleanup",
       "before": 16548,
-      "after": 16548,
-      "saved": 0,
+      "after": 16622,
+      "saved": -74,
       "beforeSHA256": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
-      "afterSHA256": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2"
+      "afterSHA256": "74b2ff0c056ad250846feea0656c4dcd5ff6d1a5fddccf43dd43d091836962b1"
     }
   ]
 }

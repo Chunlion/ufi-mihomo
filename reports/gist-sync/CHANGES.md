@@ -9,15 +9,15 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
 - JS 与 Gist 共用配置事务生成器。Go、模块 UI、构建和测试脚本纳入仓库。
 - 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 - select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
-- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；修改来源后先保存再同步。首次状态查询的 yq 目录在初始化时建立。
+- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
 - 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 
 ```text
-.gitattributes                                     |   7 +
+.gitattributes                                     |   8 +
  .gitignore                                         |   3 +
  README.md                                          |   8 +-
  dist/v9.0.0-delivery.json                          |  18 +-
- ...62\276\347\256\200\344\272\244\344\273\230.zip" | Bin 253933 -> 275994 bytes
+ ...62\276\347\256\200\344\272\244\344\273\230.zip" | Bin 253933 -> 275749 bytes
  docs/gist-sync.md                                  |  59 ++
  gist-sync/Clash.GistSync                           |   6 +
  gist-sync/age.json                                 |   7 +
@@ -32,7 +32,7 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  gist-sync/native/hardening_test.go                 |  70 +++
  gist-sync/native/housekeeping.go                   |  88 +++
  gist-sync/native/housekeeping_test.go              |  88 +++
- gist-sync/native/jobs.go                           | 278 +++++++++
+ gist-sync/native/jobs.go                           | 280 +++++++++
  gist-sync/native/live_test.go                      |  38 ++
  gist-sync/native/locks.go                          | 335 ++++++++++
  gist-sync/native/main.go                           | 151 +++++
@@ -43,30 +43,32 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  gist-sync/native/real_age_test.go                  | 114 ++++
  gist-sync/native/sealed.go                         | 164 +++++
  gist-sync/native/sealed_test.go                    | 103 ++++
- gist-sync/native/settings.go                       | 424 +++++++++++++
- gist-sync/native/transaction.go                    | 468 ++++++++++++++
- gist-sync/native/transaction_test.go               | 426 +++++++++++++
- gist-sync/plugin-gist.js                           | 155 +++++
+ gist-sync/native/settings.go                       | 449 ++++++++++++++
+ gist-sync/native/transaction.go                    | 474 ++++++++++++++
+ gist-sync/native/transaction_test.go               | 459 ++++++++++++++
+ gist-sync/plugin-gist.js                           | 156 +++++
  gist-sync/release.json                             |   6 +
  gist-sync/test-tools.json                          |  24 +
- gist-sync/ui-gist.js                               | 125 ++++
- reports/gist-sync/CHANGES.md                       | 553 +++++++++++++++++
+ gist-sync/ui-gist.js                               | 116 ++++
+ reports/gist-sync/CHANGES.md                       | 557 +++++++++++++++++
  reports/gist-sync/DEVICE-PLAN.md                   |  17 +
- reports/gist-sync/TEST-REPORT.md                   | 187 ++++++
+ reports/gist-sync/TEST-REPORT.md                   | 212 +++++++
  reports/gist-sync/base-run.json                    | 678 ++++++++++++++++++++
  reports/gist-sync/baseline.json                    |  12 +
- reports/gist-sync/browser-ui.json                  | 104 ++++
- reports/gist-sync/browser-ui.png                   | Bin 0 -> 68008 bytes
- reports/gist-sync/changes.patch                    | Bin 0 -> 504162 bytes
+ reports/gist-sync/browser-ui.json                  | 110 ++++
+ reports/gist-sync/browser-ui.png                   | Bin 0 -> 78895 bytes
+ reports/gist-sync/changes.patch                    | Bin 0 -> 509539 bytes
  reports/gist-sync/device-input.json                |  30 +
- reports/gist-sync/device-input.png                 | Bin 0 -> 366072 bytes
+ reports/gist-sync/device-input.png                 | Bin 0 -> 369570 bytes
  reports/gist-sync/device-install.json              |  14 +
  reports/gist-sync/device-live.json                 |  33 +
+ reports/gist-sync/device-observed-user-state.json  |  29 +
  reports/gist-sync/device-plugin-update.json        |   7 +
  reports/gist-sync/device-postcheck.json            |   4 +
- reports/gist-sync/evidence.jsonl                   | 196 ++++++
+ reports/gist-sync/device-saved-test.json           |  35 ++
+ reports/gist-sync/evidence.jsonl                   | 284 +++++++++
  reports/gist-sync/git-proof.json                   |  13 +
- reports/gist-sync/integration.json                 | 138 +++++
+ reports/gist-sync/integration.json                 | 144 +++++
  reports/gist-sync/latest-run.json                  | 416 +++++++++++++
  reports/gist-sync/live.json                        |  15 +
  ...08058188200-F50_read-only_inspection.stderr.log | Bin 0 -> 69 bytes
@@ -461,34 +463,210 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  ...vice_upload_after_successful_upgrade.stdout.log | Bin 0 -> 270 bytes
  ...A256_and_archive_member_verification.stderr.log | Bin 0 -> 6696 bytes
  ...A256_and_archive_member_verification.stdout.log | Bin 0 -> 242 bytes
+ ...A256_and_archive_member_verification.stderr.log | Bin 0 -> 568 bytes
+ ...A256_and_archive_member_verification.stdout.log | Bin 0 -> 242 bytes
+ ...0-build_matching_dark_interval_style.stderr.log | Bin
+ ...0-build_matching_dark_interval_style.stdout.log | Bin 0 -> 602 bytes
+ ...500-dark_select_protocol_and_options.stderr.log | Bin
+ ...500-dark_select_protocol_and_options.stdout.log | Bin 0 -> 32 bytes
+ ...l_persistence_and_link_UI_regression.stderr.log | Bin
+ ...l_persistence_and_link_UI_regression.stdout.log | Bin 0 -> 37 bytes
+ ...menu_to_F50_preserving_other_plugins.stderr.log | Bin 0 -> 45 bytes
+ ...menu_to_F50_preserving_other_plugins.stdout.log | Bin 0 -> 729 bytes
+ ...le_Apply_device_action_and_dark_menu.stderr.log | Bin
+ ...le_Apply_device_action_and_dark_menu.stdout.log | Bin 0 -> 602 bytes
+ ...800-clean_repository_component_build.stderr.log | Bin
+ ...800-clean_repository_component_build.stdout.log | Bin 0 -> 602 bytes
+ ...7059752400-pinned_genuine_test_tools.stderr.log | Bin
+ ...7059752400-pinned_genuine_test_tools.stdout.log | Bin 0 -> 552 bytes
+ ...65597207530000-ZIP_reader_permission.stderr.log | Bin
+ ...65597207530000-ZIP_reader_permission.stdout.log | Bin
+ ...92065597302477600-syntax___TProxy_js.stderr.log | Bin
+ ...92065597302477600-syntax___TProxy_js.stdout.log | Bin
+ ...5500-syntax_gist-sync_plugin-gist_js.stderr.log | Bin
+ ...5500-syntax_gist-sync_plugin-gist_js.stdout.log | Bin
+ ...74956700-syntax_gist-sync_ui-gist_js.stderr.log | Bin
+ ...74956700-syntax_gist-sync_ui-gist_js.stdout.log | Bin
+ ...45327700-Shell_syntax_Clash_GistSync.stderr.log | Bin
+ ...45327700-Shell_syntax_Clash_GistSync.stdout.log | Bin
+ ...263300-BusyBox_syntax_Clash_GistSync.stderr.log | Bin
+ ...263300-BusyBox_syntax_Clash_GistSync.stdout.log | Bin
+ ...7400-Shell_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...7400-Shell_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...65598774754300-Go_vet_current_source.stderr.log | Bin
+ ...65598774754300-Go_vet_current_source.stdout.log | Bin
+ ...99967640300-compile_current_Go_tests.stderr.log | Bin
+ ...99967640300-compile_current_Go_tests.stdout.log | Bin
+ ...0060071400-Go_unit_and_process_tests.stderr.log | Bin
+ ...0060071400-Go_unit_and_process_tests.stdout.log | Bin 0 -> 20690 bytes
+ ...900-clean_repository_component_build.stderr.log | Bin
+ ...900-clean_repository_component_build.stdout.log | Bin 0 -> 602 bytes
+ ...0480884900-pinned_genuine_test_tools.stderr.log | Bin
+ ...0480884900-pinned_genuine_test_tools.stdout.log | Bin 0 -> 552 bytes
+ ...65670631768400-ZIP_reader_permission.stderr.log | Bin
+ ...65670631768400-ZIP_reader_permission.stdout.log | Bin
+ ...92065670728456200-syntax___TProxy_js.stderr.log | Bin
+ ...92065670728456200-syntax___TProxy_js.stdout.log | Bin
+ ...7100-syntax_gist-sync_plugin-gist_js.stderr.log | Bin
+ ...7100-syntax_gist-sync_plugin-gist_js.stdout.log | Bin
+ ...15125200-syntax_gist-sync_ui-gist_js.stderr.log | Bin
+ ...15125200-syntax_gist-sync_ui-gist_js.stdout.log | Bin
+ ...58376900-Shell_syntax_Clash_GistSync.stderr.log | Bin
+ ...58376900-Shell_syntax_Clash_GistSync.stdout.log | Bin
+ ...103600-BusyBox_syntax_Clash_GistSync.stderr.log | Bin
+ ...103600-BusyBox_syntax_Clash_GistSync.stdout.log | Bin
+ ...2300-Shell_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...2300-Shell_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...65672176951700-Go_vet_current_source.stderr.log | Bin
+ ...65672176951700-Go_vet_current_source.stdout.log | Bin
+ ...73338485700-compile_current_Go_tests.stderr.log | Bin
+ ...73338485700-compile_current_Go_tests.stdout.log | Bin
+ ...4442839400-Go_unit_and_process_tests.stderr.log | Bin
+ ...4442839400-Go_unit_and_process_tests.stdout.log | Bin 0 -> 19893 bytes
+ ...ion_CLI_real_transactions_and_daemon.stderr.log | Bin
+ ...ion_CLI_real_transactions_and_daemon.stdout.log | Bin 0 -> 1868 bytes
+ ...ARM64_age_real_decryption_under_QEMU.stderr.log | Bin
+ ...ARM64_age_real_decryption_under_QEMU.stdout.log | Bin 0 -> 111 bytes
+ ...79400-Gist_UI_and_protocol_rc3-ui_js.stderr.log | Bin
+ ...79400-Gist_UI_and_protocol_rc3-ui_js.stdout.log | Bin 0 -> 32 bytes
+ ...600-Gist_UI_and_protocol_ui-logic_js.stderr.log | Bin
+ ...600-Gist_UI_and_protocol_ui-logic_js.stdout.log | Bin 0 -> 37 bytes
+ ...regression_including_ARM64_emulation.stderr.log | Bin
+ ...regression_including_ARM64_emulation.stdout.log | Bin 0 -> 946 bytes
+ ..._and_original_component_preservation.stderr.log | Bin
+ ..._and_original_component_preservation.stdout.log | Bin 0 -> 230 bytes
+ ..._complete_components_to_approved_F50.stderr.log | Bin 0 -> 45 bytes
+ ..._complete_components_to_approved_F50.stdout.log | Bin 0 -> 481 bytes
+ ...teractions_with_simulated_device_API.stderr.log | Bin 0 -> 45 bytes
+ ...teractions_with_simulated_device_API.stdout.log | Bin 0 -> 3558 bytes
+ ...32259119800-final_source_size_report.stderr.log | Bin
+ ...32259119800-final_source_size_report.stdout.log | Bin 0 -> 1488 bytes
+ ...Apply_worker_with_original_installer.stderr.log | Bin 0 -> 45 bytes
+ ...Apply_worker_with_original_installer.stdout.log | Bin 0 -> 1700 bytes
+ ...nd_configuration_after_Apply_upgrade.stderr.log | Bin 0 -> 45 bytes
+ ...nd_configuration_after_Apply_upgrade.stdout.log | Bin 0 -> 680 bytes
+ ...ngle_Apply_UI_and_matching_dark_menu.stderr.log | Bin 0 -> 45 bytes
+ ...ngle_Apply_UI_and_matching_dark_menu.stdout.log | Bin 0 -> 788 bytes
+ ...pply_input_and_matching_dark_options.stderr.log | Bin 0 -> 45 bytes
+ ...pply_input_and_matching_dark_options.stdout.log | Bin 0 -> 743 bytes
+ ..._control_theme_for_matching_interval.stderr.log | Bin 0 -> 45 bytes
+ ..._control_theme_for_matching_interval.stdout.log | Bin 0 -> 735 bytes
+ ...900-clean_repository_component_build.stderr.log | Bin
+ ...900-clean_repository_component_build.stdout.log | Bin 0 -> 602 bytes
+ ...9452229800-pinned_genuine_test_tools.stderr.log | Bin
+ ...9452229800-pinned_genuine_test_tools.stdout.log | Bin 0 -> 552 bytes
+ ...65979605572700-ZIP_reader_permission.stderr.log | Bin
+ ...65979605572700-ZIP_reader_permission.stdout.log | Bin
+ ...92065979708872100-syntax___TProxy_js.stderr.log | Bin
+ ...92065979708872100-syntax___TProxy_js.stdout.log | Bin
+ ...1300-syntax_gist-sync_plugin-gist_js.stderr.log | Bin
+ ...1300-syntax_gist-sync_plugin-gist_js.stdout.log | Bin
+ ...08418300-syntax_gist-sync_ui-gist_js.stderr.log | Bin
+ ...08418300-syntax_gist-sync_ui-gist_js.stdout.log | Bin
+ ...78329600-Shell_syntax_Clash_GistSync.stderr.log | Bin
+ ...78329600-Shell_syntax_Clash_GistSync.stdout.log | Bin
+ ...536400-BusyBox_syntax_Clash_GistSync.stderr.log | Bin
+ ...536400-BusyBox_syntax_Clash_GistSync.stdout.log | Bin
+ ...1700-Shell_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...1700-Shell_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...45100-Gist_UI_and_protocol_rc3-ui_js.stderr.log | Bin
+ ...45100-Gist_UI_and_protocol_rc3-ui_js.stdout.log | Bin 0 -> 32 bytes
+ ...200-Gist_UI_and_protocol_ui-logic_js.stderr.log | Bin
+ ...200-Gist_UI_and_protocol_ui-logic_js.stdout.log | Bin 0 -> 37 bytes
+ ...ted_request_and_wrong-key_protection.stderr.log | Bin 0 -> 45 bytes
+ ...ted_request_and_wrong-key_protection.stdout.log | Bin 0 -> 735 bytes
+ ...ithout_modifying_saved_Gist_settings.stderr.log | Bin 0 -> 45 bytes
+ ...ithout_modifying_saved_Gist_settings.stdout.log | Bin 0 -> 879 bytes
+ ...regression_including_ARM64_emulation.stderr.log | Bin
+ ...regression_including_ARM64_emulation.stdout.log | Bin 0 -> 946 bytes
+ ..._and_original_component_preservation.stderr.log | Bin
+ ..._and_original_component_preservation.stdout.log | Bin 0 -> 230 bytes
+ ...teractions_with_simulated_device_API.stderr.log | Bin 0 -> 45 bytes
+ ...teractions_with_simulated_device_API.stdout.log | Bin 0 -> 3454 bytes
+ ...11830081300-final_source_size_report.stderr.log | Bin
+ ...11830081300-final_source_size_report.stdout.log | Bin 0 -> 1488 bytes
+ ...ve_host-matched_dark_Apply_interface.stderr.log | Bin 0 -> 45 bytes
+ ...ve_host-matched_dark_Apply_interface.stdout.log | Bin 0 -> 792 bytes
+ ...options_and_primary_Apply_validation.stderr.log | Bin 0 -> 45 bytes
+ ...options_and_primary_Apply_validation.stdout.log | Bin 0 -> 1654 bytes
+ ...evice-held_identity_without_applying.stderr.log | Bin 0 -> 45 bytes
+ ...evice-held_identity_without_applying.stdout.log | Bin 0 -> 1208 bytes
+ ...g_button_height_for_compact_interval.stderr.log | Bin 0 -> 45 bytes
+ ...g_button_height_for_compact_interval.stdout.log | Bin 0 -> 491 bytes
+ ...700-clean_repository_component_build.stderr.log | Bin
+ ...700-clean_repository_component_build.stdout.log | Bin 0 -> 602 bytes
+ ...2910604100-pinned_genuine_test_tools.stderr.log | Bin
+ ...2910604100-pinned_genuine_test_tools.stdout.log | Bin 0 -> 552 bytes
+ ...66223066058800-ZIP_reader_permission.stderr.log | Bin
+ ...66223066058800-ZIP_reader_permission.stdout.log | Bin
+ ...92066223140791900-syntax___TProxy_js.stderr.log | Bin
+ ...92066223140791900-syntax___TProxy_js.stdout.log | Bin
+ ...5900-syntax_gist-sync_plugin-gist_js.stderr.log | Bin
+ ...5900-syntax_gist-sync_plugin-gist_js.stdout.log | Bin
+ ...68817200-syntax_gist-sync_ui-gist_js.stderr.log | Bin
+ ...68817200-syntax_gist-sync_ui-gist_js.stdout.log | Bin
+ ...30315300-Shell_syntax_Clash_GistSync.stderr.log | Bin
+ ...30315300-Shell_syntax_Clash_GistSync.stdout.log | Bin
+ ...208000-BusyBox_syntax_Clash_GistSync.stderr.log | Bin
+ ...208000-BusyBox_syntax_Clash_GistSync.stdout.log | Bin
+ ...6100-Shell_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...6100-Shell_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stderr.log | Bin
+ ...00-BusyBox_syntax_Clash_ConfigCommit.stdout.log | Bin
+ ...79000-Gist_UI_and_protocol_rc3-ui_js.stderr.log | Bin
+ ...79000-Gist_UI_and_protocol_rc3-ui_js.stdout.log | Bin 0 -> 32 bytes
+ ...600-Gist_UI_and_protocol_ui-logic_js.stderr.log | Bin
+ ...600-Gist_UI_and_protocol_ui-logic_js.stdout.log | Bin 0 -> 37 bytes
+ ...px_interval_with_single_Apply_action.stderr.log | Bin 0 -> 45 bytes
+ ...px_interval_with_single_Apply_action.stdout.log | Bin 0 -> 792 bytes
+ ...interval_matches_actual_Apply_button.stderr.log | Bin 0 -> 45 bytes
+ ...interval_matches_actual_Apply_button.stdout.log | Bin 0 -> 1637 bytes
+ ...regression_including_ARM64_emulation.stderr.log | Bin
+ ...regression_including_ARM64_emulation.stdout.log | Bin 0 -> 946 bytes
+ ..._and_original_component_preservation.stderr.log | Bin
+ ..._and_original_component_preservation.stdout.log | Bin 0 -> 230 bytes
+ ...teractions_with_simulated_device_API.stderr.log | Bin 0 -> 45 bytes
+ ...teractions_with_simulated_device_API.stdout.log | Bin 0 -> 3482 bytes
+ ...44017104800-final_source_size_report.stderr.log | Bin
+ ...44017104800-final_source_size_report.stdout.log | Bin 0 -> 1488 bytes
+ ..._visual_check_with_saved_link_masked.stderr.log | Bin 0 -> 45 bytes
+ ..._visual_check_with_saved_link_masked.stdout.log | Bin 0 -> 1689 bytes
+ ...ackage_compact_single_Apply_delivery.stderr.log | Bin 0 -> 1775 bytes
+ ...ackage_compact_single_Apply_delivery.stdout.log | Bin 0 -> 242 bytes
  .../regression/cleanup.test.js.stderr.log          | Bin
- .../regression/cleanup.test.js.stdout.log          | Bin 0 -> 7197 bytes
+ .../regression/cleanup.test.js.stdout.log          | Bin 0 -> 7195 bytes
  .../regression/compact.test.js.stderr.log          | Bin
  .../regression/compact.test.js.stdout.log          | Bin 0 -> 1425 bytes
  .../regression/download_archive.test.js.stderr.log | Bin
  .../regression/download_archive.test.js.stdout.log | Bin 0 -> 1126 bytes
  .../http_subscription.test.js.stderr.log           | Bin
- .../http_subscription.test.js.stdout.log           | Bin 0 -> 2790 bytes
+ .../http_subscription.test.js.stdout.log           | Bin 0 -> 2795 bytes
  .../regression/ipv6_dns.test.js.stderr.log         | Bin
- .../regression/ipv6_dns.test.js.stdout.log         | Bin 0 -> 6299 bytes
+ .../regression/ipv6_dns.test.js.stdout.log         | Bin 0 -> 6303 bytes
  .../regression/optimization.test.js.stderr.log     | Bin
- .../regression/optimization.test.js.stdout.log     | Bin 0 -> 4397 bytes
+ .../regression/optimization.test.js.stdout.log     | Bin 0 -> 4396 bytes
  .../optimization_install.test.js.stderr.log        | Bin
- .../optimization_install.test.js.stdout.log        | Bin 0 -> 4750 bytes
+ .../optimization_install.test.js.stdout.log        | Bin 0 -> 4758 bytes
  .../optimization_network.test.js.stderr.log        | Bin
- .../optimization_network.test.js.stdout.log        | Bin 0 -> 3480 bytes
+ .../optimization_network.test.js.stdout.log        | Bin 0 -> 3479 bytes
  .../optimization_subscription.test.js.stderr.log   | Bin
- .../optimization_subscription.test.js.stdout.log   | Bin 0 -> 6822 bytes
+ .../optimization_subscription.test.js.stdout.log   | Bin 0 -> 6823 bytes
  .../regression/panel_open.test.js.stderr.log       | Bin
  .../regression/panel_open.test.js.stdout.log       | Bin 0 -> 3098 bytes
  .../release_consistency.test.js.stderr.log         | Bin
- .../release_consistency.test.js.stdout.log         | Bin 0 -> 775 bytes
+ .../release_consistency.test.js.stdout.log         | Bin 0 -> 777 bytes
  .../regression/reliability.test.js.stderr.log      | Bin
- .../regression/reliability.test.js.stdout.log      | Bin 0 -> 7274 bytes
+ .../regression/reliability.test.js.stdout.log      | Bin 0 -> 7280 bytes
  .../gist-sync/regression/run_tests.js.stderr.log   | Bin
  .../gist-sync/regression/run_tests.js.stdout.log   | Bin 0 -> 5290 bytes
  .../subscription_update.test.js.stderr.log         | Bin
- .../subscription_update.test.js.stdout.log         | Bin 0 -> 7108 bytes
+ .../subscription_update.test.js.stdout.log         | Bin 0 -> 7111 bytes
  .../regression/yaml_bridge.test.js.stderr.log      | Bin
  .../regression/yaml_bridge.test.js.stdout.log      | Bin 0 -> 857 bytes
  reports/gist-sync/test-tools.json                  |  18 +
@@ -511,11 +689,11 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  scripts/verify_plugin.js                           |   4 +-
  tests/gist-sync/arm64-components.py                |  15 +
  tests/gist-sync/baseline-normalizer.js             | 285 +++++++++
- tests/gist-sync/browser-ui.js                      |  41 ++
+ tests/gist-sync/browser-ui.js                      |  43 ++
  tests/gist-sync/device-backup.js                   |  39 ++
  tests/gist-sync/device-host-backup.js              |   7 +
  tests/gist-sync/device-host-backup.sh              |  18 +
- tests/gist-sync/device-input.js                    |  34 +
+ tests/gist-sync/device-input.js                    |  41 ++
  tests/gist-sync/device-inspect.js                  |  22 +
  tests/gist-sync/device-install.js                  |  23 +
  tests/gist-sync/device-live-test.js                |  34 +
@@ -524,20 +702,21 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  tests/gist-sync/device-plugin-verify.js            |  18 +
  tests/gist-sync/device-postcheck.js                |  39 ++
  tests/gist-sync/device-redaction.js                |  11 +
- tests/gist-sync/device-ui.js                       |  50 ++
+ tests/gist-sync/device-saved-test.js               |  21 +
+ tests/gist-sync/device-ui.js                       |  51 ++
  tests/gist-sync/device-upload.js                   |  18 +
  tests/gist-sync/expected-contracts.json            | 145 +++++
  tests/gist-sync/host-bridge.js                     |  10 +
- tests/gist-sync/integration.py                     | 290 +++++++++
+ tests/gist-sync/integration.py                     | 304 +++++++++
  tests/gist-sync/live-network.py                    |  17 +
  tests/gist-sync/mock-age.py                        |  16 +
  tests/gist-sync/mock-yq.py                         |  31 +
  tests/gist-sync/normalize-reference.js             |   5 +
  tests/gist-sync/package-check.py                   |  30 +
- tests/gist-sync/rc3-ui.js                          |  56 ++
+ tests/gist-sync/rc3-ui.js                          |  57 ++
  tests/gist-sync/seal-request.js                    |   6 +
  tests/gist-sync/service-integration.py             |  47 ++
- tests/gist-sync/ui-logic.js                        |  53 ++
+ tests/gist-sync/ui-logic.js                        |  50 ++
  tests/gist-sync/vendor/CryptoJS-LICENSE            |  24 +
  tests/gist-sync/vendor/crypto-js.js                |   1 +
  tests/tproxy/cleanup.test.js                       |  14 +-
@@ -547,9 +726,9 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
  tests/tproxy/optimization_network.test.js          |  14 +-
  tests/tproxy/release_consistency.test.js           |   8 +-
  tests/tproxy/run_tests.js                          |  11 +-
- tproxy-yq.zip                                      | Bin 60632949 -> 67034304 bytes
- "\347\214\253\347\214\253TProxy.js"                | 594 ++++++++++++++----
- 536 files changed, 11644 insertions(+), 192 deletions(-)
+ tproxy-yq.zip                                      | Bin 60632949 -> 67035027 bytes
+ "\347\214\253\347\214\253TProxy.js"                | 586 ++++++++++++++----
+ 715 files changed, 11931 insertions(+), 192 deletions(-)
 ```
 
-完整源码差异见 `changes.patch`。F50 完整包升级已验证；生产 Gist 正确密钥解密和 Android WebView 尚未验证。
+完整源码差异见 `changes.patch`。F50 完整包升级已验证；真实 Gist 解密与配置校验已通过，F50 生产配置应用和 Android WebView 尚未验证。

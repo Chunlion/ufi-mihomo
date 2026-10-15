@@ -2245,12 +2245,12 @@ mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install
 # GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
 f50_gist_verify_bundle() {
   groot=$1
-  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'e4dc4c4ae38fca82ac998860f2af203fa984361f2960edf57e51df491097c0b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
+  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = '1c1ab84e4e9ba20151ac2b857d47f5f2e90bfc37a0968df4e090d4a5360f5f6b' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
   [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '496bc79bf2ba6653960827d757757975a0521b28599c955d7b87af06dbf69efa' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '3c30efa0fbed5e6c51f938efa00f66eae39e52770153158712a397812fdb13a7' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
   chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
   sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
   gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
@@ -3360,7 +3360,7 @@ exit "$delete_rc"
   const CLASH_PACKAGE_REPO_URL = '';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
-  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"29a48b34825b7404e4c1823a69ebf7ed54ed7f5f969cfe0c21de56a80a2aec10","published":false});
+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"8a72a33f0e8a57e44311197aa82b113e059416a796d9d40005c70462bb6b8f3e","published":false});
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
@@ -3476,6 +3476,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   async function f50GistDispatch(action, request = {}) {
     try {
       const key = await f50GistExec(['request-key'],15000);
+      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
       const sealed=f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -3515,7 +3516,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
 
     test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
     settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
-    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'\u914d\u7f6e\u5df2\u52a0\u8f7d\uff0c\u7b56\u7565\u68c0\u67e5\u901a\u8fc7',
+    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
     saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
@@ -11789,24 +11790,24 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         <div style="pointer-events:all;width:92vw;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
-          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
+          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
           <label for="mm_gist_key" style="display:block;margin-top:10px">age 私钥</label>
-          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
+          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
           <small id="mm_gist_key_hint" style="display:block;margin:4px 0 8px;color:#94a3b8"></small>
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0;">
             <label><input id="mm_gist_auto" type="checkbox"> 自动同步</label>
-            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:light!important;background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;min-height:42px;padding:6px;border:1px solid #64748b;border-radius:6px;">
-              <option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="1">1 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="6" selected>6 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="12">12 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="24">24 小时</option>
+            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:dark!important;background:#111827!important;color:#fff!important;font:12px Arial;box-sizing:border-box;height:30px;min-height:0;padding:4px 8px;border:1px solid #64748b;border-radius:8px;">
+              <option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="1">1 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="6" selected>6 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="12">12 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="24">24 小时</option>
             </select></label>
           </div>
-          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:3">
-            <button id="mm_gist_test">测试</button><button id="mm_gist_save">保存</button><button id="mm_gist_sync">立即同步</button>
+          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:1">
+            <button id="mm_gist_apply" type="button">应用</button>
           </div>
           <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
           <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
           <details style="margin-top:8px"><summary>更多</summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-              <button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
+              <button id="mm_gist_test">测试连接</button><button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
               <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
               <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
             </div>
@@ -11814,7 +11815,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
         </div>`);
       const q = id => el.querySelector('#mm_gist_'+id);
-      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, savedUrl='';
+      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 
       const result = text => { if(opened) q('result').textContent=text; };
       const fmt = value => value && !String(value).startsWith('0001-') ? new Date(value).toLocaleString() : '\u65e0';
@@ -11830,11 +11831,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           q('url').value=saved.deleted?'':saved.url || '';
           q('auto').checked=!!saved.auto;
           q('interval').value=String(saved.intervalHours || 6);
-          revision=saved.revision || 0; settingsLoaded=true; savedUrl=saved.url || '';
+          revision=saved.revision || 0; settingsLoaded=true;
           pendingKey='';q('key').value='';
         }
         q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
         q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
+        currentFingerprint=st.currentFingerprint || null;
         const state=st.state?.generation===st.settings?.generation?st.state:null;
         const last=state?.last;
         const recent=(st.jobs||[])[0];
@@ -11847,28 +11849,22 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
         return st;
       };
-      const busy=on=>{foreground=on;for(const name of ['test','save','sync','disable','delete','recover','read'])q(name).disabled=on;};
+      const busy=on=>{foreground=on;for(const name of ['test','apply','disable','delete','recover','read'])q(name).disabled=on;};
       const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
       const launch=async (action,request={})=>{
         if(foreground)return;
-        busy(true);result('\u6b63\u5728\u63d0\u4ea4\u8bbe\u5907\u4efb\u52a1\u2026');
+        busy(true);result(action==='apply'?'正在应用…':'正在处理…');
         try{
           const started=await f50GistDispatch(action,request);
           if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
           currentJob=started.job;
-          result('\u8bbe\u5907\u4efb\u52a1 '+currentJob+' \u5df2\u63d0\u4ea4\uff1b\u53ef\u5173\u95ed\u9875\u9762\u3002');
+          result(action==='apply'?'正在应用…':'正在处理…');
           while(opened){
             const job=await f50GistExec(['job',currentJob],8000);
             if(!opened)break;
             if(job.status==='finished'){
               const out=job.result;result(describe(out));
               if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
-              if(action==='sync' && out?.code==='local_config_conflict'){
-                const expected=out.applied;
-                if(expected && window.confirm('\u5df2\u68c0\u6d4b\u5230\u672c\u5730\u914d\u7f6e\u6216\u7f51\u7edc\u8bbe\u7f6e\u4fee\u6539\u3002\u786e\u8ba4\u7528 Gist \u66ff\u6362\u5f53\u524d\u914d\u7f6e\uff1f\u672c\u5730\u7f51\u7edc\u53c2\u6570\u4ecd\u6309\u732b\u732b\u89c4\u5219\u4fdd\u7559\u3002')){
-                  busy(false);return await launch('sync',{replaceLocal:true,expectedLocal:expected});
-                }
-              }
               break;
             }
             if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
@@ -11887,13 +11883,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         q('url').value=url;
         if(q('key').value.trim())pendingKey=q('key').value.trim();
         q('key').value='';
-        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision,...(action==='apply'?{replaceLocal:true,expectedLocal:currentFingerprint}:{})});
       };
-      q('test').onclick=()=>formAction('test');q('save').onclick=()=>formAction('save');
-      q('sync').onclick=()=>{
-        if(f50GistCleanUrl(q('url').value)!==savedUrl || q('key').value.trim() || pendingKey){result('请先保存新链接或私钥，再同步。');return;}
-        return launch('sync');
-      };
+      q('test').onclick=()=>formAction('test');q('apply').onclick=()=>formAction('apply');
       q('disable').onclick=()=>launch('disable');
       q('refresh').onclick=()=>refresh(false);
       q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};

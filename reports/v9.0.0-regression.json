@@ -1,12 +1,12 @@
 {
-  "date": "2026-10-15T11:41:45.825Z",
+  "date": "2026-10-15T12:12:03.439Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "adc9458d69b4caff2b6f79e8b6b773429acf0dc8",
-    "bytes": 618405,
-    "sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+    "baseCommit": "69952204314d3a1c5f73e8e1f2f3d19d28514fa4",
+    "bytes": 617656,
+    "sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,

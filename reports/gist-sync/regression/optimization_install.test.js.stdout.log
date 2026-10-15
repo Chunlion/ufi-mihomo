@@ -2,127 +2,127 @@ TAP version 13
 # Subtest: failed rollback retains the old backup and reports blocked cleanup
 ok 1 - failed rollback retains the old backup and reports blocked cleanup
   ---
-  duration_ms: 1940.993532
+  duration_ms: 1700.79924
   ...
 # Subtest: installation interruption preserves the old configuration and permits a complete retry
 ok 2 - installation interruption preserves the old configuration and permits a complete retry
   ---
-  duration_ms: 2451.013166
+  duration_ms: 3567.90692
   ...
 # Subtest: new installation
 ok 3 - new installation
   ---
-  duration_ms: 681.872546
+  duration_ms: 1492.137294
   ...
 # Subtest: running upgrade
 ok 4 - running upgrade
   ---
-  duration_ms: 1427.95093
+  duration_ms: 3009.06738
   ...
 # Subtest: explicitly stopped upgrade
 ok 5 - explicitly stopped upgrade
   ---
-  duration_ms: 1138.075101
+  duration_ms: 3178.759831
   ...
 # Subtest: running upgrade with stale stop latch
 ok 6 - running upgrade with stale stop latch
   ---
-  duration_ms: 804.425483
+  duration_ms: 2770.033754
   ...
 # Subtest: old installation without explicit stop latch
 ok 7 - old installation without explicit stop latch
   ---
-  duration_ms: 1241.529804
+  duration_ms: 3815.8837
   ...
 # Subtest: unsafe ZIP path preserves failure code and old installation
 ok 8 - unsafe ZIP path preserves failure code and old installation
   ---
-  duration_ms: 76.165009
+  duration_ms: 253.475691
   ...
 # Subtest: missing controller preserves failure code and old installation
 ok 9 - missing controller preserves failure code and old installation
   ---
-  duration_ms: 87.4669
+  duration_ms: 230.780426
   ...
 # Subtest: missing Gist manifest preserves failure code and old installation
 ok 10 - missing Gist manifest preserves failure code and old installation
   ---
-  duration_ms: 90.656746
+  duration_ms: 385.738029
   ...
 # Subtest: missing age preserves failure code and old installation
 ok 11 - missing age preserves failure code and old installation
   ---
-  duration_ms: 94.022117
+  duration_ms: 236.68754
   ...
 # Subtest: missing sync worker preserves failure code and old installation
 ok 12 - missing sync worker preserves failure code and old installation
   ---
-  duration_ms: 107.558168
+  duration_ms: 219.432571
   ...
 # Subtest: nonzero worker exit with success JSON preserves failure code and old installation
 ok 13 - nonzero worker exit with success JSON preserves failure code and old installation
   ---
-  duration_ms: 131.016181
+  duration_ms: 413.368424
   ...
 # Subtest: missing fresh core preserves failure code and old installation
 ok 14 - missing fresh core preserves failure code and old installation
   ---
-  duration_ms: 83.40665
+  duration_ms: 171.658662
   ...
 # Subtest: missing YAML component preserves failure code and old installation
 ok 15 - missing YAML component preserves failure code and old installation
   ---
-  duration_ms: 167.20787
+  duration_ms: 634.447221
   ...
 # Subtest: invalid YAML preserves failure code and old installation
 ok 16 - invalid YAML preserves failure code and old installation
   ---
-  duration_ms: 356.309275
+  duration_ms: 1011.194849
   ...
 # Subtest: start timeout preserves failure code and old installation
 ok 17 - start timeout preserves failure code and old installation
   ---
-  duration_ms: 2247.130038
+  duration_ms: 2611.041511
   ...
 # Subtest: invalid core config preserves failure code and old installation
 ok 18 - invalid core config preserves failure code and old installation
   ---
-  duration_ms: 2026.334225
+  duration_ms: 2525.546265
   ...
 # Subtest: network application failure preserves failure code and old installation
 ok 19 - network application failure preserves failure code and old installation
   ---
-  duration_ms: 1446.402495
+  duration_ms: 3019.656085
   ...
 # Subtest: service patch failure preserves failure code and old installation
 ok 20 - service patch failure preserves failure code and old installation
   ---
-  duration_ms: 253.293962
+  duration_ms: 322.234966
   ...
 # Subtest: panel HTTP failure reports a warning and retains successfully started components
 ok 21 - panel HTTP failure reports a warning and retains successfully started components
   ---
-  duration_ms: 1379.749903
+  duration_ms: 2340.827455
   ...
 # Subtest: successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
 ok 22 - successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
   ---
-  duration_ms: 604.148179
+  duration_ms: 1980.510794
   ...
 # Subtest: successful installation with unknownLockEntry reports finalization failure and permits only safe retry
 ok 23 - successful installation with unknownLockEntry reports finalization failure and permits only safe retry
   ---
-  duration_ms: 840.657017
+  duration_ms: 1858.110498
   ...
 # Subtest: successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
 ok 24 - successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
   ---
-  duration_ms: 1519.07714
+  duration_ms: 2634.12337
   ...
 # Subtest: repeated full update preserves private identity and exact settings bytes
 ok 25 - repeated full update preserves private identity and exact settings bytes
   ---
-  duration_ms: 3114.101536
+  duration_ms: 6606.380475
   ...
 1..25
 # tests 25
@@ -132,4 +132,4 @@ ok 25 - repeated full update preserves private identity and exact settings bytes
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 24507.427436
+# duration_ms 47204.00046

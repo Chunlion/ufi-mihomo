@@ -220,6 +220,9 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 	if s.Generation == "" || s.Deleted {
 		return out, fail("not_configured")
 	}
+	if req.Revision != nil && *req.Revision != s.Revision {
+		return out, fail("settings_changed")
+	}
 	out.Generation = s.Generation
 	if automatic && !s.Auto {
 		return out, fail("auto_disabled")
@@ -294,6 +297,9 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 	}
 	if active.Generation != s.Generation || active.Deleted {
 		return out, fail("source_changed")
+	}
+	if req.Revision != nil && *req.Revision != active.Revision {
+		return out, fail("settings_changed")
 	}
 	if automatic && !active.Auto {
 		return out, fail("auto_disabled")

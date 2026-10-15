@@ -1,5 +1,5 @@
 {
-  "binary_sha256": "0fe691d4cb1b1203dc2aa1f53c5737a952f4c8dc62fa309e4ac3ce6042016d61",
+  "binary_sha256": "43feb7e3ad0f81abe89dd552b01f4af9c933f1b7bc2e5a1e10082d0df3ffe6bc",
   "components": "genuine production CLI, age, yq, Mihomo; local TLS fixture; isolated Off service adapter",
   "tests": [
     {
@@ -12,127 +12,133 @@
       "name": "production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.618
+      "seconds": 0.365
     },
     {
       "name": "real files, backup, atomic commit and matching state while stopped",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.54
+      "seconds": 0.335
     },
     {
       "name": "genuine Mihomo hot reload and runtime confirmation",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.558
+      "seconds": 0.425
+    },
+    {
+      "name": "single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys",
+      "category": "INTEGRATION",
+      "result": "PASS",
+      "seconds": 1.891
     },
     {
       "name": "reencrypted unchanged config keeps genuine core PID",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.446
+      "seconds": 0.319
     },
     {
       "name": "real age decrypt followed by invalid YAML preserves current files",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.327
+      "seconds": 0.196
     },
     {
       "name": "corrupt ciphertext never reaches commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.323
+      "seconds": 0.251
     },
     {
       "name": "local edit conflict is never silently overwritten",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.265
+      "seconds": 0.187
     },
     {
       "name": "genuine age rejects wrong identity without a configuration write",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.28
+      "seconds": 0.195
     },
     {
       "name": "genuine age rejects truncated authenticated ciphertext",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.367
+      "seconds": 0.197
     },
     {
       "name": "real HTTPS 503 retries then preserves configuration",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 3.265
+      "seconds": 3.207
     },
     {
       "name": "real in-flight HTTPS cancellation cannot commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.884
+      "seconds": 0.909
     },
     {
       "name": "source revision change fences the old downloader before commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 1.049
+      "seconds": 1.046
     },
     {
       "name": "SIGKILL recovery at download_complete",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.704
+      "seconds": 0.372
     },
     {
       "name": "SIGKILL recovery at decrypt_complete",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.625
+      "seconds": 0.405
     },
     {
       "name": "SIGKILL recovery at before_commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.836
+      "seconds": 0.801
     },
     {
       "name": "SIGKILL recovery at after_commit",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.662
+      "seconds": 0.716
     },
     {
       "name": "SIGKILL recovery at before_state_record",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.954
+      "seconds": 0.631
     },
     {
       "name": "actual read-only configuration filesystem fails safely and recovers",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.549
+      "seconds": 0.434
     },
     {
       "name": "genuine API connection loss, denied restart, rollback and later recovery",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 1.077
+      "seconds": 0.871
     },
     {
       "name": "detached daemon, due work, repeated saves, boot hook and disable",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 12.665
+      "seconds": 12.357
     },
     {
       "name": "private identity absent from logs, receipts and leftover work",
       "category": "INTEGRATION",
       "result": "PASS",
-      "seconds": 0.043
+      "seconds": 0.045
     }
   ]
 }

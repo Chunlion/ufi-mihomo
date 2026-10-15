@@ -2,192 +2,192 @@ TAP version 13
 # Subtest: provider update, runtime matches=true
 ok 1 - provider update, runtime matches=true
   ---
-  duration_ms: 3.745328
+  duration_ms: 4.487942
   ...
 # Subtest: provider update, runtime matches=false
 ok 2 - provider update, runtime matches=false
   ---
-  duration_ms: 1.127729
+  duration_ms: 1.273945
   ...
 # Subtest: local update, runtime matches=true
 ok 3 - local update, runtime matches=true
   ---
-  duration_ms: 1.256615
+  duration_ms: 1.683822
   ...
 # Subtest: local update, runtime matches=false
 ok 4 - local update, runtime matches=false
   ---
-  duration_ms: 0.989966
+  duration_ms: 1.4408
   ...
 # Subtest: uploaded_config retains its dedicated update path
 ok 5 - uploaded_config retains its dedicated update path
   ---
-  duration_ms: 1.398497
+  duration_ms: 1.531805
   ...
 # Subtest: subscription_original retains its dedicated update path
 ok 6 - subscription_original retains its dedicated update path
   ---
-  duration_ms: 0.959748
+  duration_ms: 1.120242
   ...
 # Subtest: uploaded local provider downloads its saved subscription / success
 ok 7 - uploaded local provider downloads its saved subscription / success
   ---
-  duration_ms: 2.081794
+  duration_ms: 2.27659
   ...
 # Subtest: uploaded local provider downloads its saved subscription / download
 ok 8 - uploaded local provider downloads its saved subscription / download
   ---
-  duration_ms: 1.363037
+  duration_ms: 1.471386
   ...
 # Subtest: uploaded local provider downloads its saved subscription / stale
 ok 9 - uploaded local provider downloads its saved subscription / stale
   ---
-  duration_ms: 1.501712
+  duration_ms: 1.741593
   ...
 # Subtest: uploaded local provider downloads its saved subscription / other-provider
 ok 10 - uploaded local provider downloads its saved subscription / other-provider
   ---
-  duration_ms: 1.926856
+  duration_ms: 2.713367
   ...
 # Subtest: local refresh keeps observed cache state / provider_count_mismatch
 ok 11 - local refresh keeps observed cache state / provider_count_mismatch
   ---
-  duration_ms: 1.531878
+  duration_ms: 1.666264
   ...
 # Subtest: local refresh keeps observed cache state / provider_update_failed
 ok 12 - local refresh keeps observed cache state / provider_update_failed
   ---
-  duration_ms: 1.03449
+  duration_ms: 1.031644
   ...
 # Subtest: local refresh keeps observed cache state / provider_snapshot_failed
 ok 13 - local refresh keeps observed cache state / provider_snapshot_failed
   ---
-  duration_ms: 1.073349
+  duration_ms: 1.132758
   ...
 # Subtest: local refresh keeps observed cache state / provider_reload_missing
 ok 14 - local refresh keeps observed cache state / provider_reload_missing
   ---
-  duration_ms: 1.123966
+  duration_ms: 1.153292
   ...
 # Subtest: uploaded_config does not promise cache preservation for an unconfirmed download
 ok 15 - uploaded_config does not promise cache preservation for an unconfirmed download
   ---
-  duration_ms: 1.489042
+  duration_ms: 1.585588
   ...
 # Subtest: template.yaml does not promise cache preservation for an unconfirmed download
 ok 16 - template.yaml does not promise cache preservation for an unconfirmed download
   ---
-  duration_ms: 0.996659
+  duration_ms: 1.30853
   ...
 # Subtest: template local refresh reports the provider and both mismatched counts
 ok 17 - template local refresh reports the provider and both mismatched counts
   ---
-  duration_ms: 2.030682
+  duration_ms: 2.155943
   ...
 # Subtest: refreshing a subset keeps its existing provider filename
 ok 18 - refreshing a subset keeps its existing provider filename
   ---
-  duration_ms: 2.125787
+  duration_ms: 2.122327
   ...
 # Subtest: a configuration without providers cannot report a successful subscription refresh
 ok 19 - a configuration without providers cannot report a successful subscription refresh
   ---
-  duration_ms: 1.354716
+  duration_ms: 2.762434
   ...
 # Subtest: Mihomo HTTP Provider API status 200
 ok 20 - Mihomo HTTP Provider API status 200
   ---
-  duration_ms: 1.428694
+  duration_ms: 1.661076
   ...
 # Subtest: Mihomo HTTP Provider API status 390
 ok 21 - Mihomo HTTP Provider API status 390
   ---
-  duration_ms: 1.361813
+  duration_ms: 1.187479
   ...
 # Subtest: Mihomo HTTP Provider API status 500
 ok 22 - Mihomo HTTP Provider API status 500
   ---
-  duration_ms: 3.547737
+  duration_ms: 0.941737
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
 ok 23 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
   ---
-  duration_ms: 4.369916
+  duration_ms: 4.968768
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
 ok 24 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
   ---
-  duration_ms: 57.692866
+  duration_ms: 56.69778
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
 ok 25 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
   ---
-  duration_ms: 92.470667
+  duration_ms: 132.004754
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
 ok 26 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
   ---
-  duration_ms: 86.174528
+  duration_ms: 106.67965
   ...
 # Subtest: an original header with no URLs prevents automatic legacy-source migration
 ok 27 - an original header with no URLs prevents automatic legacy-source migration
   ---
-  duration_ms: 1.752795
+  duration_ms: 1.915758
   ...
 # Subtest: HTTP 390 fallback transaction / success
 ok 28 - HTTP 390 fallback transaction / success
   ---
-  duration_ms: 54.72382
+  duration_ms: 62.687533
   ...
 # Subtest: HTTP 390 fallback transaction / download
 ok 29 - HTTP 390 fallback transaction / download
   ---
-  duration_ms: 95.742261
+  duration_ms: 115.472701
   ...
 # Subtest: HTTP 390 fallback transaction / write
 ok 30 - HTTP 390 fallback transaction / write
   ---
-  duration_ms: 91.978213
+  duration_ms: 113.30343
   ...
 # Subtest: HTTP 390 fallback transaction / start
 ok 31 - HTTP 390 fallback transaction / start
   ---
-  duration_ms: 142.606171
+  duration_ms: 117.089486
   ...
 # Subtest: HTTP 390 fallback transaction / reload
 ok 32 - HTTP 390 fallback transaction / reload
   ---
-  duration_ms: 94.431869
+  duration_ms: 111.441121
   ...
 # Subtest: subscription save protections {"disabled":true}
 ok 33 - subscription save protections {"disabled":true}
   ---
-  duration_ms: 25.599558
+  duration_ms: 38.848958
   ...
 # Subtest: subscription save protections {"custom":true}
 ok 34 - subscription save protections {"custom":true}
   ---
-  duration_ms: 26.863527
+  duration_ms: 39.695812
   ...
 # Subtest: subscription save protections {"running":false}
 ok 35 - subscription save protections {"running":false}
   ---
-  duration_ms: 44.027554
+  duration_ms: 61.164972
   ...
 # Subtest: subscription save protections {"ruleMode":"original"}
 ok 36 - subscription save protections {"ruleMode":"original"}
   ---
-  duration_ms: 1.874433
+  duration_ms: 2.076635
   ...
 # Subtest: subscription save protections {"convertMode":"provider"}
 ok 37 - subscription save protections {"convertMode":"provider"}
   ---
-  duration_ms: 54.18701
+  duration_ms: 65.727641
   ...
 # Subtest: subscription save protections {"ruleMode":"original","convertMode":"provider"}
 ok 38 - subscription save protections {"ruleMode":"original","convertMode":"provider"}
   ---
-  duration_ms: 1.970724
+  duration_ms: 2.022494
   ...
 1..38
 # tests 38
@@ -197,4 +197,4 @@ ok 38 - subscription save protections {"ruleMode":"original","convertMode":"prov
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1095.418379
+# duration_ms 1314.309743

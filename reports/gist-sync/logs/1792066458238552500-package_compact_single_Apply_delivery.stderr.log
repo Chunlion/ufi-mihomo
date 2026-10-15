@@ -1,0 +1,15 @@
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-regression.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-size.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/gist-sync.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/evidence.jsonl', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'reports/gist-sync/latest-run.json', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'scripts/package_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/integration.py', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-regression.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'reports/v9.0.0-size.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitattributes', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/gist-sync.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/package_gist_sync.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/gist-sync/integration.py', CRLF will be replaced by LF the next time Git touches it

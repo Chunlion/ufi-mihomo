@@ -38,7 +38,7 @@
       "environment": "real Tabbit Chromium; simulated device API"
     },
     {
-      "name": "replace identity and manual sync",
+      "name": "replace identity and apply in one action",
       "result": "PASS",
       "category": "MOCK",
       "environment": "real Tabbit Chromium; simulated device API"
@@ -51,6 +51,12 @@
     },
     {
       "name": "all four options have explicit readable colors and adequate height",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "real Tabbit Chromium; simulated device API"
+    },
+    {
+      "name": "interval select and options match neighboring dark input colors",
       "result": "PASS",
       "category": "MOCK",
       "environment": "real Tabbit Chromium; simulated device API"
@@ -69,35 +75,35 @@
     }
   ],
   "styles": {
-    "height": 42,
+    "height": 30,
     "select": {
-      "color": "rgb(15, 23, 42)",
-      "background": "rgb(248, 250, 252)"
+      "color": "rgb(255, 255, 255)",
+      "background": "rgb(17, 24, 39)"
     },
     "options": [
       {
         "text": "1 小时",
         "value": "1",
-        "color": "rgb(15, 23, 42)",
-        "background": "rgb(248, 250, 252)"
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(17, 24, 39)"
       },
       {
         "text": "6 小时",
         "value": "6",
-        "color": "rgb(15, 23, 42)",
-        "background": "rgb(248, 250, 252)"
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(17, 24, 39)"
       },
       {
         "text": "12 小时",
         "value": "12",
-        "color": "rgb(15, 23, 42)",
-        "background": "rgb(248, 250, 252)"
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(17, 24, 39)"
       },
       {
         "text": "24 小时",
         "value": "24",
-        "color": "rgb(15, 23, 42)",
-        "background": "rgb(248, 250, 252)"
+        "color": "rgb(255, 255, 255)",
+        "background": "rgb(17, 24, 39)"
       }
     ]
   }

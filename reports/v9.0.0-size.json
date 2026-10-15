@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "adc9458d69b4caff2b6f79e8b6b773429acf0dc8",
+  "sourceBaseCommit": "69952204314d3a1c5f73e8e1f2f3d19d28514fa4",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,10 +9,10 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 618405,
-  "sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa",
+  "final": 617656,
+  "sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180",
   "functionsBefore": 732,
-  "functionsAfter": 774,
+  "functionsAfter": 773,
   "modules": [
     {
       "module": "旧模式与显式迁移",
@@ -65,8 +65,8 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 467367,
-      "saved": -31663
+      "after": 466618,
+      "saved": -30914
     }
   ],
   "shell": [
@@ -76,7 +76,7 @@
       "after": 95568,
       "saved": 25100,
       "beforeSHA256": "286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387",
-      "afterSHA256": "59d391698b57da5818869511f602ac78739379e17b4025f3c6b80c2871ea1e67"
+      "afterSHA256": "2f514d934e577c2c2b890984d745a5f2bbbf9481bc730ec1bc88b9b2d9638cff"
     },
     {
       "name": "start",

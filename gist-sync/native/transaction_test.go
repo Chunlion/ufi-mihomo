@@ -76,6 +76,39 @@ func saveFixture(t *testing.T, a *App) {
 		t.Fatalf("save: %+v %v", out, e)
 	}
 }
+func TestApplySavesAndCommitsInOneAction(t *testing.T) {
+	a := fixture(t)
+	setRemote(a, fixtureKey, remoteConfig(7))
+	before, _ := fileHash(a.cfg())
+	out, err := a.applyConfig(context.Background(), Request{URL: goodURL, Identity: fixtureKey})
+	if err != nil || !out.OK || !out.Saved || !out.Written || out.Code != "saved_stopped" {
+		t.Fatalf("apply: %+v %v", out, err)
+	}
+	after, _ := fileHash(a.cfg())
+	if after == before || a.readState().CandidateHash != out.CandidateHash {
+		t.Fatal("Apply did not commit matching configuration and state")
+	}
+}
+func TestApplyRevisionCannotCommitAfterSettingsChange(t *testing.T) {
+	a := fixture(t)
+	saveFixture(t, a)
+	s, _ := a.readSettings()
+	before, _ := fileHash(a.cfg())
+	setRemote(a, fixtureKey, remoteConfig(2))
+	a.Hook = func(point string) error {
+		if point == "after_download" {
+			next := s
+			next.Revision++
+			return writeJSON(a.settingsPath(), next)
+		}
+		return nil
+	}
+	_, err := a.syncConfig(context.Background(), Request{Revision: &s.Revision}, false)
+	after, _ := fileHash(a.cfg())
+	if code(err) != "settings_changed" || before != after {
+		t.Fatalf("stale Apply revision committed: %v", err)
+	}
+}
 func TestManualWorkflow(t *testing.T) {
 	a := fixture(t)
 	setRemote(a, fixtureKey, remoteConfig(1))
@@ -135,7 +168,7 @@ func TestSourceAndIdentityChange(t *testing.T) {
 	ctx := context.Background()
 	saveFixture(t, a)
 	old, _ := a.readSettings()
-	newURL := strings.Replace(goodURL, "Bettbox.yaml.age", "other.age", 1)
+	newURL := strings.Replace(goodURL, "config.yaml.age", "other.age", 1)
 	setRemote(a, fixtureKey, []byte("not a YAML mapping"))
 	out, e := a.validateSave(ctx, Request{URL: newURL}, true)
 	if e == nil || out.Saved {
@@ -254,7 +287,7 @@ func TestSourceGenerationFence(t *testing.T) {
 		next := old
 		next.Generation = nonce()
 		next.Revision++
-		next.URL = strings.Replace(goodURL, "Bettbox.yaml.age", "new.age", 1)
+		next.URL = strings.Replace(goodURL, "config.yaml.age", "new.age", 1)
 		dir := a.data() + "/sources/" + next.Generation
 		_ = privateDir(dir)
 		_ = atomicWrite(dir+"/identity.txt", []byte(fixtureKey+"\n"), 0600)

@@ -318,6 +318,31 @@ func (a *App) validateSave(ctx context.Context, req Request, save bool) (out Out
 	}
 	return out, nil
 }
+func (a *App) applyConfig(ctx context.Context, req Request) (Outcome, error) {
+	saved, err := a.validateSave(ctx, req, true)
+	if err != nil || !saved.OK {
+		return saved, err
+	}
+	active, err := a.readSettings()
+	if err == nil && (active.Generation != saved.Generation || req.Revision != nil && active.Revision != *req.Revision+1) {
+		err = fail("settings_changed")
+	}
+	if err != nil {
+		saved.OK, saved.Code = false, code(err)
+		return saved, err
+	}
+	req.Identity = ""
+	req.Revision = &active.Revision
+	out, err := a.syncConfig(ctx, req, false)
+	out.Saved = true
+	if out.Generation == "" {
+		out.Generation = saved.Generation
+	}
+	if out.Warning == "" {
+		out.Warning = saved.Warning
+	}
+	return out, err
+}
 func (a *App) disableAuto(ctx context.Context) (out Outcome, err error) {
 	lease, e := a.acquireLease(ctx, false)
 	if e != nil {

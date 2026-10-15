@@ -25,8 +25,9 @@ check('job receipt schema is checked',()=>assert.equal(parse(frame({id:'a'.repea
 check('unknown job cannot become success',()=>assert.equal(parse(frame({status:'finished'}),'job').code,'response_format_invalid'));
 check('status missing settings is rejected',()=>assert.equal(parse(frame({ok:true,version:'1.0.0-rc4',protocol:1}),'status').code,'response_format_invalid'));
 const ui=fs.readFileSync('gist-sync/ui-gist.js','utf8');
+check('Apply is the single main save-and-sync action',()=>{assert(ui.includes('id="mm_gist_apply"'));assert(!ui.includes('id="mm_gist_save"'));assert(!ui.includes('id="mm_gist_sync"'));assert(ui.includes("formAction('apply')"));});
 check('Gist page has no standalone install or age download actions',()=>{assert(!/mm_gist_(install|age)["']/.test(ui));assert(!ui.includes('upload_img'));assert(!ui.includes('install-age'));assert(ui.includes('mm_gist_recover'));assert(ui.includes('mm_gist_delete'));});
-check('all four interval options have explicit contrasting styles',()=>{const values=[...ui.matchAll(/<option[^>]+value="(\d+)"/g)].map(m=>Number(m[1]));assert.deepEqual(values,[1,6,12,24]);assert.equal((ui.match(/background:#f8fafc!important;color:#0f172a!important/g)||[]).length,5);assert(ui.includes('min-height:42px'));});
+check('all four interval options have explicit contrasting styles',()=>{const values=[...ui.matchAll(/<option[^>]+value="(\d+)"/g)].map(m=>Number(m[1]));assert.deepEqual(values,[1,6,12,24]);assert.equal((ui.match(/background:#111827!important;color:#fff!important/g)||[]).length,5);assert(ui.includes('height:30px'));assert(!ui.includes('min-height:42px')); assert(ui.includes('color-scheme:dark!important'));assert(!ui.includes('color-scheme:light'));});
 (async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gist-rc3-protocol-'));
  try {

@@ -1,0 +1,29 @@
+{
+  "category": "DEVICE",
+  "observedOnly": true,
+  "ok": true,
+  "configured": true,
+  "identitySet": true,
+  "auto": false,
+  "intervalHours": 6,
+  "lastSuccess": "0001-01-01T00:00:00Z",
+  "last": {
+    "ok": false,
+    "code": "",
+    "downloaded": false,
+    "decrypted": false,
+    "validated": false,
+    "written": false,
+    "loaded": false,
+    "runtimeVerified": false,
+    "applied": {
+      "config": "",
+      "source": "",
+      "policy": ""
+    },
+    "completedAt": "0001-01-01T00:00:00Z"
+  },
+  "fingerprintError": "",
+  "schedulerRunning": false,
+  "jobs": []
+}

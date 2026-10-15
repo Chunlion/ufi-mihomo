@@ -42,14 +42,14 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
 - JS 与 Gist 共用配置事务生成器。Go、模块 UI、构建和测试脚本纳入仓库。
 - 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 - select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
-- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；修改来源后先保存再同步。首次状态查询的 yq 目录在初始化时建立。
+- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
 - 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 
 ```text
 {proof['diff_stat']}
 ```
 
-完整源码差异见 `changes.patch`。F50 完整包升级已验证；生产 Gist 正确密钥解密和 Android WebView 尚未验证。
+完整源码差异见 `changes.patch`。F50 完整包升级已验证；真实 Gist 解密与配置校验已通过，F50 生产配置应用和 Android WebView 尚未验证。
 """
     (REPORTS/'CHANGES.md').write_text(difference,encoding='utf-8')
     patch=subprocess.check_output(['git','diff',baseline['head'],'--','猫猫TProxy.js','.gitattributes','.gitignore','README.md','scripts','gist-sync','tests','docs'],cwd=ROOT)
@@ -74,9 +74,9 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
             '完整包升级及事务收尾成功；配置、来源、策略哈希与备份一致。核心只有一个，API HTTP 200，保持 TProxy。',
             '宿主已保存当前精简 JS，重新打开后逐字回读一致，其余六个插件未变。',
             '旧页面空链接触发 invalid_gist_url 已实机复现。新版空/错误链接在页面拦截，未新建设备任务。',
-            '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试，不是生产 Gist 解密成功。','']
+            '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试。随后设备保存的私钥通过真实 Gist 只读解密与配置校验，未应用生产配置，证据见 `device-saved-test.json`。','']
     evidence=[json.loads(x) for x in (REPORTS/'evidence.jsonl').read_text(encoding='utf-8').splitlines() if x]
-    names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','genuine initial status and full transaction regression','Raw URL boundary regression'}
+    names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','deploy compact 30px interval with single Apply action','verify compact interval matches actual Apply button','validate real saved Gist with device-held identity without applying','upgrade single Apply worker with original installer','verify core and configuration after Apply upgrade','actual F50 Apply button encrypted request and wrong-key protection','genuine initial status and full transaction regression','Raw URL boundary regression'}
     for row in evidence:
         if row['name'] not in names:continue
         lines += [f"- **{row['name']}** — {row['category']} / {row['result']}；退出码 `{row['exit_code']}`。",
@@ -84,9 +84,9 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
                   f"  stdout：`{row['stdout']}`；stderr：`{row['stderr']}`。",'']
     lines += ['', '## BLOCKED 与限制','',
               '- 真实 TProxy/TUN/Off 数据流量、设备重启及长时间自动同步未执行；本次只授权安装升级、不切换模式。',
-              '- 生产私钥未提供，没有解密用户真实 Gist。Raw HTTPS、状态码、大小、两次 SHA 和变化检测见 `live.json`；Node 的成功不替代生产 Go 客户端 LIVE 成功。',
+              '- 最初没有测试私钥；随后设备已保存用户设置，正式程序使用设备持有的私钥通过真实 Gist 下载、解密、YAML 和 Mihomo 校验，未写入生产配置，见 `device-saved-test.json`。早期网络下载证据见 `live.json`。',
               '- 电脑 WSL 的 Go LIVE 被 Fake-IP 检查阻止；F50 正式程序已成功下载相同 Gist。电脑失败退出码和日志保留，没有放开 SSRF 或 TLS 检查。',
-              '- F50 页面完整交互测试未完成：浏览器标签页在提交/等待期间关闭，相关 FAIL 原样保留。已读回实际设备回执，任务正确下载后因测试私钥不匹配失败，未写配置；没有把页面测试整体标为 PASS。',
+              '- F50 主按钮输入拦截、紧凑暗色菜单及重新打开已通过。早期完整交互测试的断言错误及标签页关闭记录保留；设备已有用户设置后，测试按保护条件停止，未替换密钥。真实 Gist 使用设备保存密钥完成只读验证，未点击应用覆盖生产配置。',
               '- 普通浏览器交互使用真实 Chromium 与模拟设备 API，截图和颜色见 `browser-ui.png/json`。Android WebView 原生下拉弹窗未验证。',
               '- 后台测试使用实际独立进程，将持久化到期时间设为过去，没有等待 24 小时或重启设备。期限/重试有 UNIT 覆盖；F50 长时间网络恢复待验证。',
               '- 正常配置链路使用正式 AMD64 程序、真实 age/yq/Mihomo 和隔离 TLS。Off 服务适配器确认实际 API，不证明 Android 防火墙执行。仅测试二进制提供挂起点，以 SIGKILL 复现崩溃。',
@@ -94,7 +94,7 @@ RC2/RC3 是独立交付来源。RC3 的原始 JS 基线与本仓库 HEAD 的 JS 
               '构建、安全边界与实机准备步骤见 `docs/gist-sync.md`。']
     (REPORTS/'TEST-REPORT.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     DIST.mkdir(parents=True,exist_ok=True)
-    (DIST/'升级说明.txt').write_text('导入配套 JS，再在原组件管理中导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页已采用用户精简界面。在线组件包尚未发布；本次 F50 已升级，保持 TProxy。生产 Gist 正确密钥解密、模式切换及 Android WebView 未验证。\n',encoding='utf-8')
+    (DIST/'升级说明.txt').write_text('导入配套 JS，再在原组件管理中导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页已采用精简界面，填写链接、私钥后点击应用即可更新 YAML。在线组件包尚未发布；本次 F50 已升级，保持 TProxy。真实 Gist 只读解密校验通过；F50 生产配置应用、模式切换及 Android WebView 未验证。\n',encoding='utf-8')
     for name in ['TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']:
         shutil.copyfile(REPORTS/name,DIST/name)
     files=[DIST/name for name in ['猫猫TProxy.js','tproxy-yq-gistsync-full.zip','升级说明.txt','TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']]

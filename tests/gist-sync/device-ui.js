@@ -17,6 +17,7 @@ try {
  if(!(await group.evaluate(e=>e.open)))await group.locator('summary').click();
  await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
  await page.waitForFunction(()=>!!document.querySelector('#mm_gist_status')?.textContent);
+ if(!(await page.locator('#mm_gist_sync_dialog details').evaluate(e=>e.open)))await page.locator('#mm_gist_sync_dialog summary').click();
  const before=await snapshot();
  assert.equal(await page.locator('#mm_gist_url').inputValue(),'','Expected unconfigured device; do not replace user settings');
  await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请先填写 Gist Raw 链接。');
@@ -24,19 +25,19 @@ try {
  await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请填写完整的 Gist Raw .age 下载链接。');
  const invalid=await snapshot();await expect(invalid.jobs.map(j=>j.id)).toEqual(before.jobs.map(j=>j.id));
  const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,options:[...e.options].map(o=>({value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
- await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=42);
+ await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=28 && styles.height<=32);
  for(const o of styles.options){assert.notEqual(o.color,o.background);await page.locator('#mm_gist_interval').selectOption(o.value);}
  assert.ok(!(await page.locator('#mm_gist_status').textContent()).match(/SHA-256|控制面|运行确认|未执行/));
  await page.locator('#mm_gist_url').fill('\u200b '+input.url+' \ufeff');
  await page.locator('#mm_gist_key').fill(identity);identity='';
- await page.locator('#mm_gist_test').click();
+ await page.locator('#mm_gist_apply').click();
  await expect(page.locator('#mm_gist_result')).toContainText('age 解密失败',{timeout:120000});
  await expect(page.locator('#mm_gist_key')).toHaveValue('');
  await expect(page.locator('#mm_gist_url')).toHaveValue(input.url);
  assert.ok(!(await page.locator('#mm_gist_result').textContent()).includes('未执行 / 未确认'));
  const after=await snapshot();await expect(after.fingerprint).toEqual(before.fingerprint);await expect(after.settings).toEqual(before.settings);
  const job=after.jobs.find(j=>!before.jobs.some(b=>b.id===j.id));
- assert.ok(job);assert.equal(job.action,'test');assert.equal(job.result.code,'age_decrypt_failed');assert.equal(job.result.ok,false);
+ assert.ok(job);assert.equal(job.action,'apply');assert.equal(job.result.code,'age_decrypt_failed');assert.equal(job.result.ok,false);
  assert.equal(job.result.downloaded,true);assert.equal(job.result.decrypted,false);assert.equal(job.result.written,false);assert.equal(job.result.cipherHash,input.sha256);
  await page.screenshot({fullPage:false});
  await page.locator('#mm_gist_close').click();await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();

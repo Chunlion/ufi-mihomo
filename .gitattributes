@@ -5,4 +5,5 @@ reports/gist-sync/** text eol=lf
 reports/gist-sync/logs/** binary
 reports/gist-sync/regression/** binary
 reports/gist-sync/*.patch binary
+reports/gist-sync/*.png binary
 tests/gist-sync/vendor/CryptoJS-LICENSE whitespace=-blank-at-eol

@@ -3,10 +3,10 @@
   "scope": "UI revision",
   "reused_integration": {
     "report": "reports/gist-sync/integration.json",
-    "binary_sha256": "0fe691d4cb1b1203dc2aa1f53c5737a952f4c8dc62fa309e4ac3ce6042016d61",
+    "binary_sha256": "43feb7e3ad0f81abe89dd552b01f4af9c933f1b7bc2e5a1e10082d0df3ffe6bc",
     "rerun": false
   },
-  "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa",
+  "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180",
   "rows": [
     {
       "name": "clean repository component build",
@@ -17,18 +17,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:19.844805+00:00",
-      "elapsed_seconds": 10.101,
+      "started": "2026-10-15T12:10:09.897909+00:00",
+      "elapsed_seconds": 9.742,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064429943138900-clean_repository_component_build.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064429943138900-clean_repository_component_build.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066219637952700-clean_repository_component_build.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066219637952700-clean_repository_component_build.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "pinned genuine test tools",
@@ -39,18 +39,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:29.947611+00:00",
-      "elapsed_seconds": 2.975,
+      "started": "2026-10-15T12:10:19.641069+00:00",
+      "elapsed_seconds": 3.271,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064432921905600-pinned_genuine_test_tools.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064432921905600-pinned_genuine_test_tools.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066222910604100-pinned_genuine_test_tools.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066222910604100-pinned_genuine_test_tools.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "ZIP reader permission",
@@ -66,18 +66,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:32.924575+00:00",
-      "elapsed_seconds": 0.147,
+      "started": "2026-10-15T12:10:22.913895+00:00",
+      "elapsed_seconds": 0.153,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433069283300-ZIP_reader_permission.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433069283300-ZIP_reader_permission.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223066058800-ZIP_reader_permission.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223066058800-ZIP_reader_permission.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "syntax 猫猫TProxy.js",
@@ -89,18 +89,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.073169+00:00",
-      "elapsed_seconds": 0.09,
+      "started": "2026-10-15T12:10:23.068695+00:00",
+      "elapsed_seconds": 0.073,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433161617400-syntax___TProxy_js.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433161617400-syntax___TProxy_js.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223140791900-syntax___TProxy_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223140791900-syntax___TProxy_js.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "syntax gist-sync/plugin-gist.js",
@@ -112,18 +112,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.165319+00:00",
-      "elapsed_seconds": 0.094,
+      "started": "2026-10-15T12:10:23.143336+00:00",
+      "elapsed_seconds": 0.065,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433257383400-syntax_gist-sync_plugin-gist_js.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433257383400-syntax_gist-sync_plugin-gist_js.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223206605900-syntax_gist-sync_plugin-gist_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223206605900-syntax_gist-sync_plugin-gist_js.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "syntax gist-sync/ui-gist.js",
@@ -135,18 +135,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.261512+00:00",
-      "elapsed_seconds": 0.099,
+      "started": "2026-10-15T12:10:23.209307+00:00",
+      "elapsed_seconds": 0.061,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433358357000-syntax_gist-sync_ui-gist_js.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433358357000-syntax_gist-sync_ui-gist_js.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223268817200-syntax_gist-sync_ui-gist_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223268817200-syntax_gist-sync_ui-gist_js.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "Shell syntax Clash.GistSync",
@@ -162,18 +162,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.362081+00:00",
-      "elapsed_seconds": 0.143,
+      "started": "2026-10-15T12:10:23.271283+00:00",
+      "elapsed_seconds": 0.161,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433503502000-Shell_syntax_Clash_GistSync.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433503502000-Shell_syntax_Clash_GistSync.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223430315300-Shell_syntax_Clash_GistSync.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223430315300-Shell_syntax_Clash_GistSync.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "BusyBox syntax Clash.GistSync",
@@ -190,18 +190,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.507098+00:00",
-      "elapsed_seconds": 0.154,
+      "started": "2026-10-15T12:10:23.433964+00:00",
+      "elapsed_seconds": 0.165,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433659808400-BusyBox_syntax_Clash_GistSync.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433659808400-BusyBox_syntax_Clash_GistSync.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223598208000-BusyBox_syntax_Clash_GistSync.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223598208000-BusyBox_syntax_Clash_GistSync.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "Shell syntax Clash.ConfigCommit",
@@ -217,18 +217,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.663613+00:00",
-      "elapsed_seconds": 0.137,
+      "started": "2026-10-15T12:10:23.600670+00:00",
+      "elapsed_seconds": 0.146,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433799095400-Shell_syntax_Clash_ConfigCommit.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433799095400-Shell_syntax_Clash_ConfigCommit.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223745976100-Shell_syntax_Clash_ConfigCommit.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223745976100-Shell_syntax_Clash_ConfigCommit.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "BusyBox syntax Clash.ConfigCommit",
@@ -245,18 +245,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.802397+00:00",
-      "elapsed_seconds": 0.163,
+      "started": "2026-10-15T12:10:23.748902+00:00",
+      "elapsed_seconds": 0.178,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064433963690700-BusyBox_syntax_Clash_ConfigCommit.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064433963690700-BusyBox_syntax_Clash_ConfigCommit.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066223925952900-BusyBox_syntax_Clash_ConfigCommit.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066223925952900-BusyBox_syntax_Clash_ConfigCommit.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "Gist UI and protocol rc3-ui.js",
@@ -271,18 +271,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:33.974310+00:00",
-      "elapsed_seconds": 0.277,
+      "started": "2026-10-15T12:10:23.934817+00:00",
+      "elapsed_seconds": 0.304,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064434249354200-Gist_UI_and_protocol_rc3-ui_js.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064434249354200-Gist_UI_and_protocol_rc3-ui_js.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066224237679000-Gist_UI_and_protocol_rc3-ui_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066224237679000-Gist_UI_and_protocol_rc3-ui_js.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "Gist UI and protocol ui-logic.js",
@@ -297,18 +297,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:34.253330+00:00",
-      "elapsed_seconds": 0.189,
+      "started": "2026-10-15T12:10:24.240577+00:00",
+      "elapsed_seconds": 0.193,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064434440281100-Gist_UI_and_protocol_ui-logic_js.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064434440281100-Gist_UI_and_protocol_ui-logic_js.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066224432409600-Gist_UI_and_protocol_ui-logic_js.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066224432409600-Gist_UI_and_protocol_ui-logic_js.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "full original regression including ARM64 emulation",
@@ -327,18 +327,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:40:34.444155+00:00",
-      "elapsed_seconds": 73.111,
+      "started": "2026-10-15T12:10:24.435186+00:00",
+      "elapsed_seconds": 99.108,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064507553267000-full_original_regression_including_ARM64_emulation.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064507553267000-full_original_regression_including_ARM64_emulation.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066323542274400-full_original_regression_including_ARM64_emulation.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066323542274400-full_original_regression_including_ARM64_emulation.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "package hashes, ELF and original component preservation",
@@ -349,18 +349,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:41:47.557699+00:00",
-      "elapsed_seconds": 2.885,
+      "started": "2026-10-15T12:12:03.545005+00:00",
+      "elapsed_seconds": 2.991,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064510439472600-package_hashes__ELF_and_original_component_preservation.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064510439472600-package_hashes__ELF_and_original_component_preservation.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066326535064100-package_hashes__ELF_and_original_component_preservation.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066326535064100-package_hashes__ELF_and_original_component_preservation.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "Tabbit real interactions with simulated device API",
@@ -371,24 +371,24 @@
         "--task",
         "GistSync network validation",
         "--request-id",
-        "final-browser-1792064510444118400",
+        "final-browser-1792066326537339400",
         "--timeout-ms",
         "120000"
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:41:50.444796+00:00",
-      "elapsed_seconds": 59.527,
+      "started": "2026-10-15T12:12:06.537637+00:00",
+      "elapsed_seconds": 16.851,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064569970275700-Tabbit_real_interactions_with_simulated_device_API.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064569970275700-Tabbit_real_interactions_with_simulated_device_API.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066343387312100-Tabbit_real_interactions_with_simulated_device_API.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066343387312100-Tabbit_real_interactions_with_simulated_device_API.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     },
     {
       "name": "final source size report",
@@ -399,18 +399,18 @@
       ],
       "cwd": "C:\\Users\\Cuty\\Desktop\\Github\\Tproxy-F50",
       "platform": "nt",
-      "started": "2026-10-15T11:42:49.974537+00:00",
-      "elapsed_seconds": 0.641,
+      "started": "2026-10-15T12:12:23.392142+00:00",
+      "elapsed_seconds": 0.626,
       "exit_code": 0,
       "result": "PASS",
-      "stdout": "reports\\gist-sync\\logs\\1792064570613774500-final_source_size_report.stdout.log",
-      "stderr": "reports\\gist-sync\\logs\\1792064570613774500-final_source_size_report.stderr.log",
+      "stdout": "reports\\gist-sync\\logs\\1792066344017104800-final_source_size_report.stdout.log",
+      "stderr": "reports\\gist-sync\\logs\\1792066344017104800-final_source_size_report.stderr.log",
       "environment": {
         "GOOS": "linux",
         "GOARCH": "amd64",
         "CGO_ENABLED": "0"
       },
-      "plugin_sha256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
+      "plugin_sha256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
     }
   ]
 }

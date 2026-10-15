@@ -2,127 +2,127 @@ TAP version 13
 # Subtest: single-file JS and generated operation scripts are syntactically valid
 ok 1 - single-file JS and generated operation scripts are syntactically valid
   ---
-  duration_ms: 73.597607
+  duration_ms: 162.318909
   ...
 # Subtest: tproxy4: complete configuration equals original
 ok 2 - tproxy4: complete configuration equals original
   ---
-  duration_ms: 3.686588
+  duration_ms: 4.004636
   ...
 # Subtest: tproxy6: complete configuration equals original
 ok 3 - tproxy6: complete configuration equals original
   ---
-  duration_ms: 2.60227
+  duration_ms: 2.597485
   ...
 # Subtest: tun4: complete configuration equals original
 ok 4 - tun4: complete configuration equals original
   ---
-  duration_ms: 3.097808
+  duration_ms: 4.14689
   ...
 # Subtest: tun6: complete configuration equals original
 ok 5 - tun6: complete configuration equals original
   ---
-  duration_ms: 4.022129
+  duration_ms: 2.647846
   ...
 # Subtest: off4: complete configuration equals original
 ok 6 - off4: complete configuration equals original
   ---
-  duration_ms: 2.362443
+  duration_ms: 2.789972
   ...
 # Subtest: off6: complete configuration equals original
 ok 7 - off6: complete configuration equals original
   ---
-  duration_ms: 2.356637
+  duration_ms: 2.831015
   ...
 # Subtest: start timeout: outer markers survive command substitution
 ok 8 - start timeout: outer markers survive command substitution
   ---
-  duration_ms: 55.713017
+  duration_ms: 93.485177
   ...
 # Subtest: start invalid configuration: outer markers survive command substitution
 ok 9 - start invalid configuration: outer markers survive command substitution
   ---
-  duration_ms: 30.034577
+  duration_ms: 30.857963
   ...
 # Subtest: start panel verification warning: outer markers survive command substitution
 ok 10 - start panel verification warning: outer markers survive command substitution
   ---
-  duration_ms: 34.262284
+  duration_ms: 56.896802
   ...
 # Subtest: start network application: outer markers survive command substitution
 ok 11 - start network application: outer markers survive command substitution
   ---
-  duration_ms: 25.726908
+  duration_ms: 30.154
   ...
 # Subtest: start success: outer markers survive command substitution
 ok 12 - start success: outer markers survive command substitution
   ---
-  duration_ms: 29.18542
+  duration_ms: 31.175713
   ...
 # Subtest: mode normalization, provider names, User-Agent and disabled sources retain their data
 ok 13 - mode normalization, provider names, User-Agent and disabled sources retain their data
   ---
-  duration_ms: 2.066034
+  duration_ms: 2.261126
   ...
 # Subtest: saved mode "\# KANO_SUB_CONVERT_MODE=provider\\r\\n" / file: provider
 ok 14 - saved mode "\# KANO_SUB_CONVERT_MODE=provider\\r\\n" / file: provider
   ---
-  duration_ms: 1.276947
+  duration_ms: 1.398066
   ...
 # Subtest: saved mode "\# KANO_SUB_CONVERT_MODE=local\\n" / http: local
 ok 15 - saved mode "\# KANO_SUB_CONVERT_MODE=local\\n" / http: local
   ---
-  duration_ms: 0.958096
+  duration_ms: 0.886935
   ...
 # Subtest: saved mode "" / file,file: local
 ok 16 - saved mode "" / file,file: local
   ---
-  duration_ms: 1.032437
+  duration_ms: 1.057423
   ...
 # Subtest: saved mode "" / http: provider
 ok 17 - saved mode "" / http: provider
   ---
-  duration_ms: 0.91991
+  duration_ms: 0.912763
   ...
 # Subtest: saved mode "" / : provider
 ok 18 - saved mode "" / : provider
   ---
-  duration_ms: 0.856103
+  duration_ms: 1.008239
   ...
 # Subtest: cancellation before prevents further shell commands
 ok 19 - cancellation before prevents further shell commands
   ---
-  duration_ms: 0.972342
+  duration_ms: 1.067197
   ...
 # Subtest: cancellation during prevents further shell commands
 ok 20 - cancellation during prevents further shell commands
   ---
-  duration_ms: 1.214006
+  duration_ms: 1.109928
   ...
 # Subtest: cancellation wait prevents further shell commands
 ok 21 - cancellation wait prevents further shell commands
   ---
-  duration_ms: 0.831377
+  duration_ms: 0.707015
   ...
 # Subtest: uncertain transport failures are never automatically retried
 ok 22 - uncertain transport failures are never automatically retried
   ---
-  duration_ms: 0.870499
+  duration_ms: 0.822098
   ...
 # Subtest: missing start marker uses a fallback; log text cannot spoof anchored markers
 ok 23 - missing start marker uses a fallback; log text cannot spoof anchored markers
   ---
-  duration_ms: 13.587236
+  duration_ms: 52.300706
   ...
 # Subtest: YAML reads use one version process and detect replaced, missing or invalid components
 ok 24 - YAML reads use one version process and detect replaced, missing or invalid components
   ---
-  duration_ms: 332.922928
+  duration_ms: 797.36318
   ...
 # Subtest: managed YAML: idempotent panel fields, nonempty secret and original unified-delay
 ok 25 - managed YAML: idempotent panel fields, nonempty secret and original unified-delay
   ---
-  duration_ms: 562.613912
+  duration_ms: 456.801299
   ...
 1..25
 # tests 25
@@ -132,4 +132,4 @@ ok 25 - managed YAML: idempotent panel fields, nonempty secret and original unif
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1389.301626
+# duration_ms 1951.211434

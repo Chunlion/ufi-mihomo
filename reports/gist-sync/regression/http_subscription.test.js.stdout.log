@@ -2,77 +2,77 @@ TAP version 13
 # Subtest: retained ARM64 patch source reproduces the embedded byte ranges
 ok 1 - retained ARM64 patch source reproduces the embedded byte ranges
   ---
-  duration_ms: 1.86085
+  duration_ms: 2.360339
   ...
 # Subtest: retained patch source rejects an unsupported controller
 ok 2 - retained patch source rejects an unsupported controller
   ---
-  duration_ms: 1.969644
+  duration_ms: 2.242383
   ...
 # Subtest: controller patch changes only the declared ranges and is idempotent
 ok 3 - controller patch changes only the declared ranges and is idempotent
   ---
-  duration_ms: 135.74757
+  duration_ms: 137.691127
   ...
 # Subtest: an unsupported controller remains untouched
 ok 4 - an unsupported controller remains untouched
   ---
-  duration_ms: 28.15363
+  duration_ms: 26.631811
   ...
 # Subtest: the bundled ARMv7 payload does not block the ARM64 patch
 ok 5 - the bundled ARMv7 payload does not block the ARM64 patch
   ---
-  duration_ms: 277.784204
+  duration_ms: 212.695042
   ...
 # Subtest: an incomplete patch is rejected without changing the controller
 ok 6 - an incomplete patch is rejected without changing the controller
   ---
-  duration_ms: 29.0227
+  duration_ms: 29.129219
   ...
 # Subtest: a failed decoder cannot replace the original controller
 ok 7 - a failed decoder cannot replace the original controller
   ---
-  duration_ms: 58.223177
+  duration_ms: 58.591955
   ...
 # Subtest: simultaneous patch processes use separate temporary files
 ok 8 - simultaneous patch processes use separate temporary files
   ---
-  duration_ms: 116.850315
+  duration_ms: 116.005764
   ...
 # Subtest: ARM64 download accepts http://8.8.8.8/sub and pins port 80
 ok 9 - ARM64 download accepts http://8.8.8.8/sub and pins port 80
   ---
-  duration_ms: 10625.96038
+  duration_ms: 10625.215266
   ...
 # Subtest: ARM64 download accepts https://8.8.8.8/sub and pins port 443
 ok 10 - ARM64 download accepts https://8.8.8.8/sub and pins port 443
   ---
-  duration_ms: 1106.132025
+  duration_ms: 1101.675245
   ...
 # Subtest: ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080
 ok 11 - ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080
   ---
-  duration_ms: 10501.492393
+  duration_ms: 10547.48216
   ...
 # Subtest: ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443
 ok 12 - ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443
   ---
-  duration_ms: 6483.344206
+  duration_ms: 6567.554946
   ...
 # Subtest: ARM64 download retains URL validation for ftp://8.8.8.8/sub
 ok 13 - ARM64 download retains URL validation for ftp://8.8.8.8/sub
   ---
-  duration_ms: 347.226514
+  duration_ms: 251.219046
   ...
 # Subtest: ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub
 ok 14 - ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub
   ---
-  duration_ms: 231.72113
+  duration_ms: 259.835971
   ...
 # Subtest: ARM64 download retains URL validation for http://127.0.0.1/sub
 ok 15 - ARM64 download retains URL validation for http://127.0.0.1/sub
   ---
-  duration_ms: 231.890673
+  duration_ms: 302.295737
   ...
 1..15
 # tests 15
@@ -82,4 +82,4 @@ ok 15 - ARM64 download retains URL validation for http://127.0.0.1/sub
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 30405.293286
+# duration_ms 30484.47362

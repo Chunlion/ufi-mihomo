@@ -58,7 +58,7 @@ func (a *App) requestKey() (map[string]any, error) {
 	if e = atomicWrite(dir+"/"+id, x509.MarshalPKCS1PrivateKey(key), 0600); e != nil {
 		return nil, e
 	}
-	return map[string]any{"ok": true, "protocol": 1, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
+	return map[string]any{"ok": true, "protocol": 1, "apply": true, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
 }
 
 type sealedRequest struct {

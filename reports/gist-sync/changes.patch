@@ -1,8 +1,8 @@
 diff --git a/.gitattributes b/.gitattributes
-index 47ffa1f..79e99ff 100644
+index 47ffa1f..64b552b 100644
 --- a/.gitattributes
 +++ b/.gitattributes
-@@ -1 +1,8 @@
+@@ -1 +1,9 @@
  猫猫TProxy.js text eol=lf
 +gist-sync/** text eol=lf
 +tests/gist-sync/** text eol=lf
@@ -10,6 +10,7 @@ index 47ffa1f..79e99ff 100644
 +reports/gist-sync/logs/** binary
 +reports/gist-sync/regression/** binary
 +reports/gist-sync/*.patch binary
++reports/gist-sync/*.png binary
 +tests/gist-sync/vendor/CryptoJS-LICENSE whitespace=-blank-at-eol
 diff --git a/.gitignore b/.gitignore
 index ae81745..509ec6e 100644
@@ -48,7 +49,7 @@ index 4feb964..6c2216a 100644
  node scripts/patch_controller_http.js tproxy-yq.zip clashctl_arm64.http
 diff --git a/docs/gist-sync.md b/docs/gist-sync.md
 new file mode 100644
-index 0000000..539c124
+index 0000000..dc22ad4
 --- /dev/null
 +++ b/docs/gist-sync.md
 @@ -0,0 +1,59 @@
@@ -79,7 +80,7 @@ index 0000000..539c124
 +
 +## 安装与升级
 +
-+将配套 JS 导入宿主，再在原组件管理中导入完整 ZIP。Gist 页面只管理同步设置和维护操作。组件校验及可执行性检查在替换旧安装前完成；升级保留 `Tools/gist-sync` 中的设置和私钥，清理任务、运行态和临时工作目录。成功安装与事务收尾分别报告；收尾失败时保留恢复线索。
++将配套 JS 导入宿主，再在原组件管理中导入完整 ZIP。Gist 页面填写链接和私钥，点击“应用”即保存并同步；维护操作收在“更多”中。组件校验及可执行性检查在替换旧安装前完成；升级保留 `Tools/gist-sync` 中的设置和私钥，清理任务、运行态和临时工作目录。成功安装与事务收尾分别报告；收尾失败时保留恢复线索。
 +
 +当前完整包尚未发布，`gist-sync/release.json` 的 `published=false`、下载列表为空。在线入口会说明待发布，不能使用不含 GistSync 的旧镜像。发布需要另行授权；必须先上传并验证实际包，再填入真实 URL 和发布状态并重建、复测。
 +
@@ -91,9 +92,9 @@ index 0000000..539c124
 +
 +`invalid_response` 的可复现链路是：旧设备缺少同步程序，Shell 的非 JSON 错误或空响应落入前端通用解析失败。新版先检查组件、版本和权限，再读取带随机边界及退出码的响应，分别报告组件缺失、版本不符、设备失败、格式错误、超时或状态未知。真实宿主的组件缺失路径另有 DEVICE 证据。
 +
-+`invalid_gist_url` 已在旧 F50 页面复现：空链接仍提交 test 任务。精简界面在提交前拦截空链接及错误格式，清理粘贴内容两端的不可见字符。测试和保存使用编辑后的链接；立即同步要求先保存修改。
++`invalid_gist_url` 已在旧 F50 页面复现：空链接仍提交 test 任务。精简界面在提交前拦截空链接及错误格式，清理粘贴内容两端的不可见字符。填写链接和私钥后点击“应用”，同一设备任务保存设置并更新当前 YAML；启用自动同步后按间隔继续更新。
 +
-+生产下载器拒绝内网及 Fake-IP 地址。电脑 WSL 的原生下载曾被 Fake-IP 检查阻止，失败记录保留。F50 的正式 ARM64 程序已成功下载同一真实 Gist，密文 SHA 与电脑下载一致；独立错误私钥得到解密失败，配置未写入。没有放开地址限制或 TLS 校验，也没有解密生产 Gist。
++生产下载器拒绝内网及 Fake-IP 地址。电脑 WSL 的原生下载曾被 Fake-IP 检查阻止，失败记录保留。F50 的正式 ARM64 程序已成功下载同一真实 Gist，密文 SHA 与电脑下载一致；独立错误私钥得到解密失败，配置未写入。没有放开地址限制或 TLS 校验，随后使用设备已保存的私钥完成真实 Gist 解密、YAML 和 Mihomo 校验，未应用生产配置。
 +
 +## 证据边界
 +
@@ -101,7 +102,7 @@ index 0000000..539c124
 +- UNIT：Go 单元测试，含可控 HTTP、进程和错误注入；这些不是外网或设备证据。
 +- MOCK：原组件安装/恢复测试中的设备替身、普通浏览器中的模拟设备接口。QEMU 执行原 ARM64 控制器，但网络输入仍是夹具。
 +- INTEGRATION：生产 AMD64 同步程序、真实 age/yq/Mihomo、本地 TLS 服务、真实文件/进程/HTTP。挂载、PID 和网络命名空间隔离；服务适配器仅测试 Off 和核心 API，不实现 F50 防火墙。断电测试通过仅在测试二进制启用的挂起点执行 SIGKILL；正常链路使用正式构建二进制。
-+- LIVE：用户授权 Raw URL 的真实外网请求；没有生产私钥，不含真实 Gist 解密。
++- LIVE：用户授权 Raw URL 的真实外网请求；设备保存的私钥完成真实 Gist 解密验证，没有导出私钥。
 +- DEVICE：F50 完整备份、用户授权后的完整包升级、实际程序执行、核心 API、配置及来源哈希、宿主 JS 保存回读，以及真实 Raw 下载和错误密钥验证。升级前后保持 TProxy。
 +
 +调度集成测试让持久化期限到期，实际运行独立后台进程，验证保存、关闭自动同步和 boot 入口。没有实际等待 24 小时，没有重启真实设备。长时间网络恢复、Android WebView 及 TProxy/TUN/Off 数据流量仍未验证。
@@ -110,7 +111,7 @@ index 0000000..539c124
 +
 +用户已允许备份后安装升级，暂不切换模式。完整备份及原宿主 JS 留在设备 root 专用目录，指针为 `/data/local/tmp/maomao-rc4-backup.path`。实际安装和收尾均成功，配置、来源及策略文件与备份哈希一致，核心 API 返回 200。首次状态目录缺失的初始化问题已修复，当前配置指纹不再为空。
 +
-+没有覆盖生产配置、切换模式或重启设备。真实 Gist 解密还需要匹配的私钥；没有将生产私钥写入命令行、日志或仓库。网络模式回归和真实重启需另行授权。
++没有覆盖生产配置、切换模式或重启设备。已通过设备保存的私钥进行真实 Gist 只读解密校验，没有将私钥写入命令行、日志或仓库。网络模式回归和真实重启需另行授权。
 diff --git a/gist-sync/Clash.GistSync b/gist-sync/Clash.GistSync
 new file mode 100644
 index 0000000..68b2f73
@@ -2140,10 +2141,10 @@ index 0000000..aead310
 +}
 diff --git a/gist-sync/native/jobs.go b/gist-sync/native/jobs.go
 new file mode 100644
-index 0000000..b0ef5ee
+index 0000000..f833e05
 --- /dev/null
 +++ b/gist-sync/native/jobs.go
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,280 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -2170,7 +2171,7 @@ index 0000000..b0ef5ee
 +
 +func validAction(action string) bool {
 +	switch action {
-+	case "test", "save", "sync", "disable", "delete":
++	case "test", "save", "apply", "sync", "disable", "delete":
 +		return true
 +	}
 +	return false
@@ -2299,6 +2300,8 @@ index 0000000..b0ef5ee
 +			out, err = a.validateSave(ctx, req, false)
 +		case "save":
 +			out, err = a.validateSave(ctx, req, true)
++		case "apply":
++			out, err = a.applyConfig(ctx, req)
 +		case "sync":
 +			out, err = a.syncConfig(ctx, req, false)
 +		case "disable":
@@ -3638,7 +3641,7 @@ index 0000000..06cafda
 +}
 diff --git a/gist-sync/native/process_test.go b/gist-sync/native/process_test.go
 new file mode 100644
-index 0000000..6079a88
+index 0000000..adbeedd
 --- /dev/null
 +++ b/gist-sync/native/process_test.go
 @@ -0,0 +1,423 @@
@@ -3903,7 +3906,7 @@ index 0000000..6079a88
 +	}
 +	before, _ := fileHash(a.cfg())
 +	setRemote(a, fixtureKey, remoteConfig(2))
-+	out, e := a.validateSave(context.Background(), Request{URL: strings.Replace(goodURL, "Bettbox.yaml.age", "switched.age", 1)}, true)
++	out, e := a.validateSave(context.Background(), Request{URL: strings.Replace(goodURL, "config.yaml.age", "switched.age", 1)}, true)
 +	if e != nil || !out.Saved {
 +		t.Fatal(out, e)
 +	}
@@ -4874,7 +4877,7 @@ index 0000000..0d39b99
 +}
 diff --git a/gist-sync/native/sealed.go b/gist-sync/native/sealed.go
 new file mode 100644
-index 0000000..f9e3515
+index 0000000..a503a96
 --- /dev/null
 +++ b/gist-sync/native/sealed.go
 @@ -0,0 +1,164 @@
@@ -4938,7 +4941,7 @@ index 0000000..f9e3515
 +	if e = atomicWrite(dir+"/"+id, x509.MarshalPKCS1PrivateKey(key), 0600); e != nil {
 +		return nil, e
 +	}
-+	return map[string]any{"ok": true, "protocol": 1, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
++	return map[string]any{"ok": true, "protocol": 1, "apply": true, "id": id, "modulus": fmt.Sprintf("%x", key.N), "exponent": key.E}, nil
 +}
 +
 +type sealedRequest struct {
@@ -5153,10 +5156,10 @@ index 0000000..fc9620e
 +}
 diff --git a/gist-sync/native/settings.go b/gist-sync/native/settings.go
 new file mode 100644
-index 0000000..367e411
+index 0000000..d120767
 --- /dev/null
 +++ b/gist-sync/native/settings.go
-@@ -0,0 +1,424 @@
+@@ -0,0 +1,449 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -5477,6 +5480,31 @@ index 0000000..367e411
 +	}
 +	return out, nil
 +}
++func (a *App) applyConfig(ctx context.Context, req Request) (Outcome, error) {
++	saved, err := a.validateSave(ctx, req, true)
++	if err != nil || !saved.OK {
++		return saved, err
++	}
++	active, err := a.readSettings()
++	if err == nil && (active.Generation != saved.Generation || req.Revision != nil && active.Revision != *req.Revision+1) {
++		err = fail("settings_changed")
++	}
++	if err != nil {
++		saved.OK, saved.Code = false, code(err)
++		return saved, err
++	}
++	req.Identity = ""
++	req.Revision = &active.Revision
++	out, err := a.syncConfig(ctx, req, false)
++	out.Saved = true
++	if out.Generation == "" {
++		out.Generation = saved.Generation
++	}
++	if out.Warning == "" {
++		out.Warning = saved.Warning
++	}
++	return out, err
++}
 +func (a *App) disableAuto(ctx context.Context) (out Outcome, err error) {
 +	lease, e := a.acquireLease(ctx, false)
 +	if e != nil {
@@ -5583,10 +5611,10 @@ index 0000000..367e411
 +}
 diff --git a/gist-sync/native/transaction.go b/gist-sync/native/transaction.go
 new file mode 100644
-index 0000000..9437cf4
+index 0000000..58d3dda
 --- /dev/null
 +++ b/gist-sync/native/transaction.go
-@@ -0,0 +1,468 @@
+@@ -0,0 +1,474 @@
 +// SPDX-License-Identifier: AGPL-3.0-or-later
 +package main
 +
@@ -5809,6 +5837,9 @@ index 0000000..9437cf4
 +	if s.Generation == "" || s.Deleted {
 +		return out, fail("not_configured")
 +	}
++	if req.Revision != nil && *req.Revision != s.Revision {
++		return out, fail("settings_changed")
++	}
 +	out.Generation = s.Generation
 +	if automatic && !s.Auto {
 +		return out, fail("auto_disabled")
@@ -5883,6 +5914,9 @@ index 0000000..9437cf4
 +	}
 +	if active.Generation != s.Generation || active.Deleted {
 +		return out, fail("source_changed")
++	}
++	if req.Revision != nil && *req.Revision != active.Revision {
++		return out, fail("settings_changed")
 +	}
 +	if automatic && !active.Auto {
 +		return out, fail("auto_disabled")
@@ -6057,10 +6091,10 @@ index 0000000..9437cf4
 +}
 diff --git a/gist-sync/native/transaction_test.go b/gist-sync/native/transaction_test.go
 new file mode 100644
-index 0000000..f1f6212
+index 0000000..06fc70e
 --- /dev/null
 +++ b/gist-sync/native/transaction_test.go
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,459 @@
 +package main
 +
 +import (
@@ -6139,6 +6173,39 @@ index 0000000..f1f6212
 +		t.Fatalf("save: %+v %v", out, e)
 +	}
 +}
++func TestApplySavesAndCommitsInOneAction(t *testing.T) {
++	a := fixture(t)
++	setRemote(a, fixtureKey, remoteConfig(7))
++	before, _ := fileHash(a.cfg())
++	out, err := a.applyConfig(context.Background(), Request{URL: goodURL, Identity: fixtureKey})
++	if err != nil || !out.OK || !out.Saved || !out.Written || out.Code != "saved_stopped" {
++		t.Fatalf("apply: %+v %v", out, err)
++	}
++	after, _ := fileHash(a.cfg())
++	if after == before || a.readState().CandidateHash != out.CandidateHash {
++		t.Fatal("Apply did not commit matching configuration and state")
++	}
++}
++func TestApplyRevisionCannotCommitAfterSettingsChange(t *testing.T) {
++	a := fixture(t)
++	saveFixture(t, a)
++	s, _ := a.readSettings()
++	before, _ := fileHash(a.cfg())
++	setRemote(a, fixtureKey, remoteConfig(2))
++	a.Hook = func(point string) error {
++		if point == "after_download" {
++			next := s
++			next.Revision++
++			return writeJSON(a.settingsPath(), next)
++		}
++		return nil
++	}
++	_, err := a.syncConfig(context.Background(), Request{Revision: &s.Revision}, false)
++	after, _ := fileHash(a.cfg())
++	if code(err) != "settings_changed" || before != after {
++		t.Fatalf("stale Apply revision committed: %v", err)
++	}
++}
 +func TestManualWorkflow(t *testing.T) {
 +	a := fixture(t)
 +	setRemote(a, fixtureKey, remoteConfig(1))
@@ -6198,7 +6265,7 @@ index 0000000..f1f6212
 +	ctx := context.Background()
 +	saveFixture(t, a)
 +	old, _ := a.readSettings()
-+	newURL := strings.Replace(goodURL, "Bettbox.yaml.age", "other.age", 1)
++	newURL := strings.Replace(goodURL, "config.yaml.age", "other.age", 1)
 +	setRemote(a, fixtureKey, []byte("not a YAML mapping"))
 +	out, e := a.validateSave(ctx, Request{URL: newURL}, true)
 +	if e == nil || out.Saved {
@@ -6317,7 +6384,7 @@ index 0000000..f1f6212
 +		next := old
 +		next.Generation = nonce()
 +		next.Revision++
-+		next.URL = strings.Replace(goodURL, "Bettbox.yaml.age", "new.age", 1)
++		next.URL = strings.Replace(goodURL, "config.yaml.age", "new.age", 1)
 +		dir := a.data() + "/sources/" + next.Generation
 +		_ = privateDir(dir)
 +		_ = atomicWrite(dir+"/identity.txt", []byte(fixtureKey+"\n"), 0600)
@@ -6489,10 +6556,10 @@ index 0000000..f1f6212
 +}
 diff --git a/gist-sync/plugin-gist.js b/gist-sync/plugin-gist.js
 new file mode 100644
-index 0000000..451e805
+index 0000000..8a780ee
 --- /dev/null
 +++ b/gist-sync/plugin-gist.js
-@@ -0,0 +1,155 @@
+@@ -0,0 +1,156 @@
 +  const F50_GIST_HELPER = '/data/clash/Tools/kano-gist-sync';
 +  function f50GistParse(response, tag, command) {
 +    const candidates = [response?.content, response?.data?.content, response?.data?.result, response?.result];
@@ -6576,6 +6643,7 @@ index 0000000..451e805
 +  async function f50GistDispatch(action, request = {}) {
 +    try {
 +      const key = await f50GistExec(['request-key'],15000);
++      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
 +      if (!key.ok) return key;
 +      const sealed=f50GistSeal(key,action,request);
 +      return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -6615,7 +6683,7 @@ index 0000000..451e805
 +
 +    test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
 +    settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
-+    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'\u914d\u7f6e\u5df2\u52a0\u8f7d\uff0c\u7b56\u7565\u68c0\u67e5\u901a\u8fc7',
++    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
 +    saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
 +    local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
 +    local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
@@ -6692,10 +6760,10 @@ index 0000000..14bcb2b
 +}
 diff --git a/gist-sync/ui-gist.js b/gist-sync/ui-gist.js
 new file mode 100644
-index 0000000..99c3eb8
+index 0000000..cf6fe74
 --- /dev/null
 +++ b/gist-sync/ui-gist.js
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,116 @@
 +    const gistSyncBtn = document.createElement('button');
 +    gistSyncBtn.classList.add('btn');
 +    gistSyncBtn.textContent = 'Gist \u52a0\u5bc6\u540c\u6b65';
@@ -6705,24 +6773,24 @@ index 0000000..99c3eb8
 +        <div style="pointer-events:all;width:92vw;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
 +          <div class="title" style="margin:0 0 12px">Gist 同步</div>
 +          <label for="mm_gist_url">Gist Raw 链接</label>
-+          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
++          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
 +          <label for="mm_gist_key" style="display:block;margin-top:10px">age 私钥</label>
-+          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
++          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
 +          <small id="mm_gist_key_hint" style="display:block;margin:4px 0 8px;color:#94a3b8"></small>
 +          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0;">
 +            <label><input id="mm_gist_auto" type="checkbox"> 自动同步</label>
-+            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:light!important;background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;min-height:42px;padding:6px;border:1px solid #64748b;border-radius:6px;">
-+              <option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="1">1 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="6" selected>6 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="12">12 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="24">24 小时</option>
++            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:dark!important;background:#111827!important;color:#fff!important;font:12px Arial;box-sizing:border-box;height:30px;min-height:0;padding:4px 8px;border:1px solid #64748b;border-radius:8px;">
++              <option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="1">1 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="6" selected>6 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="12">12 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="24">24 小时</option>
 +            </select></label>
 +          </div>
-+          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:3">
-+            <button id="mm_gist_test">测试</button><button id="mm_gist_save">保存</button><button id="mm_gist_sync">立即同步</button>
++          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:1">
++            <button id="mm_gist_apply" type="button">应用</button>
 +          </div>
 +          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
 +          <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
 +          <details style="margin-top:8px"><summary>更多</summary>
 +            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-+              <button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
++              <button id="mm_gist_test">测试连接</button><button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
 +              <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
 +              <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
 +            </div>
@@ -6730,7 +6798,7 @@ index 0000000..99c3eb8
 +          <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
 +        </div>`);
 +      const q = id => el.querySelector('#mm_gist_'+id);
-+      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, savedUrl='';
++      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 +
 +      const result = text => { if(opened) q('result').textContent=text; };
 +      const fmt = value => value && !String(value).startsWith('0001-') ? new Date(value).toLocaleString() : '\u65e0';
@@ -6746,11 +6814,12 @@ index 0000000..99c3eb8
 +          q('url').value=saved.deleted?'':saved.url || '';
 +          q('auto').checked=!!saved.auto;
 +          q('interval').value=String(saved.intervalHours || 6);
-+          revision=saved.revision || 0; settingsLoaded=true; savedUrl=saved.url || '';
++          revision=saved.revision || 0; settingsLoaded=true;
 +          pendingKey='';q('key').value='';
 +        }
 +        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
 +        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
++        currentFingerprint=st.currentFingerprint || null;
 +        const state=st.state?.generation===st.settings?.generation?st.state:null;
 +        const last=state?.last;
 +        const recent=(st.jobs||[])[0];
@@ -6763,28 +6832,22 @@ index 0000000..99c3eb8
 +        q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
 +        return st;
 +      };
-+      const busy=on=>{foreground=on;for(const name of ['test','save','sync','disable','delete','recover','read'])q(name).disabled=on;};
++      const busy=on=>{foreground=on;for(const name of ['test','apply','disable','delete','recover','read'])q(name).disabled=on;};
 +      const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
 +      const launch=async (action,request={})=>{
 +        if(foreground)return;
-+        busy(true);result('\u6b63\u5728\u63d0\u4ea4\u8bbe\u5907\u4efb\u52a1\u2026');
++        busy(true);result(action==='apply'?'正在应用…':'正在处理…');
 +        try{
 +          const started=await f50GistDispatch(action,request);
 +          if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
 +          currentJob=started.job;
-+          result('\u8bbe\u5907\u4efb\u52a1 '+currentJob+' \u5df2\u63d0\u4ea4\uff1b\u53ef\u5173\u95ed\u9875\u9762\u3002');
++          result(action==='apply'?'正在应用…':'正在处理…');
 +          while(opened){
 +            const job=await f50GistExec(['job',currentJob],8000);
 +            if(!opened)break;
 +            if(job.status==='finished'){
 +              const out=job.result;result(describe(out));
 +              if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
-+              if(action==='sync' && out?.code==='local_config_conflict'){
-+                const expected=out.applied;
-+                if(expected && window.confirm('\u5df2\u68c0\u6d4b\u5230\u672c\u5730\u914d\u7f6e\u6216\u7f51\u7edc\u8bbe\u7f6e\u4fee\u6539\u3002\u786e\u8ba4\u7528 Gist \u66ff\u6362\u5f53\u524d\u914d\u7f6e\uff1f\u672c\u5730\u7f51\u7edc\u53c2\u6570\u4ecd\u6309\u732b\u732b\u89c4\u5219\u4fdd\u7559\u3002')){
-+                  busy(false);return await launch('sync',{replaceLocal:true,expectedLocal:expected});
-+                }
-+              }
 +              break;
 +            }
 +            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
@@ -6803,13 +6866,9 @@ index 0000000..99c3eb8
 +        q('url').value=url;
 +        if(q('key').value.trim())pendingKey=q('key').value.trim();
 +        q('key').value='';
-+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
++        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision,...(action==='apply'?{replaceLocal:true,expectedLocal:currentFingerprint}:{})});
 +      };
-+      q('test').onclick=()=>formAction('test');q('save').onclick=()=>formAction('save');
-+      q('sync').onclick=()=>{
-+        if(f50GistCleanUrl(q('url').value)!==savedUrl || q('key').value.trim() || pendingKey){result('请先保存新链接或私钥，再同步。');return;}
-+        return launch('sync');
-+      };
++      q('test').onclick=()=>formAction('test');q('apply').onclick=()=>formAction('apply');
 +      q('disable').onclick=()=>launch('disable');
 +      q('refresh').onclick=()=>refresh(false);
 +      q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};
@@ -7092,7 +7151,7 @@ index 0000000..ae25b40
 +if __name__=='__main__':main()
 diff --git a/scripts/package_gist_sync.py b/scripts/package_gist_sync.py
 new file mode 100644
-index 0000000..d07ac19
+index 0000000..b654b94
 --- /dev/null
 +++ b/scripts/package_gist_sync.py
 @@ -0,0 +1,117 @@
@@ -7140,14 +7199,14 @@ index 0000000..d07ac19
 +- JS 与 Gist 共用配置事务生成器。Go、模块 UI、构建和测试脚本纳入仓库。
 +- 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 +- select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
-+- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；修改来源后先保存再同步。首次状态查询的 yq 目录在初始化时建立。
++- 采用用户提供的精简界面。空链接不再提交设备任务，清理粘贴链接两端的不可见字符；主按钮统一为“应用”，同一设备任务保存设置并同步 YAML，后台按所选间隔继续更新。首次状态查询的 yq 目录在初始化时建立。
 +- 新增真实组件、SIGKILL、只读目录、API 失联、来源切换、取消和后台调度验证。旧测试补齐依赖；变化的 Shell 输出使用审查快照精确断言，验证器不会更新预期。
 +
 +```text
 +{proof['diff_stat']}
 +```
 +
-+完整源码差异见 `changes.patch`。F50 完整包升级已验证；生产 Gist 正确密钥解密和 Android WebView 尚未验证。
++完整源码差异见 `changes.patch`。F50 完整包升级已验证；真实 Gist 解密与配置校验已通过，F50 生产配置应用和 Android WebView 尚未验证。
 +"""
 +    (REPORTS/'CHANGES.md').write_text(difference,encoding='utf-8')
 +    patch=subprocess.check_output(['git','diff',baseline['head'],'--','猫猫TProxy.js','.gitattributes','.gitignore','README.md','scripts','gist-sync','tests','docs'],cwd=ROOT)
@@ -7172,9 +7231,9 @@ index 0000000..d07ac19
 +            '完整包升级及事务收尾成功；配置、来源、策略哈希与备份一致。核心只有一个，API HTTP 200，保持 TProxy。',
 +            '宿主已保存当前精简 JS，重新打开后逐字回读一致，其余六个插件未变。',
 +            '旧页面空链接触发 invalid_gist_url 已实机复现。新版空/错误链接在页面拦截，未新建设备任务。',
-+            '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试，不是生产 Gist 解密成功。','']
++            '正式 ARM64 同步程序通过真实 HTTPS 下载用户 Gist，密文 SHA 与电脑下载一致；独立错误私钥被拒绝，确认配置指纹保持不变。此项是预期失败的负向测试。随后设备保存的私钥通过真实 Gist 只读解密与配置校验，未应用生产配置，证据见 `device-saved-test.json`。','']
 +    evidence=[json.loads(x) for x in (REPORTS/'evidence.jsonl').read_text(encoding='utf-8').splitlines() if x]
-+    names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','genuine initial status and full transaction regression','Raw URL boundary regression'}
++    names={'reproduce empty link invalid_gist_url on old installed UI','upgrade approved complete package retaining production mode','verify actual upgraded components core and configuration','persist user minimal plugin preserving other six entries','verify real downloader and confirmed fingerprint after initialization fix','actual minimal UI input download and negative decryption','actual F50 empty-link rejection and minimal UI','deploy compact 30px interval with single Apply action','verify compact interval matches actual Apply button','validate real saved Gist with device-held identity without applying','upgrade single Apply worker with original installer','verify core and configuration after Apply upgrade','actual F50 Apply button encrypted request and wrong-key protection','genuine initial status and full transaction regression','Raw URL boundary regression'}
 +    for row in evidence:
 +        if row['name'] not in names:continue
 +        lines += [f"- **{row['name']}** — {row['category']} / {row['result']}；退出码 `{row['exit_code']}`。",
@@ -7182,9 +7241,9 @@ index 0000000..d07ac19
 +                  f"  stdout：`{row['stdout']}`；stderr：`{row['stderr']}`。",'']
 +    lines += ['', '## BLOCKED 与限制','',
 +              '- 真实 TProxy/TUN/Off 数据流量、设备重启及长时间自动同步未执行；本次只授权安装升级、不切换模式。',
-+              '- 生产私钥未提供，没有解密用户真实 Gist。Raw HTTPS、状态码、大小、两次 SHA 和变化检测见 `live.json`；Node 的成功不替代生产 Go 客户端 LIVE 成功。',
++              '- 最初没有测试私钥；随后设备已保存用户设置，正式程序使用设备持有的私钥通过真实 Gist 下载、解密、YAML 和 Mihomo 校验，未写入生产配置，见 `device-saved-test.json`。早期网络下载证据见 `live.json`。',
 +              '- 电脑 WSL 的 Go LIVE 被 Fake-IP 检查阻止；F50 正式程序已成功下载相同 Gist。电脑失败退出码和日志保留，没有放开 SSRF 或 TLS 检查。',
-+              '- F50 页面完整交互测试未完成：浏览器标签页在提交/等待期间关闭，相关 FAIL 原样保留。已读回实际设备回执，任务正确下载后因测试私钥不匹配失败，未写配置；没有把页面测试整体标为 PASS。',
++              '- F50 主按钮输入拦截、紧凑暗色菜单及重新打开已通过。早期完整交互测试的断言错误及标签页关闭记录保留；设备已有用户设置后，测试按保护条件停止，未替换密钥。真实 Gist 使用设备保存密钥完成只读验证，未点击应用覆盖生产配置。',
 +              '- 普通浏览器交互使用真实 Chromium 与模拟设备 API，截图和颜色见 `browser-ui.png/json`。Android WebView 原生下拉弹窗未验证。',
 +              '- 后台测试使用实际独立进程，将持久化到期时间设为过去，没有等待 24 小时或重启设备。期限/重试有 UNIT 覆盖；F50 长时间网络恢复待验证。',
 +              '- 正常配置链路使用正式 AMD64 程序、真实 age/yq/Mihomo 和隔离 TLS。Off 服务适配器确认实际 API，不证明 Android 防火墙执行。仅测试二进制提供挂起点，以 SIGKILL 复现崩溃。',
@@ -7192,7 +7251,7 @@ index 0000000..d07ac19
 +              '构建、安全边界与实机准备步骤见 `docs/gist-sync.md`。']
 +    (REPORTS/'TEST-REPORT.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 +    DIST.mkdir(parents=True,exist_ok=True)
-+    (DIST/'升级说明.txt').write_text('导入配套 JS，再在原组件管理中导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页已采用用户精简界面。在线组件包尚未发布；本次 F50 已升级，保持 TProxy。生产 Gist 正确密钥解密、模式切换及 Android WebView 未验证。\n',encoding='utf-8')
++    (DIST/'升级说明.txt').write_text('导入配套 JS，再在原组件管理中导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页已采用精简界面，填写链接、私钥后点击应用即可更新 YAML。在线组件包尚未发布；本次 F50 已升级，保持 TProxy。真实 Gist 只读解密校验通过；F50 生产配置应用、模式切换及 Android WebView 未验证。\n',encoding='utf-8')
 +    for name in ['TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']:
 +        shutil.copyfile(REPORTS/name,DIST/name)
 +    files=[DIST/name for name in ['猫猫TProxy.js','tproxy-yq-gistsync-full.zip','升级说明.txt','TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']]
@@ -7735,10 +7794,10 @@ index 0000000..b71ddfb
 +module.exports={profiles:F50_FIXED_PROFILES,KPR:createPrivateRouteLogic()};
 diff --git a/tests/gist-sync/browser-ui.js b/tests/gist-sync/browser-ui.js
 new file mode 100644
-index 0000000..a350483
+index 0000000..5654e25
 --- /dev/null
 +++ b/tests/gist-sync/browser-ui.js
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,43 @@
 +const fs=await import('node:fs/promises');
 +const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
 +const ui=await fs.readFile(root+'gist-sync/ui-gist.js','utf8');
@@ -7754,28 +7813,30 @@ index 0000000..a350483
 +const createFixedToast=(id,html)=>{document.getElementById(id)?.remove();const el=document.createElement('section');el.id=id;el.innerHTML=html;el.style.cssText='margin:20px auto;width:max-content';document.body.append(el);return {el,close:()=>el.remove()};};
 +const f50GistMessage=window.gistMessage;
 +const f50GistCleanUrl=window.gistCleanUrl,f50GistValidUrl=window.gistValidUrl;
-+const f50GistExec=async args=>args[0]==='status'?(missing?{ok:false,code:'components_missing'}:{ok:true,version:'1.0.0-rc4',protocol:1,settings:{...saved},identitySet:true,ageReady:true,schedulerRunning:saved.auto,jobs:[]}):args[0]==='job'?{id:args[1],status:'finished',result:{ok:true,code:lastAction==='save'?'settings_saved':lastAction==='test'?'test_passed':lastAction==='disable'?'auto_disabled':'up_to_date',settingsSaved:['save','disable'].includes(lastAction),downloaded:true,decrypted:true,validated:true}}:{ok:true};
-+const f50GistDispatch=async(action,request)=>{lastAction=action;calls.push({action,hasIdentity:!!request.identity,url:request.url,intervalHours:request.intervalHours,auto:request.auto});if(action==='save')saved={...saved,url:request.url,auto:request.auto,intervalHours:request.intervalHours,revision:saved.revision+1};if(action==='disable')saved.auto=false;return {ok:true,job:(++jobNumber).toString(16).padStart(32,'0')};};
++const f50GistExec=async args=>args[0]==='status'?(missing?{ok:false,code:'components_missing'}:{ok:true,version:'1.0.0-rc4',protocol:1,settings:{...saved},identitySet:true,ageReady:true,schedulerRunning:saved.auto,jobs:[]}):args[0]==='job'?{id:args[1],status:'finished',result:{ok:true,code:lastAction==='apply'?'synced':lastAction==='test'?'test_passed':lastAction==='disable'?'auto_disabled':'up_to_date',settingsSaved:['apply','disable'].includes(lastAction),downloaded:true,decrypted:true,validated:true}}:{ok:true};
++const f50GistDispatch=async(action,request)=>{lastAction=action;calls.push({action,hasIdentity:!!request.identity,url:request.url,intervalHours:request.intervalHours,auto:request.auto});if(action==='apply')saved={...saved,url:request.url,auto:request.auto,intervalHours:request.intervalHours,revision:saved.revision+1};if(action==='disable')saved.auto=false;return {ok:true,job:(++jobNumber).toString(16).padStart(32,'0')};};
 +window.fixtureState=()=>({saved:{...saved},calls:structuredClone(calls)});window.fixtureMissing=()=>missing=true;
 +`+ui+'\nwindow.openGist=()=>gistSyncBtn.onclick();'});
 +await page.evaluate(()=>window.openGist());
 +const checked=[];const check=(name)=>checked.push({name,result:'PASS',category:'MOCK',environment:'real Tabbit Chromium; simulated device API'});
 +await expect(page.locator('#mm_gist_url')).toHaveValue(/one\.age$/);check('saved link restored');
 +await page.locator('#mm_gist_url').fill('https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/two.age');
-+await page.locator('#mm_gist_key').fill('fixture-key-not-production');await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
++await page.getByText('更多',{exact:true}).click();await page.locator('#mm_gist_key').fill('fixture-key-not-production');await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_apply')).toBeEnabled();
 +await expect(page.locator('#mm_gist_key')).toHaveValue('');check('test connection clears password field');
 +await page.locator('#mm_gist_auto').check();
 +for(const value of ['1','6','12','24']){
-+ await page.locator('#mm_gist_interval').selectOption(value);await page.locator('#mm_gist_save').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
++ await page.locator('#mm_gist_interval').selectOption(value);await page.locator('#mm_gist_apply').click();await expect(page.locator('#mm_gist_apply')).toBeEnabled();
 + await page.locator('#mm_gist_close').click();await page.evaluate(()=>window.openGist());await expect(page.locator('#mm_gist_interval')).toHaveValue(value);await expect(page.locator('#mm_gist_auto')).toBeChecked();check('interval '+value+' saves and restores after reopen');
 +}
-+await page.locator('#mm_gist_key').fill('replacement-fixture-key');await page.locator('#mm_gist_save').click();await expect(page.locator('#mm_gist_save')).toBeEnabled();
-+await page.locator('#mm_gist_sync').click();await expect(page.locator('#mm_gist_sync')).toBeEnabled();check('replace identity and manual sync');
-+await page.getByText('更多',{exact:true}).click();await page.locator('#mm_gist_disable').click();await expect(page.locator('#mm_gist_auto')).not.toBeChecked();check('disable automatic sync');
++await page.locator('#mm_gist_key').fill('replacement-fixture-key');await page.locator('#mm_gist_apply').click();await expect(page.locator('#mm_gist_apply')).toBeEnabled();
++check('replace identity and apply in one action');
++if(!(await page.locator('details').evaluate(e=>e.open)))await page.getByText('更多',{exact:true}).click();await page.locator('#mm_gist_disable').click();await expect(page.locator('#mm_gist_auto')).not.toBeChecked();check('disable automatic sync');
 +const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,select:{color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor},options:[...e.options].map(o=>({text:o.textContent,value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
-+assert.equal(styles.options.length,4);assert.ok(styles.height>=42);for(const o of styles.options){assert.ok(o.text);assert.notEqual(o.color,o.background);}check('all four options have explicit readable colors and adequate height');
++assert.equal(styles.options.length,4);assert.ok(styles.height>=28 && styles.height<=32);for(const o of styles.options){assert.ok(o.text);assert.notEqual(o.color,o.background);}check('all four options have explicit readable colors and adequate height');
++const inputStyle=await page.locator('#mm_gist_url').evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor}));
++await expect(styles.select).toEqual(inputStyle);for(const o of styles.options){assert.equal(o.color,inputStyle.color);assert.equal(o.background,inputStyle.background);}check('interval select and options match neighboring dark input colors');
 +await page.screenshot({path:root+'reports/gist-sync/browser-ui.png',fullPage:true});
-+const state=await page.evaluate(()=>window.fixtureState());assert.equal(state.calls[0].action,'test');assert.equal(state.calls[0].hasIdentity,true);assert.ok(state.calls.some(c=>c.action==='sync'));assert.equal(state.saved.intervalHours,24);
++const state=await page.evaluate(()=>window.fixtureState());assert.equal(state.calls[0].action,'test');assert.equal(state.calls[0].hasIdentity,true);assert.ok(state.calls.some(c=>c.action==='apply'));assert.equal(state.saved.intervalHours,24);
 +await page.evaluate(()=>window.fixtureMissing());await page.locator('#mm_gist_refresh').click();await expect(page.locator('#mm_gist_status')).toHaveText('当前完整组件版本不支持 Gist 同步，请在组件管理中更新。');check('missing component actionable message');
 +assert.equal(await page.getByRole('button',{name:'联网安装 age'}).count(),0);assert.equal(await page.getByRole('button',{name:'导入完整组件包（含 Gist）'}).count(),0);check('no independent component installation controls');
 +await fs.writeFile(root+'reports/gist-sync/browser-ui.json',JSON.stringify({userAgent:await page.evaluate(()=>navigator.userAgent),checks:checked,styles},null,2)+'\n');
@@ -7864,10 +7925,10 @@ index 0000000..6f17b35
 +echo HOST_SETTING_BACKUP_VERIFIED=1
 diff --git a/tests/gist-sync/device-input.js b/tests/gist-sync/device-input.js
 new file mode 100644
-index 0000000..e3a7e39
+index 0000000..7fba719
 --- /dev/null
 +++ b/tests/gist-sync/device-input.js
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,41 @@
 +const fs=await import('node:fs/promises');
 +const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
 +const host=pages().find(p=>p.url()==='http://192.168.0.1:2333/');
@@ -7886,20 +7947,27 @@ index 0000000..e3a7e39
 +}
 +await page.waitForFunction(()=>!!document.querySelector('#mm_gist_status')?.textContent);
 +const before=await jobs();
-+await page.locator('#mm_gist_url').fill('');await page.locator('#mm_gist_test').click();
++const savedURL=await page.locator('#mm_gist_url').inputValue();
++await page.locator('#mm_gist_url').fill('');await page.locator('#mm_gist_apply').click();
 +await expect(page.locator('#mm_gist_result')).toHaveText('请先填写 Gist Raw 链接。');
-+await page.locator('#mm_gist_url').fill('https://gist.github.com/fixture/abcde');await page.locator('#mm_gist_test').click();
++await page.locator('#mm_gist_url').fill('https://gist.github.com/fixture/abcde');await page.locator('#mm_gist_apply').click();
 +await expect(page.locator('#mm_gist_result')).toHaveText('请填写完整的 Gist Raw .age 下载链接。');
 +await expect(await jobs()).toEqual(before);
 +assert.ok(!(await page.locator('#mm_gist_status').textContent()).match(/SHA-256|控制面|运行确认|未执行/));
 +const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,options:[...e.options].map(o=>({value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
-+await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=42);
++await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=28 && styles.height<=32);
 +for(const o of styles.options)assert.notEqual(o.color,o.background);
++const buttonHeight=await page.locator('#mm_gist_apply').evaluate(e=>e.getBoundingClientRect().height);
++assert.ok(Math.abs(styles.height-buttonHeight)<1,'Interval select must match the neighboring Apply button height');
++const theme=await page.locator('#mm_gist_interval').evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,scheme:getComputedStyle(e).colorScheme}));
++const inputStyle=await page.locator('#mm_gist_url').evaluate(e=>({color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor}));
++assert.equal(theme.color,inputStyle.color);assert.equal(theme.background,inputStyle.background);assert.equal(theme.scheme,'dark');
++for(const o of styles.options){assert.equal(o.color,theme.color);assert.equal(o.background,theme.background);}
 +await page.locator('#mm_gist_url').fill('');await page.locator('#mm_gist_close').click();
 +await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
-+await expect(page.locator('#mm_gist_url')).toHaveValue('');await expect(page.locator('#mm_gist_key')).toHaveValue('');
++await expect(page.locator('#mm_gist_url')).toHaveValue(savedURL);await expect(page.locator('#mm_gist_key')).toHaveValue('');
 +await expect(page.locator('#mm_gist_sync_dialog')).toHaveCSS('opacity','1');
-+await page.screenshot({fullPage:false});
++await page.screenshot({fullPage:false,mask:[page.locator('#mm_gist_url')],maskColor:'#111827'});
 +const result={category:'DEVICE',result:'PASS',coverage:'empty/malformed links rejected locally with no new jobs; concise status; four readable options; reopen; no settings or configuration writes',styles};
 +await fs.writeFile(root+'reports/gist-sync/device-input.json',JSON.stringify(result,null,2)+'\n');return result;
 diff --git a/tests/gist-sync/device-inspect.js b/tests/gist-sync/device-inspect.js
@@ -7961,7 +8029,7 @@ index 0000000..80712d5
 +}
 diff --git a/tests/gist-sync/device-live-test.js b/tests/gist-sync/device-live-test.js
 new file mode 100644
-index 0000000..f0afd42
+index 0000000..ff1f93b
 --- /dev/null
 +++ b/tests/gist-sync/device-live-test.js
 @@ -0,0 +1,34 @@
@@ -7982,7 +8050,7 @@ index 0000000..f0afd42
 +  const api=new Function('hostRunShellWithRoot','shellQuote','CryptoJS',glue+'\nreturn {exec:f50GistExec,dispatch:f50GistDispatch};')(runShellWithRoot,v=>"'"+String(v).replace(/'/g,"'\\''")+"'",CryptoJS);
 +  const before=await api.exec(['status']);if(!before.ok)throw Error('Device status unavailable: '+before.code);
 +  if(before.fingerprintError||!['config','policy','source'].every(k=>before.currentFingerprint?.[k]))throw Error('Initial fingerprint unconfirmed: '+before.fingerprintError);
-+  const started=await api.dispatch('test',{url:input.url,identity,auto:false,intervalHours:6});identity='';
++  const started=await api.dispatch('apply',{url:input.url,identity,auto:false,intervalHours:6});identity='';
 +  if(!started.ok||!started.job)throw Error('Device dispatch failed: '+started.code);
 +  const deadline=Date.now()+135000;let job;
 +  while(Date.now()<deadline){job=await api.exec(['job',started.job]);if(job.status==='finished')break;if(!job.ok||job.status==='completion_unknown')throw Error('Device job unconfirmed');await new Promise(r=>setTimeout(r,500));}
@@ -7994,7 +8062,7 @@ index 0000000..f0afd42
 + assert.equal(result.outcome.ok,false);assert.equal(result.outcome.code,'age_decrypt_failed');
 + assert.equal(result.outcome.downloaded,true);assert.equal(result.outcome.decrypted,false);assert.equal(result.outcome.written,false);
 + assert.equal(result.outcome.cipherHash,input.sha256);assert.deepEqual(result.after,result.before);
-+ await fs.writeFile(root+'reports/gist-sync/device-live.json',JSON.stringify({category:'DEVICE/LIVE',result:'PASS',coverage:'production ARM64 CLI, actual external Raw HTTPS download, authenticated ciphertext hash, independent wrong identity rejection, no configuration write',...result},null,2)+'\n');
++ await fs.writeFile(root+'reports/gist-sync/device-live.json',JSON.stringify({category:'DEVICE/LIVE',result:'PASS',coverage:'production ARM64 Apply action, actual external Raw HTTPS download, authenticated ciphertext hash, independent wrong identity rejection, no configuration write',...result},null,2)+'\n');
 + // Remove only this finished negative-test receipt; retain its recorded evidence.
 + await page.evaluate(async id=>{if(!/^[a-f0-9]{32}$/.test(id))throw Error('Invalid fixture job');const r=await runShellWithRoot('rm -f /data/clash/Tools/gist-sync/jobs/'+id+'.json',5000);if(!r.success)throw Error('Test receipt cleanup failed');},result.id);
 + return result;
@@ -8158,12 +8226,39 @@ index 0000000..04d3e11
 +const platform=await page.evaluate(async()=>await runShellWithRoot("command -v awk; ls -l $(command -v awk); sed -n '/^f50_redact()/,/^}/p' /data/clash/Scripts/Clash.Service | base64",10000));
 +const trustedPath=await page.evaluate(async command=>await runShellWithRoot('export PATH=/data/kano_tproxy_tools/bin:$PATH\ncommand -v awk\n'+command+' 2>&1',10000),command);
 +return {plain,viaFile,platform,trustedPath};
+diff --git a/tests/gist-sync/device-saved-test.js b/tests/gist-sync/device-saved-test.js
+new file mode 100644
+index 0000000..503b739
+--- /dev/null
++++ b/tests/gist-sync/device-saved-test.js
+@@ -0,0 +1,21 @@
++const fs=await import('node:fs/promises');
++const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
++const glue=await fs.readFile(root+'gist-sync/plugin-gist.js','utf8');
++const result=await page.evaluate(async glue=>{
++ const api=new Function('hostRunShellWithRoot','shellQuote','CryptoJS',glue+'\nreturn {exec:f50GistExec,dispatch:f50GistDispatch};')(runShellWithRoot,v=>"'"+String(v).replace(/'/g,"'\\''")+"'",CryptoJS);
++ const before=await api.exec(['status']);
++ if(!before.ok||!before.settings?.url||!before.identitySet||before.fingerprintError)throw Error('Saved device settings unavailable');
++ const started=await api.dispatch('test',{url:before.settings.url,revision:before.settings.revision});
++ if(!started.ok||!started.job)throw Error('Read-only validation could not start: '+started.code);
++ let job;const end=Date.now()+135000;
++ while(Date.now()<end){job=await api.exec(['job',started.job]);if(job.status==='finished')break;if(!job.ok||job.status==='completion_unknown')throw Error('Read-only validation result unconfirmed');await new Promise(r=>setTimeout(r,500));}
++ if(job?.status!=='finished')throw Error('Read-only validation timeout');
++ const after=await api.exec(['status']);
++ if(!after.ok||after.fingerprintError)throw Error('Final state unconfirmed');
++ if(JSON.stringify(after.currentFingerprint)!==JSON.stringify(before.currentFingerprint)||JSON.stringify(after.settings)!==JSON.stringify(before.settings))throw Error('Device settings/configuration changed during validation');
++ return {outcome:job.result,before:before.currentFingerprint,after:after.currentFingerprint,settingsUnchanged:true};
++},glue);
++assert.equal(result.outcome.ok,true);assert.equal(result.outcome.code,'test_passed');
++assert.equal(result.outcome.downloaded,true);assert.equal(result.outcome.decrypted,true);assert.equal(result.outcome.validated,true);assert.equal(result.outcome.written,false);
++await fs.writeFile(root+'reports/gist-sync/device-saved-test.json',JSON.stringify({category:'DEVICE/LIVE',result:'PASS',coverage:'real saved Gist and device-held identity; actual age decryption, YAML and Mihomo validation; no settings or production configuration write',...result},null,2)+'\n');
++return result;
 diff --git a/tests/gist-sync/device-ui.js b/tests/gist-sync/device-ui.js
 new file mode 100644
-index 0000000..9f3456e
+index 0000000..dc5692f
 --- /dev/null
 +++ b/tests/gist-sync/device-ui.js
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,51 @@
 +const fs=await import('node:fs/promises');
 +const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
 +const inputPath=root+'.cache/gist-sync/device-live-input.json',keyPath=root+'.cache/gist-sync/device-test-identity.txt';
@@ -8183,6 +8278,7 @@ index 0000000..9f3456e
 + if(!(await group.evaluate(e=>e.open)))await group.locator('summary').click();
 + await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
 + await page.waitForFunction(()=>!!document.querySelector('#mm_gist_status')?.textContent);
++ if(!(await page.locator('#mm_gist_sync_dialog details').evaluate(e=>e.open)))await page.locator('#mm_gist_sync_dialog summary').click();
 + const before=await snapshot();
 + assert.equal(await page.locator('#mm_gist_url').inputValue(),'','Expected unconfigured device; do not replace user settings');
 + await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请先填写 Gist Raw 链接。');
@@ -8190,19 +8286,19 @@ index 0000000..9f3456e
 + await page.locator('#mm_gist_test').click();await expect(page.locator('#mm_gist_result')).toHaveText('请填写完整的 Gist Raw .age 下载链接。');
 + const invalid=await snapshot();await expect(invalid.jobs.map(j=>j.id)).toEqual(before.jobs.map(j=>j.id));
 + const styles=await page.locator('#mm_gist_interval').evaluate(e=>({height:e.getBoundingClientRect().height,options:[...e.options].map(o=>({value:o.value,color:getComputedStyle(o).color,background:getComputedStyle(o).backgroundColor}))}));
-+ await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=42);
++ await expect(styles.options.map(o=>o.value)).toEqual(['1','6','12','24']);assert.ok(styles.height>=28 && styles.height<=32);
 + for(const o of styles.options){assert.notEqual(o.color,o.background);await page.locator('#mm_gist_interval').selectOption(o.value);}
 + assert.ok(!(await page.locator('#mm_gist_status').textContent()).match(/SHA-256|控制面|运行确认|未执行/));
 + await page.locator('#mm_gist_url').fill('\u200b '+input.url+' \ufeff');
 + await page.locator('#mm_gist_key').fill(identity);identity='';
-+ await page.locator('#mm_gist_test').click();
++ await page.locator('#mm_gist_apply').click();
 + await expect(page.locator('#mm_gist_result')).toContainText('age 解密失败',{timeout:120000});
 + await expect(page.locator('#mm_gist_key')).toHaveValue('');
 + await expect(page.locator('#mm_gist_url')).toHaveValue(input.url);
 + assert.ok(!(await page.locator('#mm_gist_result').textContent()).includes('未执行 / 未确认'));
 + const after=await snapshot();await expect(after.fingerprint).toEqual(before.fingerprint);await expect(after.settings).toEqual(before.settings);
 + const job=after.jobs.find(j=>!before.jobs.some(b=>b.id===j.id));
-+ assert.ok(job);assert.equal(job.action,'test');assert.equal(job.result.code,'age_decrypt_failed');assert.equal(job.result.ok,false);
++ assert.ok(job);assert.equal(job.action,'apply');assert.equal(job.result.code,'age_decrypt_failed');assert.equal(job.result.ok,false);
 + assert.equal(job.result.downloaded,true);assert.equal(job.result.decrypted,false);assert.equal(job.result.written,false);assert.equal(job.result.cipherHash,input.sha256);
 + await page.screenshot({fullPage:false});
 + await page.locator('#mm_gist_close').click();await page.getByRole('button',{name:'Gist 加密同步',exact:true}).click();
@@ -8240,7 +8336,7 @@ index 0000000..852c501
 +return result;
 diff --git a/tests/gist-sync/expected-contracts.json b/tests/gist-sync/expected-contracts.json
 new file mode 100644
-index 0000000..087464d
+index 0000000..600406a
 --- /dev/null
 +++ b/tests/gist-sync/expected-contracts.json
 @@ -0,0 +1,145 @@
@@ -8329,7 +8425,7 @@ index 0000000..087464d
 +    },
 +    "buildF50InstallScript[\"/data/upload.zip\"]": {
 +      "before": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867",
-+      "after": "59d391698b57da5818869511f602ac78739379e17b4025f3c6b80c2871ea1e67"
++      "after": "2f514d934e577c2c2b890984d745a5f2bbbf9481bc730ec1bc88b9b2d9638cff"
 +    },
 +    "buildF50CleanupScript[]": {
 +      "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
@@ -8387,7 +8483,7 @@ index 0000000..087464d
 +    "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
 +    "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
 +  },
-+  "sourceSHA256": "03c00549ba701adbf26cd76a4d38e47c94800a4b083997d78c1a2ba62359d3fa"
++  "sourceSHA256": "d3ed457a7c0e2c02c47974dd51a1cfba3dc39e196eea1c52632bfa7109f37180"
 +}
 diff --git a/tests/gist-sync/host-bridge.js b/tests/gist-sync/host-bridge.js
 new file mode 100644
@@ -8408,10 +8504,10 @@ index 0000000..d3be8e7
 \ No newline at end of file
 diff --git a/tests/gist-sync/integration.py b/tests/gist-sync/integration.py
 new file mode 100644
-index 0000000..28980d4
+index 0000000..1247b0a
 --- /dev/null
 +++ b/tests/gist-sync/integration.py
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,304 @@
 +"""Run the unmodified production CLI with real age/yq/Mihomo inside Linux namespaces."""
 +from pathlib import Path
 +import argparse,contextlib,hashlib,http.server,json,os,shutil,signal,ssl,subprocess,sys,tempfile,threading,time,urllib.request,zipfile
@@ -8559,6 +8655,20 @@ index 0000000..28980d4
 +        def loaded_commit():
 +            f.remote(2);out=f.action('sync',expect='synced');assert out['loaded'] and out['runtimeVerified'];assert (f.test/'core.pid').read_text()==pid;assert f.api()['mode']=='rule'
 +        check('genuine Mihomo hot reload and runtime confirmation',loaded_commit)
++        def one_click_apply():
++            f.remote(21)
++            before=f.cli('status');req={'url':URL,'identity':f.identity,'auto':True,'intervalHours':1,'revision':before['settings']['revision'],'replaceLocal':True,'expectedLocal':before['currentFingerprint']}
++            out=f.action('apply',req,expect='synced')
++            assert out['ok'] and out['settingsSaved'] and out['written'] and out['loaded'] and out['runtimeVerified']
++            assert (f.test/'core.pid').read_text()==pid
++            status=f.cli('status');assert status['settings']['auto'] and status['settings']['intervalHours']==1 and status['schedulerRunning']
++            state=json.loads((f.clash/'Tools/gist-sync/state.json').read_text());assert state['candidateHash']==state['applied']['config']
++            req['revision']=status['settings']['revision'];req['identity']='';out=f.action('apply',req,expect='up_to_date');assert out['settingsSaved'] and out['loaded']
++            bad=dict(req,identity='AGE-SECRET-KEY-1'+'A'*58,revision=f.cli('status')['settings']['revision'])
++            stable=f.config_hash();saved=f.cli('status')['settings'];out=f.action('apply',bad,expect='age_decrypt_failed')
++            assert not out['ok'] and not out.get('settingsSaved') and f.config_hash()==stable and f.cli('status')['settings']==saved
++            f.action('disable',expect='auto_disabled');f.remote(2);f.action('apply',dict(req,auto=False,revision=f.cli('status')['settings']['revision']),expect='synced')
++        check('single Apply saves credentials, commits and hot loads YAML, starts one scheduler and rejects wrong keys',one_click_apply)
 +        def unchanged():
 +            f.remote(2);out=f.action('sync',expect='up_to_date');assert out['loaded'];assert (f.test/'core.pid').read_text()==pid
 +        check('reencrypted unchanged config keeps genuine core PID',unchanged)
@@ -8833,10 +8943,10 @@ index 0000000..8701ae1
 +print(json.dumps({'original_components_byte_identical':True,'metadata_changes':modified,'full_manifest_members':len(full['files']),'gist_manifest_members':len(gist['files']),'arm64_elf_verified':True,'published':False},indent=2))
 diff --git a/tests/gist-sync/rc3-ui.js b/tests/gist-sync/rc3-ui.js
 new file mode 100644
-index 0000000..f06f993
+index 0000000..4e14458
 --- /dev/null
 +++ b/tests/gist-sync/rc3-ui.js
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,57 @@
 +const fs=require('fs'),vm=require('vm'),assert=require('assert'),cp=require('child_process'),os=require('os'),path=require('path');
 +const ctx={crypto:require('crypto').webcrypto,TextEncoder,Uint8Array,DataView,BigInt,CryptoJS:require('./vendor/crypto-js.js'),shellQuote:v=>"'"+String(v).replace(/'/g,"'\\''")+"'"};
 +vm.createContext(ctx);vm.runInContext(fs.readFileSync('gist-sync/plugin-gist.js','utf8')+'\nthis.api={parse:f50GistParse,exec:f50GistExec,dispatch:f50GistDispatch};',ctx);
@@ -8864,8 +8974,9 @@ index 0000000..f06f993
 +check('unknown job cannot become success',()=>assert.equal(parse(frame({status:'finished'}),'job').code,'response_format_invalid'));
 +check('status missing settings is rejected',()=>assert.equal(parse(frame({ok:true,version:'1.0.0-rc4',protocol:1}),'status').code,'response_format_invalid'));
 +const ui=fs.readFileSync('gist-sync/ui-gist.js','utf8');
++check('Apply is the single main save-and-sync action',()=>{assert(ui.includes('id="mm_gist_apply"'));assert(!ui.includes('id="mm_gist_save"'));assert(!ui.includes('id="mm_gist_sync"'));assert(ui.includes("formAction('apply')"));});
 +check('Gist page has no standalone install or age download actions',()=>{assert(!/mm_gist_(install|age)["']/.test(ui));assert(!ui.includes('upload_img'));assert(!ui.includes('install-age'));assert(ui.includes('mm_gist_recover'));assert(ui.includes('mm_gist_delete'));});
-+check('all four interval options have explicit contrasting styles',()=>{const values=[...ui.matchAll(/<option[^>]+value="(\d+)"/g)].map(m=>Number(m[1]));assert.deepEqual(values,[1,6,12,24]);assert.equal((ui.match(/background:#f8fafc!important;color:#0f172a!important/g)||[]).length,5);assert(ui.includes('min-height:42px'));});
++check('all four interval options have explicit contrasting styles',()=>{const values=[...ui.matchAll(/<option[^>]+value="(\d+)"/g)].map(m=>Number(m[1]));assert.deepEqual(values,[1,6,12,24]);assert.equal((ui.match(/background:#111827!important;color:#fff!important/g)||[]).length,5);assert(ui.includes('height:30px'));assert(!ui.includes('min-height:42px')); assert(ui.includes('color-scheme:dark!important'));assert(!ui.includes('color-scheme:light'));});
 +(async()=>{
 + const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gist-rc3-protocol-'));
 + try {
@@ -8960,10 +9071,10 @@ index 0000000..5306d3a
 +else:raise RuntimeError('Unsupported integration service action')
 diff --git a/tests/gist-sync/ui-logic.js b/tests/gist-sync/ui-logic.js
 new file mode 100644
-index 0000000..0d44e80
+index 0000000..60ba737
 --- /dev/null
 +++ b/tests/gist-sync/ui-logic.js
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,50 @@
 +const fs=require('fs'),vm=require('vm'),assert=require('assert');
 +let state={ok:true,settings:{revision:4,generation:'g1',url:'https://gist.githubusercontent.com/u/abcde/raw/one.age',auto:false,intervalHours:6},identitySet:true,ageReady:true,jobs:[]};
 +const elements=new Map();function elem(){return {value:'',checked:false,disabled:false,placeholder:'',textContent:'',isConnected:true,classList:{add(){}}};}
@@ -8975,9 +9086,9 @@ index 0000000..0d44e80
 + f50GistMessage:c=>String(c||'unknown'),f50InstallGistComponents:async()=>true,
 + f50GistExec:async args=>{
 +  if(args[0]==='status')return JSON.parse(JSON.stringify(state));
-+  if(args[0]==='job')return {status:'finished',result:{ok:true,code:action==='save'?'settings_saved':action==='test'?'test_passed':'up_to_date',settingsSaved:action==='save',downloaded:true,decrypted:true,validated:true}};
++  if(args[0]==='job')return {status:'finished',result:{ok:true,code:action==='apply'?'synced':action==='test'?'test_passed':'up_to_date',settingsSaved:action==='apply',downloaded:true,decrypted:true,validated:true}};
 +  return {ok:true};
-+ },f50GistDispatch:async (a,r)=>{action=a;requests.push([a,JSON.parse(JSON.stringify(r))]);if(a==='save'){state.settings.revision++;state.settings.url=r.url;state.settings.auto=r.auto;state.settings.intervalHours=r.intervalHours;}return {ok:true,job:'0123456789abcdef0123456789abcdef'};}
++ },f50GistDispatch:async (a,r)=>{action=a;requests.push([a,JSON.parse(JSON.stringify(r))]);if(a==='apply'){state.settings.revision++;state.settings.url=r.url;state.settings.auto=r.auto;state.settings.intervalHours=r.intervalHours;}return {ok:true,job:'0123456789abcdef0123456789abcdef'};}
 +};
 +vm.createContext(ctx);const glue=fs.readFileSync('gist-sync/plugin-gist.js','utf8');vm.runInContext(glue.slice(glue.indexOf('  const f50GistCleanUrl'))+'\nthis.f50GistCleanUrl=f50GistCleanUrl;this.f50GistValidUrl=f50GistValidUrl;',ctx);vm.runInContext(fs.readFileSync('gist-sync/ui-gist.js','utf8')+'\nthis.button=gistSyncBtn;',ctx);
 +const checks=[];const check=(n,f)=>{f();checks.push({name:n,passed:true});};
@@ -8995,19 +9106,16 @@ index 0000000..0d44e80
 + check('Pasted invisible edge characters are removed',()=>assert.equal(q('url').value,url));
 + await q('refresh').onclick();
 + check('Status refresh does not overwrite unsaved URL',()=>assert.equal(q('url').value,url));
-+ await q('save').onclick();
-+ check('Save retains pending key after test',()=>assert.equal(requests[1][1].identity,'not-a-real-secret'));
-+ check('Save does not invoke sync',()=>assert.equal(requests.length,2));
-+ q('url').value='https://gist.githubusercontent.com/u/abcde/raw/UNSAVED.age';
-+ await q('sync').onclick();
-+ check('Manual sync requires saving edited source first',()=>assert.equal(requests.length,2));
-+ q('url').value=url;await q('sync').onclick();
-+ check('Manual sync uses saved source with auto off',()=>assert.deepEqual(requests[2],['sync',{}]));
++ await q('apply').onclick();
++ check('Apply retains pending key after test and submits one device action',()=>{assert.equal(requests[1][0],'apply');assert.equal(requests[1][1].identity,'not-a-real-secret');assert.equal(requests.length,2);});
++ q('url').value='https://gist.githubusercontent.com/u/abcde/raw/EDITED.age';
++ await q('apply').onclick();
++ check('One Apply uses edited URL without a separate Save',()=>{assert.equal(requests[2][0],'apply');assert.equal(requests[2][1].url,q('url').value);assert.equal(requests[2][1].replaceLocal,true);});
 + q('url').value='https://gist.githubusercontent.com/u/abcde/raw/'+'a'.repeat(40)+'/x.age';
 + check('Pinned revision remains accepted',()=>assert(ctx.f50GistValidUrl(q('url').value)));
 + check('Status and action results remain concise',()=>{assert(!q('status').textContent.includes('SHA-256'));assert(!q('status').textContent.includes('控制面'));assert(!q('result').textContent.includes('未执行 / 未确认'));});
 + for(const interval of [1,6,12,24]){
-+  q('interval').value=String(interval);await q('save').onclick();
++  q('interval').value=String(interval);await q('apply').onclick();
 +  check('Interval '+interval+' saves and restores',()=>assert.equal(q('interval').value,String(interval)));
 +  q('interval').value='6';confirm=true;await q('read').onclick();
 +  check('Reopening saved interval '+interval+' restores device setting',()=>assert.equal(q('interval').value,String(interval)));
@@ -9338,7 +9446,7 @@ index ee4b144..966a07f 100644
        fs.readFileSync(service, 'utf8') === '#!/bin/sh\nexit 0\n', '包装器补丁失败不覆盖原文件或继续启动');
    }
 diff --git "a/\347\214\253\347\214\253TProxy.js" "b/\347\214\253\347\214\253TProxy.js"
-index 8c30b52..8d09a7e 100644
+index 8c30b52..0888ab2 100644
 --- "a/\347\214\253\347\214\253TProxy.js"
 +++ "b/\347\214\253\347\214\253TProxy.js"
 @@ -1,4 +1,5 @@
@@ -9591,12 +9699,12 @@ index 8c30b52..8d09a7e 100644
 +# GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
 +f50_gist_verify_bundle() {
 +  groot=$1
-+  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'e4dc4c4ae38fca82ac998860f2af203fa984361f2960edf57e51df491097c0b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
++  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = '1c1ab84e4e9ba20151ac2b857d47f5f2e90bfc37a0968df4e090d4a5360f5f6b' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
 +  [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-+  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '496bc79bf2ba6653960827d757757975a0521b28599c955d7b87af06dbf69efa' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
++  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = '3c30efa0fbed5e6c51f938efa00f66eae39e52770153158712a397812fdb13a7' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
 +  chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
 +  sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
 +  gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
@@ -9689,11 +9797,11 @@ index 8c30b52..8d09a7e 100644
    const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
 -  // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
 -  // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
-+  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"29a48b34825b7404e4c1823a69ebf7ed54ed7f5f969cfe0c21de56a80a2aec10","published":false});
++  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"8a72a33f0e8a57e44311197aa82b113e059416a796d9d40005c70462bb6b8f3e","published":false});
    const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
    const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
    const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
-@@ -3232,6 +3393,162 @@ exit "$delete_rc"
+@@ -3232,6 +3393,163 @@ exit "$delete_rc"
    const KANO_HELPER_PATH = `${CLASH_DIR}/Tools/kano-f50-helper`;
    const KANO_HELPER_SNAPSHOT_TTL = 1500;
  
@@ -9780,6 +9888,7 @@ index 8c30b52..8d09a7e 100644
 +  async function f50GistDispatch(action, request = {}) {
 +    try {
 +      const key = await f50GistExec(['request-key'],15000);
++      if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
 +      if (!key.ok) return key;
 +      const sealed=f50GistSeal(key,action,request);
 +      return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
@@ -9819,7 +9928,7 @@ index 8c30b52..8d09a7e 100644
 +
 +    test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
 +    settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
-+    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'\u914d\u7f6e\u5df2\u52a0\u8f7d\uff0c\u7b56\u7565\u68c0\u67e5\u901a\u8fc7',
++    up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
 +    saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
 +    local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
 +    local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
@@ -9856,7 +9965,7 @@ index 8c30b52..8d09a7e 100644
    // ===== Basic helpers =====
      let transientShellOperation = null;
    let deviceTaskUncertain = false;
-@@ -3311,7 +3628,7 @@ exit "$delete_rc"
+@@ -3311,7 +3629,7 @@ exit "$delete_rc"
        if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
        if (op.token.cancelled || op.closing) throw operationCancelled();
        const request = tag + '.' + (++taskCommandSequence);
@@ -9865,7 +9974,7 @@ index 8c30b52..8d09a7e 100644
        const command = `set +e
  exec 2>&1
  umask 077
-@@ -3939,12 +4256,14 @@ KANO_YQ_SMOKE_EOF
+@@ -3939,12 +4257,14 @@ KANO_YQ_SMOKE_EOF
    const downloadCoreArchive = async ({ allowCached = false } = {}) => {
      // UFI root-shell requests have a finite request window. Keep every foreground
      // download attempt below that window and try sources one-by-one from JS.
@@ -9880,7 +9989,7 @@ index 8c30b52..8d09a7e 100644
          command -v unzip >/dev/null 2>&1 || exit 1
          unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
          echo "ARCHIVE_READY=cached"
-@@ -3983,6 +4302,7 @@ KANO_YQ_SMOKE_EOF
+@@ -3983,6 +4303,7 @@ KANO_YQ_SMOKE_EOF
            echo "ARCHIVE_VERIFY_FAILED=empty"
            exit 1
          }
@@ -9888,7 +9997,7 @@ index 8c30b52..8d09a7e 100644
          size="$(wc -c < "$NEW" 2>/dev/null || echo 0)"
          unzip -t "$NEW" >"$LOG.verify" 2>&1 || {
            rm -f "$NEW" 2>/dev/null || true
-@@ -5126,106 +5446,7 @@ PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
+@@ -5126,106 +5447,7 @@ PROTECT_SECRET=${targetPath === CLASH_CONFIG && preserveSecret ? 1 : 0}
  BACKUP_REQUESTED=${backup ? 1 : 0}
  BACKUP_TAG=${shellQuote(safeTag)}
  YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
@@ -9996,7 +10105,7 @@ index 8c30b52..8d09a7e 100644
  `;
    const res = await runShellWithRoot(script, 45000);
    if (res.success) invalidateStatusSnapshot();
-@@ -11559,6 +11780,131 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+@@ -11559,6 +11781,122 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
   return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
  };
  
@@ -10009,24 +10118,24 @@ index 8c30b52..8d09a7e 100644
 +        <div style="pointer-events:all;width:92vw;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
 +          <div class="title" style="margin:0 0 12px">Gist 同步</div>
 +          <label for="mm_gist_url">Gist Raw 链接</label>
-+          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
++          <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
 +          <label for="mm_gist_key" style="display:block;margin-top:10px">age 私钥</label>
-+          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;">
++          <input id="mm_gist_key" type="password" maxlength="100" spellcheck="false" autocomplete="new-password" placeholder="AGE-SECRET-KEY-1..." style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
 +          <small id="mm_gist_key_hint" style="display:block;margin:4px 0 8px;color:#94a3b8"></small>
 +          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0;">
 +            <label><input id="mm_gist_auto" type="checkbox"> 自动同步</label>
-+            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:light!important;background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;min-height:42px;padding:6px;border:1px solid #64748b;border-radius:6px;">
-+              <option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="1">1 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="6" selected>6 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="12">12 小时</option><option style="background:#f8fafc!important;color:#0f172a!important;font-size:16px!important;line-height:1.5!important;" value="24">24 小时</option>
++            <label>每 <select id="mm_gist_interval" aria-label="同步间隔" style="color-scheme:dark!important;background:#111827!important;color:#fff!important;font:12px Arial;box-sizing:border-box;height:30px;min-height:0;padding:4px 8px;border:1px solid #64748b;border-radius:8px;">
++              <option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="1">1 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="6" selected>6 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="12">12 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="24">24 小时</option>
 +            </select></label>
 +          </div>
-+          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:3">
-+            <button id="mm_gist_test">测试</button><button id="mm_gist_save">保存</button><button id="mm_gist_sync">立即同步</button>
++          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:1">
++            <button id="mm_gist_apply" type="button">应用</button>
 +          </div>
 +          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
 +          <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
 +          <details style="margin-top:8px"><summary>更多</summary>
 +            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-+              <button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
++              <button id="mm_gist_test">测试连接</button><button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
 +              <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
 +              <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
 +            </div>
@@ -10034,7 +10143,7 @@ index 8c30b52..8d09a7e 100644
 +          <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
 +        </div>`);
 +      const q = id => el.querySelector('#mm_gist_'+id);
-+      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, savedUrl='';
++      let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 +
 +      const result = text => { if(opened) q('result').textContent=text; };
 +      const fmt = value => value && !String(value).startsWith('0001-') ? new Date(value).toLocaleString() : '\u65e0';
@@ -10050,11 +10159,12 @@ index 8c30b52..8d09a7e 100644
 +          q('url').value=saved.deleted?'':saved.url || '';
 +          q('auto').checked=!!saved.auto;
 +          q('interval').value=String(saved.intervalHours || 6);
-+          revision=saved.revision || 0; settingsLoaded=true; savedUrl=saved.url || '';
++          revision=saved.revision || 0; settingsLoaded=true;
 +          pendingKey='';q('key').value='';
 +        }
 +        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
 +        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
++        currentFingerprint=st.currentFingerprint || null;
 +        const state=st.state?.generation===st.settings?.generation?st.state:null;
 +        const last=state?.last;
 +        const recent=(st.jobs||[])[0];
@@ -10067,28 +10177,22 @@ index 8c30b52..8d09a7e 100644
 +        q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
 +        return st;
 +      };
-+      const busy=on=>{foreground=on;for(const name of ['test','save','sync','disable','delete','recover','read'])q(name).disabled=on;};
++      const busy=on=>{foreground=on;for(const name of ['test','apply','disable','delete','recover','read'])q(name).disabled=on;};
 +      const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
 +      const launch=async (action,request={})=>{
 +        if(foreground)return;
-+        busy(true);result('\u6b63\u5728\u63d0\u4ea4\u8bbe\u5907\u4efb\u52a1\u2026');
++        busy(true);result(action==='apply'?'正在应用…':'正在处理…');
 +        try{
 +          const started=await f50GistDispatch(action,request);
 +          if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
 +          currentJob=started.job;
-+          result('\u8bbe\u5907\u4efb\u52a1 '+currentJob+' \u5df2\u63d0\u4ea4\uff1b\u53ef\u5173\u95ed\u9875\u9762\u3002');
++          result(action==='apply'?'正在应用…':'正在处理…');
 +          while(opened){
 +            const job=await f50GistExec(['job',currentJob],8000);
 +            if(!opened)break;
 +            if(job.status==='finished'){
 +              const out=job.result;result(describe(out));
 +              if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
-+              if(action==='sync' && out?.code==='local_config_conflict'){
-+                const expected=out.applied;
-+                if(expected && window.confirm('\u5df2\u68c0\u6d4b\u5230\u672c\u5730\u914d\u7f6e\u6216\u7f51\u7edc\u8bbe\u7f6e\u4fee\u6539\u3002\u786e\u8ba4\u7528 Gist \u66ff\u6362\u5f53\u524d\u914d\u7f6e\uff1f\u672c\u5730\u7f51\u7edc\u53c2\u6570\u4ecd\u6309\u732b\u732b\u89c4\u5219\u4fdd\u7559\u3002')){
-+                  busy(false);return await launch('sync',{replaceLocal:true,expectedLocal:expected});
-+                }
-+              }
 +              break;
 +            }
 +            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
@@ -10107,13 +10211,9 @@ index 8c30b52..8d09a7e 100644
 +        q('url').value=url;
 +        if(q('key').value.trim())pendingKey=q('key').value.trim();
 +        q('key').value='';
-+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
++        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision,...(action==='apply'?{replaceLocal:true,expectedLocal:currentFingerprint}:{})});
 +      };
-+      q('test').onclick=()=>formAction('test');q('save').onclick=()=>formAction('save');
-+      q('sync').onclick=()=>{
-+        if(f50GistCleanUrl(q('url').value)!==savedUrl || q('key').value.trim() || pendingKey){result('请先保存新链接或私钥，再同步。');return;}
-+        return launch('sync');
-+      };
++      q('test').onclick=()=>formAction('test');q('apply').onclick=()=>formAction('apply');
 +      q('disable').onclick=()=>launch('disable');
 +      q('refresh').onclick=()=>refresh(false);
 +      q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};
@@ -10128,7 +10228,7 @@ index 8c30b52..8d09a7e 100644
      const mmBox = document.querySelector('#mm_action_box');
  
      const appendActionGroup = (title, buttons, openGroup = false) => {
-@@ -11579,7 +11925,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
+@@ -11579,7 +11917,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
      };
  
      const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);

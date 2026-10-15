@@ -11,7 +11,7 @@ const start = source.indexOf('  const downloadCoreArchive = async');
 const end = source.indexOf('  const setButtonBusy =', start);
 
 function downloader(responses, published = true) {
-  // Published mirrors are fixtures; the actual release remains unpublished.
+  // Keep fixture mirrors independent of the live distribution URL.
   const mirrors = ['https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip'];
   let index = 0;
   const fixtureConstants = constants.replace(/= [^;]*;/g, () => "= " + JSON.stringify(mirrors[index++]) + ";");

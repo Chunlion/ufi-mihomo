@@ -61,6 +61,9 @@ def main():
             if z.testzip() is not None:raise ValueError('Complete package CRC failed')
             for name,data in files.items():
                 if z.read(name)!=data:raise ValueError('Complete package differs: '+name)
+        if release['published']:
+            if not release['urls'] or any(not url.startswith('https://') for url in release['urls']):raise ValueError('Published package requires verified HTTPS URLs')
+            if sha(temporary.read_bytes())!=release.get('sha256'):raise ValueError('Published package differs from pinned distribution; verify and update release.json first')
         os.replace(temporary,PACKAGE)
     finally:temporary.unlink(missing_ok=True)
     subprocess.run(['node','scripts/sync_gist_plugin.js','--finalize'],cwd=ROOT,check=True)

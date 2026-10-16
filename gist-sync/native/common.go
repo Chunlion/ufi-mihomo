@@ -24,7 +24,6 @@ import (
 const version = "1.0.0-rc4"
 const maxConfig int64 = 8 << 20
 const maxRequest int64 = 16 << 10
-const ageVersion = "v1.3.2"
 
 // Public error codes, never subprocess output, URLs, YAML, or identities.
 type codedError string

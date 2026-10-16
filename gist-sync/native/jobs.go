@@ -280,5 +280,5 @@ func (a *App) status(ctx context.Context) (map[string]any, error) {
 	gistActive := liveErr == nil && sourceErr == nil && strings.TrimSpace(string(source)) == "KANO_CONFIG_SOURCE=uploaded_config" &&
 		(live[gistMeta] == true || (stateErr == nil && ferr == nil && state.Applied.Config != "" && state.Applied.Config == fp.Config))
 	age, e := run(ctx, 4*time.Second, nil, filepath.Join(a.Root, "Tools/age"), "--version")
-	return map[string]any{"ok": true, "manualSources": 1, "gistActive": gistActive, "version": version, "protocol": 1, "settings": s, "identitySet": keySet, "pinnedURL": pinned, "schedulerRunning": a.daemonAlive(), "state": state, "stateError": code(stateErr), "currentFingerprint": fp, "fingerprintError": code(ferr), "activationPending": exists(a.journalDir()), "ageReady": e == nil && strings.TrimSpace(string(age)) == ageVersion, "jobs": jobs}, nil
+	return map[string]any{"ok": true, "manualSources": 1, "gistActive": gistActive, "version": version, "protocol": 1, "settings": s, "identitySet": keySet, "pinnedURL": pinned, "schedulerRunning": a.daemonAlive(), "state": state, "stateError": code(stateErr), "currentFingerprint": fp, "fingerprintError": code(ferr), "activationPending": exists(a.journalDir()), "ageReady": e == nil && strings.TrimSpace(string(age)) != "", "jobs": jobs}, nil
 }

@@ -21,17 +21,11 @@ with zipfile.ZipFile(io.BytesIO(original)) as old,zipfile.ZipFile(ROOT/'tproxy-y
         assert (current.getinfo(name).external_attr>>16)&0o111
     assert current.read('Tools/kano-gist-sync')==(ROOT/'build/gist-sync/bin/kano-gist-sync-linux-arm64').read_bytes()
 source=(ROOT/'猫猫TProxy.js').read_text(encoding='utf-8');release=json.loads((ROOT/'gist-sync/release.json').read_text())
-if release['published']:
-    assert release['urls'] and all(url.startswith('https://') for url in release['urls'])
-    assert release['sha256']==sha((ROOT/'tproxy-yq.zip').read_bytes())
-    for url in release['urls']:assert url in source
-    assert '"published":true' in source
-else:
-    assert release['urls']==[]
-    assert '"published":false' in source
-assert sha((ROOT/'tproxy-yq.zip').read_bytes()) in source
+assert gist['version']==full['version']==release['version']
+assert gist['protocol']==release['protocol']==1
+assert 'F50_FULL_COMPONENT_RELEASE' not in source
 assert (ROOT/'dist/gist-sync/猫猫TProxy.js').read_bytes()==(ROOT/'猫猫TProxy.js').read_bytes()
 assert (ROOT/'dist/gist-sync/tproxy-yq-gistsync-full.zip').read_bytes()==(ROOT/'tproxy-yq.zip').read_bytes()
 metadata=subprocess.check_output(['go','version','-m',str(ROOT/'build/gist-sync/bin/kano-gist-sync-linux-arm64')],text=True)
 assert 'vcs.revision=' not in metadata and 'vcs.modified=' not in metadata,'Git state must not change the rebuilt package hash'
-print(json.dumps({'original_components_byte_identical':True,'metadata_changes':modified,'full_manifest_members':len(full['files']),'gist_manifest_members':len(gist['files']),'arm64_elf_verified':True,'published':release['published']},indent=2))
+print(json.dumps({'original_components_byte_identical':True,'metadata_changes':modified,'full_manifest_members':len(full['files']),'gist_manifest_members':len(gist['files']),'arm64_elf_verified':True},indent=2))

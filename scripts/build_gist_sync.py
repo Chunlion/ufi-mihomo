@@ -61,17 +61,13 @@ def main():
             if z.testzip() is not None:raise ValueError('Complete package CRC failed')
             for name,data in files.items():
                 if z.read(name)!=data:raise ValueError('Complete package differs: '+name)
-        if release['published']:
-            if not release['urls'] or any(not url.startswith('https://') for url in release['urls']):raise ValueError('Published package requires verified HTTPS URLs')
-            if sha(temporary.read_bytes())!=release.get('sha256'):raise ValueError('Published package differs from pinned distribution; verify and update release.json first')
         os.replace(temporary,PACKAGE)
     finally:temporary.unlink(missing_ok=True)
-    subprocess.run(['node','scripts/sync_gist_plugin.js','--finalize'],cwd=ROOT,check=True)
     subprocess.run(['node','--check','猫猫TProxy.js'],cwd=ROOT,check=True)
     output=ROOT/'dist/gist-sync';output.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(PACKAGE,output/'tproxy-yq-gistsync-full.zip')
     shutil.copyfile(ROOT/'猫猫TProxy.js',output/'猫猫TProxy.js')
-    report={'version':release['version'],'go':subprocess.check_output(['go','version'],text=True).strip(),'published':release['published'],
+    report={'version':release['version'],'go':subprocess.check_output(['go','version'],text=True).strip(),
             'plugin_sha256':sha((ROOT/'猫猫TProxy.js').read_bytes()),'package_sha256':sha(PACKAGE.read_bytes()),'native_sha256':{a:sha((BUILD/f'bin/kano-gist-sync-linux-{a}').read_bytes()) for a in ['arm64','amd64']},'manifest':manifest}
     (BUILD/'build.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(json.dumps({k:v for k,v in report.items() if k!='manifest'},indent=2))

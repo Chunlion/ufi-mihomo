@@ -19,7 +19,7 @@
         return {...value,ok:true};
       }
       if (value.ok !== true) return {ok:false,code:'response_format_invalid'};
-      if (['status','version'].includes(command) && (value.version !== '1.0.0-rc4' || value.protocol !== 1)) return {ok:false,code:'component_version_mismatch'};
+      if (['status','version'].includes(command) && value.protocol !== 1) return {ok:false,code:'component_version_mismatch'};
       if (command === 'status' && (!value.settings || typeof value.settings !== 'object' ||
           ![1,6,12,24].includes(value.settings.intervalHours) || typeof value.ageReady !== 'boolean')) return {ok:false,code:'response_format_invalid'};
       return value;
@@ -38,7 +38,7 @@ printf '\\nF50_GIST_BEGIN_${tag}\\n'
 if [ ! -f ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; fi
 if [ ! -x ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"component_not_executable"}'; exit 126; fi
 v=$(${shellQuote(F50_GIST_HELPER)} version 2>/dev/null) || { printf '%s\\n' '{"ok":false,"code":"device_execution_failed"}'; exit 126; }
-printf '%s' "$v" | grep -q '"version":"1.0.0-rc4"' && printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
+printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
 for rel in Tools/age Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
   [ -f "/data/clash/$rel" ] && [ -x "/data/clash/$rel" ] || { printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; }
 done

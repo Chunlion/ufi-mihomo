@@ -2245,21 +2245,34 @@ mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install
 # GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
 f50_gist_verify_bundle() {
   groot=$1
-  [ -f "$groot/Tools/gist-sync-component.json" ] && [ ! -L "$groot/Tools/gist-sync-component.json" ] && [ "$(sha256sum "$groot/Tools/gist-sync-component.json" | awk '{print $1}')" = 'cf9311a9b9f59799c37c83db0149fd7bcaf7f89cd7bdc93fda72f781c91601b0' ] || { f50_install_fail gist_manifest_mismatch; return 1; }
-  [ -f "$groot/Scripts/Clash.ConfigCommit" ] && [ ! -L "$groot/Scripts/Clash.ConfigCommit" ] && [ "$(sha256sum "$groot/Scripts/Clash.ConfigCommit" | awk '{print $1}')" = '3525845691b4d7e2919ebac2eed082c70da7cfb355629e89d5d93623e5fe2b00' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Scripts/Clash.GistSync" ] && [ ! -L "$groot/Scripts/Clash.GistSync" ] && [ "$(sha256sum "$groot/Scripts/Clash.GistSync" | awk '{print $1}')" = '444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Tools/age" ] && [ ! -L "$groot/Tools/age" ] && [ "$(sha256sum "$groot/Tools/age" | awk '{print $1}')" = '41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Tools/age.LICENSE" ] && [ ! -L "$groot/Tools/age.LICENSE" ] && [ "$(sha256sum "$groot/Tools/age.LICENSE" | awk '{print $1}')" = 'afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
-  [ -f "$groot/Tools/kano-gist-sync" ] && [ ! -L "$groot/Tools/kano-gist-sync" ] && [ "$(sha256sum "$groot/Tools/kano-gist-sync" | awk '{print $1}')" = 'c3961e618a8aab4a68c8707d36182aa990bee6ecc3e31c654d077de63c44b476' ] || { f50_install_fail gist_component_hash_mismatch; return 1; }
+  for grel in Tools/age Tools/kano-gist-sync Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
+    [ -s "$groot/$grel" ] && [ ! -L "$groot/$grel" ] || { f50_install_fail gist_components_missing; return 1; }
+  done
   chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
   sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
   gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
-  printf '%s' "$gist_probe" | grep -q '"version":"1.0.0-rc4"' && printf '%s' "$gist_probe" | grep -Eq '"protocol":1([,}])' || { f50_install_fail gist_runtime_probe_failed; return 1; }
-  age_probe=$(f50_limit 5 "$groot/Tools/age" --version 2>/dev/null) && [ "$age_probe" = v1.3.2 ] || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
+  printf '%s' "$gist_probe" | grep -Eq '"protocol":1([,}])' || { f50_install_fail gist_runtime_probe_failed; return 1; }
+  age_probe=$(f50_limit 5 "$groot/Tools/age" --version 2>/dev/null) && [ -n "$age_probe" ] || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
 }
-[ -f "$PKG/Tools/gist-sync-component.json" ] || { f50_install_fail gist_components_missing; exit 1; }
-f50_gist_verify_bundle "$PKG" || exit 1
-GIST_COMPONENTS=installed
+if [ -s "$PKG/Tools/kano-gist-sync" ] || [ -e "$PKG/Scripts/Clash.GistSync" ] || [ -e "$PKG/Scripts/Clash.ConfigCommit" ]; then
+  f50_gist_verify_bundle "$PKG" || exit 1
+  GIST_COMPONENTS=installed
+elif [ -s "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/age" ] &&
+     [ -s "$F50_ROOT/Scripts/Clash.GistSync" ] && [ -s "$F50_ROOT/Scripts/Clash.ConfigCommit" ]; then
+  # Keep an already installed GistSync when a legacy online package omits it.
+  for grel in Tools/age Tools/kano-gist-sync Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
+    cp -p "$F50_ROOT/$grel" "$PKG/$grel" || { f50_install_fail gist_preserve_failed; exit 1; }
+  done
+  for grel in Tools/age.LICENSE Tools/gist-sync-component.json; do
+    if [ -f "$F50_ROOT/$grel" ]; then
+      cp -p "$F50_ROOT/$grel" "$PKG/$grel" || { f50_install_fail gist_preserve_failed; exit 1; }
+    fi
+  done
+  f50_gist_verify_bundle "$PKG" || exit 1
+  GIST_COMPONENTS=retained
+else
+  GIST_COMPONENTS=not_in_package
+fi
 
 for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/kano-gist-sync "$PKG"/Tools/age "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
   [ ! -f "$file" ] || chmod 755 "$file" || { f50_install_fail executable_permission_failed; exit 1; }
@@ -2485,16 +2498,19 @@ async function installF50PackageAtDevicePath(uploaded) {
     if (warning) message += warning === 'previous_components_retained' ? '；已保留旧组件回滚目录' : '；安装告警：' + warning;
     const gistVersion = await f50GistExec(['version'], 8000);
     let gistReady = gistVersion.ok;
-    if (!gistVersion.ok) message += '；Gist 状态未确认：' + f50GistMessage(gistVersion.code);
-    if (gistVersion.ok && gistVersion.version === '1.0.0-rc4') {
+    if (gistVersion.ok) {
       const gistResume = await f50GistExec(['start-daemon'], 8000);
-      if (!gistResume.ok) gistReady = false;
-      if (!gistResume.ok) message += '；Gist 调度恢复未确认：' + (gistResume.code || 'unknown');
+      gistReady = gistResume.ok;
+      if (!gistResume.ok) message += '\uff1bGist \u8c03\u5ea6\u6062\u590d\u672a\u786e\u8ba4\uff1a' + (gistResume.code || 'unknown');
+    } else if (gistVersion.code === 'components_missing') {
+      message += '\uff1b\u5f53\u524d\u7ec4\u4ef6\u5305\u672a\u5305\u542b GistSync';
+    } else {
+      message += '\uff1bGist \u72b6\u6001\u672a\u786e\u8ba4\uff1a' + f50GistMessage(gistVersion.code);
     }
-    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: gistReady};
-    operationFinish(gistReady, message);
+    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true, gistReady};
+    operationFinish(true, message);
     createToast(safeTextToHtml(message), !gistReady || warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
-    return gistReady;
+    return true;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
     lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装未完成');
@@ -3355,12 +3371,13 @@ exit "$delete_rc"
   const LOG_FILE = '/data/clash/Proxy/Clash.log';
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
-  const CLASH_PACKAGE_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/0f6fe98b0dc461ae4a473431d5deae7c5727afad/tproxy-yq.zip';
-  const CLASH_PACKAGE_FALLBACK_URL = '';
-  const CLASH_PACKAGE_REPO_URL = '';
+  const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
+  const CLASH_PACKAGE_FALLBACK_URL = 'https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip';
+  const CLASH_PACKAGE_REPO_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip';
   const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
-  const F50_FULL_COMPONENT_RELEASE = Object.freeze({"version":"1.0.0-rc4","sha256":"be5ceb675eb80e56d3d6499618a829b391538840c16b369e5a95d6f5cb6b2b04","published":true});
+  // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
+  // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
   const DOWNLOAD_SOURCE_FILE = '/data/kano_clash.source';
   const CLASH_RUNTIME_MANAGER = `${CLASH_DIR}/Scripts/Clash.KanoStart`;
   const CLASH_SERVICE_WRAPPER_VERSION = F50_COMPAT_VERSION;
@@ -3414,7 +3431,7 @@ exit "$delete_rc"
         return {...value,ok:true};
       }
       if (value.ok !== true) return {ok:false,code:'response_format_invalid'};
-      if (['status','version'].includes(command) && (value.version !== '1.0.0-rc4' || value.protocol !== 1)) return {ok:false,code:'component_version_mismatch'};
+      if (['status','version'].includes(command) && value.protocol !== 1) return {ok:false,code:'component_version_mismatch'};
       if (command === 'status' && (!value.settings || typeof value.settings !== 'object' ||
           ![1,6,12,24].includes(value.settings.intervalHours) || typeof value.ageReady !== 'boolean')) return {ok:false,code:'response_format_invalid'};
       return value;
@@ -3433,7 +3450,7 @@ printf '\\nF50_GIST_BEGIN_${tag}\\n'
 if [ ! -f ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; fi
 if [ ! -x ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"component_not_executable"}'; exit 126; fi
 v=$(${shellQuote(F50_GIST_HELPER)} version 2>/dev/null) || { printf '%s\\n' '{"ok":false,"code":"device_execution_failed"}'; exit 126; }
-printf '%s' "$v" | grep -q '"version":"1.0.0-rc4"' && printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
+printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
 for rel in Tools/age Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
   [ -f "/data/clash/$rel" ] && [ -x "/data/clash/$rel" ] || { printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; }
 done
@@ -4306,14 +4323,12 @@ KANO_YQ_SMOKE_EOF
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
     // UFI root-shell requests have a finite request window. Keep every foreground
     // download attempt below that window and try sources one-by-one from JS.
-    if (!F50_FULL_COMPONENT_RELEASE.published) return {ok:false,stage:'unpublished',message:'RC4 完整组件包尚未发布，请在组件管理中导入随附的完整组件 ZIP。',content:'RC4 完整组件包尚未发布，请在组件管理中导入随附的完整组件 ZIP。'};
     operationStage('检查安装包缓存');
     if (allowCached) {
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
         LOG=${shellQuote(DOWNLOAD_LOG)}
         [ -s "$ZIP" ] || exit 1
-        [ "$(sha256sum "$ZIP" | awk '{print $1}')" = ${shellQuote(F50_FULL_COMPONENT_RELEASE.sha256)} ] || exit 1
         command -v unzip >/dev/null 2>&1 || exit 1
         unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
         echo "ARCHIVE_READY=cached"
@@ -4323,7 +4338,7 @@ KANO_YQ_SMOKE_EOF
       }
     }
 
-    const sources = [CLASH_PACKAGE_URL, CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
+    const sources = [CLASH_PACKAGE_REPO_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_FALLBACK_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
       operationStage('下载并校验安装包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
@@ -4352,7 +4367,6 @@ KANO_YQ_SMOKE_EOF
           echo "ARCHIVE_VERIFY_FAILED=empty"
           exit 1
         }
-        [ "$(sha256sum "$NEW" | awk '{print $1}')" = ${shellQuote(F50_FULL_COMPONENT_RELEASE.sha256)} ] || { rm -f "$NEW"; echo ARCHIVE_VERIFY_FAILED=sha256; exit 1; }
         size="$(wc -c < "$NEW" 2>/dev/null || echo 0)"
         unzip -t "$NEW" >"$LOG.verify" 2>&1 || {
           rm -f "$NEW" 2>/dev/null || true

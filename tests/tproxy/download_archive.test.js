@@ -10,14 +10,13 @@ const constants = source.match(/  const CLASH_PACKAGE_(?:URL|FALLBACK_URL|REPO_U
 const start = source.indexOf('  const downloadCoreArchive = async');
 const end = source.indexOf('  const setButtonBusy =', start);
 
-function downloader(responses, published = true) {
+function downloader(responses) {
   // Keep fixture mirrors independent of the live distribution URL.
   const mirrors = ['https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip'];
   let index = 0;
   const fixtureConstants = constants.replace(/= [^;]*;/g, () => "= " + JSON.stringify(mirrors[index++]) + ";");
   const calls = [];
   const download = vm.runInNewContext(fixtureConstants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
-    F50_FULL_COMPONENT_RELEASE: {published,sha256:'fixture-only'},
     DOWNLOAD_ZIP: '/data/package.zip', DOWNLOAD_LOG: '/data/package.log', DOWNLOAD_SOURCE_FILE: '/data/package.source',
     shellQuote: value => `'${value}'`, operationStage() {}, getCurlBinCmd: () => '', dataSpaceGuardCmd: () => '',
     runShellWithRoot: async script => {
@@ -29,31 +28,31 @@ function downloader(responses, published = true) {
   return { download, calls };
 }
 
-test('Gitee package succeeds without contacting the fallback', async () => {
+test('current GitHub package succeeds without contacting mirrors', async () => {
   const { download, calls } = downloader([{ success: true, content: 'ARCHIVE_READY=downloaded' }]);
   const result = await download();
   assert.equal(result.ok, true);
-  assert.match(result.source, /^https:\/\/gitee\.com\//);
+  assert.match(result.source, /^https:\/\/raw\.githubusercontent\.com\/Chunlion\/ufi-mihomo\/main\//);
   assert.equal(calls.length, 1);
   assert.match(calls[0], /unzip -t "\$NEW"/);
   assert.match(calls[0], /mv -f "\$NEW" "\$ZIP"/);
 });
 
 for (const content of ['Load failed', 'ARCHIVE_VERIFY_FAILED=zip']) {
-  test(`Gitee failure (${content}) falls back to GitCode`, async () => {
+  test(`GitHub failure (${content}) falls back to Gitee`, async () => {
     const { download, calls } = downloader([
       { success: false, content },
       { success: true, content: 'ARCHIVE_READY=downloaded' },
     ]);
     const result = await download();
     assert.equal(result.ok, true);
-    assert.match(calls[0], /https:\/\/gitee\.com\//);
-    assert.equal(result.source, 'https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip');
+    assert.match(calls[0], /https:\/\/raw\.githubusercontent\.com\//);
+    assert.equal(result.source, 'https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip');
     assert.equal(calls.length, 2);
   });
 }
 
-test('Gitee and GitCode failures fall back to GitHub', async () => {
+test('GitHub and Gitee failures fall back to GitCode', async () => {
   const { download, calls } = downloader([
     { success: false, content: 'ARCHIVE_DOWNLOAD_FAILED=28' },
     { success: false, content: 'ARCHIVE_VERIFY_FAILED=zip' },
@@ -61,8 +60,8 @@ test('Gitee and GitCode failures fall back to GitHub', async () => {
   ]);
   const result = await download();
   assert.equal(result.ok, true);
-  assert.match(calls[1], /https:\/\/gitcode\.com\/Cuty\/tp-yq\//);
-  assert.match(result.source, /^https:\/\/raw\.githubusercontent\.com\/Chunlion\/ufi-mihomo\//);
+  assert.match(calls[1], /https:\/\/gitee\.com\//);
+  assert.match(result.source, /^https:\/\/gitcode\.com\/Cuty\/tp-yq\//);
   assert.equal(calls.length, 3);
 });
 
@@ -81,4 +80,10 @@ test('all download failures retain diagnostics and report failure', async () => 
   assert.match(result.content, /HTTP 500/);
 });
 
-test('unpublished complete component release never contacts old mirrors',async()=>{ const {download,calls}=downloader([],false); const result=await download(); assert.equal(result.ok,false);assert.equal(result.stage,'unpublished');assert.equal(calls.length,0); });
+test('cached compatible packages do not require a pinned release hash',async()=>{
+  const {download,calls}=downloader([{success:true,content:'ARCHIVE_READY=cached'}]);
+  assert.equal((await download({allowCached:true})).ok,true);
+  assert.equal(calls.length,1);
+  assert.match(calls[0],/unzip -t "\$ZIP"/);
+  assert.doesNotMatch(calls[0],/sha256sum/);
+});

@@ -62,7 +62,7 @@
           ? (st.schedulerRunning ? '自动同步开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步开启 · 设备调度未运行')
           : '自动同步关闭';
         const lastTime=state?.lastSuccess ? '上次同步 '+fmt(state.lastSuccess) : '尚未同步';
-        const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_missing_or_wrong_version' : '') || (last && !last.ok ? last.code : '');
+        const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_unavailable' : '') || (last && !last.ok ? last.code : '');
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
         return st;
       };

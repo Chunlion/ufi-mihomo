@@ -1,6 +1,6 @@
 """Build GistSync from repository sources and refresh the complete component package."""
 from pathlib import Path
-import hashlib,io,json,os,re,shutil,subprocess,tarfile,tempfile,urllib.request,zipfile
+import hashlib,io,json,os,shutil,subprocess,tarfile,tempfile,urllib.request,zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 BUILD=ROOT/'build/gist-sync'
@@ -58,7 +58,6 @@ def main():
                 executable=name.startswith('Scripts/') or name in {'Tools/age','Tools/kano-gist-sync','Tools/yq_linux_arm64','Tools/mosdns_arm64','Proxy/Clash.Core'} or name.startswith('Tools/kano-f50-helper')
                 info.external_attr=(0o100755 if executable else 0o100644)<<16;z.writestr(info,data)
         with zipfile.ZipFile(temporary) as z:
-            if z.testzip() is not None:raise ValueError('Complete package CRC failed')
             for name,data in files.items():
                 if z.read(name)!=data:raise ValueError('Complete package differs: '+name)
         os.replace(temporary,PACKAGE)

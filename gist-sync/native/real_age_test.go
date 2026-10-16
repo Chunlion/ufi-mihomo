@@ -94,7 +94,7 @@ func TestRealAgeCompatibleVersion(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	wrapper := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo v1.99.0; exit 0; fi\nexec '" + age + "' \"$@\"\n"
+	wrapper := "#!/bin/sh\nprintf '%s\\n' \"$1\" >> '" + a.Root + "/age-calls'\nif [ \"$1\" = --version ]; then echo v1.99.0; exit 0; fi\nexec '" + age + "' \"$@\"\n"
 	if e = os.WriteFile(a.Root+"/Tools/age", []byte(wrapper), 0700); e != nil {
 		t.Fatal(e)
 	}
@@ -109,6 +109,10 @@ func TestRealAgeCompatibleVersion(t *testing.T) {
 	got, e := os.ReadFile(path)
 	if e != nil || !bytes.Equal(got, plain) {
 		t.Fatal("plaintext mismatch", e)
+	}
+	calls, e := os.ReadFile(a.Root + "/age-calls")
+	if e != nil || string(calls) != "--decrypt\n" {
+		t.Fatal("decryption ran an extra probe", e)
 	}
 	status, e := a.status(context.Background())
 	if e != nil || status["ageReady"] != true {

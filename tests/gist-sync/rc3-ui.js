@@ -39,6 +39,15 @@ check('all four interval options have explicit contrasting styles',()=>{const va
   fs.mkdirSync(path.join(dir,'Tools'));fs.mkdirSync(path.join(dir,'Scripts'));
   fs.writeFileSync(path.join(dir,'Tools/kano-gist-sync'),'#!/bin/sh\nprintf \'%s\\n\' \'{"ok":true,"version":"1.0.0-rc1"}\'\n',{mode:0o755});
   assert.equal((await ctx.api.exec(['status'])).code,'component_version_mismatch');checks.push({name:'actual Shell rejects old binary protocol',result:'PASS'});
+  fs.writeFileSync(path.join(dir,'Tools/kano-gist-sync'),`#!/bin/sh
+if [ "$1" = version ]; then exit 91; fi
+printf '%s\\n' "$1" >> '${dir}/calls'
+printf '%s\\n' '{"ok":true,"protocol":1,"settings":{"intervalHours":6},"ageReady":false}'
+`,{mode:0o755});
+  const status=await ctx.api.exec(['status']);
+  assert.equal(status.ok,true);assert.equal(status.ageReady,false);
+  assert.equal(fs.readFileSync(path.join(dir,'calls'),'utf8'),'status\n');
+  checks.push({name:'status executes once and can diagnose missing companion components',result:'PASS'});
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
  const source=fs.readFileSync('猫猫TProxy.js','utf8');
  const install=source.slice(source.indexOf('async function installF50PackageAtDevicePath('),source.indexOf('async function installF50PackageFromNetwork('));

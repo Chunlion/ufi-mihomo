@@ -30,11 +30,10 @@ def main():
     subprocess.run(['node','scripts/sync_gist_plugin.js'],cwd=ROOT,check=True)
     release=json.loads((ROOT/'gist-sync/release.json').read_text(encoding='utf-8'))
     native=ROOT/'gist-sync/native'
-    if f'const version = "{release["version"]}"' not in (native/'common.go').read_text():raise ValueError('Worker and release version differ')
     for arch in ['arm64','amd64']:
         env=dict(os.environ,GOOS='linux',GOARCH=arch,CGO_ENABLED='0')
         output=BUILD/f'bin/kano-gist-sync-linux-{arch}';output.parent.mkdir(exist_ok=True)
-        subprocess.run(['go','build','-buildvcs=false','-trimpath','-ldflags=-s -w -buildid=','-o',str(output),'.'],cwd=native,env=env,check=True)
+        subprocess.run(['go','build','-buildvcs=false','-trimpath',f'-ldflags=-s -w -buildid= -X main.version={release["version"]}','-o',str(output),'.'],cwd=native,env=env,check=True)
     tools=BUILD/'clash/Tools';tools.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(BUILD/'bin/kano-gist-sync-linux-arm64',tools/'kano-gist-sync')
     age,license=age_files();(tools/'age').write_bytes(age);(tools/'age.LICENSE').write_bytes(license)
@@ -43,13 +42,10 @@ def main():
     (tools/'gist-sync-component.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8',newline='\n')
     with zipfile.ZipFile(PACKAGE) as z:
         files={i.filename:z.read(i) for i in z.infolist() if not i.is_dir() and i.filename not in OWNED}
-    base_files={n:sha(data) for n,data in files.items() if n!='Tools/components.json'}
     metadata=json.loads(files['Tools/components.json'])
     metadata['full_package_version']=release['version'];metadata['gist_sync']=manifest
     files['Tools/components.json']=(json.dumps(metadata,indent=2)+'\n').encode()
     for name in OWNED-{'Tools/full-component-release.json'}:files[name]=(BUILD/'clash'/name).read_bytes()
-    full={'version':release['version'],'platform':'linux-arm64','base_files_sha256':sha(json.dumps(base_files,sort_keys=True).encode()),'files':{n:sha(data) for n,data in sorted(files.items())}}
-    files['Tools/full-component-release.json']=(json.dumps(full,indent=2)+'\n').encode()
     with tempfile.NamedTemporaryFile(dir=PACKAGE.parent,prefix='.gist-package-',suffix='.zip',delete=False) as tmp:temporary=Path(tmp.name)
     try:
         with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:

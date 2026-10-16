@@ -3449,11 +3449,6 @@ printf '\\nF50_GIST_BEGIN_${tag}\\n'
 (
 if [ ! -f ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; fi
 if [ ! -x ${shellQuote(F50_GIST_HELPER)} ]; then printf '%s\\n' '{"ok":false,"code":"component_not_executable"}'; exit 126; fi
-v=$(${shellQuote(F50_GIST_HELPER)} version 2>/dev/null) || { printf '%s\\n' '{"ok":false,"code":"device_execution_failed"}'; exit 126; }
-printf '%s' "$v" | grep -Eq '"protocol":1([,}])' || { printf '%s\\n' '{"ok":false,"code":"component_version_mismatch"}'; exit 1; }
-for rel in Tools/age Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
-  [ -f "/data/clash/$rel" ] && [ -x "/data/clash/$rel" ] || { printf '%s\\n' '{"ok":false,"code":"components_missing"}'; exit 127; }
-done
 ${invocation}) 2>/dev/null
 rc=$?
 printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
@@ -3549,7 +3544,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
     blocked_dns_address:'DNS 返回了内网或 Fake-IP 地址，已拒绝下载。请让 Gist 域名使用真实公网 DNS。',
     dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
-    age_missing_or_wrong_version:'完整组件中的 age 缺失或版本不匹配，请在组件管理中更新',
+    age_unavailable:'age 无法执行，请在组件管理中更新',
     age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
     committed_pending_finalize:'\u914d\u7f6e\u5df2\u63d0\u4ea4\uff0c\u4e8b\u52a1\u6536\u5c3e\u5f85\u786e\u8ba4\uff1b\u8bf7\u5148\u6062\u590d\u540c\u6b65\u4e8b\u52a1',
     sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
@@ -11931,7 +11926,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           ? (st.schedulerRunning ? '自动同步开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步开启 · 设备调度未运行')
           : '自动同步关闭';
         const lastTime=state?.lastSuccess ? '上次同步 '+fmt(state.lastSuccess) : '尚未同步';
-        const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_missing_or_wrong_version' : '') || (last && !last.ok ? last.code : '');
+        const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_unavailable' : '') || (last && !last.ok ? last.code : '');
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
         return st;
       };

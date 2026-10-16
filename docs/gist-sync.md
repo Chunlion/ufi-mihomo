@@ -12,11 +12,10 @@ py -3 scripts/verify_gist_sync.py --clean
 
 仅修改界面时可用 `py -3 scripts/verify_gist_sync.py --revision --browser`。它重新构建、检查界面和组件包，并要求程序哈希与已通过的集成测试一致；不会把沿用的测试写成重新执行。
 
-第二条从空的 `build/gist-sync` 重建并记录测试命令、标准输出、错误输出和退出码。不会删除 `.cache`、用户配置或历史证据。结果在 `reports/gist-sync/`。正式打包入口：
+第二条从空的 `build/gist-sync` 重建并记录测试命令、标准输出、错误输出和退出码。不会删除 `.cache`、用户配置或历史证据。结果在 `reports/gist-sync/`。当前构建的 GistSync 交付包使用：
 
 ```powershell
-node scripts/report_plugin.js
-py -3 scripts/package_plugin.py
+py -3 scripts/package_gist_sync.py
 ```
 
 `build_helper.py` 的默认完整构建也会调用 GistSync 构建。`--skip-package` 保留原语义，不更新组件包。Mihomo、原控制器、yq、Zashboard 等原组件继续从仓库现有 `tproxy-yq.zip` 保留；本项目未取得原控制器的完整源码，不能声称它也由 Go 源码重建。
@@ -37,7 +36,7 @@ Gist 私钥不调用 `upload_img`。浏览器用设备一次性公钥加密请�
 
 HTTP 宿主缺乏可验证的页面完整性，受控宿主、同源脚本或设备 root 仍可取得输入或明文。加密请求不能解决主动篡改页面的问题，不能宣称私钥绝对安全。未审计到宿主服务端所有日志代码；只验证本功能不经图片上传、普通任务回执及日志不含私钥。
 
-`invalid_response` 的可复现链路是：旧设备缺少同步程序，Shell 的非 JSON 错误或空响应落入前端通用解析失败。新版先检查组件、版本和权限，再读取带随机边界及退出码的响应，分别报告组件缺失、版本不符、设备失败、格式错误、超时或状态未知。真实宿主的组件缺失路径另有 DEVICE 证据。
+`invalid_response` 的可复现链路是：旧设备缺少同步程序，Shell 的非 JSON 错误或空响应落入前端通用解析失败。请求先检查同步程序和权限，再读取带随机边界及退出码的命令结果；状态与版本响应检查协议。不会在每次状态查询或恢复前重复探测版本、检查全部配套文件。真实宿主的组件缺失路径另有 DEVICE 证据。
 
 `invalid_gist_url` 已在旧 F50 页面复现：空链接仍提交 test 任务。精简界面在提交前拦截空链接及错误格式，清理粘贴内容两端的不可见字符。填写链接和私钥后点击“应用”，同一设备任务保存设置并更新当前 YAML；启用自动同步后按间隔继续更新。
 

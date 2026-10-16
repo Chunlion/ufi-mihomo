@@ -28,6 +28,7 @@ exit ${options.startRc || 0}
   writePackage('Proxy/WebUI/zashboard/assets/main.js', 'zashboard');
   const components = path.resolve(__dirname,'../../build/gist-sync/clash');
   for (const rel of ['Tools/age','Tools/kano-gist-sync','Tools/age.LICENSE','Tools/gist-sync-component.json','Scripts/Clash.GistSync','Scripts/Clash.ConfigCommit']) writePackage(rel,fs.readFileSync(path.join(components,rel)));
+  if (options.legacy) for (const rel of ['Tools/age','Tools/kano-gist-sync','Tools/age.LICENSE','Tools/gist-sync-component.json','Scripts/Clash.GistSync','Scripts/Clash.ConfigCommit']) fs.rmSync(path.join(pkg,rel));
   if (options.missing) fs.rmSync(path.join(pkg, options.missing));
   if (options.old) {
     write(root, 'Proxy/config.yaml', config + 'custom-old: retained\n');
@@ -43,8 +44,8 @@ exit ${options.startRc || 0}
 f50_limit() {
  shift
  case "$1" in
- */Tools/kano-gist-sync) ${options.runtimeProbeFailure ? 'echo \'{"ok":true,"version":"1.0.0-rc4","protocol":1}\'; return 1;' : ''} shift; ${quote(path.resolve(__dirname,'../../build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
- */Tools/age) shift; ${quote(path.resolve(__dirname,'../../.cache/gist-sync/tools/age-amd64/age'))} "$@";;
+ */Tools/kano-gist-sync) ${options.runtimeProbeFailure ? 'echo \'{"ok":true,"version":"1.0.0-rc4","protocol":1}\'; return 1;' : ''} ${options.futureVersion ? 'echo \'{"ok":true,"version":"1.1.0","protocol":1}\'; return 0;' : ''} shift; ${quote(path.resolve(__dirname,'../../build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
+ */Tools/age) ${options.futureVersion ? 'echo v1.99.0; return 0;' : ''} shift; ${quote(path.resolve(__dirname,'../../.cache/gist-sync/tools/age-amd64/age'))} "$@";;
  *) "$@";;
  esac
 }
@@ -127,9 +128,8 @@ for (const [name, options, status] of [
 for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
-  ['missing Gist manifest', { missing: 'Tools/gist-sync-component.json' }, 'gist_components_missing'],
-  ['missing age', { missing: 'Tools/age',old:true }, 'gist_component_hash_mismatch'],
-  ['missing sync worker', { missing: 'Tools/kano-gist-sync',old:true }, 'gist_component_hash_mismatch'],
+  ['missing age', { missing: 'Tools/age',old:true }, 'gist_components_missing'],
+  ['missing sync worker', { missing: 'Tools/kano-gist-sync',old:true }, 'gist_components_missing'],
   ['nonzero worker exit with success JSON', { runtimeProbeFailure:true,old:true }, 'gist_runtime_probe_failed'],
   ['missing fresh core', { missing: 'Proxy/Clash.Core' }, 'missing_core'],
   ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'panel_candidate_rejected'],
@@ -204,5 +204,28 @@ test('repeated full update preserves private identity and exact settings bytes',
    assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt'),'utf8'),key);
    assert.equal(fs.statSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt')).mode&0o777,0o600);
   }
+ }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
+});
+
+for(const options of [{futureVersion:true},{missing:'Tools/gist-sync-component.json'},{legacy:true}]) {
+ test('compatible package installs without release pins '+JSON.stringify(options),{skip:!yq},()=>{
+  const c=installCase(options);
+  try {assert.equal(c.result.status,0,c.result.stdout+c.result.stderr);assert.match(c.result.stdout,/KANO_INSTALL_OK=1/);}
+  finally {fs.rmSync(c.dir,{recursive:true,force:true});}
+ });
+}
+
+test('legacy online update retains installed GistSync and its settings',{skip:!yq},()=>{
+ const c=installCase({legacy:true,old:true,stopped:true});
+ try {
+  assert.equal(c.result.status,0,c.result.stdout+c.result.stderr);
+  const components=path.resolve(__dirname,'../../build/gist-sync/clash');
+  const files=['Tools/age','Tools/kano-gist-sync','Scripts/Clash.GistSync','Scripts/Clash.ConfigCommit'];
+  for(const rel of files)write(c.root,rel,fs.readFileSync(path.join(components,rel)));
+  const settings='{"auto":false,"intervalHours":24}\n';
+  write(c.root,'Tools/gist-sync/settings.conf',settings);
+  const result=c.execute();assert.equal(result.status,0,result.stdout+result.stderr);
+  for(const rel of files)assert.deepEqual(fs.readFileSync(path.join(c.root,rel)),fs.readFileSync(path.join(components,rel)));
+  assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/settings.conf'),'utf8'),settings);
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });

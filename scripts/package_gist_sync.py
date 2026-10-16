@@ -38,7 +38,7 @@ def main():
 RC2/RC3 是独立交付来源；维护源码、构建和测试均已纳入本仓库，没有初始化替代仓库。
 
 - 主插件纳入 Gist 设置、下载、解密、配置事务、互斥、来源保护及恢复；Controller 协议、固定 Secret 和网络规则保留。
-- 默认完整组件包增加 age、同步程序、脚本和清单；安装前校验文件哈希、程序退出状态及版本；重复升级保留设置与私钥。在线入口使用仓库固定提交中的完整 ZIP，包含 GistSync，并校验 SHA-256。
+- 默认完整组件包包含 age、同步程序、脚本和清单；安装前检查组件可执行性及协议，升级保留设置与私钥。在线入口优先下载仓库 main 的完整 ZIP，失败后沿用镜像回退。
 - JS 与 Gist 共用配置事务生成器。Go、模块 UI、构建和测试脚本纳入仓库。
 - 响应带边界和退出码，组件缺失有准确分类；私钥请求通过设备一次性公钥加密，不调用图片上传。
 - select 明确颜色、字体和高度。移除独立安装入口。实测修复重复 DOM ID、无事务恢复时空错误码。
@@ -100,11 +100,11 @@ RC2/RC3 是独立交付来源；维护源码、构建和测试均已纳入本仓
               '- 普通浏览器交互使用真实 Chromium 与模拟设备 API，截图和颜色见 `browser-ui.png/json`。Android WebView 原生下拉弹窗未验证。',
               '- 后台测试使用实际独立进程，将持久化到期时间设为过去，没有等待 24 小时或重启设备。期限/重试有 UNIT 覆盖；F50 长时间网络恢复待验证。',
               '- 正常配置链路使用正式 AMD64 程序、真实 age/yq/Mihomo 和隔离 TLS。Off 服务适配器确认实际 API，不证明 Android 防火墙执行。仅测试二进制提供挂起点，以 SIGKILL 复现崩溃。',
-              '- 在线完整包使用仓库固定提交地址，已恢复原在线安装入口；未创建 GitHub Release。','',
+              '- 在线完整包跟随仓库 main，失败后回退镜像；未创建 GitHub Release。','',
               '构建、安全边界与实机准备步骤见 `docs/gist-sync.md`。']
     (REPORTS/'TEST-REPORT.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     DIST.mkdir(parents=True,exist_ok=True)
-    (DIST/'升级说明.txt').write_text('更新配套 JS，再在原组件管理中点击在线安装/更新，或导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页已采用精简界面，填写链接、私钥后点击应用即可更新 YAML。在线组件包从仓库固定提交下载；F50 保持 TProxy。真实 Gist 只读解密校验通过；F50 生产配置应用、模式切换及 Android WebView 未验证。\n',encoding='utf-8')
+    (DIST/'升级说明.txt').write_text('更新配套 JS，再在原组件管理中点击在线安装/更新，或导入完整 ZIP。GistSync 和 age 一次安装，升级保留设置和私钥。Gist 页填写链接、私钥后点击应用即可更新 YAML。在线组件包优先从仓库 main 下载，失败后回退镜像；ZIP 校验及协议检查保留。\n',encoding='utf-8')
     for name in ['TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']:
         shutil.copyfile(REPORTS/name,DIST/name)
     files=[DIST/name for name in ['猫猫TProxy.js','tproxy-yq-gistsync-full.zip','升级说明.txt','TEST-REPORT.md','CHANGES.md','changes.patch','git-proof.json']]

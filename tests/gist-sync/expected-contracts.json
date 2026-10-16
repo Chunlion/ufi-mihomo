@@ -83,7 +83,7 @@
     },
     "buildF50InstallScript[\"/data/upload.zip\"]": {
       "before": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867",
-      "after": "14540080f32f243f723bd371faf0c43a7edd83a42e78b55c007c2b1a314bd0b8"
+      "after": "c9d483838d8426fb033ba7ce3459c8d45d2593bf3396682131b81579343fd692"
     },
     "buildF50CleanupScript[]": {
       "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
@@ -141,5 +141,5 @@
     "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
     "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
   },
-  "sourceSHA256": "d08567c3b099e6510871034d44ae43ce2d33f16c98cb8dbaccf0abcc44413806"
+  "sourceSHA256": "8e41d3178a463d8fae5dbc8b362366f43a258d06006ca2f987f65bf5610129f0"
 }

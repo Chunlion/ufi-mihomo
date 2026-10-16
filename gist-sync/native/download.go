@@ -249,7 +249,7 @@ func (a *App) decrypt(ctx context.Context, encrypted []byte, identity, work stri
 		return "", e
 	}
 	v, e := run(ctx, 5*time.Second, nil, age, "--version")
-	if e != nil || strings.TrimSpace(string(v)) != ageVersion {
+	if e != nil || strings.TrimSpace(string(v)) == "" {
 		return "", fail("age_missing_or_wrong_version")
 	}
 	plain, e := run(ctx, 30*time.Second, nil, age, "--decrypt", "--identity", work+"/identity.txt", work+"/cipher.age")

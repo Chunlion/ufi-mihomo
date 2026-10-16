@@ -87,6 +87,34 @@ func TestRealAgeEndToEnd(t *testing.T) {
 		})
 	}
 }
+
+func TestRealAgeCompatibleVersion(t *testing.T) {
+	a := fixture(t)
+	age, e := filepath.Abs(realAge)
+	if e != nil {
+		t.Fatal(e)
+	}
+	wrapper := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo v1.99.0; exit 0; fi\nexec '" + age + "' \"$@\"\n"
+	if e = os.WriteFile(a.Root+"/Tools/age", []byte(wrapper), 0700); e != nil {
+		t.Fatal(e)
+	}
+	key, pub := generatedIdentity(t)
+	plain := []byte("proxies: []\nrules: [MATCH,DIRECT]\n")
+	work, _ := a.newWork("compatible-age-")
+	defer secureRemove(work)
+	path, e := a.decrypt(context.Background(), encryptReal(t, pub, plain, false), key, work)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := os.ReadFile(path)
+	if e != nil || !bytes.Equal(got, plain) {
+		t.Fatal("plaintext mismatch", e)
+	}
+	status, e := a.status(context.Background())
+	if e != nil || status["ageReady"] != true {
+		t.Fatal("compatible age not ready", e)
+	}
+}
 func TestRealAgeReencryptionNoEffectiveChange(t *testing.T) {
 	a := fixture(t)
 	copyFixture(t, realAge, a.Root+"/Tools/age")

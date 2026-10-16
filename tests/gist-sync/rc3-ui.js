@@ -4,7 +4,10 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync('gist-sync/plugin-gist.js'
 const checks=[];function check(name,fn){fn();checks.push({name,result:'PASS'});}
 const tag='0123456789abcdef',frame=(value,rc=0)=>({success:true,content:`\nF50_GIST_BEGIN_${tag}\n${typeof value==='string'?value:JSON.stringify(value)}\nF50_GIST_END_${tag}=${rc}\n`});
 const parse=(r,cmd='version')=>ctx.api.parse(r,tag,cmd);
-check('valid version requires protocol matching component version',()=>assert.equal(parse(frame({ok:true,version:'1.0.0-rc4',protocol:1})).ok,true));
+check('compatible component versions use the same protocol',()=>{
+ for(const version of ['1.0.0-rc4','1.1.0'])assert.equal(parse(frame({ok:true,version,protocol:1})).ok,true);
+ assert.equal(parse(frame({ok:true,version:'1.1.0',protocol:2})).code,'component_version_mismatch');
+});
 for(const [name,input,expected] of [
  ['missing helper',frame({ok:false,code:'components_missing'},127),'components_missing'],
  ['permission denied',frame({ok:false,code:'component_not_executable'},126),'component_not_executable'],
@@ -49,7 +52,8 @@ check('all four interval options have explicit contrasting styles',()=>{const va
    operationFinish:ok=>{finished=ok;},createToast:(message,kind)=>{color=kind;}};
   vm.createContext(sandbox);vm.runInContext(install+'\nthis.install=installF50PackageAtDevicePath;',sandbox);
   const result=await sandbox.install('/fixture.zip');
-  assert.equal(result,scenario==='ready');assert.equal(finished,scenario==='ready');assert.equal(sandbox.lastInstallDiagnostic.ok,scenario==='ready');
+  assert.equal(result,true);assert.equal(finished,true);assert.equal(sandbox.lastInstallDiagnostic.ok,true);
+  assert.equal(sandbox.lastInstallDiagnostic.gistReady,scenario==='ready');
   if(scenario!=='ready')assert.notEqual(color,'green');
   checks.push({name:'post-install '+scenario+' never reports unconfirmed Gist success',result:'PASS'});
  }

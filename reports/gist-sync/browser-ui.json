@@ -38,13 +38,19 @@
       "environment": "real Tabbit Chromium; simulated device API"
     },
     {
-      "name": "replace identity and apply in one action",
+      "name": "replace identity through Save without applying",
       "result": "PASS",
       "category": "MOCK",
       "environment": "real Tabbit Chromium; simulated device API"
     },
     {
-      "name": "disable automatic sync",
+      "name": "automatic sync checkbox saves disabled state",
+      "result": "PASS",
+      "category": "MOCK",
+      "environment": "real Tabbit Chromium; simulated device API"
+    },
+    {
+      "name": "Sync is independent from Save",
       "result": "PASS",
       "category": "MOCK",
       "environment": "real Tabbit Chromium; simulated device API"

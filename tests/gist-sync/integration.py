@@ -140,6 +140,13 @@ def inside():
             out=f.action('test',{'url':URL,'identity':f.identity,'intervalHours':6,'auto':False},expect='test_passed');assert out['downloaded'] and out['decrypted'] and out['validated'] and not out['written']
             f.save();assert f.config_hash()==before
         before=f.config_hash();check('production CLI HTTPS download, genuine age decrypt, YAML and Mihomo -t',crypto_and_save)
+        def plain_control():
+            denied=f.cli('dispatch','save',input=json.dumps({'identity':f.identity}).encode(),allow_error=True)
+            assert denied['code']=='sealed_request_required'
+            started=f.cli('dispatch','disable',input=b'{}')
+            assert f.wait_job(started['job'])['result']['ok']
+            assert not f.cli('status')['settings']['auto']
+        check('non-secret control uses ordinary dispatch; private identity still requires sealing',plain_control)
         def stopped_commit():
             out=f.action('sync',expect='saved_stopped');assert out['written'] and not out['loaded']
             result=json.loads(call([str(CACHE/'yq-linux-amd64'),'e','-o=json','.',str(f.clash/'Proxy/config.yaml')]))

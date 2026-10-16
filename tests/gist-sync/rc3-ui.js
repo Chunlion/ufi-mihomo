@@ -28,7 +28,8 @@ check('job receipt schema is checked',()=>assert.equal(parse(frame({id:'a'.repea
 check('unknown job cannot become success',()=>assert.equal(parse(frame({status:'finished'}),'job').code,'response_format_invalid'));
 check('status missing settings is rejected',()=>assert.equal(parse(frame({ok:true,version:'1.0.0-rc4',protocol:1}),'status').code,'response_format_invalid'));
 const ui=fs.readFileSync('gist-sync/ui-gist.js','utf8');
-check('Apply is the single main save-and-sync action',()=>{assert(ui.includes('id="mm_gist_apply"'));assert(!ui.includes('id="mm_gist_save"'));assert(!ui.includes('id="mm_gist_sync"'));assert(ui.includes("formAction('apply')"));});
+check('Test Save and Sync are separate actions',()=>{for(const id of ['test','save','sync'])assert(ui.includes('id="mm_gist_'+id+'"'));assert(!ui.includes('mm_gist_apply'));});
+check('host output after a complete receipt is accepted',()=>{const r=frame({ok:true,version:'1.0.0-rc4',protocol:1});r.content=r.content.replace('=0','=0 \t')+'host: completed\n';assert.equal(parse(r).ok,true);});
 check('Gist page has no standalone install or age download actions',()=>{assert(!/mm_gist_(install|age)["']/.test(ui));assert(!ui.includes('upload_img'));assert(!ui.includes('install-age'));assert(ui.includes('mm_gist_recover'));assert(ui.includes('mm_gist_delete'));});
 check('all four interval options have explicit contrasting styles',()=>{const values=[...ui.matchAll(/<option[^>]+value="(\d+)"/g)].map(m=>Number(m[1]));assert.deepEqual(values,[1,6,12,24]);assert.equal((ui.match(/background:#111827!important;color:#fff!important/g)||[]).length,5);assert(ui.includes('height:30px'));assert(!ui.includes('min-height:42px')); assert(ui.includes('color-scheme:dark!important'));assert(!ui.includes('color-scheme:light'));});
 (async()=>{
@@ -49,6 +50,14 @@ printf '%s\\n' '{"ok":true,"protocol":1,"settings":{"intervalHours":6},"ageReady
   assert.equal(fs.readFileSync(path.join(dir,'calls'),'utf8'),'status\n');
   checks.push({name:'status executes once and can diagnose missing companion components',result:'PASS'});
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+ ctx.hostRunShellWithRoot=async script=>{
+  assert(script.includes("'dispatch' 'disable'"));
+  const nonce=script.match(/F50_GIST_BEGIN_([a-f0-9]+)/)[1];
+  return {success:true,content:`\nF50_GIST_BEGIN_${nonce}\n{"ok":true,"job":"${'a'.repeat(32)}"}\nF50_GIST_END_${nonce}=0\n`};
+ };
+ ctx.CryptoJS=undefined;ctx.BigInt=undefined;
+ assert.equal((await ctx.api.dispatch('disable')).ok,true);
+ checks.push({name:'non-secret control needs no CryptoJS BigInt or transport key',result:'PASS'});
  const source=fs.readFileSync('猫猫TProxy.js','utf8');
  const install=source.slice(source.indexOf('async function installF50PackageAtDevicePath('),source.indexOf('async function installF50PackageFromNetwork('));
  for(const scenario of ['status_unknown','scheduler_unknown','ready']){
@@ -56,14 +65,13 @@ printf '%s\\n' '{"ok":true,"protocol":1,"settings":{"intervalHours":6},"ageReady
   const sandbox={lastInstallDiagnostic:null,buildF50InspectScript:()=>'',buildF50InstallScript:()=>'',
    operationStage(){},invalidateStatusSnapshot(){},invalidateBinarySnapshot(){},
    runShellWithRoot:async()=>({success:true,deviceCompleted:true,deviceExitCode:0,content:++calls===1?'F50_INSPECT_OK=1':'F50_INSTALL_COMPONENTS_OK=1\nF50_INSTALL_TRANSACTION_STATE=complete\nKANO_INSTALL_OK=1\nF50_INSTALL_STATUS=installed_stopped'}),
-   f50GistExec:async args=>({ok:args[0]==='version'?scenario!=='status_unknown':scenario!=='scheduler_unknown',version:'1.0.0-rc4',code:'device_state_unknown'}),
+   f50GistExec:async()=>{throw Error('generic installation must not probe Gist');},
    f50GistMessage:String,f50Diagnostic:()=>({}),safeTextToHtml:String,
    operationFinish:ok=>{finished=ok;},createToast:(message,kind)=>{color=kind;}};
   vm.createContext(sandbox);vm.runInContext(install+'\nthis.install=installF50PackageAtDevicePath;',sandbox);
   const result=await sandbox.install('/fixture.zip');
   assert.equal(result,true);assert.equal(finished,true);assert.equal(sandbox.lastInstallDiagnostic.ok,true);
-  assert.equal(sandbox.lastInstallDiagnostic.gistReady,scenario==='ready');
-  if(scenario!=='ready')assert.notEqual(color,'green');
+  assert.equal(color,'green');
   checks.push({name:'post-install '+scenario+' never reports unconfirmed Gist success',result:'PASS'});
  }
  fs.writeFileSync('build/gist-sync/rc3-ui-results.json',JSON.stringify(checks,null,2)+'\n');console.log('PASS',checks.length,'RC3 protocol/UI checks');

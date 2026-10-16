@@ -44,7 +44,7 @@ exit ${options.startRc || 0}
 f50_limit() {
  shift
  case "$1" in
- */Tools/kano-gist-sync) ${options.runtimeProbeFailure ? 'echo \'{"ok":true,"version":"1.0.0-rc4","protocol":1}\'; return 1;' : ''} ${options.futureVersion ? 'echo \'{"ok":true,"version":"1.1.0","protocol":1}\'; return 0;' : ''} shift; ${quote(path.resolve(__dirname,'../../build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
+ */Tools/kano-gist-sync) if [ "$2" = start-daemon ]; then printf resumed > ${quote(path.join(root,'gist-resumed'))}; return 0; fi; ${options.runtimeProbeFailure ? 'echo \'{"ok":true,"version":"1.0.0-rc4","protocol":1}\'; return 1;' : ''} ${options.futureVersion ? 'echo \'{"ok":true,"version":"1.1.0","protocol":1}\'; return 0;' : ''} shift; ${quote(path.resolve(__dirname,'../../build/gist-sync/bin/kano-gist-sync-linux-amd64'))} "$@";;
  */Tools/age) ${options.futureVersion ? 'echo v1.99.0; return 0;' : ''} shift; ${quote(path.resolve(__dirname,'../../.cache/gist-sync/tools/age-amd64/age'))} "$@";;
  *) "$@";;
  esac
@@ -128,11 +128,8 @@ for (const [name, options, status] of [
 for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
-  ['missing age', { missing: 'Tools/age',old:true }, 'gist_components_missing'],
-  ['missing sync worker', { missing: 'Tools/kano-gist-sync',old:true }, 'gist_components_missing'],
-  ['nonzero worker exit with success JSON', { runtimeProbeFailure:true,old:true }, 'gist_runtime_probe_failed'],
   ['missing fresh core', { missing: 'Proxy/Clash.Core' }, 'missing_core'],
-  ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'panel_candidate_rejected'],
+  ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'yaml_parser_not_executable'],
   ['invalid YAML', { invalidConfig: true }, 'config_probe_failed'],
   ['start timeout', { old: true, running: true, startRc: 124 }, 'start_timeout'],
   ['invalid core config', { old: true, running: true, startOutput: 'F50_ERROR=original_config_invalid', startRc: 1 }, 'invalid_config'],
@@ -207,7 +204,7 @@ test('repeated full update preserves private identity and exact settings bytes',
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });
 
-for(const options of [{futureVersion:true},{missing:'Tools/gist-sync-component.json'},{legacy:true}]) {
+for(const options of [{futureVersion:true},{missing:'Tools/gist-sync-component.json'},{missing:'Tools/age'},{missing:'Tools/kano-gist-sync'},{runtimeProbeFailure:true},{legacy:true}]) {
  test('compatible package installs without release pins '+JSON.stringify(options),{skip:!yq},()=>{
   const c=installCase(options);
   try {assert.equal(c.result.status,0,c.result.stdout+c.result.stderr);assert.match(c.result.stdout,/KANO_INSTALL_OK=1/);}
@@ -227,5 +224,13 @@ test('legacy online update retains installed GistSync and its settings',{skip:!y
   const result=c.execute();assert.equal(result.status,0,result.stdout+result.stderr);
   for(const rel of files)assert.deepEqual(fs.readFileSync(path.join(c.root,rel)),fs.readFileSync(path.join(components,rel)));
   assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/settings.conf'),'utf8'),settings);
+ }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
+});
+
+for(const auto of [false,true])test('installation resumes only enabled automatic Gist '+auto,{skip:!yq},()=>{
+ const c=installCase({old:true,stopped:true});try{
+  write(c.root,'Tools/gist-sync/settings.conf',JSON.stringify({auto}));
+  const result=c.execute();assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.equal(fs.existsSync(path.join(c.root,'gist-resumed')),auto);
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });

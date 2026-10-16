@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -57,6 +58,25 @@ func main() {
 		result, err = a.status(ctx)
 	case "request-key":
 		result, err = a.requestKey()
+	case "dispatch":
+		if len(args) != 2 || !validAction(args[1]) {
+			err = fail("invalid_arguments")
+			break
+		}
+		var req Request
+		d := json.NewDecoder(io.LimitReader(os.Stdin, maxRequest+1))
+		d.DisallowUnknownFields()
+		if err = d.Decode(&req); err != nil {
+			err = fail("request_json_invalid")
+			break
+		}
+		if req.Identity != "" || req.ManualSources != nil {
+			err = fail("sealed_request_required")
+			break
+		}
+		var id string
+		id, err = a.dispatchRequest(ctx, args[1], req)
+		result = map[string]any{"ok": err == nil, "job": id, "code": code(err)}
 	case "dispatch-sealed":
 		if len(args) != 2 || !validAction(args[1]) {
 			err = fail("invalid_arguments")

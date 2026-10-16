@@ -17,6 +17,10 @@
       "before": "fedf3bb997f246f4981fb5ab6822ad953879d24d4d8b9843d27cf0db6d2411cc",
       "after": "80b515f784a5c76c5941a81e8e90e96beda53b51cefa09256adb5c38ad32c382"
     },
+    "buildF50HttpSubscriptionPatchScript[]": {
+      "before": "a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3",
+      "after": "76f3c22578b8117e06a671bf0358b62ebc8c780a2a4e17021ce77dcbdfaabf3e"
+    },
     "buildF50OriginalConfigFunctions[]": {
       "before": "ec97cc237cae51703109a76d1803bd3a538e6deb87b395fe6367ec9ae328de5b",
       "after": "57a91997b158ebc5ca80969f4e0d353e66c737b48c2d30e8ea3a5f6402841443"
@@ -27,19 +31,23 @@
     },
     "buildF50StartScript[\"start\"]": {
       "before": "b73e83a2a4fdf39b4f25f1aa3ab0f4e2945347b5f675bdb440609158b25e28cf",
-      "after": "7fa31dfb176bbad27dbeb30ad2991099423d9df073f6fb1f44d355ed40e6a1b7"
+      "after": "5c9ddeeea172994ea96426a85edb170ee49df3103302d4c0ce2d2c3c60b20d25"
     },
     "buildF50StartScript[\"restart\"]": {
       "before": "4cad91b9c7c08b6bb57119afec0df9cfb96f98dae08a5bfebc78ed88a7a8df1d",
-      "after": "4962066b4954c2881ca859b5fb50e21ca8491b851c6d019ce35057f33191103d"
+      "after": "f6ee7d46d1ce994405e373f7034d9ed320f483a4b9c79383bcc8716ce604f385"
+    },
+    "buildF50ZashboardValidationFunction[]": {
+      "before": "16805be0b9d03e567504f8dd99bedd976c014afe482c798ad33bbe5a90c665f8",
+      "after": "e52472cf01037fb1e07788e5d3992633a5a9aed21b6c8b6a9b03ea3b7a07e70a"
     },
     "buildF50MaintenanceFunctions[\"all\"]": {
       "before": "f772617b8306a45b1cd6a86f410b075811e68c139229bc36db6eb9b5ba370d85",
-      "after": "e5833681ced349750c32bcf2caea9efda9b44e2ef4447b0e1d0790725e303b41"
+      "after": "08f16a03ddd282182ea9cfe28fc961347ed9804d7997ab57f5c7c1255a2603dc"
     },
     "buildF50MaintenanceFunctions[\"start\"]": {
       "before": "011b765c7d1a2335ac9b318a2c9386794596caddb9a6bff61adbc784fe8855fa",
-      "after": "94975788722d6760a572d78b12466779b62aaa9a39685dcc85da9ce886fe635d"
+      "after": "e1932f62fa6fbaa5fdc38336375fb4be3fc620530b06d9b8c03a6d403c32bfc8"
     },
     "buildF50MaintenanceFunctions[\"inspect\"]": {
       "before": "1bed9167f07fa04203c853530bdaa78504fc004dc3c18a74275dcc82058eac64",
@@ -47,7 +55,7 @@
     },
     "buildF50MaintenanceFunctions[\"install\"]": {
       "before": "59675725b0197c10bdc3fe1074d165653da102136afd51eee7a388e39b930ca5",
-      "after": "e2dfa22aba67d235deb526ea47ac5ceba9b46c49d058b9bb9a1d1de7bbba823c"
+      "after": "45aa788ec66cd7e8f9b0f7dac7c709e26e19c912bb2e2e36255af07ee96e483c"
     },
     "buildF50MaintenanceFunctions[\"cleanup\"]": {
       "before": "e51d9437c4dd88a0fd65733493936b079caf1ddd20ee7e01250385a19fb87559",
@@ -73,6 +81,10 @@
       "before": "5f72d2fa77b4307d6bdaf93a05a28223b0f4a939050e7db7efa454d596e9b54e",
       "after": "048ecb2b97fe8b0999bd8603c1a664d3c10935b2ff691e0d7d8be295ba55a1d1"
     },
+    "buildF50PanelHelpers[]": {
+      "before": "832cd4c240e6fc9cb2d9e1893523ec5462f83fb9d9e3dcd584f59083d71ed61c",
+      "after": "9ae61a42b9786738a7a2d8439de4a36cfaa845f8104ef0c2c9ff8ac3bd61db98"
+    },
     "buildF50StartHelpers[]": {
       "before": "537670e916d482c9337534dfac4667c0137fe3d330e8f61b31e1588207116854",
       "after": "7e101949212987596d7cff9ed332a867b30e825dc5c05ca5eab383f741148923"
@@ -83,7 +95,7 @@
     },
     "buildF50InstallScript[\"/data/upload.zip\"]": {
       "before": "f4e6992feb6c26ff432072b0b09acc89ab2c899f68f887edb258c07e29107867",
-      "after": "1bba8d09cc3036760aee057b9c16185d613ba286f318ad4f2e339597082ecb29"
+      "after": "97c66da525cb28b640112e03089a5372f0761e477baf181c3d56c2a69731dd5a"
     },
     "buildF50CleanupScript[]": {
       "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
@@ -139,7 +151,8 @@
     "gist_permission_failed": "无法设置 Gist 组件执行权限，未完成安装。",
     "gist_script_invalid": "Gist 组件脚本校验失败，未完成安装。",
     "gist_backup_cleanup_failed": "组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。",
-    "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。"
+    "gist_transient_cleanup_failed": "同步临时数据清理失败，未替换原组件。",
+    "controller_interface_incompatible": "控制器缺少所需命令接口。"
   },
-  "sourceSHA256": "8e3888324d30d12c0db695b5b6374930f9c90867d000bc704ea53e57a31fd69b"
+  "sourceSHA256": "ea13606ca8b6d122d3e0f59408cc72632228415c20feca092eec2018db5f37c3"
 }

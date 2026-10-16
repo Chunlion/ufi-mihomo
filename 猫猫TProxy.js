@@ -609,19 +609,24 @@ ROOT=${root}
 FOUND=0
 NEW=''
 trap 'rm -f "$NEW"' EXIT
-command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
 # F50 uses ARM64; the bundled ARMv7 controller has a different binary layout.
 for BIN in "$ROOT/Scripts/clashctl_arm64"; do
   [ -f "$BIN" ] || continue
   [ ! -L "$BIN" ] || { echo F50_ERROR=controller_http_patch_symlink; exit 1; }
   command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_hash_tool_missing; exit 1; }
-  [ "$(cat "$ROOT/Tools/f50-controller.version" 2>/dev/null)" = '${F50_COMPAT_VERSION}' ] || { echo F50_ERROR=controller_http_patch_version_mismatch; exit 1; }
   PATCH_HASH=$(sha256sum "$BIN" | awk '{print $1}')
   case "$PATCH_HASH" in
     ${originalHash}) ;;
     ${F50_HTTP_CONTROLLER_PATCHED_HASH}) ;;
-    *) echo F50_ERROR=controller_http_patch_unknown_build; exit 1 ;;
+    *)
+      help=$(CLASH_ROOT="$ROOT" "$BIN" help 2>&1) || { echo F50_ERROR=controller_interface_incompatible; exit 1; }
+      for action in start stop status policy fetch-batch; do
+        printf '%s' "$help" | grep -Eq "(^|[[:space:]|])$action([[:space:]|]|$)" || { echo F50_ERROR=controller_interface_incompatible; exit 1; }
+      done
+      echo F50_CONTROLLER_HTTP_PATCH=skipped_unknown_build
+      exit 0 ;;
   esac
+  command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
   FOUND=1
   OLD=0; CURRENT=0
   for SPEC in ${specs}; do
@@ -969,10 +974,9 @@ let f50BackendReady = false;
 async function ensureCompatBackend() {
   if (f50BackendReady) return true;
   const r = await runShellWithRoot(`set -e
-[ "$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }
 ${buildF50HttpSubscriptionPatchScript()} || exit 1
 sh /data/clash/Scripts/Clash.Service version`, 15000);
-  f50BackendReady = !!r.success && String(r.content || '').includes('F50_CONTROLLER=8.0.0-compat.2.3');
+  f50BackendReady = !!r.success && /^F50_CONTROLLER=\S+/m.test(String(r.content || ''));
   if (!f50BackendReady) createToast(/controller_http_patch_/.test(String(r.content || '')) ? 'HTTP 订阅兼容修复失败，请使用配套组件包。' : '请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
   return f50BackendReady;
 }
@@ -991,7 +995,7 @@ const F50_DIAGNOSTIC_LABELS = {
   zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
   archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
   data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
-  controller_http_patch_unknown_build: '控制器整体哈希不匹配，已拒绝定位补丁。',
+  controller_interface_incompatible: '控制器缺少所需命令接口。',
   config_transaction_pending: '存在未完成的配置事务，请先恢复网络。',
   install_transaction_pending: '安装事务未完成，已阻止启动；保留的事务日志可用于回滚。',
   data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
@@ -1152,30 +1156,22 @@ async function f50Command(action, timeout = 60000) {
   if (/^(?:stop|recover|restart)$/.test(action) && !(await ensureOriginalSubscriptionService())) {
     return { success: false, content: 'F50_ERROR=tun_rule_cleanup_patch_failed' };
   }
-  return runShellWithRoot("[ \"$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)\" = '8.0.0-compat.2.3' ] || { echo F50_BACKEND_REQUIRED; exit 1; }\nsh " + shellQuote(CLASH_SERVICE) + ' ' + action, timeout);
+  return runShellWithRoot('sh ' + shellQuote(CLASH_SERVICE) + ' ' + action, timeout);
 }
 let f50PackageInput = null;
 function buildF50ZashboardValidationFunction() { return `
 f50_validate_zashboard() {
   ui_dir=$1
-  [ -d "$ui_dir" ] || { echo F50_PANEL_CODE=missing_directory; return 1; }
   [ -s "$ui_dir/index.html" ] || { echo F50_PANEL_CODE=missing_index; return 1; }
-  [ -s "$ui_dir/manifest.webmanifest" ] || { echo F50_PANEL_CODE=missing_manifest; return 1; }
-  [ -s "$ui_dir/registerSW.js" ] || { echo F50_PANEL_CODE=missing_register_sw; return 1; }
-  [ -d "$ui_dir/assets" ] || { echo F50_PANEL_CODE=missing_assets; return 1; }
-  [ ! -d "$ui_dir/_nuxt" ] || { echo F50_PANEL_CODE=wrong_identity; return 1; }
-  if grep -Eiq '<title>[[:space:]]*metacubexd[[:space:]]*</title>' "$ui_dir/index.html"; then
-    echo F50_PANEL_CODE=wrong_identity; return 1
-  fi
   grep -Eiq '<title>[[:space:]]*zashboard[[:space:]]*</title>' "$ui_dir/index.html" || { echo F50_PANEL_CODE=wrong_identity; return 1; }
-  manifest_yq="$ui_dir/../../../Tools/yq_linux_arm64"
-  [ -x "$manifest_yq" ] || { echo F50_PANEL_CODE=missing_manifest_parser; return 1; }
-  "$manifest_yq" e -p=json -e '.name == "zashboard" and .short_name == "zashboard"' "$ui_dir/manifest.webmanifest" >/dev/null 2>&1 || { echo F50_PANEL_CODE=wrong_manifest; return 1; }
-  main_asset=$(sed -n 's/.*src="\\.\\/\\(assets\\/[^"?]*\\.js\\)[^"]*".*/\\1/p' "$ui_dir/index.html" | head -n 1)
-  [ -n "$main_asset" ] && [ -s "$ui_dir/$main_asset" ] || { echo F50_PANEL_CODE=missing_main_asset; return 1; }
-  grep -qi 'zashboard' "$ui_dir/$main_asset" || { echo F50_PANEL_CODE=wrong_bundle; return 1; }
+  scripts=$(tr "\\047" '"' < "$ui_dir/index.html" | grep -Eo '<script[^>]*src="[^"]+"' | sed 's/.*src="//;s/"$//')
+  [ -n "$scripts" ] || { echo F50_PANEL_CODE=missing_main_asset; return 1; }
+  for asset in $scripts; do
+    case "$asset" in https://*|http://*) continue ;; esac
+    asset=\${asset%%[?#]*}; asset=\${asset#./}; asset=\${asset#/}
+    [ -s "$ui_dir/$asset" ] || { echo F50_PANEL_CODE=missing_main_asset; return 1; }
+  done
   echo F50_PANEL_VALIDATED=1
-  return 0
 }
 `; }
 function buildF50MaintenanceFunctions(operation = 'all') {
@@ -2242,33 +2238,12 @@ if [ ! -s "$PKG/Proxy/Clash.Core" ]; then
   PKG=$MERGED
 fi
 mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install_fail package_directory_failed; exit 1; }
-# GistSync is shipped in the complete component ZIP, not embedded in JavaScript.
-f50_gist_verify_bundle() {
-  groot=$1
-  for grel in Tools/age Tools/kano-gist-sync Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
-    [ -s "$groot/$grel" ] && [ ! -L "$groot/$grel" ] || { f50_install_fail gist_components_missing; return 1; }
-  done
-  chmod 755 "$groot/Tools/age" "$groot/Tools/kano-gist-sync" "$groot/Scripts/Clash.GistSync" "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_permission_failed; return 1; }
-  sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
-  gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
-  printf '%s' "$gist_probe" | grep -Eq '"protocol":1([,}])' || { f50_install_fail gist_runtime_probe_failed; return 1; }
-  f50_limit 5 "$groot/Tools/age" --version >/dev/null 2>&1 || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
-}
-if [ -s "$PKG/Tools/kano-gist-sync" ] || [ -e "$PKG/Scripts/Clash.GistSync" ] || [ -e "$PKG/Scripts/Clash.ConfigCommit" ]; then
-  f50_gist_verify_bundle "$PKG" || exit 1
-elif [ -s "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/age" ] &&
-     [ -s "$F50_ROOT/Scripts/Clash.GistSync" ] && [ -s "$F50_ROOT/Scripts/Clash.ConfigCommit" ]; then
-  # Keep an already installed GistSync when a legacy online package omits it.
-  for grel in Tools/age Tools/kano-gist-sync Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
+# A legacy component package may omit optional files already installed.
+for grel in Tools/age Tools/kano-gist-sync Tools/age.LICENSE Tools/gist-sync-component.json Scripts/Clash.GistSync Scripts/Clash.ConfigCommit; do
+  if [ ! -e "$PKG/$grel" ] && [ -f "$F50_ROOT/$grel" ]; then
     cp -p "$F50_ROOT/$grel" "$PKG/$grel" || { f50_install_fail gist_preserve_failed; exit 1; }
-  done
-  for grel in Tools/age.LICENSE Tools/gist-sync-component.json; do
-    if [ -f "$F50_ROOT/$grel" ]; then
-      cp -p "$F50_ROOT/$grel" "$PKG/$grel" || { f50_install_fail gist_preserve_failed; exit 1; }
-    fi
-  done
-  f50_gist_verify_bundle "$PKG" || exit 1
-fi
+  fi
+done
 
 for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/kano-gist-sync "$PKG"/Tools/age "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do
   [ ! -f "$file" ] || chmod 755 "$file" || { f50_install_fail executable_permission_failed; exit 1; }
@@ -2276,14 +2251,14 @@ done
 ${buildF50HttpSubscriptionPatchScript('"$PKG"')} || { f50_install_fail controller_http_patch_failed; exit 1; }
 probe=$(CLASH_ROOT="$PKG" f50_limit 5 "$PKG/Scripts/clashctl_arm64" version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail controller_not_executable "$probe"; exit 1; }
-case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
+case "$probe" in *F50_CONTROLLER=?*) ;; *) f50_install_fail controller_protocol_mismatch; exit 1 ;; esac
 probe=$(f50_limit 5 "$PKG/Proxy/Clash.Core" -v 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail core_not_executable "$probe"; exit 1; }
 f50_patch_service "$PKG/Scripts/Clash.Service" || { f50_install_fail service_patch_failed; exit 1; }
 sh -n "$PKG/Scripts/Clash.Service" || { f50_install_fail service_script_invalid; exit 1; }
 probe=$(CLASH_ROOT="$PKG" f50_limit 5 sh "$PKG/Scripts/Clash.Service" version 2>&1); probe_rc=$?
 [ "$probe_rc" = 0 ] || { f50_install_fail service_script_failed "$probe"; exit 1; }
-case "$probe" in *F50_CONTROLLER=8.0.0-compat.2.3*) ;; *) f50_install_fail service_protocol_mismatch; exit 1 ;; esac
+case "$probe" in *F50_CONTROLLER=?*) ;; *) f50_install_fail service_protocol_mismatch; exit 1 ;; esac
 panel_probe=$(f50_validate_zashboard "$PKG/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
 printf '%s\\n' "$panel_probe"
 [ "$panel_rc" = 0 ] || { f50_install_fail panel_candidate_rejected "$panel_probe"; exit 1; }
@@ -2445,6 +2420,11 @@ else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
   exit 1
 fi
+# Restore scheduling only for an existing enabled Gist configuration.
+if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/gist-sync/settings.conf" ] &&
+   "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$F50_ROOT/Tools/gist-sync/settings.conf" >/dev/null 2>&1; then
+  CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_INSTALL_WARNING=gist_scheduler_resume_failed
+fi
 # Component completion is independent of journal, receipt and lock finalization.
 SUCCESS=1
 # Do not retain age identities in ordinary component rollback folders.
@@ -2492,20 +2472,9 @@ async function installF50PackageAtDevicePath(uploaded) {
     const recoveredWithFallback = /^F50_CLEAN_WARNING=/m.test(output);
     if (recoveredWithFallback) message += '；旧恢复报错后已通过兜底清理复查';
     if (warning) message += warning === 'previous_components_retained' ? '；已保留旧组件回滚目录' : '；安装告警：' + warning;
-    const gistVersion = await f50GistExec(['version'], 8000);
-    let gistReady = gistVersion.ok;
-    if (gistVersion.ok) {
-      const gistResume = await f50GistExec(['start-daemon'], 8000);
-      gistReady = gistResume.ok;
-      if (!gistResume.ok) message += '\uff1bGist \u8c03\u5ea6\u6062\u590d\u672a\u786e\u8ba4\uff1a' + (gistResume.code || 'unknown');
-    } else if (gistVersion.code === 'components_missing') {
-      message += '\uff1b\u5f53\u524d\u7ec4\u4ef6\u5305\u672a\u5305\u542b GistSync';
-    } else {
-      message += '\uff1bGist \u72b6\u6001\u672a\u786e\u8ba4\uff1a' + f50GistMessage(gistVersion.code);
-    }
-    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true, gistReady};
+    lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
     operationFinish(true, message);
-    createToast(safeTextToHtml(message), !gistReady || warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
+    createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
     return true;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
@@ -3409,7 +3378,7 @@ exit "$delete_rc"
   const F50_GIST_HELPER = '/data/clash/Tools/kano-gist-sync';
   function f50GistParse(response, tag, command) {
     const candidates = [response?.content, response?.data?.content, response?.data?.result, response?.result];
-    const pattern = new RegExp('(?:^|\\n)F50_GIST_BEGIN_' + tag + '\\r?\\n([\\s\\S]*?)\\r?\\nF50_GIST_END_' + tag + '=(\\d+)\\s*$');
+    const pattern = new RegExp('(?:^|\\n)F50_GIST_BEGIN_' + tag + '\\r?\\n([\\s\\S]*?)\\r?\\nF50_GIST_END_' + tag + '=(\\d+)[ \\t]*(?:\\r?\\n|$)');
     for (const content of candidates) {
       if (typeof content !== 'string') continue;
       const match = content.match(pattern);
@@ -3452,8 +3421,8 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     try { return f50GistParse(await hostRunShellWithRoot.call(globalThis,script,timeout),tag,args[0]); }
     catch (error) { return {ok:false,code:error?.name==='AbortError' || /timeout/i.test(error?.message || '')?'operation_timeout':'device_state_unknown'}; }
   }
-  function f50GistSeal(key, action, request) {
-    if (typeof CryptoJS === 'undefined' || typeof BigInt === 'undefined' || !crypto?.getRandomValues) throw Error('secure_transport_unavailable');
+  async function f50GistSeal(key, action, request) {
+    if (typeof CryptoJS === 'undefined' || !crypto?.getRandomValues) throw Error('secure_transport_unavailable');
     if (key.protocol !== 1 || !/^[a-f0-9]{32}$/.test(key.id || '') || !/^[a-f0-9]{512}$/.test(key.modulus || '') || key.exponent !== 65537) throw Error('component_version_mismatch');
     const hex = bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
     const wa = bytes=>CryptoJS.enc.Hex.parse(hex(bytes));
@@ -3466,14 +3435,24 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
         out.set(hash(input).slice(0,Math.min(32,length-i*32)),i*32);
       }return out;
     };
-    const secret=crypto.getRandomValues(new Uint8Array(64)),seed=crypto.getRandomValues(new Uint8Array(32));
-    const db=new Uint8Array(223);db.set(hash(new TextEncoder().encode('Maomao-GistSync-RC3')));db[158]=1;db.set(secret,159);
-    const dbMask=mask(seed,223);for(let i=0;i<223;i++)db[i]^=dbMask[i];
-    const seedMask=mask(db,32);for(let i=0;i<32;i++)seed[i]^=seedMask[i];
-    const encoded=new Uint8Array(256);encoded.set(seed,1);encoded.set(db,33);
-    const modulus=BigInt('0x'+key.modulus);let base=BigInt('0x'+hex(encoded)),exponent=65537n,encrypted=1n;
-    while(exponent){if(exponent&1n)encrypted=encrypted*base%modulus;base=base*base%modulus;exponent>>=1n;}
-    const wrapped=CryptoJS.enc.Hex.parse(encrypted.toString(16).padStart(512,'0')).toString(CryptoJS.enc.Base64);
+    const secret=crypto.getRandomValues(new Uint8Array(64));
+    let wrapped;
+    if (crypto.subtle) {
+      const n=CryptoJS.enc.Hex.parse(key.modulus).toString(CryptoJS.enc.Base64).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      const publicKey=await crypto.subtle.importKey('jwk',{kty:'RSA',n,e:'AQAB'},{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+      wrapped=wa(new Uint8Array(await crypto.subtle.encrypt({name:'RSA-OAEP',label:new TextEncoder().encode('Maomao-GistSync-RC3')},publicKey,secret))).toString(CryptoJS.enc.Base64);
+    } else {
+      // The F50 HTTP host has no WebCrypto; retain its existing OAEP transport.
+      if (typeof BigInt === 'undefined') throw Error('secure_transport_unavailable');
+      const seed=crypto.getRandomValues(new Uint8Array(32));
+      const db=new Uint8Array(223);db.set(hash(new TextEncoder().encode('Maomao-GistSync-RC3')));db[158]=1;db.set(secret,159);
+      const dbMask=mask(seed,223);for(let i=0;i<223;i++)db[i]^=dbMask[i];
+      const seedMask=mask(db,32);for(let i=0;i<32;i++)seed[i]^=seedMask[i];
+      const encoded=new Uint8Array(256);encoded.set(seed,1);encoded.set(db,33);
+      const modulus=BigInt('0x'+key.modulus);let base=BigInt('0x'+hex(encoded)),exponent=65537n,encrypted=1n;
+      while(exponent){if(exponent&1n)encrypted=encrypted*base%modulus;base=base*base%modulus;exponent>>=1n;}
+      wrapped=CryptoJS.enc.Hex.parse(encrypted.toString(16).padStart(512,'0')).toString(CryptoJS.enc.Base64);
+    }
     const iv=crypto.getRandomValues(new Uint8Array(16));
     const data=CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(JSON.stringify(request)),wa(secret.slice(0,32)),{iv:wa(iv),mode:CryptoJS.mode.CBC,padding:CryptoJS.pad.Pkcs7}).ciphertext.toString(CryptoJS.enc.Base64);
     const iv64=wa(iv).toString(CryptoJS.enc.Base64);
@@ -3483,11 +3462,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
   async function f50GistDispatch(action, request = {}) {
     try {
+      if (!request.identity && !request.manualSources) {
+        const direct=await f50GistExec(['dispatch',action],12000,JSON.stringify(request));
+        if (direct.code !== 'invalid_command') return direct;
+      }
       const key = await f50GistExec(['request-key'],15000);
       if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
       if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
-      const sealed=f50GistSeal(key,action,request);
+      const sealed=await f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
     } catch (error) { return {ok:false,code:['secure_transport_unavailable','component_version_mismatch'].includes(error?.message)?error.message:'request_encryption_failed'}; }
     finally { request.identity=''; }
@@ -3550,12 +3533,37 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
 
+  async function f50GistLeave() {
+    const leave=async()=>{
+      const read=await readYamlObject(CLASH_CONFIG,'config.yaml');
+      if (!read.ok) throw Error(read.message || '读取配置失败');
+      const paused=await runShellWithRoot(`set -e
+settings=/data/clash/Tools/gist-sync/settings.conf
+if [ -f "$settings" ]; then
+  tmp="$settings.new.$$"
+  trap 'rm -f "$tmp"' EXIT
+  /data/clash/Tools/yq_linux_arm64 e -p=json -o=json '.auto = false | .revision += 1' "$settings" > "$tmp"
+  chmod 600 "$tmp" && mv -f "$tmp" "$settings"
+fi`,8000);
+      if (!paused.success) throw Error('关闭 Gist 自动同步失败');
+      delete read.value['x-f50-gist-sync'];
+      const written=await writeYamlObjectAtomic(CLASH_CONFIG,read.value);
+      if (!written.ok) throw Error(written.content || '退出 Gist 管理失败');
+      invalidateStatusSnapshot();
+      return true;
+    };
+    return activeCriticalOperation?.leaseOwned ? leave() : runCriticalOperation('退出 Gist 管理',leave);
+  }
+
   async function f50GistManaged() {
     const st = await f50GistExec(['status'], 15000);
     if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) throw Error(read.message || '读取配置失败');
     if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
+      if (window.confirm('Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？')) {
+        if (await f50GistLeave()) return null;
+      }
       throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
     }
     return null;
@@ -3586,14 +3594,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
       if (!job.ok || job.status === 'completion_unknown') {
         createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
       }
-      await new Promise(resolve=>setTimeout(resolve,700));
+      await new Promise(resolve=>setTimeout(resolve,2000));
     }
     createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
-  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
+  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '').replace(/\?raw=1$/, '');
   const f50GistValidUrl = value => {
+    value=f50GistCleanUrl(value);
     try {
       if (value.length > 2048 || !value.startsWith('https://gist.githubusercontent.com/') || /[\s\u200B-\u200D\u2060\uFEFF\\]/.test(value)) return false;
       const u = new URL(value);
@@ -11853,7 +11862,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     quickRunBtn.textContent = '安装 / 启动';
     quickRunBtn.onclick = async ()=>{
  if(!(await ensureAdvanced()))return false;
- const r=await runShellWithRoot("test \"$(cat /data/clash/Tools/f50-controller.version 2>/dev/null)\" = '8.0.0-compat.2.3'",4000);
+ const r=await runShellWithRoot('test -s /data/clash/Scripts/Clash.Service && test -x /data/clash/Scripts/clashctl_arm64',4000);
  if(!r.success)return await installF50PackageFromNetwork();
  return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
 };
@@ -11877,16 +11886,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               <option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="1">1 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="6" selected>6 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="12">12 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="24">24 小时</option>
             </select></label>
           </div>
-          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:1">
-            <button id="mm_gist_apply" type="button">应用</button>
+          <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3">
+            <button id="mm_gist_test" type="button">测试</button>
+            <button id="mm_gist_save" type="button">保存设置</button>
+            <button id="mm_gist_sync" type="button">同步</button>
           </div>
           <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
           <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
           <details style="margin-top:8px"><summary>更多</summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-              <button id="mm_gist_test">测试连接</button><button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
+              <button id="mm_gist_refresh">重读设置</button>
               <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
-              <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
+              <button id="mm_gist_leave">退出 Gist 管理</button><button id="mm_gist_delete">删除设置</button>
             </div>
           </details>
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
@@ -11926,16 +11937,16 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
         return st;
       };
-      const busy=on=>{foreground=on;for(const name of ['test','apply','disable','delete','recover','read'])q(name).disabled=on;};
+      const busy=on=>{foreground=on;for(const name of ['test','save','sync','delete','recover','leave','refresh'])q(name).disabled=on;};
       const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
       const launch=async (action,request={})=>{
         if(foreground)return;
-        busy(true);result(action==='apply'?'正在应用…':'正在处理…');
+        busy(true);result(action==='sync'?'正在同步…':'正在处理…');
         try{
           const started=await f50GistDispatch(action,request);
           if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
           currentJob=started.job;
-          result(action==='apply'?'正在应用…':'正在处理…');
+          result(action==='sync'?'正在同步…':'正在处理…');
           while(opened){
             const job=await f50GistExec(['job',currentJob],8000);
             if(!opened)break;
@@ -11945,7 +11956,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               break;
             }
             if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
-            await new Promise(resolve=>setTimeout(resolve,1500));
+            await new Promise(resolve=>setTimeout(resolve,2000));
           }
         }catch(_){result('\u4efb\u52a1\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u8bf7\u5237\u65b0\u72b6\u6001\u3002');}
         finally{if(opened)busy(false);}
@@ -11960,12 +11971,19 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         q('url').value=url;
         if(q('key').value.trim())pendingKey=q('key').value.trim();
         q('key').value='';
-        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision,...(action==='apply'?{replaceLocal:true,expectedLocal:currentFingerprint}:{})});
+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
       };
-      q('test').onclick=()=>formAction('test');q('apply').onclick=()=>formAction('apply');
-      q('disable').onclick=()=>launch('disable');
-      q('refresh').onclick=()=>refresh(false);
-      q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};
+      q('test').onclick=()=>formAction('test');
+      q('save').onclick=()=>formAction('save');
+      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
+      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
+      q('leave').onclick=async()=>{
+        if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
+        busy(true);
+        try {await f50GistLeave();result('已退出 Gist 管理，可使用普通订阅设置。');await refresh(true);}
+        catch(error){result(error.message || '退出 Gist 管理失败');}
+        finally{if(opened)busy(false);}
+      };
       q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};

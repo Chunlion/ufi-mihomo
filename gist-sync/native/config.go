@@ -45,10 +45,6 @@ func (a *App) readYAML(ctx context.Context, path string) (map[string]any, error)
 	if e = noLinks(yq); e != nil {
 		return nil, e
 	}
-	v, e := run(ctx, 5*time.Second, env, yq, "--version")
-	if e != nil || !regexp.MustCompile(`mikefarah/yq.*version\s+v?4\.`).Match(v) {
-		return nil, fail("yq_v4_required")
-	}
 	// Same merge-anchor switch as the browser bridge, when the installed yq has it.
 	args := []string{"eval", "-o=json", "-I=0"}
 	help, _ := run(ctx, 5*time.Second, env, yq, "--help")
@@ -75,6 +71,9 @@ func (a *App) fingerprint(ctx context.Context) (Fingerprint, error) {
 	if e != nil {
 		return Fingerprint{}, fail("current_config_unreadable")
 	}
+	return a.fingerprintYAML(m)
+}
+func (a *App) fingerprintYAML(m map[string]any) (Fingerprint, error) {
 	s, e := fileHash(a.source())
 	if e != nil {
 		return Fingerprint{}, e

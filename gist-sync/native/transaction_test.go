@@ -170,7 +170,7 @@ func TestSourceAndIdentityChange(t *testing.T) {
 	old, _ := a.readSettings()
 	newURL := strings.Replace(goodURL, "config.yaml.age", "other.age", 1)
 	setRemote(a, fixtureKey, []byte("not a YAML mapping"))
-	out, e := a.validateSave(ctx, Request{URL: newURL}, true)
+	out, e := a.validateSave(ctx, Request{URL: newURL}, false)
 	if e == nil || out.Saved {
 		t.Fatal(out, e)
 	}
@@ -178,9 +178,12 @@ func TestSourceAndIdentityChange(t *testing.T) {
 	if current != old {
 		t.Fatal("bad source replaced settings")
 	}
-	setRemote(a, fixtureKey, remoteConfig(2))
+	a.HTTPClient = doFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("save fetched remote")
+		return nil, io.EOF
+	})
 	out, e = a.validateSave(ctx, Request{URL: newURL}, true)
-	if e != nil || !out.Saved {
+	if e != nil || !out.Saved || out.Downloaded || out.Decrypted || out.Validated {
 		t.Fatal(out, e)
 	}
 	current, _ = a.readSettings()

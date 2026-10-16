@@ -195,22 +195,21 @@ func (a *App) validateSave(ctx context.Context, req Request, save bool) (out Out
 		return out, fail("invalid_sync_interval")
 	}
 	sameSource := old.Generation != "" && !old.Deleted && old.URL == u && oldKey == key
-	work, e := a.newWork("validate-")
-	if e != nil {
-		return out, e
-	}
-	defer func() {
-		if e := secureRemove(work); e != nil {
-			out.Warning = "private_work_cleanup_failed"
-			out.OK = false
-			if err == nil {
-				err = e
-			}
+	var work, plain string
+	if !save {
+		work, e = a.newWork("validate-")
+		if e != nil {
+			return out, e
 		}
-	}()
-	var plain string
-	// Changing scheduling on an already validated source also works while offline.
-	if !save || !sameSource {
+		defer func() {
+			if e := secureRemove(work); e != nil {
+				out.Warning = "private_work_cleanup_failed"
+				out.OK = false
+				if err == nil {
+					err = e
+				}
+			}
+		}()
 		if e = a.space(); e != nil {
 			return out, e
 		}
@@ -320,6 +319,9 @@ func (a *App) validateSave(ctx context.Context, req Request, save bool) (out Out
 	return out, nil
 }
 func (a *App) applyConfig(ctx context.Context, req Request) (Outcome, error) {
+	if tested, err := a.validateSave(ctx, req, false); err != nil || !tested.OK {
+		return tested, err
+	}
 	saved, err := a.validateSave(ctx, req, true)
 	if err != nil || !saved.OK {
 		return saved, err

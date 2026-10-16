@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const version = "1.0.0-rc4"
+var version = "dev"
 const maxConfig int64 = 8 << 20
 const maxRequest int64 = 16 << 10
 

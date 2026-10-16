@@ -2252,11 +2252,10 @@ f50_gist_verify_bundle() {
   sh -n "$groot/Scripts/Clash.GistSync" && sh -n "$groot/Scripts/Clash.ConfigCommit" || { f50_install_fail gist_script_invalid; return 1; }
   gist_probe=$(f50_limit 5 "$groot/Tools/kano-gist-sync" version 2>/dev/null) || { f50_install_fail gist_runtime_probe_failed; return 1; }
   printf '%s' "$gist_probe" | grep -Eq '"protocol":1([,}])' || { f50_install_fail gist_runtime_probe_failed; return 1; }
-  age_probe=$(f50_limit 5 "$groot/Tools/age" --version 2>/dev/null) && [ -n "$age_probe" ] || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
+  f50_limit 5 "$groot/Tools/age" --version >/dev/null 2>&1 || { f50_install_fail gist_age_runtime_probe_failed; return 1; }
 }
 if [ -s "$PKG/Tools/kano-gist-sync" ] || [ -e "$PKG/Scripts/Clash.GistSync" ] || [ -e "$PKG/Scripts/Clash.ConfigCommit" ]; then
   f50_gist_verify_bundle "$PKG" || exit 1
-  GIST_COMPONENTS=installed
 elif [ -s "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/age" ] &&
      [ -s "$F50_ROOT/Scripts/Clash.GistSync" ] && [ -s "$F50_ROOT/Scripts/Clash.ConfigCommit" ]; then
   # Keep an already installed GistSync when a legacy online package omits it.
@@ -2269,9 +2268,6 @@ elif [ -s "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/age" ] &&
     fi
   done
   f50_gist_verify_bundle "$PKG" || exit 1
-  GIST_COMPONENTS=retained
-else
-  GIST_COMPONENTS=not_in_package
 fi
 
 for file in "$PKG"/Scripts/* "$PKG"/Tools/kano-f50-helper* "$PKG"/Tools/kano-gist-sync "$PKG"/Tools/age "$PKG"/Tools/yq_linux_arm64 "$PKG"/Tools/mosdns_arm64 "$PKG"/Proxy/Clash.Core; do

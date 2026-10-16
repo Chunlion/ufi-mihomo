@@ -11,5 +11,6 @@ with tempfile.TemporaryDirectory(prefix='age-arm64-') as d:
     for bad in [cipher[:-20],b'not an age ciphertext']:
         r=subprocess.run([str(TOOLS/'qemu-aarch64'),str(BUILD/'clash/Tools/age'),'-d','-i',str(key)],input=bad,stdout=subprocess.PIPE,stderr=subprocess.PIPE);assert r.returncode!=0
     version=json.loads(subprocess.check_output([str(TOOLS/'qemu-aarch64'),str(BUILD/'clash/Tools/kano-gist-sync'),'version']))
-    assert version['goarch']=='arm64' and version['version']=='1.0.0-rc4' and version['protocol']==1
+    release=json.loads((ROOT/'gist-sync/release.json').read_text())
+    assert version['goarch']=='arm64' and version['version']==release['version'] and version['protocol']==release['protocol']
 print('PASS genuine ARM64 age decryption, corrupted ciphertext rejection and worker ELF execution; emulator, not F50')

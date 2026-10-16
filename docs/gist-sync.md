@@ -1,6 +1,6 @@
 # GistSync 维护与复测
 
-仓库中的 `猫猫TProxy.js` 是主插件，`gist-sync/plugin-gist.js` 和 `ui-gist.js` 是对应模块的维护源。构建时将模块同步回主插件，从原有事务生成 `Clash.ConfigCommit`，再从 Go 源码构建同步程序。不要只修改交付 ZIP。
+仓库中的 `猫猫TProxy.js` 是主插件，`gist-sync/plugin-gist.js` 和 `ui-gist.js` 是对应模块的维护源。构建时将模块同步回主插件，从原有事务生成 `Clash.ConfigCommit`，再从 Go 源码构建同步程序；版本号由 `gist-sync/release.json` 注入。不要只修改交付 ZIP。
 
 Windows 需要 Node.js、Python 3、Go 1.26.3，以及 Debian WSL。测试还需要 WSL 的 Python、Node、OpenSSL、iproute2、BusyBox、libarchive-tools 和 dpkg-deb。测试工具按 `gist-sync/test-tools.json` 校验；QEMU 只解出一个可执行文件，不安装系统服务或注册 binfmt。
 

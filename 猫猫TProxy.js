@@ -9537,7 +9537,7 @@ btn_disabled.onclick = async () => {
             override.js)
               printf '%s' ${shellQuote(defaultOverrideJsForBackup)} > "$PKG_DIR/$name" || return 1
               ;;
-            device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
+            sub_user_agent.conf|device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
               : > "$PKG_DIR/$name" || return 1
               ;;
             rule_override.json|rule_override_applied.json)

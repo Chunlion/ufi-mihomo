@@ -190,6 +190,59 @@ for (const [options, eligible, state] of [
   } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
 });
 
+for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owned_busy', 'normal']) {
+  test('uninstall busy lease recovery / ' + outcome, async () => {
+    const op = { token: { id: 'uninstall' }, requests: 0, leaseOwned: outcome === 'owned_busy' };
+    const stages = [], recovery = [];
+    const sandbox = {
+      activeCriticalOperation: op, lastInstallDiagnostic: null,
+      operationStage() {}, operationCancelled: () => Object.assign(new Error('cancelled'), { name: 'OperationCancelled' }),
+      f50UnknownCompletion: (operation, cause) => {
+        operation.uncertain = true;
+        operation.token.cancelled = true;
+        return Object.assign(new Error(String(cause)), { name: 'OperationCancelled' });
+      },
+      buildUninstallStages: () => ['stop', 'boot', 'delete'].map(title => ({ title, script: title, timeout: 60000 })),
+      buildF50EmergencyScript: (tag, requireIdle) => {
+        assert.equal(tag, ''); assert.equal(requireIdle, true); return 'RECOVER_IDLE';
+      },
+      buildF50FinalCheckScript: () => 'FINAL_CHECK',
+      f50Diagnostic: detail => ({ details: detail }),
+      f50UninstallVerdict: response => ({ ok: response.content === 'clean', code: response.content, detail: response.content }),
+      runShellWithRoot: async script => {
+        stages.push(script);
+        if (stages.length === 1 && outcome !== 'normal') {
+          op.leasePromise = Promise.resolve(false);
+          return { success: false, content: 'F50_OPERATION_BUSY' };
+        }
+        if (stages.length === 2 && outcome !== 'normal') assert.equal(op.leasePromise, null);
+        return outcome === 'retry_busy' ? { success: false, content: 'F50_OPERATION_BUSY' } : { success: true, content: 'done' };
+      },
+      hostRunShellWithRoot: async script => {
+        if (script === 'FINAL_CHECK') return { success: true, content: stages.includes('delete') ? 'clean' : 'residual' };
+        assert.equal(script, 'RECOVER_IDLE'); recovery.push(script);
+        if (outcome === 'recovery_timeout') throw new Error('transport timeout');
+        return outcome === 'active' ? { success: false, content: 'F50_RECOVERY_STATE=active_task' }
+          : { success: true, content: 'RECOVERY_VERIFIED' };
+      },
+    };
+    const uninstall = run(slice('async function performF50Uninstall()', 'async function f50Command') + 'performF50Uninstall', sandbox);
+    if (outcome === 'recovery_timeout') {
+      await assert.rejects(uninstall(), { name: 'OperationCancelled' });
+      assert.equal(op.uncertain, true);
+    } else {
+      const result = await uninstall();
+      assert.equal(result.ok, ['idle', 'normal'].includes(outcome));
+      if (!result.ok) assert.match(result.summary, /卸载未执行.*操作锁/);
+      if (outcome === 'active') assert.match(result.details, /F50_RECOVERY_STATE=active_task/);
+    }
+    assert.deepEqual(stages, outcome === 'normal' ? ['stop', 'boot', 'delete']
+      : outcome === 'idle' ? ['stop', 'stop', 'boot', 'delete']
+      : outcome === 'retry_busy' ? ['stop', 'stop'] : ['stop']);
+    assert.equal(recovery.length, ['normal', 'owned_busy'].includes(outcome) ? 0 : 1);
+  });
+}
+
 for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'missing_receipt', 'timeout', 'other_page_busy']) {
   test('browser task ownership and receipt / ' + outcome, async () => {
     const op = { token: { id: 'fixture', cancelled: outcome === 'cancelled_before' }, requests: 0 };

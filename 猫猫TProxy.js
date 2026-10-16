@@ -1121,12 +1121,33 @@ function f50UninstallVerdict(response = {}) {
 async function performF50Uninstall() {
   const diagnostics = [];
   const stages = buildUninstallStages();
+  let operationBlocked = false;
   for (let i=0; i<stages.length; i++) {
     operationStage(stages[i].title, i, stages.length+1);
     try {
-      const response = await runShellWithRoot(stages[i].script, stages[i].timeout);
+      let response = await runShellWithRoot(stages[i].script, stages[i].timeout);
+      if (i === 0 && /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''))) {
+        const op = activeCriticalOperation;
+        if (op && !op.leaseOwned && !op.uncertain && !op.token.cancelled && !op.requests) {
+          operationStage('检查并恢复闲置操作锁', i, stages.length+1);
+          let recovered;
+          try {
+            recovered = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true), 120000);
+          } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
+          diagnostics.push({stage:'恢复闲置操作锁', transportOk:recovered?.success === true,
+            detail:f50Diagnostic(recovered?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details});
+          if (recovered?.success && /^RECOVERY_VERIFIED$/m.test(String(recovered.content || ''))) {
+            if (op !== activeCriticalOperation || op.token.cancelled) throw operationCancelled();
+            op.leasePromise = null;
+            operationStage(stages[i].title, i, stages.length+1);
+            response = await runShellWithRoot(stages[i].script, stages[i].timeout);
+          }
+        }
+      }
+      operationBlocked = /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''));
       diagnostics.push({stage:stages[i].title, transportOk:response?.success === true,
         detail:f50Diagnostic(response?.content || 'F50_STAGE_ERROR=empty_response').details});
+      if (operationBlocked) break;
     } catch (error) {
       if (error?.name === 'OperationCancelled') throw error;
       diagnostics.push({stage:stages[i].title, transportOk:false,
@@ -1145,6 +1166,7 @@ async function performF50Uninstall() {
   const details = diagnostics.map(item => 'STAGE=' + item.stage + '\nTRANSPORT_OK=' + Number(item.transportOk) + '\n' + item.detail).join('\n')
     + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
   const summary = verdict.ok ? '猫猫及全部组件数据已卸载'
+    : operationBlocked ? '卸载未执行：设备操作锁未释放，请等待其他页面任务结束，或恢复网络后重试'
     : verdict.code === 'residual' ? '最终复查发现猫猫残留，详细项见\u201c状态与日志\u201d'
     : '卸载结果未确认：最终状态读取失败，不等于存在残留';
   lastInstallDiagnostic = {...verdict, summary, details, diagnostics};

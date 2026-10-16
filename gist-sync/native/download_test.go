@@ -22,7 +22,7 @@ func response(status int, body string) *http.Response {
 const goodURL = "https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/config.yaml.age"
 
 func TestURLValidation(t *testing.T) {
-	for _, s := range []string{goodURL, strings.Replace(goodURL, "raw/", "raw/"+strings.Repeat("a", 40)+"/", 1), strings.Replace(goodURL, "config.yaml.age", "another..name.age", 1), strings.Replace(goodURL, "config.yaml.age", "%E9%85%8D%E7%BD%AE.age", 1)} {
+	for _, s := range []string{goodURL, goodURL + "?raw=1", strings.Replace(goodURL, "raw/", "raw/"+strings.Repeat("a", 40)+"/", 1), strings.Replace(goodURL, "config.yaml.age", "another..name.age", 1), strings.Replace(goodURL, "config.yaml.age", "%E9%85%8D%E7%BD%AE.age", 1)} {
 		t.Run("valid_"+s[len(s)-12:], func(t *testing.T) {
 			if _, _, e := validateURL(s); e != nil {
 				t.Fatal(e)

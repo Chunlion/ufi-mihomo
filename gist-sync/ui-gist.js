@@ -17,16 +17,18 @@
               <option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="1">1 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="6" selected>6 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="12">12 小时</option><option style="background:#111827!important;color:#fff!important;font:inherit;line-height:1.5;" value="24">24 小时</option>
             </select></label>
           </div>
-          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:1">
-            <button id="mm_gist_apply" type="button">应用</button>
+          <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3">
+            <button id="mm_gist_test" type="button">测试</button>
+            <button id="mm_gist_save" type="button">保存设置</button>
+            <button id="mm_gist_sync" type="button">同步</button>
           </div>
           <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
           <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
           <details style="margin-top:8px"><summary>更多</summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-              <button id="mm_gist_test">测试连接</button><button id="mm_gist_refresh">刷新状态</button><button id="mm_gist_read">重读设置</button>
+              <button id="mm_gist_refresh">重读设置</button>
               <button id="mm_gist_recover">恢复任务</button><button id="mm_gist_cancel">取消任务</button>
-              <button id="mm_gist_disable">关闭自动同步</button><button id="mm_gist_delete">删除设置</button>
+              <button id="mm_gist_leave">退出 Gist 管理</button><button id="mm_gist_delete">删除设置</button>
             </div>
           </details>
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
@@ -66,16 +68,16 @@
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
         return st;
       };
-      const busy=on=>{foreground=on;for(const name of ['test','apply','disable','delete','recover','read'])q(name).disabled=on;};
+      const busy=on=>{foreground=on;for(const name of ['test','save','sync','delete','recover','leave','refresh'])q(name).disabled=on;};
       const describe=out=>f50GistMessage(out?.code)+(out?.warning?'\n'+f50GistMessage(out.warning):'');
       const launch=async (action,request={})=>{
         if(foreground)return;
-        busy(true);result(action==='apply'?'正在应用…':'正在处理…');
+        busy(true);result(action==='sync'?'正在同步…':'正在处理…');
         try{
           const started=await f50GistDispatch(action,request);
           if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
           currentJob=started.job;
-          result(action==='apply'?'正在应用…':'正在处理…');
+          result(action==='sync'?'正在同步…':'正在处理…');
           while(opened){
             const job=await f50GistExec(['job',currentJob],8000);
             if(!opened)break;
@@ -85,7 +87,7 @@
               break;
             }
             if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
-            await new Promise(resolve=>setTimeout(resolve,1500));
+            await new Promise(resolve=>setTimeout(resolve,2000));
           }
         }catch(_){result('\u4efb\u52a1\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u8bf7\u5237\u65b0\u72b6\u6001\u3002');}
         finally{if(opened)busy(false);}
@@ -100,12 +102,19 @@
         q('url').value=url;
         if(q('key').value.trim())pendingKey=q('key').value.trim();
         q('key').value='';
-        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision,...(action==='apply'?{replaceLocal:true,expectedLocal:currentFingerprint}:{})});
+        return launch(action,{url,identity:pendingKey,auto:q('auto').checked,intervalHours:Number(q('interval').value),revision});
       };
-      q('test').onclick=()=>formAction('test');q('apply').onclick=()=>formAction('apply');
-      q('disable').onclick=()=>launch('disable');
-      q('refresh').onclick=()=>refresh(false);
-      q('read').onclick=()=>{if(window.confirm('\u91cd\u8bfb\u8bbe\u7f6e\u4f1a\u4e22\u5f03\u5f53\u524d\u672a\u4fdd\u5b58\u7684\u8f93\u5165\uff0c\u7ee7\u7eed\uff1f'))return refresh(true);};
+      q('test').onclick=()=>formAction('test');
+      q('save').onclick=()=>formAction('save');
+      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
+      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
+      q('leave').onclick=async()=>{
+        if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
+        busy(true);
+        try {await f50GistLeave();result('已退出 Gist 管理，可使用普通订阅设置。');await refresh(true);}
+        catch(error){result(error.message || '退出 Gist 管理失败');}
+        finally{if(opened)busy(false);}
+      };
       q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};

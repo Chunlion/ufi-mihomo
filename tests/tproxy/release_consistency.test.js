@@ -28,13 +28,13 @@ test('9.0.0 retains the bundled controller and wrapper protocol', async () => {
   assert.match(source, /猫猫TProxy v9\.0\.0/);
   assert.equal(unpack('Tools/f50-controller.version').trim(), '8.0.0-compat.2.3');
   assert.match(service, /^# KANO_SERVICE_WRAPPER_VERSION=8\.0\.0-compat\.2\.3$/m);
-  for (const [version, expected] of [['8.0.0-compat.2.3', true], ['9.0.0', false]]) {
+  for (const [version, expected] of [['8.0.0-compat.2.3', true], ['9.0.0', true]]) {
     let calls = 0;
     const ensure = vm.runInNewContext(source.match(/let f50BackendReady = false;[\s\S]*?\n}\n/)[0] + '\nensureCompatBackend', {
       buildF50HttpSubscriptionPatchScript: () => 'true', createToast() {},
       runShellWithRoot: async script => {
         calls++;
-        assert.match(script, /f50-controller\.version.*8\.0\.0-compat\.2\.3/);
+        assert.doesNotMatch(script, /cat .*f50-controller\.version/);
         return { success: true, content: `F50_CONTROLLER=${version}` };
       },
     });

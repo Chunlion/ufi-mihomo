@@ -101,3 +101,22 @@ func TestSealedKeyPermissionsAndExpiryCleanup(t *testing.T) {
 		t.Fatal("standalone install still enabled")
 	}
 }
+
+func TestHTTPHostSealedRequest(t *testing.T) {
+	a := fixture(t)
+	key, e := a.requestKey()
+	if e != nil {
+		t.Fatal(e)
+	}
+	c := exec.Command("node", "tests/gist-sync/seal-request.js", "--http")
+	c.Dir = "../.."
+	c.Stdin = bytes.NewReader(jsonBytes(map[string]any{"key": key, "action": "save", "request": Request{Identity: "AGE-SECRET-KEY-1" + strings.Repeat("A", 58)}}))
+	b, e := c.Output()
+	if e != nil {
+		t.Fatal(e)
+	}
+	req, e := a.openRequest(bytes.NewReader(b), "save")
+	if e != nil || req.Identity != "AGE-SECRET-KEY-1"+strings.Repeat("A", 58) {
+		t.Fatal("HTTP transport failed", e)
+	}
+}

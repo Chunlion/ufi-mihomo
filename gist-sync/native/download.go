@@ -33,6 +33,9 @@ func validateURL(s string) (string, bool, error) {
 		return "", false, fail("invalid_gist_url")
 	}
 	u, e := url.Parse(s)
+	if e == nil && u.RawQuery == "raw=1" {
+		u.RawQuery = ""
+	}
 	if e != nil || u.Scheme != "https" || u.Host != "gist.githubusercontent.com" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
 		return "", false, fail("invalid_gist_url")
 	}

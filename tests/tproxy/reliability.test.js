@@ -53,24 +53,18 @@ test('Service patch is idempotent and preserves file permissions', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const [manifest, accepted] of [
-  ['{"name":"zashboard","short_name":"zashboard"}', true],
-  ['{"short_name":"zashboard","extra":1,"name":"zashboard"}', true],
-  ['{"name":"\\u007aashboard","short_name":"zashboard"}', true],
-  ['{"name":"zash board","short_name":"zashboard"}', false],
-  ['{"name":"metacubexd","short_name":"zashboard"}', false],
-  ['{"name":"zashboard","short_name":"zashboard"', false],
-]) test('manifest JSON identity ' + manifest, { skip: !yq }, () => {
-  const dir = temp();
-  try {
-    const ui = path.join(dir, 'Proxy/WebUI/zashboard');
-    write(dir, 'Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
-    fs.chmodSync(path.join(dir, 'Tools/yq_linux_arm64'), 0o755);
-    write(ui, 'index.html', '<title>zashboard</title><script src="./assets/main.js"></script>');
-    write(ui, 'registerSW.js', 'register'); write(ui, 'assets/main.js', 'zashboard');
-    write(ui, 'manifest.webmanifest', manifest);
-    assert.equal(shell(api.panelValidator() + '\nf50_validate_zashboard ' + quote(ui)).status, accepted ? 0 : 1);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+for (const [html,asset,accepted] of [
+ ['<title>zashboard</title><script src="./assets/main.js"></script>','assets/main.js',true],
+ ["<title>Zashboard</title><script src='/app.mjs?v=2'></script>",'app.mjs',true],
+ ['<title>zashboard</title><script src="missing.js"></script>',null,false],
+ ['<title>metacubexd</title><script src="main.js"></script>','main.js',false],
+]) test('panel identity and referenced resource '+html,()=>{
+ const dir=temp();try{
+  const ui=path.join(dir,'Proxy/WebUI/zashboard');write(ui,'index.html',html);
+  if(asset)write(ui,asset,'export default {};');
+  const result=shell(api.panelValidator()+'\nf50_validate_zashboard '+quote(ui));
+  assert.equal(result.status,accepted?0:1,result.stdout+result.stderr);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 function yamlCommit(context = {}, prefix = '') {

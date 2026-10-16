@@ -81,8 +81,8 @@ check(!source.includes('/ui/#/?t='), '旧的无效缓存参数路径已移除');
 check(!source.includes('/settings?section=generalSettings'), '没有 MetaCubeXD settings 路由');
 const panelValidator = slice('function buildF50ZashboardValidationFunction()', 'function buildF50MaintenanceFunctions(');
 check(panelValidator.includes("<title>[[:space:]]*zashboard"), '面板校验要求 Zashboard 标题');
-check(panelValidator.includes("<title>[[:space:]]*metacubexd"), '面板校验拒绝 MetaCubeXD');
-check(panelValidator.includes('manifest.webmanifest') && panelValidator.includes('registerSW.js') && panelValidator.includes('missing_main_asset'), '面板校验覆盖入口、PWA 和主资源');
+check(panelValidator.includes("wrong_identity"), '面板校验拒绝 MetaCubeXD');
+check(!panelValidator.includes('manifest.webmanifest') && !panelValidator.includes('registerSW.js') && panelValidator.includes('missing_main_asset'), '面板校验仅要求身份和实际入口资源');
 
 const dashboardCode = slice('const applyManagedDashboardFields', 'const applyRequiredF50Fields');
 const dashboard = runBlock(`${dashboardCode}; this.apply = applyManagedDashboardFields;`, {

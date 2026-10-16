@@ -1,7 +1,7 @@
   const F50_GIST_HELPER = '/data/clash/Tools/kano-gist-sync';
   function f50GistParse(response, tag, command) {
     const candidates = [response?.content, response?.data?.content, response?.data?.result, response?.result];
-    const pattern = new RegExp('(?:^|\\n)F50_GIST_BEGIN_' + tag + '\\r?\\n([\\s\\S]*?)\\r?\\nF50_GIST_END_' + tag + '=(\\d+)\\s*$');
+    const pattern = new RegExp('(?:^|\\n)F50_GIST_BEGIN_' + tag + '\\r?\\n([\\s\\S]*?)\\r?\\nF50_GIST_END_' + tag + '=(\\d+)[ \\t]*(?:\\r?\\n|$)');
     for (const content of candidates) {
       if (typeof content !== 'string') continue;
       const match = content.match(pattern);
@@ -44,8 +44,8 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     try { return f50GistParse(await hostRunShellWithRoot.call(globalThis,script,timeout),tag,args[0]); }
     catch (error) { return {ok:false,code:error?.name==='AbortError' || /timeout/i.test(error?.message || '')?'operation_timeout':'device_state_unknown'}; }
   }
-  function f50GistSeal(key, action, request) {
-    if (typeof CryptoJS === 'undefined' || typeof BigInt === 'undefined' || !crypto?.getRandomValues) throw Error('secure_transport_unavailable');
+  async function f50GistSeal(key, action, request) {
+    if (typeof CryptoJS === 'undefined' || !crypto?.getRandomValues) throw Error('secure_transport_unavailable');
     if (key.protocol !== 1 || !/^[a-f0-9]{32}$/.test(key.id || '') || !/^[a-f0-9]{512}$/.test(key.modulus || '') || key.exponent !== 65537) throw Error('component_version_mismatch');
     const hex = bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
     const wa = bytes=>CryptoJS.enc.Hex.parse(hex(bytes));
@@ -58,14 +58,24 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
         out.set(hash(input).slice(0,Math.min(32,length-i*32)),i*32);
       }return out;
     };
-    const secret=crypto.getRandomValues(new Uint8Array(64)),seed=crypto.getRandomValues(new Uint8Array(32));
-    const db=new Uint8Array(223);db.set(hash(new TextEncoder().encode('Maomao-GistSync-RC3')));db[158]=1;db.set(secret,159);
-    const dbMask=mask(seed,223);for(let i=0;i<223;i++)db[i]^=dbMask[i];
-    const seedMask=mask(db,32);for(let i=0;i<32;i++)seed[i]^=seedMask[i];
-    const encoded=new Uint8Array(256);encoded.set(seed,1);encoded.set(db,33);
-    const modulus=BigInt('0x'+key.modulus);let base=BigInt('0x'+hex(encoded)),exponent=65537n,encrypted=1n;
-    while(exponent){if(exponent&1n)encrypted=encrypted*base%modulus;base=base*base%modulus;exponent>>=1n;}
-    const wrapped=CryptoJS.enc.Hex.parse(encrypted.toString(16).padStart(512,'0')).toString(CryptoJS.enc.Base64);
+    const secret=crypto.getRandomValues(new Uint8Array(64));
+    let wrapped;
+    if (crypto.subtle) {
+      const n=CryptoJS.enc.Hex.parse(key.modulus).toString(CryptoJS.enc.Base64).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      const publicKey=await crypto.subtle.importKey('jwk',{kty:'RSA',n,e:'AQAB'},{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+      wrapped=wa(new Uint8Array(await crypto.subtle.encrypt({name:'RSA-OAEP',label:new TextEncoder().encode('Maomao-GistSync-RC3')},publicKey,secret))).toString(CryptoJS.enc.Base64);
+    } else {
+      // The F50 HTTP host has no WebCrypto; retain its existing OAEP transport.
+      if (typeof BigInt === 'undefined') throw Error('secure_transport_unavailable');
+      const seed=crypto.getRandomValues(new Uint8Array(32));
+      const db=new Uint8Array(223);db.set(hash(new TextEncoder().encode('Maomao-GistSync-RC3')));db[158]=1;db.set(secret,159);
+      const dbMask=mask(seed,223);for(let i=0;i<223;i++)db[i]^=dbMask[i];
+      const seedMask=mask(db,32);for(let i=0;i<32;i++)seed[i]^=seedMask[i];
+      const encoded=new Uint8Array(256);encoded.set(seed,1);encoded.set(db,33);
+      const modulus=BigInt('0x'+key.modulus);let base=BigInt('0x'+hex(encoded)),exponent=65537n,encrypted=1n;
+      while(exponent){if(exponent&1n)encrypted=encrypted*base%modulus;base=base*base%modulus;exponent>>=1n;}
+      wrapped=CryptoJS.enc.Hex.parse(encrypted.toString(16).padStart(512,'0')).toString(CryptoJS.enc.Base64);
+    }
     const iv=crypto.getRandomValues(new Uint8Array(16));
     const data=CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(JSON.stringify(request)),wa(secret.slice(0,32)),{iv:wa(iv),mode:CryptoJS.mode.CBC,padding:CryptoJS.pad.Pkcs7}).ciphertext.toString(CryptoJS.enc.Base64);
     const iv64=wa(iv).toString(CryptoJS.enc.Base64);
@@ -75,11 +85,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
   async function f50GistDispatch(action, request = {}) {
     try {
+      if (!request.identity && !request.manualSources) {
+        const direct=await f50GistExec(['dispatch',action],12000,JSON.stringify(request));
+        if (direct.code !== 'invalid_command') return direct;
+      }
       const key = await f50GistExec(['request-key'],15000);
       if (action === 'apply' && key.ok && key.apply !== true) return {ok:false,code:'component_version_mismatch'};
       if (request.manualSources && key.ok && key.manualSources !== 1) return {ok:false,code:'component_version_mismatch'};
       if (!key.ok) return key;
-      const sealed=f50GistSeal(key,action,request);
+      const sealed=await f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
     } catch (error) { return {ok:false,code:['secure_transport_unavailable','component_version_mismatch'].includes(error?.message)?error.message:'request_encryption_failed'}; }
     finally { request.identity=''; }
@@ -142,12 +156,37 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
 
+  async function f50GistLeave() {
+    const leave=async()=>{
+      const read=await readYamlObject(CLASH_CONFIG,'config.yaml');
+      if (!read.ok) throw Error(read.message || '读取配置失败');
+      const paused=await runShellWithRoot(`set -e
+settings=/data/clash/Tools/gist-sync/settings.conf
+if [ -f "$settings" ]; then
+  tmp="$settings.new.$$"
+  trap 'rm -f "$tmp"' EXIT
+  /data/clash/Tools/yq_linux_arm64 e -p=json -o=json '.auto = false | .revision += 1' "$settings" > "$tmp"
+  chmod 600 "$tmp" && mv -f "$tmp" "$settings"
+fi`,8000);
+      if (!paused.success) throw Error('关闭 Gist 自动同步失败');
+      delete read.value['x-f50-gist-sync'];
+      const written=await writeYamlObjectAtomic(CLASH_CONFIG,read.value);
+      if (!written.ok) throw Error(written.content || '退出 Gist 管理失败');
+      invalidateStatusSnapshot();
+      return true;
+    };
+    return activeCriticalOperation?.leaseOwned ? leave() : runCriticalOperation('退出 Gist 管理',leave);
+  }
+
   async function f50GistManaged() {
     const st = await f50GistExec(['status'], 15000);
     if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) throw Error(read.message || '读取配置失败');
     if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
+      if (window.confirm('Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？')) {
+        if (await f50GistLeave()) return null;
+      }
       throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
     }
     return null;
@@ -178,14 +217,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
       if (!job.ok || job.status === 'completion_unknown') {
         createToast(safeTextToHtml(f50GistMessage(job.result?.code || job.code || 'device_state_unknown')),'red'); return false;
       }
-      await new Promise(resolve=>setTimeout(resolve,700));
+      await new Promise(resolve=>setTimeout(resolve,2000));
     }
     createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
-  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
+  const f50GistCleanUrl = value => String(value || '').replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '').replace(/\?raw=1$/, '');
   const f50GistValidUrl = value => {
+    value=f50GistCleanUrl(value);
     try {
       if (value.length > 2048 || !value.startsWith('https://gist.githubusercontent.com/') || /[\s\u200B-\u200D\u2060\uFEFF\\]/.test(value)) return false;
       const u = new URL(value);

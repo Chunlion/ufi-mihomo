@@ -30,7 +30,7 @@ test('Gist source saves, disabled-only and empty removal all use native merge',a
 function glueApi(extra={}) {
  const glue=fs.readFileSync('gist-sync/plugin-gist.js','utf8');
  return run(glue.slice(glue.indexOf('  const F50_GIST_MESSAGES'),glue.indexOf('  const f50GistCleanUrl'))+'\n({managed:f50GistManaged,update:f50GistUpdateSources})',{
-  activeCriticalOperation:null,CLASH_CONFIG:'fixture',Date,Promise,setTimeout,
+  activeCriticalOperation:null,CLASH_CONFIG:'fixture',Date,Promise,setTimeout,window:{confirm:()=>false},
   normalizeStoredSubSourceList:s=>s,createToast(){},safeTextToHtml:String,operationFinish(){},invalidateStatusSnapshot(){},...extra
  });
 }
@@ -55,4 +55,14 @@ test('Manual source update releases frontend lease, fences source revision and c
  assert.deepEqual(calls.slice(0,2),['release',['sync',{revision:42,manualSources:sources}]]);
  result={ok:false,code:'local_config_conflict'};assert.equal(await api.update(st,[]),false);assert.equal(messages.at(-1)[1],'red');
  result={ok:false,code:'source_changed'};assert.equal(await api.update(st,sources),false);
+});
+
+test('confirmed exit from broken Gist keeps the current config and permits ordinary subscriptions',async()=>{
+ const config={'x-f50-gist-sync':true,proxies:[{name:'retained'}]};let written=null;
+ const api=glueApi({activeCriticalOperation:{leaseOwned:true},window:{confirm:()=>true},
+  f50GistExec:async()=>({ok:false,code:'components_missing'}),readYamlObject:async()=>({ok:true,value:config}),
+  runShellWithRoot:async script=>{assert.match(script,/auto = false/);return {success:true};},
+  writeYamlObjectAtomic:async(p,value)=>{written=value;return {ok:true};}
+ });
+ assert.equal(await api.managed(),null);assert.equal(written['x-f50-gist-sync'],undefined);assert.equal(written.proxies[0].name,'retained');
 });

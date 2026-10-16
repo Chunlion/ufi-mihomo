@@ -70,9 +70,19 @@ test('an unsupported controller remains untouched', () => {
     fs.writeFileSync(binary, unsupported);
     const result = patch(dir);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_http_patch_unknown_build/);
+    assert.match(result.stdout, /F50_ERROR=controller_interface_incompatible/);
     assert.deepEqual(fs.readFileSync(binary), unsupported);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an unknown controller with the actual command interface needs no binary patch',()=>{
+ const {dir,binary}=fixture();try{
+  const future='#!/bin/sh\necho "start | stop | status | policy | fetch-batch REQUEST"\n';
+  fs.writeFileSync(binary,future,{mode:0o755});
+  const result=patch(dir);assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.match(result.stdout,/skipped_unknown_build/);assert.equal(fs.readFileSync(binary,'utf8'),future);
+  assert.ok(!fs.existsSync(binary+'.http.original'));
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('the bundled ARMv7 payload does not block the ARM64 patch', () => {
@@ -98,7 +108,7 @@ test('an incomplete patch is rejected without changing the controller', () => {
     fs.writeFileSync(binary, incomplete);
     const result = patch(dir);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_http_patch_unknown_build/);
+    assert.match(result.stdout, /F50_ERROR=controller_interface_incompatible/);
     assert.deepEqual(fs.readFileSync(binary), incomplete);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -21,7 +21,7 @@
       if (value.ok !== true) return {ok:false,code:'response_format_invalid'};
       if (['status','version'].includes(command) && value.protocol !== 1) return {ok:false,code:'component_version_mismatch'};
       if (command === 'status' && (!value.settings || typeof value.settings !== 'object' ||
-          ![1,6,12,24].includes(value.settings.intervalHours) || typeof value.ageReady !== 'boolean')) return {ok:false,code:'response_format_invalid'};
+          (!Number.isSafeInteger(value.settings.intervalHours) || value.settings.intervalHours <= 0) || typeof value.ageReady !== 'boolean')) return {ok:false,code:'response_format_invalid'};
       return value;
     }
     const text = String(response?.content || '');

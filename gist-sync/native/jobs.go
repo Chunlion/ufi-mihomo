@@ -258,7 +258,14 @@ func (a *App) status(ctx context.Context) (map[string]any, error) {
 		_, e = a.identity(s)
 		keySet = e == nil
 	}
-	fp, ferr := a.fingerprint(ctx)
+	live, liveErr := a.readYAML(ctx, a.cfg())
+	var fp Fingerprint
+	ferr := liveErr
+	if liveErr == nil {
+		fp, ferr = a.fingerprintYAML(live)
+	} else {
+		ferr = fail("current_config_unreadable")
+	}
 	jobs := []Job{}
 	entries, _ := os.ReadDir(a.data() + "/jobs")
 	for i := len(entries) - 1; i >= 0; i-- {
@@ -275,7 +282,6 @@ func (a *App) status(ctx context.Context) (map[string]any, error) {
 		jobs = jobs[:20]
 	}
 	state, stateErr := a.readStateChecked()
-	live, liveErr := a.readYAML(ctx, a.cfg())
 	source, sourceErr := readFile(a.source(), 4096)
 	gistActive := liveErr == nil && sourceErr == nil && strings.TrimSpace(string(source)) == "KANO_CONFIG_SOURCE=uploaded_config" &&
 		(live[gistMeta] == true || (stateErr == nil && ferr == nil && state.Applied.Config != "" && state.Applied.Config == fp.Config))

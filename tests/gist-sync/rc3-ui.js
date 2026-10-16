@@ -8,6 +8,10 @@ check('compatible component versions use the same protocol',()=>{
  for(const version of ['1.0.0-rc4','1.1.0'])assert.equal(parse(frame({ok:true,version,protocol:1})).ok,true);
  assert.equal(parse(frame({ok:true,version:'1.1.0',protocol:2})).code,'component_version_mismatch');
 });
+check('status accepts positive intervals independently of form options',()=>{
+ for(const intervalHours of [2,6,48])assert.equal(parse(frame({ok:true,protocol:1,settings:{intervalHours},ageReady:true}),'status').ok,true);
+ for(const intervalHours of [0,-1,1.5,'6'])assert.equal(parse(frame({ok:true,protocol:1,settings:{intervalHours},ageReady:true}),'status').code,'response_format_invalid');
+});
 for(const [name,input,expected] of [
  ['missing helper',frame({ok:false,code:'components_missing'},127),'components_missing'],
  ['permission denied',frame({ok:false,code:'component_not_executable'},126),'component_not_executable'],

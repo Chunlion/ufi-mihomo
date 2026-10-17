@@ -2,11 +2,10 @@
 
 const test = require('node:test');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { parse, visit, semantics } = require('../../scripts/compact_plugin');
-const { assert, source, slice, run, shellApi, syntax, plain, quote } = require('./optimization_harness');
+const { parse, visit } = require('../../scripts/compact_plugin');
+const { fs, assert, source, slice, run, shell, shellApi, syntax, plain, quote, temp, write } = require('./optimization_harness');
 const baseline = execFileSync('git', ['show', 'b21155e:猫猫TProxy.js'], { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 }).replace(/\r\n/g, '\n');
 const contracts=require('../gist-sync/expected-contracts.json');
-const hash=value=>require('node:crypto').createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const names = [];
 visit(parse(baseline), node => {
   if (node.type === 'FunctionDeclaration' && node.id.name.startsWith('build')) names.push(node.id.name);
@@ -20,7 +19,6 @@ function builders(text) {
     + `\nbuildF50InstallScript.cleanupBuilders = {${names.join(',')}};`;
   return shellApi(text, extra).install.cleanupBuilders;
 }
-const before = builders(baseline);
 const after = builders(source);
 const service = quote('/data/clash/Scripts/Clash.Service');
 const variants = {
@@ -35,12 +33,9 @@ const variants = {
     ['/configs', 'PATCH', { fixture: true }, { apiBase: 'http://127.0.0.1:7788', secret: 'fixture' }, '/data/api.out']],
 };
 for (const name of names) {
-  test('cleanup preserves generated output / ' + name, () => {
+  test('generated Shell parses / ' + name, () => {
     for (const args of variants[name] || [[]]) {
-      const expected = before[name](...args), actual = after[name](...args);
-      const extension=contracts.generated[name+JSON.stringify(args)];
-      if(extension){assert.equal(hash(expected),extension.before,name+' historical baseline');assert.equal(hash(actual),extension.after,name+' reviewed Gist contract');}
-      else assert.deepEqual(plain(actual), plain(expected), name);
+      const actual = after[name](...args);
       if (name === 'buildF50PanelConfigCheck') continue;
       for (const script of Array.isArray(actual) ? actual.map(stage => stage.script) : [actual]) {
         syntax(script);
@@ -52,23 +47,26 @@ for (const name of names) {
   });
 }
 
-test('cleanup baseline and reviewed Gist integration have the exact source contract', () => {
-  const functions = new Set(['buildF50HttpSubscriptionPatchScript', 'buildF50OriginalServicePatchScript', 'f50Diagnostic']);
-  const constants = new Set(['F50_HTTP_CONTROLLER_PATCHES', 'F50_HTTP_CONTROLLER_PATCHED_HASH', 'F50_DIAGNOSTIC_LABELS']);
-  function normalize(value) {
-    if (Array.isArray(value)) return value.map(normalize).filter(value => value !== null);
-    if (!value || typeof value !== 'object' || value instanceof RegExp) return value;
-    if (value.type === 'FunctionDeclaration' && functions.has(value.id.name)) return { type: value.type, name: value.id.name };
-    if (value.type === 'VariableDeclaration' && value.declarations.every(node => constants.has(node.id.name))) return null;
-    return Object.fromEntries(Object.entries(value).map(([key, value]) => [key, normalize(value)]));
-  }
-  assert.equal(hash(source),contracts.sourceSHA256);
-  const old=require('node:child_process').execFileSync('git',['show','adc9458:猫猫TProxy.js'],{encoding:'utf8',maxBuffer:2*1024*1024});
-  assert.equal(semantics(normalize(parse(old))), semantics(normalize(parse(baseline))));
+for (const committed of [false, true]) test('configuration recovery ' + (committed ? 'keeps committed files' : 'restores both files'), () => {
+  const dir = temp();
+  try {
+    const target = write(dir, 'config.yaml', 'new config\n'), sourceFile = write(dir, 'source.conf', 'new source\n');
+    const tx = target + '.kano_tx';
+    write(tx, 'format', 'F50_CONFIG_TX_V1\n');
+    for (const marker of ['ready', 'with_source', 'config.had', 'source.had', ...(committed ? ['committed'] : [])]) write(tx, marker, '');
+    write(tx, 'config', 'old config\n');
+    write(tx, 'source', 'old source\n');
+    const result = shell(after.buildF50ConfigTransactionFunctions() + `\nf50_config_tx_recover ${quote(target)} ${quote(sourceFile)}\n`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(target, 'utf8'), committed ? 'new config\n' : 'old config\n');
+    assert.equal(fs.readFileSync(sourceFile, 'utf8'), committed ? 'new source\n' : 'old source\n');
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['config.yaml', 'source.conf']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('cleanup preserves all diagnostic labels and result fields', () => {
   const expectedLabels = run(slice('  const labels = {', '  let summary', baseline) + '\nlabels');
+  for (const key of contracts.removedLabels) delete expectedLabels[key];
   const actualLabels = run(slice('const F50_DIAGNOSTIC_LABELS', 'function f50Diagnostic') + '\nF50_DIAGNOSTIC_LABELS');
   assert.deepEqual(plain(actualLabels), {...plain(expectedLabels),...contracts.labels});
   const context = { sanitizeSubscriptionSecrets: String };

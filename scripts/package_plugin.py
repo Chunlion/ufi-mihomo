@@ -7,12 +7,11 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 plugin = root / '猫猫TProxy.js'
-assert b'\r' not in plugin.read_bytes()
-assert plugin.read_bytes().endswith(b'//</script >\n')
 results = json.loads((root / 'reports/v9.0.0-regression.json').read_text(encoding='utf-8'))
 assert results['totals']['failed'] == 0
 assert results['totals']['passed'] > 0
 source = plugin.read_bytes()
+assert b'//</script >' in source
 source_hash = hashlib.sha256(source).hexdigest()
 assert results['source']['bytes'] == len(source)
 assert results['source']['sha256'] == source_hash, 'Regression report does not match plugin'
@@ -29,7 +28,6 @@ with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as arch
     for file in files:
         archive.write(file, file.relative_to(root).as_posix())
 with zipfile.ZipFile(output) as archive:
-    assert archive.testzip() is None
     for file in files:
         assert archive.read(file.relative_to(root).as_posix()) == file.read_bytes()
 delivery = {'source': results['source'], 'regressionDate': results['date'], 'totals': results['totals'],

@@ -52,9 +52,9 @@ function compact(input) {
   for (const [start, end, next] of replacements.sort((a, b) => b[0] - a[0])) {
     if (!tagged.some(node => start >= node.start && end <= node.end)) source = source.slice(0, start) + next + source.slice(end);
   }
-  assert.equal(semantics(parse(source)), semantics(before), 'string / template / regexp semantics changed');
-  sizes.utf8 = Buffer.byteLength(source);
   const ast = parse(source), edits = [];
+  assert.equal(semantics(ast), semantics(before), 'string / template / regexp semantics changed');
+  sizes.utf8 = Buffer.byteLength(source);
   const identifiers = [];
   visit(ast, node => { if (node.type === 'Identifier') identifiers.push(node); });
   visit(ast, node => {

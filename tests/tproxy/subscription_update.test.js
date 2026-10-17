@@ -456,6 +456,7 @@ test('first original config write and later network changes select preservation'
   await sandbox.shape(originalConfig, options);
   await sandbox.write('config.yaml', originalConfig, { configSource: 'template.yaml' });
   assert.deepEqual(calls.map((args) => args[3]), [true, true, false]);
+  assert.deepEqual(calls.map((args) => args[4]), [{ enabled: false }, { enabled: false }, { enabled: false }]);
   assert.equal(calls[1][1].tun_stack, 'mips');
   assert.equal(options.tun_stack, 'auto');
 });

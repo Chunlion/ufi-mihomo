@@ -44,10 +44,8 @@ const PROFILE_DELTA = {
 const F50_FIXED_PROFILES = {};
 for (const name of Object.keys(PROFILE_DELTA)) F50_FIXED_PROFILES[name] = f50DeepMerge(PROFILE_BASE, PROFILE_DELTA[name]);
 for (const profile of Object.values(F50_FIXED_PROFILES)) {
-  profile['external-ui'] = 'WebUI/zashboard';
   profile['external-ui-url'] = F50_ZASHBOARD_UI_URL;
   profile['unified-delay'] = true;
-  delete profile['external-ui-name'];
 }
 // Controller protocol and wrapper contract; independent of the plugin release version.
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
@@ -491,17 +489,12 @@ if [ "$BACKUP_REQUESTED" = 1 ] && [ -f "$TARGET" ]; then
 fi
 touch "$TX/ready" || exit 1
 sync
-stage_hash=$(hash_file "$STAGE")
-[ -n "$stage_hash" ] || exit 1
-if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then source_hash=$(hash_file "$SOURCE_NEW"); [ -n "$source_hash" ] || exit 1; fi
 chmod 600 "$STAGE" && mv -f "$STAGE" "$TARGET" || exit 1
 if [ "$WITH_SOURCE" = 1 ]; then
   if [ "$SOURCE_DELETE" = 1 ]; then rm -f "$SOURCE_FILE" || exit 1
   else chmod 600 "$SOURCE_NEW" && mv -f "$SOURCE_NEW" "$SOURCE_FILE" || exit 1; fi
 fi
 new_hash=$(hash_file "$TARGET")
-[ "$stage_hash" = "$new_hash" ] || { echo F50_ERROR=yaml_commit_checksum_mismatch; exit 1; }
-if [ "$WITH_SOURCE" = 1 ] && [ "$SOURCE_DELETE" = 0 ]; then [ "$source_hash" = "$(hash_file "$SOURCE_FILE")" ] || { echo F50_ERROR=yaml_source_checksum_mismatch; exit 1; }; fi
 touch "$TX/committed" || exit 1
 sync
 COMMITTED=1
@@ -2603,7 +2596,6 @@ function createPrivateRouteLogic() {
       if (raw.includes('.')) {
         const pos = raw.lastIndexOf(':');
         const v4 = cidr(raw.slice(pos + 1));
-        if (v4.family !== 4) throw new Error('Invalid embedded IPv4');
         raw = raw.slice(0, pos + 1) + [v4.bits.slice(0, 16), v4.bits.slice(16)].map((b) => parseInt(b, 2).toString(16)).join(':');
       }
       if (!/^[0-9a-f:]+$/i.test(raw) || raw.split('::').length > 2) throw new Error('Invalid IPv6: ' + text);
@@ -2656,7 +2648,7 @@ function createPrivateRouteLogic() {
       throw new Error('仅支持 IPv4 RFC1918 或 IPv6 ULA（fc00::/7）：' + n);
     }
     const policy = String(input.policy || '').trim();
-    if (policy.length > 128 || /[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('代理组名含不支持的字符');
+    if (/[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('代理组名含不支持的字符');
     if (enabled && (!cidrs.length || !policy)) throw new Error('启用前请填写网段并选择代理出站');
     if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('不能选择内置策略 ' + policy);
     return { enabled, cidrs, policy };
@@ -2691,20 +2683,15 @@ function createPrivateRouteLogic() {
     if (!Array.isArray(tun[key]) || tun[key].some((v) => typeof v !== 'string')) throw new Error('tun.' + key + ' must be a string array');
     return tun[key];
   }
-  function transform(config, input, mode = 'tproxy', connected = []) {
-    const state = normalize(input);
-    if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
-    const out = strip(config);
+  function transform(out, state, mode, connected) {
     if (!state.enabled || mode === 'off') return out;
     checkConnected(state, connected);
     if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('私网定向代理需要 Mihomo 规则模式');
     if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('远端网段包含 IPv6，请先勾选 IPv6 接管');
     const groups = out['proxy-groups'] || [], proxies = out.proxies || [];
-    if (!Array.isArray(groups) || !Array.isArray(proxies)) throw new Error('Invalid proxy definitions');
     const target = [...groups, ...proxies].find((p) => p && p.name === state.policy);
     if (!target) throw new Error('配置中不存在出站：' + state.policy);
     if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('所选出站不是代理');
-    if (own(out, 'rules') && !Array.isArray(out.rules)) throw new Error('rules must be an array');
     const meta = { version: 2, mode, cidrs: state.cidrs, policy: state.policy, rules: [], tun: {}, rulesPresent: own(out, 'rules'), tunPresent: own(out, 'tun') };
     const rule = (n, policy) => (cidr(n).family === 4 ? 'IP-CIDR,' : 'IP-CIDR6,') + n + ',' + policy + ',no-resolve';
     meta.rules = [...state.cidrs.map((n) => rule(n, state.policy)), ...PRIVATE.map((n) => rule(n, 'DIRECT'))];
@@ -2730,7 +2717,7 @@ function createPrivateRouteLogic() {
     out[META] = meta;
     return out;
   }
-  function runtime(config, options = {}, connected = [], preserveConfig = false) {
+  function runtime(config, options = {}, connected = [], preserveConfig = false, feature = fromOptions(options)) {
   const source = strip(config);
   const mode = options.traffic_mode || 'tproxy';
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
@@ -2764,7 +2751,7 @@ function createPrivateRouteLogic() {
   if (!own(out,'proxy-groups')) out['proxy-groups'] = [];
   if (own(out,'rules') && !Array.isArray(out.rules)) throw new Error('rules must be a list');
   if (!own(out,'rules')) out.rules = ['MATCH,DIRECT'];
-  for (const key of ['proxies','proxy-groups']) for(const node of out[key] || []) {
+  for (const key of ['proxies','proxy-groups']) for(const node of out[key]) {
     if(node && typeof node==='object'){delete node['interface-name'];delete node['routing-mark'];}
   }
   for(const key of ['proxy-providers','rule-providers']) for(const provider of Object.values(out[key]||{})) {
@@ -2780,14 +2767,13 @@ function createPrivateRouteLogic() {
   }
   out['x-f50-profile'] = '8.0.0-compat.2.3';
   // Kernel routing belongs to clashctl; TUN still needs its matching route exclusions.
-  const feature = fromOptions(options);
   if (!feature.enabled || mode === 'off') return out;
   return transform(out, feature, mode, connected);
 }
   function resolveSelection(proxies, name) {
     const visited = new Set();
     let current = name;
-    for (let i = 0; i < 32; i++) {
+    while (true) {
       if (visited.has(current)) throw new Error('Proxy group cycle: ' + current);
       visited.add(current);
       if (['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(String(current).toUpperCase())) throw new Error('代理组当前指向 ' + current);
@@ -2798,7 +2784,6 @@ function createPrivateRouteLogic() {
       if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('请选择固定节点或能确认当前出站的手动选择组');
       return current;
     }
-    throw new Error('Proxy group nesting exceeds 32');
   }
   return { PRIVATE, META, cidr, address, compact, contains, overlaps, subtract, normalize, fromOptions, checkConnected, strip, transform, runtime, resolveSelection };
 }
@@ -2837,7 +2822,7 @@ async function kprShapeRuntimeConfig(value, options = null, configSource = null)
   if (!(await ensureOriginalSubscriptionService())) throw new Error('配置处理组件更新失败，未修改配置');
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
-  return KPR.runtime(value, options.traffic_mode === 'tun' ? { ...options, tun_stack: stack } : options, connected, preserveConfig);
+  return KPR.runtime(value, options.traffic_mode === 'tun' ? { ...options, tun_stack: stack } : options, connected, preserveConfig, feature);
 }
 
 async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {

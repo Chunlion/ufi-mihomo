@@ -1,7 +1,6 @@
 'use strict';
 
 const test = require('node:test');
-const { parse, semantics } = require('../../scripts/compact_plugin');
 const { fs, assert, slice, run, shell, shellApi, source, original, plain, quote, temp, write } = require('./optimization_harness');
 const contracts=require('../gist-sync/expected-contracts.json');
 const hash=value=>require('node:crypto').createHash('sha256').update(value).digest('hex');
@@ -15,9 +14,7 @@ const current = privateApi(source), previous = privateApi(original);
 const base = { 'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],
   rules: ['MATCH,Proxy'], dns: { 'nameserver-policy': { 'custom.example': '1.1.1.1' } } };
 
-test('private routing implementation and firewall/process ownership functions are unchanged', () => {
-  assert.equal(semantics(parse(slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later'))),
-    semantics(parse(slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later', original))));
+test('firewall/process ownership functions are unchanged', () => {
   for (const name of ['stat', 'owned_exe', 'scan', 'same_process', 'stop_recorded', 'table_absent',
     'save', 'firewall_plan', 'ip_snapshot', 'drop_detached_tun_rules', 'disable_unsupported_ipv6_dns_hijack',
     'routes_plan', 'network_snapshot', 'execute_plan', 'clean_environment', 'artifact_paths', 'runtime_guard',
@@ -27,6 +24,35 @@ test('private routing implementation and firewall/process ownership functions ar
     if(extension){assert.equal(hash(extract(baseline.maintenance())),extension.before);assert.equal(hash(extract(api.maintenance())),extension.after);}
     else assert.equal(extract(api.maintenance()), extract(baseline.maintenance()), name);
   }
+});
+
+test('long private-route policy names retain their rules without mutating the input', () => {
+  const policy = 'Proxy'.repeat(40);
+  const input = { 'proxy-groups': [{ name: policy, type: 'select', proxies: ['DIRECT'] }], rules: ['MATCH,DIRECT'] };
+  const before = JSON.stringify(input);
+  const active = current.runtime(input, { private_route_enabled: 'on', private_route_cidrs: '192.168.11.0/24', private_route_policy: policy });
+  assert.equal(active.rules[0], 'IP-CIDR,192.168.11.0/24,' + policy + ',no-resolve');
+  assert.equal(JSON.stringify(input), before);
+  for (const invalid of ['bad,name', 'bad\nname', 'bad\x00name']) {
+    assert.throws(() => current.normalize({ policy: invalid }), /不支持的字符/);
+  }
+});
+
+test('deep proxy selections resolve and cycles still fail', () => {
+  const proxies = { node: { type: 'Socks5' } };
+  for (let i = 63; i >= 0; i--) proxies['group' + i] = { type: 'Selector', now: i === 63 ? 'node' : 'group' + (i + 1) };
+  assert.equal(current.resolveSelection(proxies, 'group0'), 'node');
+  proxies.group63.now = 'group0';
+  assert.throws(() => current.resolveSelection(proxies, 'group0'), /cycle/);
+});
+
+test('runtime entry rejects invalid modes and config list types', () => {
+  assert.throws(() => current.runtime(base, { traffic_mode: 'invalid' }), /Invalid traffic mode/);
+  for (const key of ['proxies', 'proxy-groups', 'rules']) {
+    assert.throws(() => current.runtime({ ...base, [key]: {} }), /must be a list/);
+  }
+  assert.equal(current.cidr('::ffff:192.168.1.1').family, 6);
+  assert.throws(() => current.cidr('::ffff:192.168.1.999'), /Invalid IPv4/);
 });
 
 test('IPv4 / IPv6 CIDR normalization and overlap detection retain their results', () => {

@@ -9,6 +9,9 @@ const uploaded=JSON.parse(fs.readFileSync('build/gist-sync/device-upload.json','
 const scripts={inspect:api.inspect(),install:api.install(uploaded),lease:api.lease(),
  wrapper:h.slice('let transientShellOperation','const shellQuote'),
  fence:h.slice('function buildF50GistFence','function buildF50YamlCommitBody')};
+const redact=h.slice('f50_redact() {','\n}\n',scripts.install)+'\n}\n';
+const probe=h.shell(redact+"\nprintf '%s\\n' safe 'Bearer fixture' 'Bearer\tfixture' 'password=fixture' | f50_redact\n");
+h.assert.equal(probe.status,0,probe.stderr);
+h.assert.equal(probe.stdout.replace(/\r\n/g,'\n'),'safe\n'+'[SENSITIVE_ERROR_REDACTED]\n'.repeat(3));
 fs.writeFileSync('build/gist-sync/device-scripts.json',JSON.stringify(scripts));
-if(scripts.install.includes('bearer[ /t]')||!scripts.install.includes('bearer[ \\t]'))throw Error('Device script escaping differs from production');
 console.log('Exact repository installer, task wrapper and lease generated for uploaded package');

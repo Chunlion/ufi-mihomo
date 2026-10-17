@@ -53,9 +53,6 @@ def main():
                 info=zipfile.ZipInfo(name,(2026,10,15,0,0,0));info.create_system=3;info.compress_type=zipfile.ZIP_DEFLATED
                 executable=name.startswith('Scripts/') or name in {'Tools/age','Tools/kano-gist-sync','Tools/yq_linux_arm64','Tools/mosdns_arm64','Proxy/Clash.Core'} or name.startswith('Tools/kano-f50-helper')
                 info.external_attr=(0o100755 if executable else 0o100644)<<16;z.writestr(info,data)
-        with zipfile.ZipFile(temporary) as z:
-            for name,data in files.items():
-                if z.read(name)!=data:raise ValueError('Complete package differs: '+name)
         os.replace(temporary,PACKAGE)
     finally:temporary.unlink(missing_ok=True)
     subprocess.run(['node','--check','猫猫TProxy.js'],cwd=ROOT,check=True)

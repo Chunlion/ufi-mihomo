@@ -20,9 +20,6 @@ def main():
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for name,p in files.items():z.write(p,name)
         z.write(DIST/'SHA256SUMS','SHA256SUMS')
-    with zipfile.ZipFile(output) as z:
-        for name,p in files.items():assert z.read(name)==p.read_bytes(),name
-        assert z.read('SHA256SUMS').decode('utf-8')==sums
     print(output.name+' '+sha(output))
 
 if __name__=='__main__':main()

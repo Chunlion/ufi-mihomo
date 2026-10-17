@@ -27,7 +27,7 @@ def main():
         check('pinned genuine test tools','STATIC',[sys.executable,'scripts/gist_test_tools.py'])
         bindir=ROOT/'.cache/gist-sync/bin';bindir.mkdir(exist_ok=True);(bindir/'tar').write_text('#!/bin/sh\nexec /usr/bin/bsdtar "$@"\n',encoding='utf-8',newline='\n')
         check('ZIP reader permission','STATIC',wsl+['chmod','755',WSLROOT+'/.cache/gist-sync/bin/tar'])
-        for name in ['猫猫TProxy.js','gist-sync/plugin-gist.js','gist-sync/ui-gist.js']:
+        for name in ['gist-sync/plugin-gist.js','gist-sync/ui-gist.js']:
             check('syntax '+name,'STATIC',['node','--check',name])
         for name in ['Clash.GistSync','Clash.ConfigCommit']:
             check('Shell syntax '+name,'STATIC',wsl+['sh','-n',WSLROOT+'/build/gist-sync/clash/Scripts/'+name])

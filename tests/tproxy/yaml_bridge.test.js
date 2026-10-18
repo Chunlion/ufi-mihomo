@@ -1,7 +1,7 @@
 'use strict';
 
 const test = require('node:test');
-const { fs, path, assert, slice, run, shell, quote, temp, write, plain } = require('./optimization_harness');
+const { fs, path, assert, slice, run, shell, shellApi, quote, temp, write, plain } = require('./optimization_harness');
 
 async function readFixture(t, options = {}) {
   const dir = temp();
@@ -9,7 +9,7 @@ async function readFixture(t, options = {}) {
   const input = write(dir, 'input.yaml', 'value: fixture\n');
   const yq = write(dir, 'Tools/yq_linux_arm64', `#!/bin/sh
 case "$1" in
-  --version) echo 'yq (https://github.com/mikefarah/yq/) version v4.53.3'; exit 0;;
+  --version) echo "${options.banner || 'yq (https://github.com/mikefarah/yq/) version v4.53.3'}"; exit 0;;
   --help) [ "$FIXTURE_SPEC" != 1 ] || echo --yaml-fix-merge-anchor-to-spec; exit 0;;
 esac
 echo 'time=fixture level=WARN msg="yq diagnostic"' >&2
@@ -20,10 +20,15 @@ for arg in "$@"; do [ "$arg" != --yaml-fix-merge-anchor-to-spec ] || used_spec=t
 printf '{"usedSpec":%s,"value":"fixture"}\n' "$used_spec"
 `);
   fs.chmodSync(yq, 0o755);
+  if (options.incompatibleTimeout) {
+    const timeout = write(dir, 'bin/timeout', '#!/bin/sh\necho "timeout: unknown option -k" >&2\nexit 1\n');
+    fs.chmodSync(timeout, 0o755);
+  }
   let status;
-  const read = run(slice('const yqVersionCheckCmd', 'const yamlHasGeneratedMarker') + '\nreadYamlObject', {
+  const read = run(slice('const yqExecutableCheckCmd', 'const yamlHasGeneratedMarker') + '\nreadYamlObject', {
     CLASH_DIR: dir, YAML_BRIDGE_MAX_BYTES: 8388608, shellQuote: quote,
     prepareYqRuntimeCmd: () => `KANO_YQ_TMP=${quote(dir)}`,
+    buildF50ShellBase: shellApi().base,
     ensureCompatBackend: async () => true,
     assertYamlRootMap(value) { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); },
     f50AssertSafeJsonNumbers() {},
@@ -32,6 +37,7 @@ printf '{"usedSpec":%s,"value":"fixture"}\n' "$used_spec"
         FIXTURE_SPEC: options.spec ? '1' : '0',
         FIXTURE_FAIL: options.fail ? '1' : '0',
         FIXTURE_INVALID_JSON: options.invalidJson ? '1' : '0',
+        ...(options.incompatibleTimeout ? { PATH: path.join(dir, 'bin') + ':' + process.env.PATH } : {}),
       });
       status = result.status;
       return { success: status === 0, content: result.stdout + result.stderr };
@@ -68,4 +74,18 @@ test('JSON bridge still rejects malformed JSON after a successful yq exit', asyn
   assert.equal(status, 0);
   assert.equal(result.ok, false);
   assert.match(result.message, /转换为单个 JSON 映射失败/);
+});
+
+test('JSON bridge accepts a compatible parser with a different version banner', async t => {
+  const { result, status } = await readFixture(t, { banner: 'Compatible YAML parser 5.0' });
+  assert.equal(status, 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.value.value, 'fixture');
+});
+
+test('JSON bridge works when the system timeout lacks kill-after support', async t => {
+  const { result, status } = await readFixture(t, { incompatibleTimeout: true });
+  assert.equal(status, 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.value.value, 'fixture');
 });

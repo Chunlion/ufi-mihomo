@@ -425,7 +425,7 @@ finish_yaml_commit() {
 trap finish_yaml_commit EXIT
 trap 'exit 130' HUP INT TERM
 [ -s "$STAGE" ] && [ ! -L "$STAGE" ] && [ ! -L "$TARGET" ] && [ ! -L "$SOURCE_FILE" ] || { echo F50_ERROR=yaml_path_invalid; exit 1; }
-${yqVersionCheckCmd()}
+${yqExecutableCheckCmd()}
 "$YQ" e -e 'tag == "!!map"' "$STAGE" >/dev/null 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
 if [ "$PROTECT_SECRET" = 1 ]; then
   old_secret=
@@ -612,10 +612,6 @@ for BIN in "$ROOT/Scripts/clashctl_arm64"; do
     ${originalHash}) ;;
     ${F50_HTTP_CONTROLLER_PATCHED_HASH}) ;;
     *)
-      help=$(CLASH_ROOT="$ROOT" "$BIN" help 2>&1) || { echo F50_ERROR=controller_interface_incompatible; exit 1; }
-      for action in start stop status policy fetch-batch; do
-        printf '%s' "$help" | grep -Eq "(^|[[:space:]|])$action([[:space:]|]|$)" || { echo F50_ERROR=controller_interface_incompatible; exit 1; }
-      done
       echo F50_CONTROLLER_HTTP_PATCH=skipped_unknown_build
       exit 0 ;;
   esac
@@ -1229,7 +1225,7 @@ F50_TASK=\${KANO_TPROXY_TASK:-}
 umask 077
 f50_limit() {
   f50_seconds=$1; shift
-  if command -v timeout >/dev/null 2>&1; then
+  if timeout -k 2 1 true >/dev/null 2>&1; then
     timeout -k 2 "$f50_seconds" "$@"
   else
     "$@" & f50_child=$!
@@ -4094,17 +4090,8 @@ exit "$kano_task_rc"`;
           echo "YQ_MISSING: yq_linux_arm64 不存在或不可执行"
           exit 1
         }
-        KANO_YQ_VERSION="$("$YQ" --version 2>&1)" || {
-          echo "YQ_EXEC_FAILED: 无法执行 yq_linux_arm64 --version"
-          exit 1
-        }
-        echo "YQ_VERSION=$KANO_YQ_VERSION"
         echo "YQ_EXEC_MODE=json_bridge_read_only"
         echo "YQ_TMPDIR=$TMPDIR"
-        echo "$KANO_YQ_VERSION" | grep -Eiq 'version[[:space:]]+v?4\\.' || {
-          echo "YQ_VERSION_UNSUPPORTED: 需要 Mike Farah yq v4，当前为 $KANO_YQ_VERSION"
-          exit 1
-        }
         KANO_YQ_SMOKE="$KANO_YQ_TMP/yq_json_bridge_smoke.$$"
         KANO_YQ_SMOKE_JSON="$KANO_YQ_TMP/yq_json_bridge_smoke.$$.json"
         cat > "$KANO_YQ_SMOKE" <<'KANO_YQ_SMOKE_EOF'
@@ -5351,12 +5338,8 @@ KANO_YQ_SMOKE_EOF
 
   // yq is an advanced-feature dependency, not a prerequisite for installing/starting Mihomo.
   // On a clean UFI environment, repair it lazily only when a YAML-backed feature is actually used.
-  const yqVersionCheckCmd = () => `
+  const yqExecutableCheckCmd = () => `
     [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
-    version="$(timeout -k 1 3 "$YQ" --version 2>&1)" || { echo "YQ_EXEC_FAILED: $version"; exit 1; }
-    echo "$version" | grep -Eiq 'mikefarah/yq.*version[[:space:]]+v?4\\.' || {
-      echo "YQ_VERSION_UNSUPPORTED: $version"; exit 1;
-    }
   `;
 
   const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
@@ -5365,10 +5348,11 @@ KANO_YQ_SMOKE_EOF
     }
     const res = await runShellWithRoot(`
         set -e
+        ${buildF50ShellBase()}
         FILE=${shellQuote(yamlPath)}
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
-        ${yqVersionCheckCmd()}
+        ${yqExecutableCheckCmd()}
         [ -s "$FILE" ] || { echo "YAML_FILE_MISSING: $FILE"; exit 1; }
         size="$(wc -c < "$FILE" 2>/dev/null || echo 0)"
         echo "$size" | grep -Eq '^[0-9]+$' || size=0
@@ -5382,7 +5366,7 @@ KANO_YQ_SMOKE_EOF
         fi
         yaml_read_stderr="$KANO_YQ_TMP/yq_json_read.$$.err"
         trap 'rm -f "$yaml_read_stderr"' EXIT
-        if timeout -k 1 15 "$YQ" "$@" -o=json '.' "$FILE" 2>"$yaml_read_stderr"; then
+        if f50_limit 15 "$YQ" "$@" -o=json '.' "$FILE" 2>"$yaml_read_stderr"; then
           :
         else
           yaml_read_rc=$?
@@ -6485,13 +6469,9 @@ KANO_WRITE_CHECK_EOF
 
 
   const getCurlBinCmd = () => `
-        CURL_BIN=${shellQuote(`${F50_FILES_DIR}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN=${shellQuote(`${KANO_INSTALL_TOOLBOX_BIN}/curl`)}
-        [ -x "$CURL_BIN" ] || CURL_BIN="$(command -v curl 2>/dev/null)"
-        if [ -z "$CURL_BIN" ] || [ ! -x "$CURL_BIN" ]; then
-          echo "curl 不存在（已检查 UFI 内置路径和系统 PATH）"
-          exit 1
-        fi
+        ${buildF50CurlLocator()}
+        f50_find_curl || exit 1
+        CURL_BIN=$F50_CURL_BIN
         `;
 
   const getCorePid = async () => (await readStatusSnapshot()).corePid;

@@ -120,6 +120,25 @@ test('uncertain transport failures are never automatically retried', async () =>
 });
 
 const yq = process.env.F50_TEST_YQ;
+test('curl selection falls back when a bundled executable cannot run', () => {
+  const dir = temp();
+  try {
+    const files = path.join(dir, 'files'), tools = path.join(dir, 'tools'), bin = path.join(dir, 'bin');
+    const broken = write(files, 'curl', '#!/bin/sh\nexit 126\n');
+    const fallback = write(bin, 'curl', '#!/bin/sh\necho "curl compatible"\n');
+    fs.chmodSync(broken, 0o755); fs.chmodSync(fallback, 0o755);
+    const locator = run(slice('function buildF50CurlLocator()', 'function buildF50ServiceCurlPatchScript') + 'buildF50CurlLocator');
+    const command = run(slice('const getCurlBinCmd', 'const getCorePid') + 'getCurlBinCmd', {
+      shellQuote: quote, F50_FILES_DIR: files, KANO_INSTALL_TOOLBOX_BIN: tools,
+      buildF50CurlLocator: () => locator().replace('/data/data/com.minikano.f50_sms/files/curl', quote(broken))
+        .replace('/data/kano_tproxy_tools/bin/curl', quote(path.join(tools, 'curl'))),
+    });
+    const result = shell(command() + '\nprintf "%s\\n" "$CURL_BIN"', { PATH: bin + ':' + process.env.PATH });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stdout.trim(), fallback);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('missing start marker uses a fallback; log text cannot spoof anchored markers', () => {
   const dir = temp();
   try {
@@ -138,7 +157,7 @@ printf '%s\\n' "$F50_START_DETAIL"
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('YAML reads use one version process and detect replaced, missing or invalid components', { skip: !yq }, async () => {
+test('YAML reads check parsing and detect replaced, missing or invalid components', { skip: !yq }, async () => {
   const dir = temp();
   try {
     const config = write(dir, 'config.yaml', 'name: good\n');
@@ -147,18 +166,19 @@ test('YAML reads use one version process and detect replaced, missing or invalid
     const bin = write(dir, 'Tools/yq_linux_arm64', script);
     fs.chmodSync(bin, 0o755);
     let calls = 0;
-    const read = run(slice('const yqVersionCheckCmd', 'const yamlHasGeneratedMarker') + 'readYamlObject', {
+    const read = run(slice('const yqExecutableCheckCmd', 'const yamlHasGeneratedMarker') + 'readYamlObject', {
       CLASH_DIR: dir.replace(/\\/g, '/'), YAML_BRIDGE_MAX_BYTES: 32, shellQuote: quote,
       ensureCompatBackend: async () => true, prepareYqRuntimeCmd: () => ':',
+      buildF50ShellBase: api.base,
       assertYamlRootMap: v => { if (!v || Array.isArray(v) || typeof v !== 'object') throw new Error('not mapping'); },
       f50AssertSafeJsonNumbers() {},
       runShellWithRoot: async script => { calls++; const r = shell(script); return { success: r.status === 0, content: r.stdout + r.stderr }; },
     });
     assert.equal((await read(config)).ok, true);
     assert.equal(calls, 1);
-    assert.equal(fs.readFileSync(log, 'utf8').trim().split('\n').length, 1);
+    assert.equal(fs.readFileSync(log, 'utf8'), '');
     fs.writeFileSync(bin, '#!/bin/sh\necho "yq version v3.4"\n');
-    assert.match((await read(config)).message, /YQ_VERSION_UNSUPPORTED/);
+    assert.match((await read(config)).message, /转换为单个 JSON 映射失败/);
     fs.rmSync(bin);
     assert.match((await read(config)).message, /YQ_MISSING/);
     fs.writeFileSync(bin, script); fs.chmodSync(bin, 0o755);

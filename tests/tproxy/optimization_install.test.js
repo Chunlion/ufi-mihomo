@@ -8,7 +8,7 @@ const config = 'secret: existing-secret\nproxies:\n  - {name: Test, type: socks5
 function installCase(options = {}) {
   const dir = temp(), root = path.join(dir, 'clash'), pkg = path.join(dir, 'package');
   const writePackage = (relative, text) => write(pkg, relative, text);
-  writePackage('Scripts/clashctl_arm64', '#!/bin/sh\necho F50_CONTROLLER=8.0.0-compat.2.3\n');
+  writePackage('Scripts/clashctl_arm64', options.controller ?? '#!/bin/sh\necho F50_CONTROLLER=8.0.0-compat.2.3\n');
   writePackage('Tools/f50-controller.version', '8.0.0-compat.2.3\n');
   writePackage('Proxy/Clash.Core', '#!/bin/sh\necho Mihomo-test\n');
   writePackage('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
@@ -140,6 +140,8 @@ test('first installation without subscriptions installs components and keeps the
 for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
+  ['unexecutable controller', { controller: '#!/bin/sh\nexit 126\n' }, 'controller_not_executable'],
+  ['controller without the protocol marker', { controller: '#!/bin/sh\necho unrelated-command\n' }, 'controller_protocol_mismatch'],
   ['missing fresh core', { missing: 'Proxy/Clash.Core' }, 'missing_core'],
   ['missing YAML component', { missing: 'Tools/yq_linux_arm64' }, 'yaml_parser_not_executable'],
   ['invalid YAML', { invalidConfig: true }, 'config_probe_failed'],

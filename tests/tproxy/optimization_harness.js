@@ -39,7 +39,7 @@ function shellApi(text = source, extra = '', contextOverrides = {}) {
       .replace('const rotateClashLogCmd =', 'let rotateClashLogCmd =')
       .replace('const dataSpaceGuardCmd =', 'let dataSpaceGuardCmd =')
     + slice('function buildF50CleanupScript()', 'let refreshDashboardAfterModeChange', text)
-    + extra + '\n({maintenance:buildF50MaintenanceFunctions, start:buildF50StartScript, inspect:buildF50InspectScript, install:buildF50InstallScript, cleanup:buildF50CleanupScript, final:buildF50FinalCheckScript, uninstall:buildUninstallStages,patch:buildF50OriginalServicePatchScript,emergency:buildF50EmergencyScript,eligibility:buildF50RecoveryEligibilityFunctions,lease:buildF50LeaseFunctions,transaction:buildF50ConfigTransactionFunctions,panelValidator:buildF50ZashboardValidationFunction})', {
+    + extra + '\n({base:buildF50ShellBase,maintenance:buildF50MaintenanceFunctions, start:buildF50StartScript, inspect:buildF50InspectScript, install:buildF50InstallScript, cleanup:buildF50CleanupScript, final:buildF50FinalCheckScript, uninstall:buildUninstallStages,patch:buildF50OriginalServicePatchScript,emergency:buildF50EmergencyScript,eligibility:buildF50RecoveryEligibilityFunctions,lease:buildF50LeaseFunctions,transaction:buildF50ConfigTransactionFunctions,panelValidator:buildF50ZashboardValidationFunction})', {
       shellQuote: quote, F50_FILES_DIR: '/data/data/com.minikano.f50_sms/files',
       KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin', BOOT_FILE: '/sdcard/ufi_tools_boot.sh',
       F50_ZASHBOARD_UI_URL: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',

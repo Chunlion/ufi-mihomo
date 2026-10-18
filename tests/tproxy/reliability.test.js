@@ -68,7 +68,7 @@ for (const [html,asset,accepted] of [
 });
 
 function yamlCommit(context = {}, prefix = '') {
-  return run(slice('const yqVersionCheckCmd', 'const readYamlObject')
+  return run(slice('const yqExecutableCheckCmd', 'const readYamlObject')
     + slice('const commitStagedYaml', 'const kprBaseWriteYamlObjectAtomic') + 'commitStagedYaml', {
       shellQuote: quote, F50_DEFAULT_SECRET: '123456', prepareYqRuntimeCmd: () => ':',
       buildF50ConfigTransactionFunctions: api.transaction, invalidateStatusSnapshot() {},

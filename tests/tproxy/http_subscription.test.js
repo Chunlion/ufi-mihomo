@@ -62,15 +62,15 @@ test('controller patch changes only the declared ranges and is idempotent', () =
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('an unsupported controller remains untouched', () => {
+test('an unknown controller remains untouched for its normal executable probe', () => {
   const { dir, binary } = fixture();
   try {
     const unsupported = Buffer.from(original);
     unsupported[api.specs[0].offset] ^= 1;
     fs.writeFileSync(binary, unsupported);
     const result = patch(dir);
-    assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_interface_incompatible/);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /skipped_unknown_build/);
     assert.deepEqual(fs.readFileSync(binary), unsupported);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -83,6 +83,19 @@ test('an unknown controller with the actual command interface needs no binary pa
   assert.match(result.stdout,/skipped_unknown_build/);assert.equal(fs.readFileSync(binary,'utf8'),future);
   assert.ok(!fs.existsSync(binary+'.http.original'));
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a compatible unknown controller does not need a matching help command', () => {
+  const { dir, binary } = fixture();
+  try {
+    const controller = '#!/bin/sh\ncase "$1" in version) echo F50_CONTROLLER=compatible;; help) exit 1;; esac\n';
+    fs.writeFileSync(binary, controller, { mode: 0o755 });
+    const result = patch(dir);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /skipped_unknown_build/);
+    assert.equal(fs.readFileSync(binary, 'utf8'), controller);
+    assert.equal(fs.existsSync(binary + '.http.original'), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('the bundled ARMv7 payload does not block the ARM64 patch', () => {
@@ -100,15 +113,15 @@ test('the bundled ARMv7 payload does not block the ARM64 patch', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('an incomplete patch is rejected without changing the controller', () => {
+test('an unknown partially patched controller is left untouched', () => {
   const { dir, binary } = fixture();
   try {
     const incomplete = Buffer.from(original);
     Buffer.from(api.specs[0].after, 'base64').copy(incomplete, api.specs[0].offset);
     fs.writeFileSync(binary, incomplete);
     const result = patch(dir);
-    assert.equal(result.status, 1);
-    assert.match(result.stdout, /F50_ERROR=controller_interface_incompatible/);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /skipped_unknown_build/);
     assert.deepEqual(fs.readFileSync(binary), incomplete);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1232,6 +1232,7 @@ f50_limit() {
     ( sleep "$f50_seconds"; kill -TERM "$f50_child" 2>/dev/null; sleep 2; kill -KILL "$f50_child" 2>/dev/null ) & f50_guard=$!
     wait "$f50_child"; f50_rc=$?
     kill "$f50_guard" 2>/dev/null; wait "$f50_guard" 2>/dev/null
+    case "$f50_rc" in 143) return 124 ;; esac
     return "$f50_rc"
   fi
 }
@@ -4085,37 +4086,6 @@ exit "$kano_task_rc"`;
         export XDG_CONFIG_HOME="$KANO_YQ_HOME"
         `;
 
-  const requireMikeFarahYqV4Cmd = () => `
-        [ -x "$YQ" ] || {
-          echo "YQ_MISSING: yq_linux_arm64 不存在或不可执行"
-          exit 1
-        }
-        echo "YQ_EXEC_MODE=json_bridge_read_only"
-        echo "YQ_TMPDIR=$TMPDIR"
-        KANO_YQ_SMOKE="$KANO_YQ_TMP/yq_json_bridge_smoke.$$"
-        KANO_YQ_SMOKE_JSON="$KANO_YQ_TMP/yq_json_bridge_smoke.$$.json"
-        cat > "$KANO_YQ_SMOKE" <<'KANO_YQ_SMOKE_EOF'
-root:
-  list:
-    - ok
-  number: 7895
-KANO_YQ_SMOKE_EOF
-        "$YQ" e -o=json '.' "$KANO_YQ_SMOKE" > "$KANO_YQ_SMOKE_JSON" 2>/data/kano_yq_expression_smoke.err || {
-          echo "YQ_JSON_BRIDGE_PREFLIGHT_FAILED"
-          cat /data/kano_yq_expression_smoke.err 2>/dev/null || true
-          rm -f "$KANO_YQ_SMOKE" "$KANO_YQ_SMOKE_JSON" 2>/dev/null || true
-          exit 1
-        }
-        grep -q '"root"' "$KANO_YQ_SMOKE_JSON" || {
-          echo "YQ_JSON_BRIDGE_VERIFY_FAILED"
-          cat "$KANO_YQ_SMOKE_JSON" 2>/dev/null || true
-          rm -f "$KANO_YQ_SMOKE" "$KANO_YQ_SMOKE_JSON" 2>/dev/null || true
-          exit 1
-        }
-        rm -f "$KANO_YQ_SMOKE" "$KANO_YQ_SMOKE_JSON" /data/kano_yq_expression_smoke.err 2>/dev/null || true
-        echo "YQ_JSON_BRIDGE_PREFLIGHT=ok"
-        `;
-
   const pruneKanoBackupsCmd = (keep = 8) => `
         prune_kano_backup_series() {
           base="$1"
@@ -4721,7 +4691,7 @@ KANO_YQ_SMOKE_EOF
   const providerNameFor = (index = 0) => `Provider${index + 1}`;
 
   const normalizeSubUrl = (value = '') =>
-    String(value).trim().replace(/[,\]}]+$/g, '');
+    String(value).trim();
 
   const normalizeStoredSubSourceList = (sources = []) => {
     const rows = [];
@@ -4746,23 +4716,6 @@ KANO_YQ_SMOKE_EOF
       url: source.url,
       name: providerNameFor(index),
     }));
-
-  const detectSuspiciousSubSources = (sources = []) => {
-    const nonSubPatterns = [
-      /generate_204/i,
-      /\/dns-query/i,
-      /\/(?:geoip|geosite|geodata|asn)(?:[._-][^/]*)?$/i,
-      /\.mmdb$/i,
-      /(?:^|[/?#&_.@-])(?:rule-?set|ruleset|rule-?provider|meta-?rules-?dat|v2ray-?rules-?dat|clash-?rules|ios_rule_script|acl4ssr|domain-list-community|gfwlist)(?:[/?#&_.=@-]|$)/i,
-      /\/(?:rule|rules|rule-set|rule-providers?)\/[^?#]+\.(?:yaml|yml|txt|list|mrs|json)(?:[?#].*)?$/i,
-      /\.mrs(?:[?#].*)?$/i,
-      /\.(png|jpg|jpeg|gif|svg|webp)$/i,
-    ];
-    return normalizeStoredSubSourceList(sources).some((source) => {
-      const urlPath = source.url.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0];
-      return nonSubPatterns.some((pattern) => pattern.test(urlPath));
-    });
-  };
 
   const buildSubUrlsFileText = (
     sources = [],
@@ -5042,7 +4995,6 @@ KANO_YQ_SMOKE_EOF
   const readTemplateProviderSubSources = async (
     templateBasePath = CLASH_TEMPLATE_BASE,
     templatePath = CLASH_TEMPLATE,
-    { includeSuspicious = false } = {},
   ) => {
     const res = await runShellWithRoot(`
         TEMPLATE_SOURCE=${shellQuote(templateBasePath)}
@@ -5055,10 +5007,7 @@ KANO_YQ_SMOKE_EOF
             grep -E '^https?://' || true
         fi
         `);
-    const sources = res.success ? parseStoredSubSourcesFromText(res.content || '') : [];
-    const suspiciousSources = sources.filter((source) => detectSuspiciousSubSources([source]));
-    const cleanSources = sources.filter((source) => !detectSuspiciousSubSources([source]));
-    return includeSuspicious ? { sources: cleanSources, suspiciousSources } : cleanSources;
+    return res.success ? parseStoredSubSourcesFromText(res.content || '') : [];
   };
 
   const persistSubSourcesForTemplate = async (
@@ -5343,9 +5292,6 @@ KANO_YQ_SMOKE_EOF
   `;
 
   const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
-    if (!(await ensureCompatBackend())) {
-      return { ok: false, value: null, message: `${label} 需要 yq v4，请先修复 YAML 组件`, shell: null };
-    }
     const res = await runShellWithRoot(`
         set -e
         ${buildF50ShellBase()}
@@ -7714,7 +7660,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
         ${prepareYqRuntimeCmd()}
         TEMPLATE=${shellQuote(txBase)}
-        ${requireMikeFarahYqV4Cmd()}
+        ${yqExecutableCheckCmd()}
         "$YQ" e '.' "$TEMPLATE" >/dev/null 2>/data/kano_template_upload_check.err || {
           echo "TEMPLATE_YAML_INVALID:"
           cat /data/kano_template_upload_check.err 2>/dev/null
@@ -7736,11 +7682,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       let savedSources = await readSavedSubSourcesForTemplate();
       let templateSubSourcesToPersist = [];
       let templateSubSyncMessage = '';
-      const providerCheck = await readTemplateProviderSubSources(txBase, txTemplate, { includeSuspicious: true });
-      if (providerCheck.suspiciousSources.length > 0) {
-        throw `模板 proxy-providers 包含疑似非节点订阅链接：${providerCheck.suspiciousSources[0].url}\n请不要把 DNS、规则集、GeoIP/GeoSite/MMDB/ASN 或图标链接放在 proxy-providers.url`;
-      }
-      const templateSources = providerCheck.sources;
+      const templateSources = await readTemplateProviderSubSources(txBase, txTemplate);
       if (preserveSubscription) {
         savedSources = templateSources;
       } else if (templateSources.length > 0) {
@@ -9273,7 +9215,7 @@ btn_disabled.onclick = async () => {
           [ "$file_size" -le 8388608 ] || { echo "RESTORE_FAILED: $name exceeds 8 MiB"; exit 1; }
         done
         [ -s "$STAGE/config.yaml" ] || { echo "RESTORE_FAILED: config.yaml empty"; exit 1; }
-        ${requireMikeFarahYqV4Cmd()}
+        ${yqExecutableCheckCmd()}
         for yaml_file in "$STAGE/config.yaml" "$STAGE/template.yaml" "$STAGE/template.base.yaml"; do
           "$YQ" e '.' "$yaml_file" >/dev/null 2>/data/kano_config_package_yaml_test.out || {
             echo "RESTORE_FAILED: invalid YAML in $(basename "$yaml_file")"
@@ -10003,30 +9945,6 @@ btn_disabled.onclick = async () => {
       return normalizeSubSourceList(urls);
     };
 
-    const showSuspiciousSubSourcesError = (sources) => {
-      const suspiciousSource = normalizeStoredSubSourceList(sources)
-        .find((source) => detectSuspiciousSubSources([source]));
-      if (!suspiciousSource) return false;
-      createToast(
-        `检测到疑似非节点订阅链接，已停止保存：${escapeHtml(maskSubscriptionUrl(suspiciousSource.url) || '订阅地址已隐藏')}<br>请不要填写 DNS、规则集、GeoIP/GeoSite/MMDB/ASN 或图标链接。`,
-        'red',
-        10000,
-      );
-      return true;
-    };
-
-    const showLegacySuspiciousSubSourcesError = (sources, context = '旧订阅来源') => {
-      const suspiciousSource = normalizeStoredSubSourceList(sources)
-        .find((source) => detectSuspiciousSubSources([source]));
-      if (!suspiciousSource) return false;
-      createToast(
-        `${escapeHtml(context)}包含疑似非节点订阅链接，已停止读取/迁移：${escapeHtml(maskSubscriptionUrl(suspiciousSource.url) || '订阅地址已隐藏')}<br>请先清理 DNS、规则集、GeoIP/GeoSite/MMDB/ASN 或图标链接。`,
-        'red',
-        10000,
-      );
-      return true;
-    };
-
 
     const clearSubSourceFile = async () => {
       const saved = await persistSubSourceState(
@@ -10165,15 +10083,6 @@ btn_disabled.onclick = async () => {
       });
       const entrypointSources = entrypointBlocks.flatMap((block) => parseLegacySubConfig(block));
       const fallbackSources = entrypointBlocks.flatMap((block) => parseLegacySubUrlsFromText(block));
-      if (showLegacySuspiciousSubSourcesError(providerSources, 'legacy proxy-providers URL')) {
-        return { legacyDetected: true, sources: [], blocked: true, content };
-      }
-      if (showLegacySuspiciousSubSourcesError(entrypointSources, 'legacy entrypoint')) {
-        return { legacyDetected: true, sources: [], blocked: true, content };
-      }
-      if (showLegacySuspiciousSubSourcesError(fallbackSources, 'legacy entrypoint fallback')) {
-        return { legacyDetected: true, sources: [], blocked: true, content };
-      }
       const providerSourcesClean = normalizeSubSourceList(providerSources);
       const entrypointSourcesClean = normalizeSubSourceList(entrypointSources);
       const fallbackSourcesClean = normalizeSubSourceList(fallbackSources);
@@ -10189,9 +10098,7 @@ btn_disabled.onclick = async () => {
 
     const migrateLegacySubscriptionSources = async ({ showToast = true } = {}) => {
       const legacy = await readLegacySubscriptionSources();
-      if (legacy.blocked) return [];
       const cleanSources = normalizeSubSourceList(legacy.sources || []);
-      if (showLegacySuspiciousSubSourcesError(cleanSources, '旧直通模式订阅链接')) return [];
       if (cleanSources.length == 0) {
         if (legacy.legacyDetected && showToast) {
           createToast('检测到旧直通模式残留，但未找到可迁移的订阅链接；请重新保存订阅链接。', 'yellow', 9000);
@@ -10593,7 +10500,6 @@ btn_disabled.onclick = async () => {
       }
       const sourceItems = parseStoredSubSourcesFromText(source.content || '');
       if (sourceItems.length > 0) {
-        if (showLegacySuspiciousSubSourcesError(sourceItems, '历史 subscription_urls.txt')) return [];
         return includeDisabled ? sourceItems : normalizeSubSourceList(sourceItems);
       }
       if (parseSubRuleModeFromText(source.content || '') === 'original'
@@ -10605,7 +10511,6 @@ btn_disabled.onclick = async () => {
       if (!res.success || !res.content) return await migrateLegacySubscriptionSources({ showToast: true });
       const legacySources = parseLegacySubConfig(res.content);
       if (legacySources.length > 0) {
-        if (showLegacySuspiciousSubSourcesError(legacySources, 'legacy entrypoint')) return [];
         if (!(await persistSubSourceState(legacySources, SUB_RULE_MODE_TEMPLATE, await readSavedSubConvertMode()))) {
           createToast('旧版订阅入口迁移失败，未继续使用未保存的订阅源。', 'red', 9000);
           appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
@@ -10657,7 +10562,6 @@ btn_disabled.onclick = async () => {
     createToast(safeTextToHtml(invalidMessage), 'red', 9000);
     return false;
   }
-  if (showSuspiciousSubSourcesError(storedSources)) { operationFinish(false); return false; }
   operationStage('检查订阅和配置来源', 0, 5);
   const configSource = await readConfigSource();
   if (configSource === 'uploaded_config') {
@@ -11349,8 +11253,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           url: row.querySelector('.mm_sub_url_input').value,
           enabled: row.dataset.enabled != 'false',
         }));
-
-        if (showSuspiciousSubSourcesError(sources)) return;
 
         const hasSubscriptionUrl = sources.some((source) => String(source.url || '').trim());
 

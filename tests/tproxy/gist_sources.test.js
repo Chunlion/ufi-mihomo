@@ -16,7 +16,7 @@ test('Gist source saves, disabled-only and empty removal all use native merge',a
  for(const input of [[],[{url:'https://example.test/sub',enabled:false}],[{url:'https://example.test/sub',enabled:true}]]) {
   let merged;const gist={settings:{revision:7}};
   const fn=subscriptionApi(slice('function validateSubscriptionMode','function buildF50CleanupScript')+slice('const saveSubSources = async','const overwriteConfigByTemplate')+'saveSubSources',{
-   validateLocalSubscriptionUrl:()=>({ok:true}),showSuspiciousSubSourcesError:()=>false,
+   validateLocalSubscriptionUrl:()=>({ok:true}),
    readConfigSource:async()=> 'uploaded_config',f50GistManaged:async()=>gist,
    f50GistUpdateSources:async(st,sources)=>{assert.equal(st,gist);merged=plain(sources);return true;},
    persistSubSourceState:()=>{throw Error('source policy changed outside native lease');},

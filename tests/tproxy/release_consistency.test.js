@@ -52,7 +52,7 @@ test('legacy sources migrate once; saved and custom configurations bypass migrat
       + slice('    const readCurrentSubSources =', '    const writeSubConfigByMode =') + '\nreadCurrentSubSources', {
       CLASH_SUB_URLS: '/subscriptions', CLASH_CONFIG: '/config', SUB_RULE_MODE_TEMPLATE: 'template',
       shellQuote: quote, normalizeSubSourceList: items => items,
-      showLegacySuspiciousSubSourcesError: () => false, createToast() {}, appendTemplateFlowDebug() {},
+      createToast() {}, appendTemplateFlowDebug() {},
       parseStoredSubSourcesFromText: text => text ? sources : [], parseLegacySubConfig: () => [],
       parseSubRuleModeFromText: () => 'template',
       readConfigSource: async () => configSource,

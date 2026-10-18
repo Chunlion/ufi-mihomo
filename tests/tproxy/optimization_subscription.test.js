@@ -6,24 +6,32 @@ const sources = [{ url: 'https://one.example/sub', name: 'Provider1' }, { url: '
 const result = (failed = false) => ({ ok: !failed, failed: failed ? 1 : 0,
   providers: sources.map(s => ({ name: s.name, ok: !failed, message: failed ? 'failed' : '', proxyCount: failed ? 0 : 2 })) });
 
-test('subscription URL detection accepts config paths, hostnames and query tokens', () => {
-  const detect = subscriptionApi('detectSuspiciousSubSources');
+test('subscription URLs retain path names and trailing query characters', () => {
+  const { normalizeSubUrl, buildSubUrlsFileText, parseStoredSubSourcesFromText } = subscriptionApi('({normalizeSubUrl,buildSubUrlsFileText,parseStoredSubSourcesFromText})');
   for (const url of [
     'https://airport.example/clash/config.yaml',
     'https://asn-airport.example/subscribe',
     'https://airport.example/api/subscribe?token=abcasnxyz',
     'https://airport.example/api/subscribe?filename=geosite.dat',
     'https://airport.example/api/subscribe?token=ruleset',
-  ]) assert.equal(detect([{ url }]), false, url);
-  for (const url of [
-    'https://rules.example/rules/direct.yaml',
-    'https://rules.example/GeoSite.dat',
-    'https://rules.example/geoip.metadb',
-    'https://rules.example/Country.mmdb',
-    'https://rules.example/ASN.mmdb',
-    'https://rules.example/direct.mrs',
-    'https://dns.example/dns-query',
-  ]) assert.equal(detect([{ url }]), true, url);
+    'https://airport.example/geoip-subscription',
+    'https://airport.example/api/subscribe?token=fixture,',
+    'https://airport.example/api/subscribe?token=fixture]',
+    'https://airport.example/api/subscribe?token=fixture}',
+  ]) {
+    assert.equal(normalizeSubUrl(' ' + url + ' '), url);
+    assert.equal(parseStoredSubSourcesFromText(buildSubUrlsFileText([{ url }]))[0].url, url);
+  }
+});
+
+test('template source imports retain URLs regardless of path names', async () => {
+  const read = subscriptionApi(slice('const readTemplateProviderSubSources', 'const persistSubSourcesForTemplate') + 'readTemplateProviderSubSources', {
+    CLASH_DIR: '/fixture', prepareYqRuntimeCmd: () => ':',
+    runShellWithRoot: async () => ({ success: true, content: 'https://airport.example/geoip-subscription\nhttps://airport.example/rules/nodes.yaml\n' }),
+  });
+  assert.deepEqual(plain(await read('/base.yaml', '/template.yaml')).map(s => s.url), [
+    'https://airport.example/geoip-subscription', 'https://airport.example/rules/nodes.yaml',
+  ]);
 });
 
 for (const mode of ['provider', 'local']) {
@@ -242,7 +250,7 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
     + '({saveSubSources,switchHttpProviderToLocal})';
   const api = subscriptionApi(extra, {
     ...constants, activeCriticalOperation: null, createRandomString: () => 'fixture',
-    validateLocalSubscriptionUrl: () => ({ ok: true }), showSuspiciousSubSourcesError: () => false,
+    validateLocalSubscriptionUrl: () => ({ ok: true }),
     readCurrentSubSources: async () => stored, readConfigSource: async () => legacy ? 'subscription_original' : custom ? 'uploaded_config' : 'template.yaml',
     readCurrentSubRuleMode: async () => legacy ? 'original' : 'template',
     runShellWithRoot: async script => {
@@ -274,6 +282,20 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
   return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites,
     execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy }) };
 }
+
+test('saving an enabled subscription retains its URL and ignores a disabled source', async () => {
+  const c = saveCase();
+  try {
+    c.stored[0].url = 'https://airport.example/geoip-subscription?token=fixture,';
+    c.stored[1].url = 'https://rules.example/direct.mrs';
+    c.stored[1].enabled = false;
+    assert.equal(await c.execute(), true);
+    const saved = fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8');
+    assert.ok(saved.includes(c.stored[0].url + ' Provider1\n'));
+    assert.ok(saved.includes('# KANO_DISABLED_SUB=' + c.stored[1].url + '\n'));
+    assert.equal(fs.readFileSync(path.join(c.dir, 'Proxy/proxies/Provider2.yaml'), 'utf8'), 'old cache:Provider2');
+  } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+});
 
 for (const convertMode of ['provider', 'local']) {
   for (const failAt of ['', 'write', 'prepare']) {

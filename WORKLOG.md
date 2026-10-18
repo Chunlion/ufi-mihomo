@@ -15,7 +15,7 @@
 1. 仅将下载源数组调整为 GitCode → Gitee → GitHub Raw。URL、失败切换、120 秒总时限、低速窗口、缓存及 ZIP 检查逻辑未改。
 2. 修复组件 Service 的 IPv6 NAT 缺失分支：原脚本中的换行转义被写成了 /n，回车过滤被写成了 /r。只更正这一段 DNS helper，并将既有标记 KANO_IPV6_DNS_SPLIT 从 1 更新为 2。
 3. JS 的现有 Service 补丁流程替换已安装的 v1 DNS helper，识别原来已接入的 f50_run_controller 调用；没有增加第二套兼容层、锁、重试或事务。
-4. tproxy-yq.zip 仅替换 Scripts/Clash.Service 内上述 DNS 段；其他组件保留。最终 ZIP 为 67,024,759 字节。
+4. DNS 修复时的 tproxy-yq.zip 仅替换 Scripts/Clash.Service 内上述 DNS 段；其他组件保留。该阶段 ZIP 为 67,024,759 字节。
 
 最终 JS 已通过后台现有保存接口写入设备；回读全文与本地一致，其他插件原文不变。重新加载页面后，实际载入的完整 JS 与交付文件一致。
 
@@ -92,3 +92,23 @@
 - **经过真实 F50 验证**，并完成一次真实设备重启；上述 NOT RUN 项不计通过。
 - 最终为 TProxy IPv4、DNS 劫持开启；原设备绕过名单保留。Gist 自动同步开启，间隔 6 小时，调度器运行。
 - 仅交付完整 猫猫TProxy.js、完整 tproxy-yq.zip 和本 WORKLOG.md。
+
+## 遗留 Gist 误报与订阅链接消失修复
+
+本次独立复现确认是已有缺陷，不能归因于前轮测试环境异常。真实 F50 上先通过现有入口同步成功，再仅点击“重启核心”：策略指纹不变，配置指纹却改变；`x-f50-gist-sync` 被移除，HTTP Provider 字段及来源信息被改写，Gist 识别随之失效。后续同步将这次内部改写判为本地修改，订阅页也因此隐藏 Gist 概览。
+
+原因位于 `buildF50OriginalConfigFunctions()` 生成的 `f50_restore_original_config()`：原配置完整恢复分支只处理 `subscription_original`，没有处理 Gist 使用的 `uploaded_config`。
+
+最小修复：让带 Gist 标记的上传配置进入现有原配置恢复分支，并保留原 Provider 和来源信息。既有 helper 标记由 14 更新到 15，沿用原迁移流程。组件 ZIP 仅更新同一 Service helper；原生 Gist 程序、冲突判定及其他组件未改，没有新增锁、重试或校验机制。
+
+| 验证项 | 结果 | 证据 |
+|---|---|---|
+| 原失败用例：同步后重启核心 | PASS（真实 F50） | 重启前后配置、策略指纹均相同；与已应用指纹一致，gistActive=true、activationPending=false |
+| 重启后订阅设置 | PASS（真实 F50） | Gist 模式恢复，显示 1 个订阅，包含该 Provider 的链接 |
+| 重启后正常“更新订阅” | PASS（真实 F50） | last.ok=true、code=up_to_date；无本地修改误报，配置和策略指纹保持不变 |
+| 核心及 Provider | PASS（真实 F50） | API 200、WebUI 200、HTTP 代理 204；16 个 Provider 有节点 |
+| 准备、启动、重启、开机启动配置保留 | PASS（本地定向回归） | 现有 Service 用例覆盖四条路径，断言 Gist 配置整体相同，含 HTTP Provider、手动 Provider 及来源信息；1 PASS、0 FAIL、34 SKIPPED |
+| JS、组件 ZIP | PASS | node --check；包内 Service 通过 sh -n；完整 ZIP CRC 检查通过，仅 Scripts/Clash.Service 内容变化 |
+| 本次修复后的真实设备重启 | NOT RUN | 本次实机复测为重启核心；开机路径由上述本地回归覆盖，不复用前轮设备重启结果冒充本次验证 |
+
+最终 JS 已保存到 F50，回读及页面实际载入内容均与本地一致；其他插件原文保留。设备已通过现有同步入口恢复 Gist 配置，最终 Service helper 为 15。最终完整 ZIP 为 67,024,933 字节。本问题无剩余阻塞；前述下载超时及 NOT RUN 边界仍保留。

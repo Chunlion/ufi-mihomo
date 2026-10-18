@@ -674,7 +674,7 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=14
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=15
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -696,15 +696,17 @@ f50_restore_original_config() {
   [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
   "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
     . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
-    (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])})) |
+    ($original."x-f50-gist-sync" == true and strenv(F50_CONFIG_SOURCE) == "uploaded_config") as $gist |
+    (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])}) |
+      ((select($gist) | omit(["proxy-providers", "x-f50-provider-sources"])), select($gist | not))) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
     .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))) |
     del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
-    select(strenv(F50_CONFIG_SOURCE) == "subscription_original")),
+    select(strenv(F50_CONFIG_SOURCE) == "subscription_original" or $gist)),
     (.dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"]))) |
     (select(strenv(F50_PRESERVE_HTTP_PROVIDER) != "1"),
       (select(strenv(F50_PRESERVE_HTTP_PROVIDER) == "1") | ."proxy-providers" = $original."proxy-providers" | del(."x-f50-provider-sources"))) |
-    select(strenv(F50_CONFIG_SOURCE) != "subscription_original"))) |
+    select(strenv(F50_CONFIG_SOURCE) != "subscription_original" and ($gist | not)))) |
     .secret = ($original.secret // .secret)
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
@@ -849,14 +851,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=14' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=15' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }

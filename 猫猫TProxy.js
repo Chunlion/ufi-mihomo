@@ -4764,16 +4764,17 @@ KANO_YQ_SMOKE_EOF
     const nonSubPatterns = [
       /generate_204/i,
       /\/dns-query/i,
-      /geoip|geosite|geodata|mmdb|asn/i,
+      /\/(?:geoip|geosite|geodata|asn)(?:[._-][^/]*)?$/i,
+      /\.mmdb$/i,
       /(?:^|[/?#&_.@-])(?:rule-?set|ruleset|rule-?provider|meta-?rules-?dat|v2ray-?rules-?dat|clash-?rules|ios_rule_script|acl4ssr|domain-list-community|gfwlist)(?:[/?#&_.=@-]|$)/i,
       /\/(?:rule|rules|rule-set|rule-providers?)\/[^?#]+\.(?:yaml|yml|txt|list|mrs|json)(?:[?#].*)?$/i,
-      /\/(?:clash|surge|loon|quantumultx)\/[^?#]+\.(?:yaml|yml|txt|list|conf|mrs)(?:[?#].*)?$/i,
       /\.mrs(?:[?#].*)?$/i,
       /\.(png|jpg|jpeg|gif|svg|webp)$/i,
     ];
-    return normalizeStoredSubSourceList(sources).some((source) =>
-      nonSubPatterns.some((pattern) => pattern.test(source.url)),
-    );
+    return normalizeStoredSubSourceList(sources).some((source) => {
+      const urlPath = source.url.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0];
+      return nonSubPatterns.some((pattern) => pattern.test(urlPath));
+    });
   };
 
   const buildSubUrlsFileText = (

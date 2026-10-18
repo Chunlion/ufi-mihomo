@@ -12,7 +12,7 @@ function installCase(options = {}) {
   writePackage('Tools/f50-controller.version', '8.0.0-compat.2.3\n');
   writePackage('Proxy/Clash.Core', '#!/bin/sh\necho Mihomo-test\n');
   writePackage('Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
-  writePackage('Proxy/config.yaml', options.invalidConfig ? 'rules: [\n' : config);
+  writePackage('Proxy/config.yaml', options.invalidConfig ? 'rules: [\n' : options.config ?? config);
   writePackage('Tools/template.yaml', config);
   writePackage('Tools/template.base.yaml', config);
   const startOutput = options.startOutput || 'START_STATE=started_verified_process';
@@ -124,6 +124,18 @@ for (const [name, options, status] of [
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }
+
+test('first installation without subscriptions installs components and keeps the core stopped', { skip: !yq }, () => {
+  const { dir, root, result } = installCase({ config: 'proxies: []\nrules: [MATCH,DIRECT]\n' });
+  try {
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^F50_INSTALL_STATUS=installed_needs_configuration$/m);
+    assert.match(result.stdout, /^F50_CONFIG_STATE=missing_subscription$/m);
+    assert.match(result.stdout, /^KANO_INSTALL_OK=1$/m);
+    assert.equal(fs.existsSync(path.join(root, 'started')), false);
+    assert.equal(fs.existsSync(path.join(root, 'Policy/stopped')), true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 for (const [name, options, code] of [
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],

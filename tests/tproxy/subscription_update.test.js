@@ -600,6 +600,25 @@ done
         assert.equal(reloadArgs[reloadArgs.indexOf('--noproxy') + 1], '*', 'local reload bypasses environment proxies');
       }
     }
+    const gistConfig = plain(configApi.runtime({
+      ...plain(configApi.profiles.tproxy4),
+      'x-f50-gist-sync': true,
+      'x-f50-gist-manual-providers': ['Manual'],
+      'x-f50-provider-sources': { Gist: 'https://example.com/gist-provider.yaml' },
+      'proxy-providers': {
+        Gist: { type: 'http', url: 'https://example.com/gist-provider.yaml', path: './proxies/Gist.yaml' },
+        Manual: { type: 'http', url: 'https://example.com/manual-provider.yaml', path: './proxies/Manual.yaml' },
+      },
+    }));
+    for (const action of ['prepare', 'start', 'restart', 'boot']) {
+      write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=uploaded_config\n');
+      write('Proxy/config.yaml', JSON.stringify(gistConfig));
+      const result = run([service, action], env);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const parsed = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+      assert.equal(parsed.status, 0, parsed.stderr);
+      assert.deepEqual(JSON.parse(parsed.stdout), gistConfig, action + ': Gist fingerprint input survives controller preparation');
+    }
     write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
     write('Proxy/config.yaml', JSON.stringify(plain(configApi.profiles.tproxy4)));
     fs.rmSync(path.join(root, 'reloaded.json'), { force: true });

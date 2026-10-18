@@ -53,7 +53,7 @@ const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', '
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
 function buildF50EmergencyScript(resumeTag = '', requireIdle = false) {
-  return buildF50MaintenanceFunctions('cleanup') + (requireIdle ? buildF50RecoveryEligibilityFunctions() : '') + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
+  return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions() + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
 F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
 F50_RECOVERY_LOCK=\${F50_RECOVERY_LOCK:-/dev/kano_tproxy_recovery.lock}
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
@@ -117,6 +117,7 @@ for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yam
   if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
   f50_config_tx_recover "$config_target" "$config_source_file" || config_recovery_failed=1
 done
+${!requireIdle ? 'if [ "$config_recovery_failed" = 0 ] && [ -z "$F50_RESUME_TAG" ]; then F50_RECOVERY_PREEMPT=1 f50_recovery_eligible || exit 1; fi' : ''}
 if f50_clean_environment && [ "$config_recovery_failed" = 0 ]; then
   # Only the known lease files are removed; an unexpected file prevents release.
   emergency_owner=$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)
@@ -188,7 +189,7 @@ f50_recovery_eligible() {
     case "$recovery_owner" in mm_service_*)
       recovery_pid=\${recovery_owner#mm_service_}
       case "$recovery_pid" in ''|*[!0-9]*) f50_recovery_block unknown_owner; return 1;; esac
-      [ ! -d "$F50_PROC/$recovery_pid" ] || { f50_recovery_block active_service; return 1; };; esac
+      [ ! -d "$F50_PROC/$recovery_pid" ] || [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] || { f50_recovery_block active_service; return 1; };; esac
   fi
   recovery_records=
   for recovery_entry in "$F50_TASK_DIR"/* "$F50_TASK_DIR"/.[!.]* "$F50_TASK_DIR"/..?*; do
@@ -208,11 +209,11 @@ f50_recovery_eligible() {
         f50_stat "$recovery_process" || { f50_recovery_block task_identity_unknown; return 1; }
         [ "$recovery_process_start" -gt 0 ] || { f50_recovery_block task_identity_unknown; return 1; }
         if [ "$F50_STAT_START" = "$recovery_process_start" ]; then
-          case "$F50_STAT_STATE" in Z|X) ;; *) f50_recovery_block active_task; return 1;; esac
+          case "$F50_STAT_STATE" in Z|X) ;; *) [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] || { f50_recovery_block active_task; return 1; };; esac
         fi
       fi
     done
-    [ "$recovery_state" = finished ] || { f50_recovery_block task_receipt_missing; return 1; }
+    [ "$recovery_state" = finished ] || { [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] && [ "$recovery_state" = running ]; } || { f50_recovery_block task_receipt_missing; return 1; }
     recovery_hash=$(sha256sum "$recovery_entry" | awk '{print $1}')
     [ -n "$recovery_hash" ] || { f50_recovery_block task_receipt_unreadable; return 1; }
     recovery_records="$recovery_records $recovery_request:$recovery_hash"
@@ -231,6 +232,7 @@ f50_recovery_eligible() {
           recovery_exe=$(readlink "$recovery_proc/exe" 2>/dev/null)
           recovery_exe=\${recovery_exe% (deleted)}
           if f50_owned_exe "$recovery_exe"; then continue; fi;; esac
+        [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] && continue
         f50_recovery_block unreceipted_active_task; return 1
       fi
   done
@@ -242,13 +244,21 @@ f50_recovery_eligible() {
       [ "$recovery_frontend_owner" = "$recovery_owner" ] && [ -z "$recovery_extra" ] || { f50_recovery_block frontend_owner_mismatch; return 1; }
       case "$recovery_deadline" in ''|*[!0-9]*) f50_recovery_block frontend_record_invalid; return 1;; esac
       read -r recovery_uptime recovery_idle < /proc/uptime || { f50_recovery_block frontend_clock_unknown; return 1; }
-      [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || { f50_recovery_block active_frontend; return 1; }
+      [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] || { f50_recovery_block active_frontend; return 1; }
     fi;; esac
   if [ -n "$recovery_records" ]; then
-    for recovery_tx in "$F50_ROOT/Proxy/"*.kano_tx "$F50_ROOT/Tools/"*.kano_tx "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
-      [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
-      [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
-    done
+    if [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ]; then
+      # These transaction types are not restored by this emergency script; keep their existing guard.
+      for recovery_tx in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
+        [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
+        [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
+      done
+    else
+      for recovery_tx in "$F50_ROOT/Proxy/"*.kano_tx "$F50_ROOT/Tools/"*.kano_tx "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
+        [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
+        [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
+      done
+    fi
     if [ "\${emergency_locked:-0}" = 1 ]; then
       for recovery_record in $recovery_records; do
         recovery_file="$F50_TASK_DIR/\${recovery_record%:*}"
@@ -312,8 +322,12 @@ f50_frontend_touch() {
   case "$lease_tag" in mm_*) ;; *) echo F50_OPERATION_INVALID_OWNER; return 1 ;; esac
   [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_TASK_DIR" ] || { echo F50_OPERATION_UNSAFE_PATH; return 1; }
 ${includeFrontend ? '  if [ "$2" = browser ]; then f50_writer_enter || return 1; fi\n' : ''}  if mkdir "$F50_OPERATION_LOCK" 2>/dev/null; then
-    chmod 700 "$F50_OPERATION_LOCK" || return 1
-    printf '%s\\n' "$lease_tag" > "$F50_OPERATION_LOCK/owner" || return 1
+    if ! chmod 700 "$F50_OPERATION_LOCK"; then rmdir "$F50_OPERATION_LOCK" 2>/dev/null; return 1; fi
+    if ! printf '%s\\n' "$lease_tag" > "$F50_OPERATION_LOCK/owner"; then
+      rm -f "$F50_OPERATION_LOCK/owner" 2>/dev/null
+      rmdir "$F50_OPERATION_LOCK" 2>/dev/null
+      return 1
+    fi
   fi
   [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
   [ ! -e "$F50_OPERATION_LOCK/cancelled" ] && [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_BUSY; return 1; }
@@ -744,21 +758,9 @@ f50_find_curl() {
 function buildF50ServiceCurlPatchScript(service) { return `(set -e
 SERVICE=${service}
 [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
-TMP="$SERVICE.audit5.$$"; BACKUP="$SERVICE.audit5-backup.$$"; FUNCTIONS="$TMP.functions"
+TMP="$SERVICE.audit5.$$"; FUNCTIONS="$TMP.functions"
 umask 077
-patch_committed=0
-patch_finish() {
-  patch_rc=$?
-  trap - EXIT HUP INT TERM
-  if [ "$patch_rc" != 0 ] && [ "$patch_committed" = 1 ]; then
-    if mv -f "$BACKUP" "$SERVICE" && [ "$(sha256sum "$SERVICE" | awk '{print $1}')" = "$old_hash" ]; then echo F50_SERVICE_PATCH_ROLLBACK=verified
-    else echo F50_ERROR=service_patch_rollback_failed; echo "F50_SERVICE_PATCH_BACKUP=$BACKUP"; exit 1; fi
-  fi
-  rm -f "$TMP" "$FUNCTIONS" || patch_rc=1
-  if [ "$patch_rc" = 0 ]; then rm -f "$BACKUP" || patch_rc=1; fi
-  exit "$patch_rc"
-}
-trap patch_finish EXIT
+trap 'rm -f "$TMP" "$FUNCTIONS"' EXIT
 trap 'exit 130' HUP INT TERM
 printf '%s' ${shellQuote(buildF50CurlLocator())} > "$FUNCTIONS"
 if grep -qx '# KANO_CURL_ABSOLUTE=1' "$SERVICE"; then
@@ -783,13 +785,7 @@ else
   service_mode=$(stat -c '%a' "$SERVICE") || exit 1
   case "$service_mode" in ''|*[!0-7]*) exit 1;; esac
   chmod "$service_mode" "$TMP" || exit 1
-  old_hash=$(sha256sum "$SERVICE" | awk '{print $1}')
-  cp -p "$SERVICE" "$BACKUP" && [ "$(sha256sum "$BACKUP" | awk '{print $1}')" = "$old_hash" ] || exit 1
-  expected_hash=$(sha256sum "$TMP" | awk '{print $1}')
-  # Set before rename so a post-commit signal restores the original.
-  patch_committed=1
   mv -f "$TMP" "$SERVICE" || exit 1
-  [ "$(sha256sum "$SERVICE" | awk '{print $1}')" = "$expected_hash" ] && sh -n "$SERVICE" || { echo F50_ERROR=service_curl_patch_verify; exit 1; }
 fi
 echo F50_SERVICE_CURL_PATCH_OK=1
 )`; }
@@ -924,19 +920,22 @@ awk -v functions="$FUNCTIONS" '
 ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish}
 fi
-if ! grep -qx '# KANO_IPV6_DNS_SPLIT=1' "$SERVICE"; then
+if ! grep -qx '# KANO_IPV6_DNS_SPLIT=2' "$SERVICE"; then
 TMP="$SERVICE.dns.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
+  /^f50_disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ { legacy=1 }
+  legacy { if($0=="# KANO_IPV6_DNS_SPLIT=1") legacy=0; next }
   /^disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ {
     while ((getline line < functions) > 0) print line
     close(functions); helpers++; skipping=1; next
   }
   skipping { if($0=="}") skipping=0; next }
   $0 == "\\"$binary\\" \\"$@\\"" { print "f50_run_controller \\"$@\\""; calls++; next }
+  $0 == "f50_run_controller \\"$@\\"" { calls++ }
   { print }
-  END { if(helpers!=1 || calls!=1 || skipping) exit 1 }
+  END { if(helpers!=1 || calls!=1 || skipping || legacy) exit 1 }
 ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish}
 fi
@@ -1090,9 +1089,6 @@ const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
   kano_log_size=$(wc -c < '/data/clash/Proxy/Clash.log' 2>/dev/null || echo 0)
   case "$kano_log_size" in ''|*[!0-9]*) ;; *) [ "$kano_log_size" -gt 5242880 ] && mv -f '/data/clash/Proxy/Clash.log' '/data/clash/Proxy/Clash.log.1' 2>/dev/null || true ;; esac
 fi
-`;
-const dataSpaceGuardCmd = (onLow = 'exit 1') => `kano_data_avail_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
-case "$kano_data_avail_kb" in ''|*[!0-9]*) ;; *) [ "$kano_data_avail_kb" -ge 51200 ] || { ${onLow}; } ;; esac
 `;
 function buildF50StartScript(action) {
   if (!['start', 'restart'].includes(action)) throw new Error('invalid_start_action');
@@ -1748,7 +1744,7 @@ f50_run_controller() (
   case "$1:$2" in policy:verify) f50_ipv4_dns_rules verify;; *) f50_ipv4_dns_rules apply;; esac || exit 1
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 )
-# KANO_IPV6_DNS_SPLIT=1
+# KANO_IPV6_DNS_SPLIT=2
 `; }
 
 function buildF50InspectHelpers() { return `f50_inspect() {
@@ -2107,16 +2103,7 @@ F50_WORK=$(mktemp -d "$F50_DATA/.f50-install.XXXXXX") || { echo F50_INSTALL_CODE
 STAGE="$F50_WORK/unpacked"; PKG=; BACKUP=; HAD_OLD=0; MOVED_OLD=0; COMMITTED=0; SUCCESS=0
 OLD_RUNNING=0; OLD_LATCH=0; CLEAN_ATTEMPTED=0; NEEDS_CONFIG=; HAD_USER_CONFIG=0
 F50_INSTALL_CODE=; F50_INSTALL_DETAIL=; KEEP_WORK=0; LOCKED=0
-INSTALL_PHASE=created
 LOCK="$F50_DATA/clash.install.lock.d"
-
-f50_install_record() {
-  INSTALL_PHASE=$1
-  record_tmp="$F50_WORK/install.journal.new"
-  printf 'format=F50_INSTALL_JOURNAL_V1\\nphase=%s\\nroot=%s\\nbackup=%s\\nstage=%s\\nold_running=%s\\nold_latch=%s\\n' "$INSTALL_PHASE" "$F50_ROOT" "$BACKUP" "$PKG" "$OLD_RUNNING" "$OLD_LATCH" > "$record_tmp" &&
-    chmod 600 "$record_tmp" && mv -f "$record_tmp" "$F50_WORK/install.journal" || return 1
-  sync
-}
 f50_install_fail() {
   F50_INSTALL_CODE=$1; F50_INSTALL_DETAIL=\${2:-}; return 1
 }
@@ -2160,12 +2147,12 @@ f50_install_finish() {
       printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact
     fi
     if [ "$COMMITTED" = 1 ] || [ "$MOVED_OLD" = 1 ] || [ "$CLEAN_ATTEMPTED" = 1 ]; then
-      if f50_restore_previous; then f50_install_record restored || KEEP_WORK=1; else finish_rc=1; KEEP_WORK=1; fi
+      if f50_restore_previous; then :; else finish_rc=1; KEEP_WORK=1; fi
     fi
     [ -z "$BACKUP" ] || printf 'F50_RECOVERY_BACKUP=%s\\n' "$BACKUP"
     finish_rc=1
   fi
-  # Release only our known lock entry; unknown files keep the lock and journal for review.
+  # Release only our known lock entry; unknown files keep the lock and recovery marker for review.
   if [ "$LOCKED" = 1 ]; then
     if ! rm -f "$LOCK/pid" || ! rmdir "$LOCK" || [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
       echo F50_INSTALL_WARNING=lock_cleanup_failed
@@ -2196,14 +2183,14 @@ f50_install_finish() {
   exit "$finish_rc"
 }
 trap f50_install_finish EXIT
+: > "$F50_WORK/install.journal" || { F50_INSTALL_CODE=journal_write_failed; exit 1; }
 trap 'F50_INSTALL_CODE=interrupted; exit 130' HUP INT TERM
 if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1; fi
 LOCKED=1
 export F50_INSTALL_TRANSACTION="$F50_WORK"
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
-f50_install_record preflight || { f50_install_fail journal_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
-${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
+${rotateClashLogCmd()}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
 command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
 # No fixed ZIP hash, resource list or template/UI fingerprints.
@@ -2222,7 +2209,6 @@ EOF_F50_MEMBERS
 archive_listing=$(unzip -l "$ZIP" 2>/dev/null)
 archive_bytes=$(printf '%s\\n' "$archive_listing" | awk '$1 ~ /^[0-9]+$/ && $NF ~ /^files?$/ && NF <= 4 {n=$1} END {print n}')
 case "$archive_bytes" in ''|*[!0-9]*) f50_install_fail archive_size_unknown; exit 1 ;; esac
-[ "$archive_bytes" -le 536870912 ] || { f50_install_fail archive_too_large; exit 1; }
 required_kb=$(( (archive_bytes + 1023) / 1024 + 51200 ))
 case "$names" in *Proxy/Clash.Core*) ;; *)
   if [ -d "$F50_ROOT" ]; then
@@ -2385,7 +2371,6 @@ case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
   if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
 esac
 if [ "$F50_OLD_FOUND" = 1 ]; then
-  f50_install_record cleanup_intent || { f50_install_fail journal_write_failed; exit 1; }
   CLEAN_ATTEMPTED=1
   f50_clean_environment || { f50_install_fail old_environment_cleanup_failed; exit 1; }
   # Native recovery may repair both the config and cached providers from a prior transaction.
@@ -2409,16 +2394,13 @@ fi
 if [ "$HAD_OLD" = 1 ]; then
   BACKUP="$F50_ROOT.rollback.install.\${F50_WORK##*.}"
   [ ! -e "$BACKUP" ] || { f50_install_fail backup_already_exists; exit 1; }
-  f50_install_record backup_rename_intent || { f50_install_fail journal_write_failed; exit 1; }
   mv "$F50_ROOT" "$BACKUP" || { BACKUP=; f50_install_fail backup_rename_failed; exit 1; }
   MOVED_OLD=1
 fi
-f50_install_record commit_intent || { f50_install_fail journal_write_failed; exit 1; }
 if ! mv "$PKG" "$F50_ROOT"; then
   f50_install_fail commit_failed; exit 1
 fi
 COMMITTED=1
-f50_install_record activation_intent || { f50_install_fail journal_write_failed; exit 1; }
 panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
 printf '%s\\n' "$panel_probe"
 [ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
@@ -2437,15 +2419,13 @@ if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/gist-sync/se
    "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$F50_ROOT/Tools/gist-sync/settings.conf" >/dev/null 2>&1; then
   CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_INSTALL_WARNING=gist_scheduler_resume_failed
 fi
-# Component completion is independent of journal, receipt and lock finalization.
+# Component completion is independent of recovery-marker and lock cleanup.
 SUCCESS=1
 # Do not retain age identities in ordinary component rollback folders.
 if [ -n "$BACKUP" ] && [ -d "$BACKUP/Tools/gist-sync" ]; then
   [ ! -L "$BACKUP/Tools/gist-sync" ] && rm -rf "$BACKUP/Tools/gist-sync" || { KEEP_WORK=1; f50_install_fail gist_backup_cleanup_failed; exit 1; }
 fi
-f50_install_record complete || { KEEP_WORK=1; f50_install_fail journal_write_failed; exit 1; }
 if [ -n "$BACKUP" ]; then
-  cp "$F50_WORK/install.journal" "$BACKUP/.f50-install-receipt" || { KEEP_WORK=1; f50_install_fail backup_receipt_failed; exit 1; }
   echo F50_INSTALL_WARNING=previous_components_retained
 fi
 exit 0
@@ -3002,7 +2982,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         } catch (_) { recovered = false; }
       }
       if (!recovered) {
-        try { await networkRescue({ stopService: true, showOutput: false, reason: '网络设置回滚失败' }); } catch (_) {}
+        try { await networkRescue({ showOutput: false }); } catch (_) {}
       }
     }
     operationFinish(false, recovered ? '应用失败，已恢复原设置' : '应用与回滚失败');
@@ -3864,37 +3844,6 @@ exit "$kano_task_rc"`;
     }
   };
 
-  const isPrivateOrReservedIpv4 = (hostname = '') => {
-    let normalized = String(hostname || '').trim().toLowerCase();
-    if (/^(0x[0-9a-f]+|[0-9]+)$/.test(normalized)) {
-      const numeric = normalized.startsWith('0x') ? parseInt(normalized, 16) : Number(normalized);
-      if (!Number.isSafeInteger(numeric) || numeric < 0 || numeric > 4294967295) return false;
-      normalized = [(numeric >>> 24) & 255, (numeric >>> 16) & 255, (numeric >>> 8) & 255, numeric & 255].join('.');
-    }
-    const parts = normalized.split('.');
-    if (parts.length != 4 || parts.some((part) => !/^\d+$/.test(part) || Number(part) > 255)) return false;
-    const [a, b, c] = parts.map(Number);
-    return a == 0 || a == 10 || a == 127 || a >= 224
-      || (a == 100 && b >= 64 && b <= 127)
-      || (a == 169 && b == 254)
-      || (a == 172 && b >= 16 && b <= 31)
-      || (a == 192 && b == 0 && (c == 0 || c == 2))
-      || (a == 192 && b == 168)
-      || (a == 198 && (b == 18 || b == 19))
-      || (a == 198 && b == 51 && c == 100)
-      || (a == 203 && b == 0 && c == 113);
-  };
-
-  const isPrivateOrReservedIpv6 = (hostname = '') => {
-    const value = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
-    if (!value || !/^[0-9a-f:.]+$/.test(value)) return true;
-    if (value.includes('.')) return true;
-    return value == '::' || value == '::1'
-      || value.startsWith('fc') || value.startsWith('fd')
-      || /^fe[89ab]/.test(value) || value.startsWith('ff')
-      || value.startsWith('2001:db8:');
-  };
-
   const validateLocalSubscriptionUrl = (value = '') => {
     let url;
     try {
@@ -3911,17 +3860,6 @@ exit "$kano_task_rc"`;
     const hostname = String(url.hostname || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
     if (!hostname) {
       return { ok: false, message: '订阅地址缺少主机名' };
-    }
-    if (
-      hostname == 'localhost'
-      || hostname.endsWith('.localhost')
-      || hostname.endsWith('.local')
-      || hostname.endsWith('.lan')
-      || hostname.endsWith('.home.arpa')
-      || isPrivateOrReservedIpv4(hostname)
-      || (hostname.includes(':') && isPrivateOrReservedIpv6(hostname))
-    ) {
-      return { ok: false, message: '本地转换拒绝回环、私网或保留地址' };
     }
     return {
       ok: true,
@@ -4128,18 +4066,8 @@ exit "$kano_task_rc"`;
       : 'damaged';
     return {
       state,
-      abi: values.ABI || 'unknown',
-      controller: values.CONTROLLER || '',
-      missing: String(values.MISSING || '').split(',').filter(Boolean),
-      permissionErrors: String(values.PERMISSION_ERRORS || '').split(',').filter(Boolean),
-      probeErrors: String(values.PROBE_ERRORS || '').split(',').filter(Boolean),
-      configValid: values.CONFIG_VALID == '1',
-      repairable: values.REPAIRABLE == '1',
-      repaired: String(values.REPAIRED || '').split(',').filter(Boolean),
       corePid: values.CORE_PID || '',
       message: values.MESSAGE || '',
-      shellSuccess: !!result.success,
-      content: String(result.content || ''),
     };
   };
 
@@ -4170,30 +4098,16 @@ exit "$kano_task_rc"`;
       SERVICE=${shellQuote(CLASH_SERVICE)}
       CORE=${shellQuote(CLASH_CORE)}
       CONFIG=${shellQuote(CLASH_CONFIG)}
-      abi="$(getprop ro.product.cpu.abi 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')"
-      [ -n "$abi" ] || abi="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
       [ -e "$SERVICE" ] || {
         echo "PREFLIGHT_STATE=not_installed"
-        echo "ABI=\${abi:-unknown}"
-        echo "CONFIG_VALID=0"
-        echo "REPAIRABLE=0"
         echo "CORE_PID="
         echo "MESSAGE=未找到 Clash.Service"
         exit 0
       }
-      missing=""
-      [ -s "$CORE" ] || missing="core"
-      [ -s "$CONFIG" ] || missing="\${missing:+$missing,}config"
-      [ -x "$SERVICE" ] || chmod 755 "$SERVICE" 2>/dev/null || true
-      [ -x "$CORE" ] || chmod 755 "$CORE" 2>/dev/null || true
-      if [ -n "$missing" ]; then
+      if [ ! -x "$CORE" ] || [ ! -s "$CONFIG" ]; then
         echo "PREFLIGHT_STATE=damaged"
-        echo "ABI=\${abi:-unknown}"
-        echo "MISSING=$missing"
-        echo "CONFIG_VALID=0"
-        echo "REPAIRABLE=1"
         echo "CORE_PID="
-        echo "MESSAGE=基础运行文件缺失"
+        echo "MESSAGE=Core 缺失或无执行权限，或配置文件缺失"
         exit 0
       fi
 
@@ -4202,16 +4116,8 @@ exit "$kano_task_rc"`;
       state=installed_stopped
       [ -z "$pid" ] || state=running_api_unavailable
       echo "PREFLIGHT_STATE=$state"
-      echo "ABI=\${abi:-unknown}"
-      echo "CONTROLLER="
-      echo "MISSING="
-      echo "PERMISSION_ERRORS="
-      echo "PROBE_ERRORS="
-      echo "CONFIG_VALID=1"
-      echo "REPAIRABLE=0"
-      echo "REPAIRED="
       echo "CORE_PID=$pid"
-      echo "MESSAGE=基础文件已就绪；状态刷新不再执行阻塞式 Core -t 预检"
+      echo "MESSAGE=基础文件已就绪；未执行配置有效性测试"
       exit 0
     `, 15 * 1000);
     const preflight = parseRuntimePreflightResult(shellResult);
@@ -4302,7 +4208,7 @@ exit "$kano_task_rc"`;
       }
     }
 
-    const sources = [CLASH_PACKAGE_REPO_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_FALLBACK_URL].filter(Boolean);
+    const sources = [CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
       operationStage('下载并校验安装包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
@@ -4314,10 +4220,8 @@ exit "$kano_task_rc"`;
         rm -f "$NEW" 2>/dev/null || true
         ${getCurlBinCmd()}
         command -v unzip >/dev/null 2>&1 || { echo "ARCHIVE_VERIFY_FAILED=unzip_missing"; exit 1; }
-        ${dataSpaceGuardCmd('echo "ARCHIVE_SPACE_LOW=$kano_data_avail_kb"; exit 1')}
-
         echo "TRY_PACKAGE_URL=${packageUrl ? shellQuote(packageUrl) : "''"}" > "$LOG"
-        "$CURL_BIN" -fsSL --connect-timeout 8 --max-time 60 --retry 0 --speed-time 12 --speed-limit 1024 \
+        "$CURL_BIN" -fsSL --connect-timeout 8 --max-time 120 --retry 0 --speed-time 20 --speed-limit 1024 \
           ${shellQuote(packageUrl)} -o "$NEW" >>"$LOG" 2>&1
         download_rc=$?
         if [ "$download_rc" -ne 0 ]; then
@@ -4347,7 +4251,7 @@ exit "$kano_task_rc"`;
         echo "ARCHIVE_READY=downloaded"
         echo "ARCHIVE_SOURCE=${shellQuote(packageUrl)}"
         echo "ARCHIVE_BYTES=$size"
-      `, 80 * 1000);
+      `, 140 * 1000);
       const content = String(result.content || '');
       if (result.success && content.includes('ARCHIVE_READY=downloaded')) {
         return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
@@ -4355,12 +4259,11 @@ exit "$kano_task_rc"`;
       errors.push(`[${packageUrl}]\n${content || 'download failed'}`);
     }
     const content = errors.join('\n---\n');
-    const spaceLow = /ARCHIVE_SPACE_LOW=/.test(content);
     return {
       ok: false,
-      stage: spaceLow ? 'space_low' : (/ARCHIVE_DOWNLOAD_FAILED/.test(content) ? 'download' : 'archive_verify'),
+      stage: /ARCHIVE_DOWNLOAD_FAILED/.test(content) ? 'download' : 'archive_verify',
       source: '',
-      message: spaceLow ? '设备 /data 可用空间不足 50 MB，已停止下载' : '所有安装包来源均下载或校验失败',
+      message: '所有安装包来源均下载或校验失败',
       content,
     };
   };
@@ -4605,10 +4508,6 @@ exit "$kano_task_rc"`;
     new Promise((resolve) => {
       setTimeout(resolve, ms);
     });
-
-  const runShellWithRootRetry = async (script = '', timeout = 20 * 1000, attempts = 3) => {
-    return runShellWithRoot(script, timeout);
-  };
 
   let binarySnapshotCache = null;
   let binarySnapshotExpiresAt = 0;
@@ -5379,7 +5278,7 @@ exit "$kano_task_rc"`;
       };
     }
 
-    const stageRes = await runShellWithRootRetry(`
+    const stageRes = await runShellWithRoot(`
         set -e
         TARGET=${shellQuote(targetPath)}
         STAGE=${shellQuote(stagePath)}
@@ -7443,13 +7342,13 @@ kano_stop_watchers() (
 )`;
 
 
-  const networkRescue = async ({ stopService = true, showOutput = true, reason = '恢复网络', preempt = false } = {}) => {
+  const networkRescue = async ({ showOutput = true, preempt = false } = {}) => {
   if (recoveryInProgress) return false;
   recoveryInProgress = true;
   if (preempt) {
     try {
       const checked = await hostRunShellWithRoot.call(globalThis,
-        buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nf50_recovery_eligible', 10000);
+        buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', 10000);
       if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
         const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
         createToast('恢复资格未确认；活跃任务或归属不明的租约已保留。<br>' + safeTextToHtml(detail), 'red', 12000);
@@ -7486,7 +7385,7 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const canResume = !preempt && activeCriticalOperation?.leaseOwned && !activeCriticalOperation.uncertain &&
       !activeCriticalOperation.token.cancelled && !activeCriticalOperation.requests;
     const resumeTag = canResume ? f50TaskTag(activeCriticalOperation.token) : '';
-    const r = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !canResume), 120000);
+    const r = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !preempt && !canResume), 120000);
     const ok = !!r.success && /^RECOVERY_VERIFIED$/m.test(String(r.content || ''));
     if (ok) deviceTaskUncertain = false;
     lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
@@ -7595,7 +7494,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
         echo CONFIG_ROLLBACK_RESTORED_ABSENT
       `, 15 * 1000);
-      await networkRescue({ stopService: true, showOutput: false, reason: `${context}回滚到无配置状态` });
+      await networkRescue({ showOutput: false });
       createToast(
         removed.success
           ? `${escapeHtml(context)}失败；写入前没有 config.yaml，已移除新配置并清理网络规则。`
@@ -7621,7 +7520,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     if (recoveryOk) {
       createToast(`${escapeHtml(context)}失败；上一份 config.yaml 已恢复，核心已重新启动。`, 'yellow', 12000);
     } else {
-      await networkRescue({ stopService: true, showOutput: false, reason: `${context}回滚后仍无法启动` });
+      await networkRescue({ showOutput: false });
       createToast(`${escapeHtml(context)}失败；旧配置也未能启动，已停止核心并清理 TProxy/DNS 规则。`, 'red', 12000);
     }
     await isMMRunning();
@@ -8991,7 +8890,7 @@ btn_disabled.onclick = async () => {
     };
   };
 
-  const stopClash = async () => await networkRescue({stopService:true,showOutput:false,reason:'停止核心'});
+  const stopClash = async () => await networkRescue({showOutput:false});
 
 
   const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false, preparedConfig = null } = {}) => {
@@ -9849,7 +9748,7 @@ btn_disabled.onclick = async () => {
 
       setButtonBusy(rescueBtn, true, '恢复中\u2026');
       try {
-        await networkRescue({ stopService: true, showOutput: true, preempt: true, reason: '手动断网恢复' });
+        await networkRescue({ showOutput: true, preempt: true });
       } finally {
         setButtonBusy(rescueBtn, false);
 
@@ -10637,7 +10536,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     operationStage('更新失败，恢复原配置');
     // Stop a timed-out provider update before restoring cache files it could still replace.
     let stopped = true;
-    try { if (runtimeAttempted) stopped = await networkRescue({ stopService: true, showOutput: false, reason: '订阅回滚' }); } catch (_) { stopped = false; }
+    try { if (runtimeAttempted) stopped = await networkRescue({ showOutput: false }); } catch (_) { stopped = false; }
     if (!stopped) {
       operationFinish(false, '核心未确认停止，未重启或覆盖缓存');
       createToast('回滚已停止，备份保留于 ' + escapeHtml(tx), 'red', 15000);
@@ -10653,7 +10552,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     invalidateStatusSnapshot();
     if (restored && runtimeAttempted && wasRunning) restored = await restartClashOk({ skipCheck: true });
     } catch (_) { restored = false; }
-    if (!restored) await networkRescue({ stopService: true, showOutput: false, reason: '订阅回滚未完成' });
+    if (!restored) await networkRescue({ showOutput: false });
     const message = firstFailure;
     operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复未完成'));
     createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚未完成，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
@@ -10896,7 +10795,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const recoveryOk = recoveryReload.success
           && await reapplyPolicyRulesSilent();
         if (!recoveryOk) {
-          await networkRescue({ stopService: true, showOutput: false, reason: '上传配置回滚失败' });
+          await networkRescue({ showOutput: false });
         }
         createToast(
           restored && recoveryOk

@@ -6,6 +6,26 @@ const sources = [{ url: 'https://one.example/sub', name: 'Provider1' }, { url: '
 const result = (failed = false) => ({ ok: !failed, failed: failed ? 1 : 0,
   providers: sources.map(s => ({ name: s.name, ok: !failed, message: failed ? 'failed' : '', proxyCount: failed ? 0 : 2 })) });
 
+test('subscription URL detection accepts config paths, hostnames and query tokens', () => {
+  const detect = subscriptionApi('detectSuspiciousSubSources');
+  for (const url of [
+    'https://airport.example/clash/config.yaml',
+    'https://asn-airport.example/subscribe',
+    'https://airport.example/api/subscribe?token=abcasnxyz',
+    'https://airport.example/api/subscribe?filename=geosite.dat',
+    'https://airport.example/api/subscribe?token=ruleset',
+  ]) assert.equal(detect([{ url }]), false, url);
+  for (const url of [
+    'https://rules.example/rules/direct.yaml',
+    'https://rules.example/GeoSite.dat',
+    'https://rules.example/geoip.metadb',
+    'https://rules.example/Country.mmdb',
+    'https://rules.example/ASN.mmdb',
+    'https://rules.example/direct.mrs',
+    'https://dns.example/dns-query',
+  ]) assert.equal(detect([{ url }]), true, url);
+});
+
 for (const mode of ['provider', 'local']) {
   for (const ready of [true, false]) {
     test(`${mode} update, runtime matches=${ready}`, async () => {
@@ -190,7 +210,7 @@ for (const status of [200, 390, 500]) {
   });
 }
 
-function saveCase({ failAt = '', running = true, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local' } = {}) {
+function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local' } = {}) {
   const dir = temp();
   const constants = { CLASH_DIR: dir, CLASH_PROXY_DIR: path.join(dir, 'Proxy'), CLASH_POLICY_DIR: path.join(dir, 'Policy') };
   for (const [key, file] of Object.entries({ CLASH_CONFIG: 'Proxy/config.yaml', CLASH_SUB_URLS: 'Proxy/subscription_urls.txt',
@@ -204,9 +224,16 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
     fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=subscription_original\n');
     fs.writeFileSync(constants.CLASH_SUB_URLS, '# KANO_SUB_RULE_MODE=original\nhttps://one.example/sub Provider1\n');
   }
-  const before = Object.fromEntries(Object.values(constants).filter(f => fs.statSync(f).isFile()).map(f => [f, fs.readFileSync(f, 'utf8')]));
-  for (const s of sources) before[path.join(dir, 'Proxy/proxies/' + s.name + '.yaml')] = 'old cache:' + s.name;
+  const absent = fresh ? [constants.CLASH_SUB_URLS, constants.CLASH_SUB_RULE_MODE_FILE, constants.CLASH_CONFIG_SOURCE_FILE,
+    ...sources.map(s => path.join(dir, 'Proxy/proxies/' + s.name + '.yaml'))] : [];
+  if (fresh) {
+    fs.writeFileSync(constants.CLASH_CONFIG, 'proxies: []\nrules: [MATCH,DIRECT]\n');
+    for (const file of absent) fs.rmSync(file);
+  }
+  const before = Object.fromEntries(Object.values(constants).filter(f => fs.existsSync(f) && fs.statSync(f).isFile()).map(f => [f, fs.readFileSync(f, 'utf8')]));
+  if (!fresh) for (const s of sources) before[path.join(dir, 'Proxy/proxies/' + s.name + '.yaml')] = 'old cache:' + s.name;
   let restarts = 0, configWrites = 0;
+  const commands = [];
   const stored = (ruleMode === 'original' ? sources.slice(0, 1) : sources).map(s => ({ ...s, enabled: !disabled }));
   const extra = slice('function validateSubscriptionMode', 'function buildF50CleanupScript')
     + slice('const fileSnapshotHelpersCmd', 'const setSubRuleMode')
@@ -236,7 +263,7 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
       if (failAt === 'write') throw new Error('config write failed');
       return true;
     },
-    f50Command: async () => ({ success: failAt !== 'prepare' }), f50Error: String,
+    f50Command: async command => { commands.push(command); return { success: failAt !== 'prepare' }; }, f50Error: String,
     restartClashOk: async () => { restarts++; return failAt !== 'start' || restarts > 1; },
     reloadLocalSubscriptionProviders: async () => result(failAt === 'reload'),
     forceUpdateProvidersFromConfig: async () => result(failAt === 'reload'),
@@ -244,8 +271,28 @@ function saveCase({ failAt = '', running = true, fallback = false, disabled = fa
     invalidateStatusSnapshot() {}, networkRescue: async () => true,
     buildProviderUpdateResult: () => result(), showSubscriptionUpdateSelfCheck: async () => true,
   });
-  return { dir, constants, before, stored, api, configWrites: () => configWrites,
+  return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites,
     execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy }) };
+}
+
+for (const convertMode of ['provider', 'local']) {
+  for (const failAt of ['', 'write', 'prepare']) {
+    test(`first subscription save / ${convertMode} / ${failAt || 'success'}`, async () => {
+      const c = saveCase({ fresh: true, running: false, convertMode, failAt });
+      try {
+        assert.equal(await c.execute(), !failAt);
+        assert.equal(c.restarts(), 0, 'saving the first subscription keeps the core stopped');
+        assert.deepEqual(c.commands, failAt === 'write' ? [] : ['prepare']);
+        if (failAt) {
+          for (const [file, text] of Object.entries(c.before)) assert.equal(fs.readFileSync(file, 'utf8'), text, file);
+          for (const file of c.absent) assert.equal(fs.existsSync(file), false, file);
+        } else {
+          assert.match(fs.readFileSync(c.constants.CLASH_CONFIG, 'utf8'), new RegExp('new config:template:' + convertMode));
+          assert.match(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8'), new RegExp('^# KANO_SUB_CONVERT_MODE=' + convertMode + '$', 'm'));
+        }
+      } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+    });
+  }
 }
 
 for (const options of [{ legacy: true }, { legacy: true, migrateLegacy: true },

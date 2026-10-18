@@ -29,7 +29,7 @@ printf '{"usedSpec":%s,"value":"fixture"}\n' "$used_spec"
     CLASH_DIR: dir, YAML_BRIDGE_MAX_BYTES: 8388608, shellQuote: quote,
     prepareYqRuntimeCmd: () => `KANO_YQ_TMP=${quote(dir)}`,
     buildF50ShellBase: shellApi().base,
-    ensureCompatBackend: async () => true,
+    ensureCompatBackend: async () => options.backendReady !== false,
     assertYamlRootMap(value) { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); },
     f50AssertSafeJsonNumbers() {},
     runShellWithRoot: async script => {
@@ -89,3 +89,27 @@ test('JSON bridge works when the system timeout lacks kill-after support', async
   assert.equal(result.ok, true);
   assert.equal(result.value.value, 'fixture');
 });
+
+test('YAML parsing works when the controller is unavailable', async t => {
+  const { result, status } = await readFixture(t, { backendReady: false });
+  assert.equal(status, 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.value.value, 'fixture');
+});
+
+for (const fallback of [false, true]) {
+  test(`timeout expiry and ordinary exit codes / fallback=${fallback}`, () => {
+    const result = shell((fallback ? 'timeout() { return 1; }\n' : '') + shellApi().base() + `
+f50_limit 1 sleep 10
+printf 'TIMEOUT=%s\\n' "$?"
+f50_limit 2 sh -c 'exit 7'
+printf 'FAILURE=%s\\n' "$?"
+f50_limit 2 true
+printf 'SUCCESS=%s\\n' "$?"
+`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^TIMEOUT=124$/m);
+    assert.match(result.stdout, /^FAILURE=7$/m);
+    assert.match(result.stdout, /^SUCCESS=0$/m);
+  });
+}

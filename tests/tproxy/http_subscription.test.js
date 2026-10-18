@@ -190,6 +190,7 @@ for (const [url, port] of [
   ['https://8.8.8.8/sub', '443'],
   ['http://8.8.8.8:8080/sub', '8080'],
   ['https://8.8.8.8:8443/sub', '8443'],
+  ['https://8.8.8.8/geoip-subscription', '443'],
 ]) {
   test(`ARM64 download accepts ${url} and pins port ${port}`, { skip: !qemu }, () => {
     const { dir, binary } = fixture();
@@ -218,6 +219,36 @@ printf 'proxies:\\n  - {name: Test, type: socks5, server: example.com, port: 108
       const args = fs.readFileSync(path.join(dir, 'curl.args'), 'utf8').trim().split(/\r?\n/);
       assert.equal(args[args.indexOf('--proto') + 1], '=http,https');
       assert.equal(args[args.indexOf('--resolve') + 1], `8.8.8.8:${port}:8.8.8.8`);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const [label, body] of [
+  ['HTML', '<html>not a subscription</html>'],
+  ['rules without nodes', 'rules:\n  - MATCH,DIRECT\n'],
+  ['empty nodes', 'proxies: []\n'],
+]) {
+  test(`ARM64 download rejects ${label} and retains the existing provider`, { skip: !qemu }, () => {
+    const { dir, binary } = fixture();
+    try {
+      const request = path.join(dir, 'request.json');
+      fs.writeFileSync(request, JSON.stringify({ sources: [{ name: 'Provider1', url: 'https://8.8.8.8/geoip-subscription' }], userAgent: 'clash.meta' }));
+      fs.mkdirSync(path.join(dir, 'Proxy/proxies'));
+      const cache = path.join(dir, 'Proxy/proxies/Provider1.yaml');
+      const previous = 'proxies:\n  - {name: Existing, type: socks5, server: example.com, port: 1080}\n';
+      fs.writeFileSync(cache, previous);
+      fs.writeFileSync(path.join(dir, 'bin/curl'), `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -D ]; then shift; printf 'HTTP/1.1 200 OK\\r\\nContent-Type: text/yaml\\r\\n\\r\\n' > "$1"; fi
+  shift
+done
+printf '%s' ${quote(body + '\n200')}
+`, { mode: 0o755 });
+      assert.equal(patch(dir).status, 0);
+      const result = native(dir, binary, request);
+      assert.ifError(result.error);
+      assert.match(result.stdout, /"ok":false/);
+      assert.equal(fs.readFileSync(cache, 'utf8'), previous);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }

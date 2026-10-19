@@ -5,6 +5,7 @@ const { spawnSync } = require('node:child_process');
 const { Worker: NodeWorker } = require('node:worker_threads');
 const { fs, path, assert, slice, run, shell, shellApi, source, plain, quote, temp, write } = require('./optimization_harness');
 const api = shellApi(), yq = process.env.F50_TEST_YQ;
+const shellReply = run(slice('const f50ShellReply =', 'const f50TaskTag') + 'f50ShellReply');
 
 test('all final operation shells parse in sh and BusyBox ash', () => {
   const scripts = [api.install('/data/upload.zip'), api.start('start'), api.start('restart'),
@@ -154,7 +155,7 @@ for (const code of ['function main() { throw new Error("override failure"); }', 
   await assert.rejects(overrideApi().apply(code, {}));
 });
 
-function recoveryCase({ receipt = true, active = false, reused = false, foreign = false, background = false, transaction = false, legacy = false, reclaim = false, output = false } = {}) {
+function recoveryCase({ receipt = true, active = false, reused = false, foreign = false, background = false, backgroundComm = 'curl', transaction = false, legacy = false, reclaim = false, output = false, snapshot = false, preempt = false, unrelated = false } = {}) {
   const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
   fs.mkdirSync(proc); fs.mkdirSync(root);
   write(dir, 'lease/owner', 'mm_fixture\n'); write(dir, 'lease/frontend', 'mm_fixture 0\n');
@@ -166,12 +167,14 @@ function recoveryCase({ receipt = true, active = false, reused = false, foreign 
     write(proc, '111/comm', 'sh\n'); write(proc, '111/environ', reused ? 'OTHER=foreign\0' : 'KANO_TPROXY_TASK=mm_fixture\0');
   }
   if (transaction) write(root, 'Tools/template.yaml.kano_tx/ready', '');
+  if (snapshot) write(dir, 'kano_subscription_save_fixture/0', 'backup');
+  if (unrelated) write(proc, '444/comm', 'system_server\n');
   if (background) {
     write(proc, '333/stat', `333 (curl) S ${Array(18).fill('0').join(' ')} 31\n`);
-    write(proc, '333/comm', 'curl\n'); write(proc, '333/environ', 'KANO_TPROXY_TASK=mm_fixture\0');
+    write(proc, '333/comm', backgroundComm + '\n'); write(proc, '333/environ', 'KANO_TPROXY_TASK=mm_fixture\0');
   }
   const result = shell(api.maintenance('cleanup') + api.eligibility() + `\nemergency_locked=${reclaim ? 1 : 0}\nf50_recovery_eligible`, {
-    F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks,
+    F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks, F50_RECOVERY_PREEMPT: preempt ? '1' : '0',
   });
   return { dir, tasks, record, result };
 }
@@ -183,6 +186,10 @@ for (const [options, eligible, state] of [
   [{ background: true }, false, 'unreceipted_active_task'],
   [{ output: true, reclaim: true }, true, 'quiescent_lease'],
   [{ output: true, receipt: false }, false, 'task_receipt_missing'],
+  [{ snapshot: true }, false, 'config_transaction_unresolved'],
+  [{ snapshot: true, receipt: false, preempt: true, reclaim: true }, true, 'quiescent_lease'],
+  [{ unrelated: true }, true, 'quiescent_lease'],
+  [{ background: true, backgroundComm: 'cp' }, false, 'unreceipted_active_task'],
 ]) test('recovery registry / ' + JSON.stringify(options), () => {
   const c = recoveryCase(options);
   try {
@@ -190,7 +197,40 @@ for (const [options, eligible, state] of [
     assert.match(c.result.stdout, new RegExp('F50_RECOVERY_STATE=' + state));
     if (options.reclaim && eligible) assert.ok(!fs.existsSync(c.tasks));
     else assert.equal(fs.readFileSync(path.join(c.tasks, 'mm_fixture.1'), 'utf8'), c.record);
+    if (options.snapshot) assert.equal(fs.readFileSync(path.join(c.dir, 'kano_subscription_save_fixture/0'), 'utf8'), 'backup');
   } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+});
+
+test('manual recovery releases the network and retains interrupted subscription backups', () => {
+  const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
+  try {
+    fs.mkdirSync(proc);
+    write(dir, 'lease/owner', 'mm_old\n'); write(dir, 'lease/frontend', 'mm_old 0\n');
+    write(tasks, 'mm_old.1', 'F50_TASK_V2 mm_old mm_old.1 111 21 222 22 running 0\n');
+    const backup = write(dir, 'kano_subscription_save_fixture/0', 'old configuration');
+    const script = api.emergency().replace('\nF50_RESUME_TAG=', '\nf50_scan() { : > "$1"; }\nf50_clean_environment() { echo F50_NETWORK_RELEASED=1; return 0; }\nF50_RESUME_TAG=');
+    const result = shell('mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n' + script, {
+      F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks, F50_RECOVERY_LOCK: path.join(dir, 'recovery'),
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^F50_NETWORK_RELEASED=1$/m); assert.match(result.stdout, /^RECOVERY_VERIFIED$/m);
+    assert.match(result.stdout, /^F50_RECOVERY_BACKUP=/m);
+    assert.equal(fs.readFileSync(backup, 'utf8'), 'old configuration');
+    assert.ok(!fs.existsSync(tasks)); assert.ok(!fs.existsSync(lease));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const owned of [false, true]) test('recovery scan identifies orphaned file writers by task ownership / ' + owned, () => {
+  const dir = temp(), proc = path.join(dir, 'proc');
+  try {
+    write(proc, '333/comm', 'cp\n');
+    write(proc, '333/stat', `333 (cp) S ${Array(18).fill('0').join(' ')} 31\n`);
+    write(proc, '333/environ', owned ? 'KANO_TPROXY_TASK=mm_fixture\0' : 'OTHER=foreign\0');
+    fs.symlinkSync('/usr/bin/cp', path.join(proc, '333/exe'));
+    const result = shell(api.maintenance('cleanup') + '\nf50_scan "$F50_DATA/pids" && cat "$F50_DATA/pids"', { F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stdout.trim(), owned ? '333 31 worker' : '');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owned_busy', 'normal']) {
@@ -198,7 +238,7 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
     const op = { token: { id: 'uninstall' }, requests: 0, leaseOwned: outcome === 'owned_busy' };
     const stages = [], recovery = [];
     const sandbox = {
-      activeCriticalOperation: op, deviceTaskUncertain: false, lastInstallDiagnostic: null,
+      activeCriticalOperation: op, deviceTaskUncertain: false, lastInstallDiagnostic: null, f50ShellReply: shellReply,
       operationStage() {}, operationCancelled: () => Object.assign(new Error('cancelled'), { name: 'OperationCancelled' }),
       f50UnknownCompletion: (operation, cause) => {
         operation.uncertain = true;
@@ -246,10 +286,12 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
   });
 }
 
-for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'missing_receipt', 'timeout', 'other_page_busy', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost']) {
+for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'missing_receipt', 'timeout', 'other_page_busy', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost', 'host_footer', 'nested_reply', 'string_reply', 'wrong_receipt']) {
   test('browser task ownership and receipt / ' + outcome, async () => {
     const op = { token: { id: 'fixture', cancelled: outcome === 'cancelled_before' }, requests: 0 };
     let calls = 0, payloads = 0, lookups = 0, heartbeat;
+    const wrap = reply => outcome === 'nested_reply' ? { success: reply.success, content: 'command echo', data: { result: reply.content } }
+      : outcome === 'string_reply' ? reply.content : reply;
     const sandbox = {
       activeCriticalOperation: op, taskCommandSequence: 0, KANO_INSTALL_TOOLBOX_BIN: '/data/kano_tproxy_tools/bin',
       buildF50LeaseFunctions: api.lease, shellQuote: quote, setInterval: fn => { heartbeat = fn; return 1; }, clearInterval() {},
@@ -259,7 +301,7 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
         calls++;
         if (command.includes('\nf50_lease_acquire ')) {
           if (outcome === 'acquire_lost') throw Error('Load failed');
-          return { success: true, content: outcome === 'other_page_busy' ? 'F50_OPERATION_BUSY' : 'F50_LEASE_ACQUIRED=1' };
+          return wrap({ success: true, content: outcome === 'other_page_busy' ? 'F50_OPERATION_BUSY' : 'F50_LEASE_ACQUIRED=1' });
         }
         if (command.includes('\nf50_lease_status ')) return { success: true, content: 'F50_LEASE_OWNED=1' };
         if (command.includes('\nf50_frontend_touch ')) throw Error('signal is aborted without reason');
@@ -278,11 +320,12 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
         if (outcome === 'response_truncated') return { success: false, content: 'payload' };
         if (outcome === 'heartbeat_lost') { heartbeat(); await op.heartbeatPending; assert.match(op.heartbeatError, /signal is aborted/); assert.ok(!op.uncertain); }
         if (outcome === 'cancelled_during') op.token.cancelled = true;
-        return { success: true, content: outcome === 'missing_receipt' ? 'payload' : 'payload\nF50_TASK_FINISHED=mm_fixture.1:0\n' };
+        return wrap({ success: true, content: outcome === 'missing_receipt' ? 'payload' : outcome === 'wrong_receipt' ? 'payload\nF50_TASK_FINISHED=mm_other.1:0\n'
+          : outcome === 'host_footer' ? 'payload\nF50_TASK_FINISHED=mm_fixture.1:0 \t\r\nhost: completed\n' : 'payload\nF50_TASK_FINISHED=mm_fixture.1:0\n' });
       },
     };
     const execute = run(slice('let transientShellOperation', 'const shellQuote') + 'runShellWithRoot', sandbox);
-    if (['completed', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost'].includes(outcome)) {
+    if (['completed', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost', 'host_footer', 'nested_reply', 'string_reply'].includes(outcome)) {
       const result = await execute('printf payload');
       assert.equal(result.deviceCompleted, true);
       assert.equal(result.deviceExitCode, outcome === 'failed_response_lost' ? 7 : 0);
@@ -295,9 +338,9 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
       assert.equal(payloads, 0);
     } else await assert.rejects(execute('printf payload'), { name: 'OperationCancelled' });
     assert.equal(op.requests, 0);
-    if (['missing_receipt', 'timeout'].includes(outcome)) assert.equal(op.uncertain, true);
+    if (['missing_receipt', 'timeout', 'wrong_receipt'].includes(outcome)) assert.equal(op.uncertain, true);
     if (outcome === 'cancelled_before') assert.equal(calls, 0);
-    assert.equal(lookups, ['missing_receipt', 'timeout', 'response_lost', 'response_truncated', 'failed_response_lost'].includes(outcome) ? 1 : 0);
+    assert.equal(lookups, ['missing_receipt', 'timeout', 'response_lost', 'response_truncated', 'failed_response_lost', 'wrong_receipt'].includes(outcome) ? 1 : 0);
     assert.equal(payloads, ['cancelled_before', 'other_page_busy'].includes(outcome) ? 0 : 1);
   });
 }
@@ -324,7 +367,7 @@ for (const failure of ['stop', 'stop_throw', 'boot']) test('uninstall stops afte
 for (const idle of [false, true]) test('uninstall recovers a prior failed operation before running stages / ' + idle, async () => {
   const op = { token: { id: 'uninstall' }, requests: 0 }, stages = [];
   const sandbox = {
-    activeCriticalOperation: op, deviceTaskUncertain: true, operationStage() {},
+    activeCriticalOperation: op, deviceTaskUncertain: true, operationStage() {}, f50ShellReply: shellReply,
     buildUninstallStages: () => ['stop', 'boot', 'delete'].map(title => ({ title, script: title })),
     buildF50EmergencyScript: () => 'RECLAIM', buildF50FinalCheckScript: () => 'FINAL',
     f50Diagnostic: details => ({ details }), f50UninstallVerdict: () => ({ ok: true, code: 'clean', detail: 'UNINSTALL_VERIFIED' }),
@@ -377,6 +420,7 @@ for (const obstacle of ['', 'process', 'network', 'journal', 'installer']) test(
     const config = write(root, 'Proxy/config.yaml', 'fixture configuration');
     const backup = write(dir, 'clash.rollback.install.fixture/Proxy/config.yaml', 'old configuration');
     const tx = write(dir, 'kano_subscription_save_fixture/0', 'subscription backup');
+    const networkTx = write(dir, 'kano_network_save_fixture/0', 'network backup');
     write(root, 'Tools/template.yaml.kano_tx/ready', '');
     write(dir, '.f50-install.fixture/install.journal', 'incomplete');
     write(dir, 'kano_yq_runtime/yq', 'component');
@@ -391,7 +435,7 @@ f50_runtime_guard && f50_remove_artifacts
 `;
     const result = shell(script, { F50_ROOT: root, F50_PROC: proc });
     assert.equal(result.status, obstacle ? 1 : 0, result.stdout + result.stderr);
-    for (const file of [config, backup, tx]) assert.equal(fs.existsSync(file), !!obstacle);
+    for (const file of [config, backup, tx, networkTx]) assert.equal(fs.existsSync(file), !!obstacle);
     assert.equal(fs.readFileSync(foreign, 'utf8'), 'foreign');
     if (obstacle) assert.match(result.stdout, /F50_DELETE_BLOCKED=/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -426,6 +470,52 @@ for (const installer of ['exited', 'running', 'unknown_entry']) test('uninstall 
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('uninstall cleanup handles interrupted Gist and YAML transactions before native network recovery', () => {
+  const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc');
+  try {
+    fs.mkdirSync(proc);
+    write(root, 'Tools/gist-sync/activation/id', 'fixture-activation\n');
+    const config = write(root, 'Proxy/config.yaml', 'new config');
+    write(root, 'Proxy/config.yaml.kano_tx/format', 'F50_CONFIG_TX_V1\n');
+    write(root, 'Proxy/config.yaml.kano_tx/ready', ''); write(root, 'Proxy/config.yaml.kano_tx/config.had', '');
+    write(root, 'Proxy/config.yaml.kano_tx/config', 'old config');
+    const journal = write(root, 'Policy/rp-filter.json', 'saved network parameters');
+    write(root, 'Scripts/Clash.Service', `#!/bin/sh
+[ "$1" = recover ] && [ "$KANO_GIST_TRANSACTION" = fixture-activation ] && [ ! -d "$CLASH_ROOT/Proxy/config.yaml.kano_tx" ] || exit 1
+rm -f "$CLASH_ROOT/Policy/rp-filter.json"
+echo NATIVE_RECOVERY_DONE
+`);
+    const script = api.uninstall()[0].script.replace('f50_inspect || exit 1', 'f50_inspect() { F50_OLD_FOUND=1; }\nf50_network_snapshot() { mkdir -p "$1"; : > "$1/plan"; }\nf50_inspect || exit 1');
+    const result = shell(script, { F50_ROOT: root, F50_PROC: proc });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^F50_RECOVER_RC=0$/m); assert.ok(!fs.existsSync(journal));
+    assert.equal(fs.readFileSync(config, 'utf8'), 'old config');
+    assert.ok(fs.existsSync(path.join(root, 'Tools/gist-sync/activation/id')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const mode of ['normal', 'uninstall', 'malformed']) test('boot cleanup preserves other plugins without requiring a working Gist binary / ' + mode, () => {
+  const dir = temp(), boot = path.join(dir, 'boot.sh'), data = path.join(dir, 'data');
+  try {
+    const text = '#!/bin/sh\necho before\n# KANO_GIST_SYNC_BEGIN\n[ ! -x /data/clash/Scripts/Clash.GistSync ] || sh /data/clash/Scripts/Clash.GistSync boot\n'
+      + (mode === 'malformed' ? '' : '# KANO_GIST_SYNC_END\n') + 'echo after\n';
+    fs.writeFileSync(boot, text);
+    const marker = path.join(dir, 'binary-ran');
+    const binary = write(data, 'clash/Tools/kano-gist-sync', '#!/bin/sh\ntouch ' + quote(marker) + '\nexit 126\n'); fs.chmodSync(binary, 0o755);
+    const names = ['BOOT_ASYNC_LINE', 'BOOT_CLEANUP_LINE', 'LEGACY_BOOT_SERVICE_LINE', 'BOOT_SERVICE_LINE', 'LEGACY_BOOT_FIX_WRAPPER_LINE', 'LEGACY_BOOT_INOTIFY_LINE', 'BOOT_INOTIFY_LINE', 'LEGACY_BOOT_POLICY_TOOLS_LINE', 'BOOT_POLICY_TOOLS_LINE', 'LEGACY_BOOT_MAC_BYPASS_LINE'];
+    const constants = Object.fromEntries(names.map(name => [name, 'unused ' + name]));
+    const editor = run(slice('const removeBootLinesCmd =', '// 策略脚本') + 'removeBootLinesCmd', { ...constants, BOOT_FILE: boot, shellQuote: quote });
+    const script = (mode === 'normal' ? editor() : shellApi(source, '', { BOOT_FILE: boot, removeBootLinesCmd: editor }).uninstall()[1].script)
+      .replaceAll('/dev/kano_boot_write.lock', path.join(dir, 'boot.lock')).replaceAll('/data/', data + '/');
+    const result = shell(script);
+    assert.equal(result.status, mode === 'malformed' ? 1 : 0, result.stdout + result.stderr);
+    const after = fs.readFileSync(boot, 'utf8');
+    if (mode === 'uninstall') assert.equal(after, '#!/bin/sh\necho before\necho after\n');
+    else assert.equal(after, text);
+    assert.ok(!fs.existsSync(marker));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const outcome of ['released_response_lost', 'still_owned', 'release_unknown', 'recovered', 'recovered_during_release']) {
   test('browser lease release reconciliation / ' + outcome, async () => {
     const op = { token: { id: 'fixture' }, leaseOwned: true, recovered: outcome === 'recovered' };
@@ -457,7 +547,7 @@ for (const outcome of ['released_response_lost', 'still_owned', 'release_unknown
   });
 }
 
-for (const [responseLost, exitCode] of [[false, 0], [true, 0], [false, 7], [true, 7]]) test('device task receipt retains output until lease release / ' + responseLost + '/' + exitCode, async () => {
+for (const [responseLost, exitCode, format] of [[false, 0], [true, 0], [false, 7], [true, 7], [true, 0, 'nested'], [true, 0, 'string']]) test('device task receipt retains output until lease release / ' + responseLost + '/' + exitCode + '/' + (format || 'direct'), async () => {
   const dir = temp(), tasks = path.join(dir, 'tasks'), lease = path.join(dir, 'lease');
   const env = { F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks, F50_RECOVERY_LOCK: path.join(dir, 'recovery') };
   const op = { token: { id: 'fixture' }, requests: 0 };
@@ -474,7 +564,8 @@ for (const [responseLost, exitCode] of [[false, 0], [true, 0], [false, 7], [true
           businessCalls++;
           if (responseLost) throw Error('Load failed');
         }
-        return { success: result.status === 0, content: result.stdout };
+        return format === 'nested' ? { success: result.status === 0, content: 'command echo', data: { content: result.stdout } }
+          : format === 'string' ? result.stdout : { success: result.status === 0, content: result.stdout };
       },
     };
     const handlers = run(slice('let transientShellOperation', 'const shellQuote') + '({execute:runShellWithRoot,release:f50ReleaseLease})', sandbox);
@@ -487,6 +578,32 @@ for (const [responseLost, exitCode] of [[false, 0], [true, 0], [false, 7], [true
     await handlers.release(op);
     assert.equal(op.leaseOwned, false);
     assert.equal(fs.existsSync(tasks), false); assert.equal(fs.existsSync(lease), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const uninstall of [false, true]) test('pending Gist activation blocks ordinary writes but permits explicit uninstall / ' + uninstall, async () => {
+  const dir = temp(), root = path.join(dir, 'clash');
+  const env = { F50_OPERATION_LOCK: path.join(dir, 'lease'), F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_LOCK: path.join(dir, 'recovery') };
+  const op = { token: { id: 'fixture' }, requests: 0, uninstall };
+  try {
+    const activation = write(root, 'Tools/gist-sync/activation/id', 'fixture-activation\n');
+    const sandbox = {
+      activeCriticalOperation: op, taskCommandSequence: 0, KANO_INSTALL_TOOLBOX_BIN: path.join(dir, 'bin'),
+      buildF50LeaseFunctions: api.lease, shellQuote: run(slice('const shellQuote =', 'const templateFlowMessages') + 'shellQuote'),
+      setInterval: () => 1, clearInterval() {}, syncCriticalOperationStatus() {},
+      operationCancelled: () => Object.assign(new Error('cancelled'), { name: 'OperationCancelled' }),
+      f50Diagnostic: () => ({}), createToast() {}, safeTextToHtml: String,
+      hostRunShellWithRoot: async command => {
+        const result = shell(command.replaceAll('/data/clash', root), env);
+        return { success: result.status === 0, content: result.stdout };
+      },
+    };
+    const handlers = run(slice('let transientShellOperation', 'const shellQuote') + '({execute:runShellWithRoot,release:f50ReleaseLease})', sandbox);
+    const result = await handlers.execute('echo BODY_RAN');
+    assert.equal(result.success, uninstall); assert.equal(result.deviceCompleted, true);
+    assert.match(result.content, uninstall ? /BODY_RAN/ : /F50_ERROR=gist_transaction_pending/);
+    assert.equal(fs.readFileSync(activation, 'utf8'), 'fixture-activation\n');
+    await handlers.release(op); assert.equal(op.leaseOwned, false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -520,7 +637,7 @@ for (const active of [false, true]) test('recovery registry / old rescue owner '
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const outcome of ['precheck_lost', 'precheck_blocked', 'response_lost', 'partial', 'recovered']) {
+for (const outcome of ['precheck_lost', 'precheck_blocked', 'response_lost', 'partial', 'config_restore_failed', 'backup_retained', 'recovered']) {
   test('network recovery reports confirmed state / ' + outcome, async () => {
     const op = { token: { id: 'fixture' }, leaseOwned: true }, toasts = [], titles = [];
     let calls = 0;
@@ -537,21 +654,23 @@ for (const outcome of ['precheck_lost', 'precheck_blocked', 'response_lost', 'pa
       hostRunShellWithRoot: async () => {
         if (++calls === 1) return { success: outcome !== 'precheck_lost', content: outcome === 'precheck_lost' ? 'signal is aborted without reason'
           : outcome === 'precheck_blocked' ? 'F50_RECOVERY_STATE=active_recovery\nF50_RECOVERY_ELIGIBLE=0' : 'F50_RECOVERY_ELIGIBLE=1' };
-        return { success: outcome === 'recovered', content: outcome === 'recovered' ? 'RECOVERY_VERIFIED'
+        return { success: ['recovered', 'backup_retained'].includes(outcome), content: outcome === 'recovered' ? 'RECOVERY_VERIFIED'
+          : outcome === 'backup_retained' ? 'F50_RECOVERY_BACKUP=/fixture/backup\nRECOVERY_VERIFIED'
+          : outcome === 'config_restore_failed' ? 'F50_NETWORK_RELEASED=1\nF50_RECOVERY_CONFIG_FAILED=1\nF50_RECOVERY_PARTIAL=1'
           : outcome === 'partial' ? 'F50_RECOVERY_PARTIAL=1' : 'Load failed' };
       },
     };
     const handlers = run(slice('let transientShellOperation', 'const shellQuote')
       + slice('const networkRescue =', 'const startClashServiceClean =')
       + '({rescue:networkRescue,unknown:f50UnknownCompletion,state:()=>deviceTaskUncertain})', sandbox);
-    assert.equal(await handlers.rescue({ preempt: true }), outcome === 'recovered');
+    assert.equal(await handlers.rescue({ preempt: true }), ['recovered', 'backup_retained'].includes(outcome));
     assert.equal(calls, outcome.startsWith('precheck') ? 1 : 2);
-    if (outcome === 'recovered') {
+    if (['recovered', 'backup_retained'].includes(outcome)) {
       assert.equal(op.recovered, true); assert.equal(op.leaseOwned, false);
       handlers.unknown(op, 'late response'); assert.equal(handlers.state(), false);
     } else {
       assert.ok(!op.recovered);
-      assert.match(toasts[0], /恢复失败/);
+      assert.match(toasts[0], outcome === 'config_restore_failed' ? /网络已释放，但配置恢复失败/ : /恢复失败/);
       assert.ok(!toasts.join('\n').includes('待确认'));
       assert.ok(!toasts.join('\n').includes('仍有残留'));
       if (outcome === 'response_lost') assert.deepEqual(titles, ['恢复失败']);

@@ -663,25 +663,28 @@ for (const idle of [false, true]) test('uninstall recovers a prior failed operat
   if (!idle) assert.equal(result.code, 'operation_busy');
 });
 
-for (const outcome of ['idle', 'active_worker', 'active_frontend', 'active_installer', 'unknown_install_entry', 'foreign_receipt']) {
-  test('uninstall reclaims only idle abandoned leases / ' + outcome, () => {
+for (const forUninstall of [false, true]) for (const outcome of ['idle', 'active_worker', 'active_frontend', 'active_installer', 'unknown_install_entry', 'foreign_receipt', 'pending_config_transaction', 'unfinished_receipt']) {
+  test((forUninstall ? 'uninstall' : 'installation') + ' reclaims only idle abandoned leases / ' + outcome, () => {
     const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
     try {
       fs.mkdirSync(proc);
       write(dir, 'lease/owner', 'mm_old\n');
       write(dir, 'lease/frontend', `mm_old ${outcome === 'active_frontend' ? '2147483647' : '0'}\n`);
-      write(tasks, 'mm_old.1', `F50_TASK_V2 ${outcome === 'foreign_receipt' ? 'mm_foreign' : 'mm_old'} mm_old.1 111 21 222 22 running 0\n`);
+      write(tasks, 'mm_old.1', `F50_TASK_V2 ${outcome === 'foreign_receipt' ? 'mm_foreign' : 'mm_old'} mm_old.1 111 21 222 22 ${forUninstall || outcome === 'unfinished_receipt' ? 'running' : 'finished'} 0\n`);
       write(tasks, 'mm_old.1.output', 'partial output');
       const backup = write(dir, 'kano_subscription_save_fixture/0', 'backup');
+      if (!forUninstall) write(dir, 'kano_subscription_save_fixture/committed', '');
       write(dir, 'clash.install.lock.d/pid', '333\n');
       if (outcome === 'unknown_install_entry') write(dir, 'clash.install.lock.d/foreign', 'keep');
       if (outcome === 'active_installer') fs.mkdirSync(path.join(proc, '333'));
       if (outcome === 'active_worker') write(proc, '111/stat', `111 (sh) S ${Array(18).fill('0').join(' ')} 21\n`);
-      const result = shell(`mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n` + api.emergency('', true, true), {
+      if (outcome === 'pending_config_transaction') write(root, 'Proxy/config.yaml.kano_tx/config', 'original config');
+      const result = shell(`mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n` + api.emergency('', true, true, forUninstall), {
         F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks, F50_RECOVERY_LOCK: path.join(dir, 'recovery'),
       });
-      assert.equal(result.status, outcome === 'idle' ? 0 : 1, result.stdout + result.stderr);
-      if (outcome === 'idle') {
+      const reclaimed = outcome === 'idle' || (forUninstall && ['pending_config_transaction', 'unfinished_receipt'].includes(outcome));
+      assert.equal(result.status, reclaimed ? 0 : 1, result.stdout + result.stderr);
+      if (reclaimed) {
         assert.match(result.stdout, /^F50_LEASE_RELEASED=1$/m);
         assert.ok(!fs.existsSync(lease)); assert.ok(!fs.existsSync(tasks));
       } else {

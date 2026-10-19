@@ -178,7 +178,10 @@ f50_recovery_eligible() {
     recovery_owner=$(cat "$F50_OPERATION_LOCK/owner") || { f50_recovery_block unknown_owner; return 1; }
     case "$recovery_owner" in
       mm_*) case "$recovery_owner" in *[!A-Za-z0-9_-]*) f50_recovery_block unknown_owner; return 1;; esac;;
-      "rescue_$$") :;;
+      rescue_*)
+        recovery_pid=\${recovery_owner#rescue_}
+        case "$recovery_pid" in ''|0|*[!0-9]*) f50_recovery_block unknown_owner; return 1;; esac
+        [ "$recovery_pid" = "$$" ] || [ ! -d "$F50_PROC/$recovery_pid" ] || { f50_recovery_block active_recovery; return 1; };;
       *) f50_recovery_block unknown_owner; return 1;;
     esac
     for recovery_entry in "$F50_OPERATION_LOCK"/* "$F50_OPERATION_LOCK"/.[!.]* "$F50_OPERATION_LOCK"/..?*; do
@@ -195,6 +198,9 @@ f50_recovery_eligible() {
   for recovery_entry in "$F50_TASK_DIR"/* "$F50_TASK_DIR"/.[!.]* "$F50_TASK_DIR"/..?*; do
     [ -e "$recovery_entry" ] || [ -L "$recovery_entry" ] || continue
     [ -f "$recovery_entry" ] && [ ! -L "$recovery_entry" ] || { f50_recovery_block unknown_task; return 1; }
+    case "$recovery_entry" in *.output)
+      [ -f "\${recovery_entry%.output}" ] && [ ! -L "\${recovery_entry%.output}" ] || { f50_recovery_block unknown_task; return 1; }
+      continue;; esac
     read -r recovery_format recovery_tag recovery_request recovery_pid recovery_start recovery_manager recovery_manager_start recovery_state recovery_rc recovery_extra < "$recovery_entry" || { f50_recovery_block unknown_task; return 1; }
     [ "$recovery_format" = F50_TASK_V2 ] && [ -z "$recovery_extra" ] || { f50_recovery_block stale_task_record; return 1; }
     [ "$recovery_tag" = "$recovery_owner" ] && [ "$recovery_entry" = "$F50_TASK_DIR/$recovery_request" ] || { f50_recovery_block task_owner_mismatch; return 1; }
@@ -236,7 +242,7 @@ f50_recovery_eligible() {
         f50_recovery_block unreceipted_active_task; return 1
       fi
   done
-  case "$recovery_owner" in mm_service_*|"rescue_$$"|'') ;; mm_*)
+  case "$recovery_owner" in mm_service_*|rescue_*|'') ;; mm_*)
     if [ ! -f "$F50_OPERATION_LOCK/frontend" ]; then
       f50_recovery_block frontend_activity_unknown; return 1
     else
@@ -262,7 +268,7 @@ f50_recovery_eligible() {
     if [ "\${emergency_locked:-0}" = 1 ]; then
       for recovery_record in $recovery_records; do
         recovery_file="$F50_TASK_DIR/\${recovery_record%:*}"
-        [ ! -L "$recovery_file" ] && [ "$(sha256sum "$recovery_file" | awk '{print $1}')" = "\${recovery_record#*:}" ] && rm -f "$recovery_file" || { f50_recovery_block task_cleanup_failed; return 1; }
+        [ ! -L "$recovery_file" ] && [ "$(sha256sum "$recovery_file" | awk '{print $1}')" = "\${recovery_record#*:}" ] && rm -f "$recovery_file" "$recovery_file.output" || { f50_recovery_block task_cleanup_failed; return 1; }
       done
       rmdir "$F50_TASK_DIR" || { f50_recovery_block task_directory_changed; return 1; }
       echo F50_RECOVERY_TASKS_RECLAIMED=1
@@ -317,6 +323,37 @@ f50_frontend_touch() {
   [ "$frontend_rc" != 0 ] || echo F50_FRONTEND_RECORDED=1
   return "$frontend_rc"
 }
+f50_task_receipt() {
+  receipt_tag=$1; receipt_file=$2
+  [ -f "$receipt_file" ] && [ ! -L "$receipt_file" ] || return 1
+  read -r receipt_format receipt_owner receipt_request receipt_pid receipt_start receipt_manager receipt_manager_start receipt_state F50_RECEIPT_RC receipt_extra < "$receipt_file" || return 1
+  [ "$receipt_format" = F50_TASK_V2 ] && [ "$receipt_owner" = "$receipt_tag" ] &&
+    [ "$receipt_file" = "$F50_TASK_DIR/$receipt_request" ] && [ "$receipt_state" = finished ] && [ -z "$receipt_extra" ] || return 1
+  case "$receipt_request" in "$receipt_tag".*) receipt_sequence=\${receipt_request#"$receipt_tag".};; *) return 1;; esac
+  for receipt_number in "$receipt_sequence" "$receipt_pid" "$receipt_start" "$receipt_manager" "$receipt_manager_start" "$F50_RECEIPT_RC"; do
+    case "$receipt_number" in ''|*[!0-9]*) return 1;; esac
+  done
+  [ "$receipt_pid" -gt 0 ] && [ "$receipt_manager" -gt 0 ] && [ "$receipt_manager_start" -gt 0 ] && [ "$F50_RECEIPT_RC" -le 255 ]
+}
+f50_task_result() {
+  f50_writer_enter || return 1
+  f50_task_receipt "$1" "$F50_TASK_DIR/$2" || { echo F50_TASK_RESULT_UNCONFIRMED; return 1; }
+  sed '1d' "$receipt_file" || return 1
+  f50_writer_leave || return 1
+  printf '\\nF50_TASK_FINISHED=%s:%s\\n' "$2" "$F50_RECEIPT_RC"
+}
+f50_lease_status() {
+  [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
+  if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1
+  else
+    status_owner=$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null) || return 1
+    [ -n "$status_owner" ] || return 1
+    if [ "$status_owner" = "$1" ]; then
+      [ ! -e "$F50_OPERATION_LOCK/cancelled" ] || return 1
+      echo F50_LEASE_OWNED=1
+    else echo F50_OPERATION_OWNER_CHANGED; fi
+  fi
+}
 ` : ''}f50_lease_acquire() {
   lease_tag=$1
   case "$lease_tag" in mm_*) ;; *) echo F50_OPERATION_INVALID_OWNER; return 1 ;; esac
@@ -335,15 +372,16 @@ ${includeFrontend ? '  if [ "$2" = browser ]; then f50_frontend_write "$lease_ta
 }
 f50_lease_release() {
   lease_tag=$1
-  if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1; return 0; fi
+${includeFrontend ? '  f50_writer_enter || return 1\n' : ''}  if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1; return 0; fi
   [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
   [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_OWNER_CHANGED; return 1; }
   [ ! -e "$F50_OPERATION_LOCK/cancelled" ] || { echo F50_OPERATION_RECOVERY_REQUIRED; return 1; }
   for lease_task in "$F50_TASK_DIR/$lease_tag."*; do
-    [ ! -e "$lease_task" ] || { echo F50_OPERATION_WORKER_REMAINS; return 1; }
+    [ -e "$lease_task" ] || [ -L "$lease_task" ] || continue
+${includeFrontend ? '    f50_task_receipt "$lease_tag" "$lease_task" || { echo F50_OPERATION_WORKER_REMAINS; return 1; }' : '    echo F50_OPERATION_WORKER_REMAINS; return 1'}
   done
-${includeFrontend ? '  [ ! -L "$F50_OPERATION_LOCK/frontend" ] || return 1\n  rm -f "$F50_OPERATION_LOCK/frontend" ' : '  rm -f '}"$F50_OPERATION_LOCK/owner" && rmdir "$F50_OPERATION_LOCK" || return 1
-  echo F50_LEASE_RELEASED=1
+${includeFrontend ? '  for lease_task in "$F50_TASK_DIR/$lease_tag."*; do\n    [ ! -e "$lease_task" ] || rm -f "$lease_task" || return 1\n  done\n  rmdir "$F50_TASK_DIR" 2>/dev/null || true\n' : ''}${includeFrontend ? '  [ ! -L "$F50_OPERATION_LOCK/frontend" ] || return 1\n  rm -f "$F50_OPERATION_LOCK/frontend" ' : '  rm -f '}"$F50_OPERATION_LOCK/owner" && rmdir "$F50_OPERATION_LOCK" || return 1
+${includeFrontend ? '  f50_writer_leave || return 1\n' : ''}  echo F50_LEASE_RELEASED=1
 }
 `; }
 
@@ -522,20 +560,20 @@ function f50AssertSafeJsonNumbers(value) {
 }
 
 function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
-  let providers='未确认';
+  let providers='来源状态读取失败';
   if (provider.success) {
     try {
       const value=JSON.parse(provider.responseText || '');
       if (!value.providers || typeof value.providers!=='object') throw Error('invalid provider snapshot');
       const entries=Object.values(value.providers);
       const known=entries.filter(item=>Array.isArray(item?.proxies));
-      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分来源状态未确认';
-    } catch (_) { providers='响应格式无法确认'; }
+      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分来源状态读取失败';
+    } catch (_) { providers='响应格式错误'; }
   }
-  return {core:pid?'进程存在':'未确认运行',
-    api:api.success?'可访问':'不可访问或未确认',
+  return {core:pid?'进程存在':'未检测到核心进程',
+    api:api.success?'可访问':'访问失败',
     takeover:'未做数据面实测（不以进程或 API 取代）',
-    panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'不可访问或未确认',providers,
+    panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'访问失败',providers,
     connectivity:'未测试（已加载节点不代表可连通）'};
 }
 
@@ -978,16 +1016,16 @@ const F50_DIAGNOSTIC_LABELS = {
   gist_component_hash_mismatch: 'Gist 组件缺失或校验失败，请重新获取完整组件包。',
   gist_runtime_probe_failed: 'Gist 程序无法在设备执行，请检查 ARM64 架构和配套版本。',
   gist_age_runtime_probe_failed: '完整组件中的 age 无法执行或版本不匹配，请重新导入配套完整组件包。',
-  gist_permission_failed: '无法设置 Gist 组件执行权限，未完成安装。',
-  gist_script_invalid: 'Gist 组件脚本校验失败，未完成安装。',
+  gist_permission_failed: '安装失败：无法设置 Gist 组件执行权限。',
+  gist_script_invalid: '安装失败：Gist 组件脚本校验失败。',
   gist_backup_cleanup_failed: '组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。',
   gist_transient_cleanup_failed: '同步临时数据清理失败，未替换原组件。',
   zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
-  archive_size_unknown: '无法确认 ZIP 解压后大小，未安装。',
+  archive_size_unknown: '安装失败：ZIP 解压后大小读取失败。',
   data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
   controller_interface_incompatible: '控制器缺少所需命令接口。',
-  config_transaction_pending: '存在未完成的配置事务，请先恢复网络。',
-  install_transaction_pending: '安装事务未完成，已阻止启动；保留的事务日志可用于回滚。',
+  config_transaction_pending: '操作失败：配置事务需要恢复，请先执行“恢复网络”。',
+  install_transaction_pending: '启动失败：安装事务未结束，请先执行“恢复网络”；事务日志已保留。',
   data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
   unzip_missing: '设备缺少解压程序，安装未执行。',
   archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
@@ -1013,28 +1051,28 @@ const F50_DIAGNOSTIC_LABELS = {
   invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
   invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
   configuration_missing: '组件包没有初始配置，原安装保持不变。',
-  old_environment_inspection_failed: '无法确认旧运行环境，已停止安装。',
-  old_environment_cleanup_failed: '旧运行环境清理未完成，已停止替换组件。',
-  finalization_failed: '安装事务收尾未完成。',
+  old_environment_inspection_failed: '旧运行环境检查失败，已停止安装。',
+  old_environment_cleanup_failed: '旧运行环境清理失败，已停止替换组件。',
+  finalization_failed: '安装事务收尾失败。',
   installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
   preserve_user_data_failed: '保留用户配置失败，已取消安装。',
   commit_failed: '组件目录替换失败，请查看回滚结果。',
   network_apply_failed: '网络接管应用失败，请查看具体防火墙或路由错误。',
   service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
   service_failed: '服务脚本执行失败。',
-  start_timeout: '核心启动超时，未确认启动成功。',
-  activation_unverified: '服务未返回启动确认，未确认启动成功。',
+  start_timeout: '启动失败：等待核心启动超时。',
+  activation_unverified: '启动失败：服务未返回启动结果。',
   activation_failed: '新组件启动失败，请查看后端具体原因。',
-  interrupted: '安装被中断，未确认完成。',
-  transaction_interrupted: '安装事务未完整执行，请查看设备状态。',
+  interrupted: '安装失败：任务被中断。',
+  transaction_interrupted: '安装失败：安装事务被中断，请查看状态与日志。',
   config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
   process_respawned: '停止后仍检测到猫猫进程，已停止安装。',
-  process_table_unreadable: '无法读取进程表，不能确认旧进程已停止。',
-  journal_restore_incomplete: '网络参数或配置事务恢复未完成，已停止安装。',
+  process_table_unreadable: '进程表读取失败，已停止后续操作。',
+  journal_restore_incomplete: '网络参数或配置事务恢复失败，已停止安装。',
   network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
   owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
 };
-function f50Diagnostic(content, fallback = '操作未完成') {
+function f50Diagnostic(content, fallback = '操作失败') {
   const safe = sanitizeSubscriptionSecrets(String(content || ''))
     .replace(/(?:https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\/\/[^\s"'<>]+/gi, '[URL_REDACTED]')
     .split(/\r?\n/).map(line => /["']?(?:password|passwd|secret|token|authorization|access_token)["']?\s*[:=]/i.test(line) ? '[SENSITIVE_ERROR_REDACTED]' : line).join('\n');
@@ -1047,7 +1085,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   const labels = F50_DIAGNOSTIC_LABELS;
   let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
-  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '设备命令超时，未确认安装完成；请查看状态与日志。';
+  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时，请查看状态与日志。';
   if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
   else if (cause === 'original_config_invalid') {
     const detail = lines.find(line => /^F50_CONFIG_TEST_DETAIL=.*(?:level=["']?(?:error|fatal)|parse config|yaml:)/i.test(line)) || lines.find(line => line.startsWith('F50_CONFIG_TEST_DETAIL='));
@@ -1055,11 +1093,11 @@ function f50Diagnostic(content, fallback = '操作未完成') {
   }
   else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过，请检查配置格式和策略引用。';
   else if (/policy|iptables|ip6tables|route|downstream|network|TUN|listener/i.test(cause) && code === 'activation_failed') summary = '网络接管规则应用失败：' + cause;
-  else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '启动未完成：' + backend;
+  else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '启动失败：' + backend;
   const serviceRc = (lines.filter(line => line.startsWith('START_SERVICE_RC=')).pop() || '').slice('START_SERVICE_RC='.length).trim();
-  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '核心启动超时，未确认启动成功。';
+  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '启动失败：等待核心启动超时。';
   const rollback = get('F50_ROLLBACK');
-  if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚未完成：' + rollback;
+  if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚失败：' + rollback;
   else if (rollback === 'restored') summary += ' 已恢复安装前状态。';
   const componentsInstalled = get('F50_INSTALL_COMPONENTS_OK') === '1';
   const transactionState = get('F50_INSTALL_TRANSACTION_STATE') || 'unknown';
@@ -1068,7 +1106,7 @@ function f50Diagnostic(content, fallback = '操作未完成') {
       ? '组件已安装并启动' : '组件已安装，保持停止';
     const warning = lines.filter(line => /^F50_INSTALL_WARNING=(?!previous_components_retained$)/.test(line)).pop() || '';
     const reason = warning.slice('F50_INSTALL_WARNING='.length) || code || transactionState;
-    summary = installed + '；事务收尾未完成（' + reason + '），未执行组件回滚。';
+    summary = installed + '；事务收尾失败（' + reason + '），未执行组件回滚。';
   }
   const keyLines = lines.filter(line => /^(F50_(?:INSTALL_[A-Z_]+|CONFIG_STATE|BACKUP_LEFT|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|KANO_INSTALL_OK|START_SERVICE_RC|START_STATE)=/.test(line));
   const details = safe.length <= 6000 ? safe : keyLines.slice(0, 12).join('\n').slice(0, 2500) + '\n[OUTPUT_TRUNCATED]\n' + safe.slice(-3500);
@@ -1155,7 +1193,7 @@ async function performF50Uninstall() {
   const summary = verdict.ok ? '猫猫及全部组件数据已卸载'
     : operationBlocked ? '卸载未执行：设备操作锁未释放，请等待其他页面任务结束，或恢复网络后重试'
     : verdict.code === 'residual' ? '最终复查发现猫猫残留，详细项见\u201c状态与日志\u201d'
-    : '卸载结果未确认：最终状态读取失败，不等于存在残留';
+    : '卸载失败：最终状态读取失败，请检查连接后重试';
   lastInstallDiagnostic = {...verdict, summary, details, diagnostics};
   return {...verdict, summary, details};
 }
@@ -2472,7 +2510,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     return true;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
-    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装未完成');
+    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装失败');
     operationFinish(false, lastInstallDiagnostic.summary);
     if (error?.name !== 'OperationCancelled') createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细信息见“状态与日志”。', 'red', 15000);
     return false;
@@ -2518,7 +2556,7 @@ async function chooseF50Package() {
         } catch (error) {
           const message = f50Error(error && (error.message || String(error))) || '上传组件包失败';
           operationFinish(false, message);
-          createToast('安装未完成<br>' + safeTextToHtml(message), 'red', 15000);
+          createToast('安装失败<br>' + safeTextToHtml(message), 'red', 15000);
           return false;
         } finally {
           if (uploaded) {
@@ -2840,7 +2878,7 @@ async function kprVerifySelection(options) {
   const live = await callMihomoApi('/configs', 'GET', null, null, 5);
   if (!live.success || String(JSON.parse(live.responseText || '{}').mode).toLowerCase() !== 'rule') throw new Error('私网定向代理需要核心实际运行在规则模式');
   const response = await callMihomoApi('/proxies', 'GET', null, null, 8);
-  if (!response.success) throw new Error('无法确认代理组的实际出站');
+    if (!response.success) throw new Error('代理组实际出站读取失败');
   const payload = JSON.parse(response.responseText || '{}');
   return KPR.resolveSelection(payload.proxies || {}, feature.policy);
 }
@@ -2930,7 +2968,7 @@ mkdir "$TX"
 ${fileSnapshotHelpersCmd()}
 ${policyTransactionFiles().map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo NETWORK_SNAPSHOT_READY`, 20000);
-    if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照未确认，未保存新设置');
+    if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照创建失败，未保存新设置');
     operationStage('写入设置与运行配置', 1, 4);
     saved = true;
     if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
@@ -2989,13 +3027,13 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
     }
     operationFinish(false, recovered ? '应用失败，已恢复原设置' : '应用与回滚失败');
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
-      (recovered ? (saved ? '已恢复原设置和配置' : '未应用新设置') : '回滚未完成，已尝试停止核心并清理规则'), recovered ? 'yellow' : 'red', 14000);
+      (recovered ? (saved ? '已恢复原设置和配置' : '未应用新设置') : '回滚失败，已尝试停止核心并清理规则'), recovered ? 'yellow' : 'red', 14000);
     return false;
   } finally {
     if (policySnapshot && (snapshotCommitted || snapshotRestored || !saved) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
       try {
         const cleaned = await runShellWithRoot('rm -rf ' + shellQuote(policySnapshot), 10000);
-        if (!cleaned.success) createToast('网络设置快照清理未确认：' + escapeHtml(policySnapshot), 'yellow', 10000);
+        if (!cleaned.success) createToast('网络设置快照清理失败：' + escapeHtml(policySnapshot), 'yellow', 10000);
       } catch (_) {}
     }
   }
@@ -3111,7 +3149,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         element.dataset.pending = 'false';
         element.dataset.result = ok === true ? 'done' : ok === false ? 'failed' : 'ended';
         element.setAttribute('aria-busy', 'false');
-        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '已完成' : ok === false ? '未完成，请查看错误详情' : '已结束'));
+        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '已完成' : ok === false ? '失败，请查看错误详情' : '已结束'));
         setText(get('.mm-op-phase'), safe); get('.mm-op-phase').title = safe;
         if (ok === true) { get('.mm-op-fill').style.width = '100%'; get('.mm-op-track').setAttribute('aria-valuenow', '100'); }
         else get('.mm-op-track').removeAttribute('aria-valuenow');
@@ -3479,7 +3517,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     http_403:'Gist 访问被拒绝。',
     download_timeout:'Gist 下载超时，请重试。',
     download_transport_failed:'Gist 下载失败，请检查网络。',
-    yaml_runtime_not_ready:'组件初始化未完成，请在组件管理中重新导入配套完整组件包。',
+    yaml_runtime_not_ready:'操作失败：组件未就绪，请在组件管理中重新导入配套完整组件包。',
     no_transaction_pending:'没有待恢复的同步事务。',
     components_missing:'当前完整组件版本不支持 Gist 同步，请在组件管理中更新。',
     base_components_missing:'原组件缺失，请在组件管理中更新完整组件包。',
@@ -3487,15 +3525,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     component_not_executable:'Gist 程序无法执行，请在组件管理中重新导入完整组件包。',
     device_execution_failed:'设备端执行失败，请检查组件架构、权限和设备状态。',
     response_format_invalid:'设备返回数据格式不正确，请刷新状态；持续出现时更新配套 JS 和组件。',
-    operation_timeout:'操作超时，设备任务可能仍在运行；请刷新状态后确认。',
-    device_state_unknown:'设备状态暂时无法确认，请检查连接后刷新状态。',
+    operation_timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
+    device_state_unknown:'操作失败：设备状态读取失败，请检查连接后重试。',
     secure_transport_unavailable:'当前宿主缺少加密能力，未传输私钥；请更新宿主。',
     request_encryption_failed:'同步请求加密失败，未发送明文私钥。',
     request_key_expired:'一次性请求密钥已过期，请刷新状态后重试。',
     sealed_request_invalid:'加密请求校验失败，未执行操作。',
     root_required:'设备未授予 root 执行权限。',
     too_many_tasks:'同步任务正在运行，请等待或在高级维护中取消任务。',
-    timeout:'设备操作超时，请刷新状态确认结果。',
+    timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
     idle:'等待同步',
 
     test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
@@ -3511,13 +3549,13 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
     age_unavailable:'age 无法执行，请在组件管理中更新',
     age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
-    committed_pending_finalize:'\u914d\u7f6e\u5df2\u63d0\u4ea4\uff0c\u4e8b\u52a1\u6536\u5c3e\u5f85\u786e\u8ba4\uff1b\u8bf7\u5148\u6062\u590d\u540c\u6b65\u4e8b\u52a1',
+    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”。',
     sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
     auto_disabled:'\u81ea\u52a8\u540c\u6b65\u5df2\u5173\u95ed',
-    task_receipt_missing:'\u4efb\u52a1\u56de\u6267\u4e22\u5931\uff0c\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u4e0d\u4ee3\u8868\u5df2\u56de\u6eda',
+    task_receipt_missing:'操作失败：任务回执读取失败，请执行“恢复同步事务”。',
     auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
   };
-  const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
+  const f50GistMessage = value => F50_GIST_MESSAGES[value] || (value ? '操作失败：' + String(value) : '操作失败：设备未返回结果');
 
   async function f50GistLeave() {
     const leave=async()=>{
@@ -3582,7 +3620,7 @@ fi`,8000);
       }
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
-    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
+    createToast('同步失败：等待任务完成超时，请在 Gist 页面恢复同步事务。','red');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
@@ -3607,36 +3645,51 @@ fi`,8000);
   let deviceTaskUncertain = false;
   const f50TaskTag = (token) => 'mm_' + String(token.id).replace(/[^A-Za-z0-9_-]/g, '_');
   const f50UnknownCompletion = (op, cause = '') => {
+    if (op.recovered) return operationCancelled();
     op.uncertain = true;
     op.token.cancelled = true;
     deviceTaskUncertain = true;
     const error = operationCancelled();
-    error.message = '设备任务是否结束未知，已保留锁和回滚点。请先执行\u201c恢复网络\u201d。';
+    error.message = '操作失败：无法读取设备执行结果，请检查连接后执行\u201c恢复网络\u201d。';
     error.code = 'device_completion_unknown';
-    lastInstallDiagnostic = f50Diagnostic('F50_ERROR=device_completion_unknown\n' + String(cause));
+    lastInstallDiagnostic = f50Diagnostic('F50_ERROR=device_completion_unknown\n' + String(cause) + (op.heartbeatError ? '\n' + op.heartbeatError : ''));
     lastInstallDiagnostic.summary = error.message;
     if (op.progress) op.progress.finish(false, error.message);
+    syncCriticalOperationStatus();
     createToast(safeTextToHtml(error.message), 'red', 12000);
     return error;
   };
   const f50ReleaseLease = async (op) => {
     clearInterval(op.heartbeat);
     if (op.heartbeatPending) await op.heartbeatPending;
-    if (!op.leaseOwned) return;
+    if (!op.leaseOwned || op.recovered) return;
     try {
-      const ended = await hostRunShellWithRoot.call(globalThis,
-        buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(f50TaskTag(op.token)) + ' ended', 6000);
-      if (!ended?.success || !/^F50_FRONTEND_RECORDED=1$/m.test(String(ended.content || ''))) {
-        throw f50UnknownCompletion(op, ended?.content || 'frontend_end_unconfirmed');
+      if (op.uncertain) {
+        await hostRunShellWithRoot.call(globalThis,
+          buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(f50TaskTag(op.token)) + ' ended', 6000);
+        return;
       }
-      if (op.uncertain) return;
-      const result = await hostRunShellWithRoot.call(globalThis,
-        buildF50LeaseFunctions() + '\nf50_lease_release ' + shellQuote(f50TaskTag(op.token)), 6000);
-      if (!result?.success || !/^F50_LEASE_RELEASED=1$/m.test(String(result.content || ''))) {
-        throw f50UnknownCompletion(op, result?.content || 'lease_release_unconfirmed');
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await hostRunShellWithRoot.call(globalThis,
+          buildF50LeaseFunctions() + '\nf50_lease_release ' + shellQuote(f50TaskTag(op.token)), 6000)
+          .catch(error => ({ success: false, content: error?.message || String(error) }));
+        if (result?.success && /^F50_LEASE_RELEASED=1$/m.test(String(result.content || ''))) {
+          op.leaseOwned = false;
+          return;
+        }
+        const checked = await hostRunShellWithRoot.call(globalThis,
+          buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(f50TaskTag(op.token)), 6000);
+        const state = String(checked?.content || '');
+        if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) {
+          op.leaseOwned = false;
+          return;
+        }
+        if (!(checked?.success && /^F50_LEASE_OWNED=1$/m.test(state)) || attempt) {
+          throw f50UnknownCompletion(op, result?.content || 'lease_release_unconfirmed');
+        }
       }
-      op.leaseOwned = false;
     } catch (error) {
+      if (op.recovered) return;
       deviceTaskUncertain = true;
       op.uncertain = true;
       if (error?.name !== 'OperationCancelled') f50UnknownCompletion(op, error?.message || error);
@@ -3663,15 +3716,27 @@ fi`,8000);
           try {
             result = await hostRunShellWithRoot.call(globalThis,
               buildF50LeaseFunctions() + '\nf50_lease_acquire ' + shellQuote(tag) + ' browser', 6000);
-          } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
-          const text = String(result?.content || '');
+          } catch (error) { result = { success: false, content: error?.message || String(error) }; }
+          let text = String(result?.content || '');
+          if (!(result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) && !/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) {
+            const checked = await hostRunShellWithRoot.call(globalThis,
+              buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(tag), 6000)
+              .catch(error => ({ success: false, content: error?.message || String(error) }));
+            const state = String(checked?.content || '');
+            if (checked?.success && /^F50_LEASE_OWNED=1$/m.test(state)) { result = { success: true }; text = 'F50_LEASE_ACQUIRED=1'; }
+            else if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) return false;
+          }
           if (result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) { op.leaseOwned = true;
             op.heartbeat = setInterval(() => {
               if (op.closing || op.uncertain || op.heartbeatPending) return;
               op.heartbeatPending = hostRunShellWithRoot.call(globalThis,
                 buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(tag) + ' running', 6000)
-                .then(r => { if (!(r?.success && /^F50_FRONTEND_RECORDED=1$/m.test(String(r?.content || ''))) && !/F50_OPERATION_RECOVERY_BUSY/.test(r?.content || '')) f50UnknownCompletion(op, r?.content || 'frontend_touch_unconfirmed'); })
-                .catch(e => f50UnknownCompletion(op, e?.message || e)).finally(() => { op.heartbeatPending = null; });
+                .catch(error => ({ success: false, content: error?.message || String(error) }))
+                .then(r => {
+                  if (op.recovered) return;
+                  op.heartbeatError = r?.success && /^F50_FRONTEND_RECORDED=1$/m.test(String(r?.content || ''))
+                    ? '' : String(r?.content || 'frontend_touch_unconfirmed');
+                }).finally(() => { op.heartbeatPending = null; });
             }, 20000);
             return true; }
           if (/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return false;
@@ -3698,7 +3763,7 @@ if [ -e "$F50_OPERATION_LOCK/cancelled" ] || [ "$(cat "$F50_OPERATION_LOCK/owner
 fi
 f50_frontend_write ${shellQuote(tag)} running || exit 1
 mkdir -p "$F50_TASK_DIR" && chmod 700 "$F50_TASK_DIR" || exit 1
-env KANO_TPROXY_TASK=${shellQuote(tag)} sh -c ${shellQuote(base)} &
+env KANO_TPROXY_TASK=${shellQuote(tag)} sh -c ${shellQuote(base)} > "$F50_TASK_DIR/${request}.output" 2>&1 &
 kano_task_pid=$!
 kano_task_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' "/proc/$kano_task_pid/stat" 2>/dev/null)
 case "$kano_task_start" in ''|*[!0-9]*) kano_task_start=0;; esac
@@ -3708,25 +3773,36 @@ f50_writer_leave || { wait "$kano_task_pid"; exit 1; }
 wait "$kano_task_pid"
 kano_task_rc=$?
 f50_writer_enter || exit 1
-printf 'F50_TASK_V2 %s %s %s %s %s %s finished %s\\n' ${shellQuote(tag)} ${shellQuote(request)} "$kano_task_pid" "$kano_task_start" "$$" "$kano_manager_start" "$kano_task_rc" > "$F50_TASK_DIR/${request}.receipt" &&
+{ printf 'F50_TASK_V2 %s %s %s %s %s %s finished %s\\n' ${shellQuote(tag)} ${shellQuote(request)} "$kano_task_pid" "$kano_task_start" "$$" "$kano_manager_start" "$kano_task_rc" &&
+  cat "$F50_TASK_DIR/${request}.output"; } > "$F50_TASK_DIR/${request}.receipt" &&
   mv -f "$F50_TASK_DIR/${request}.receipt" "$F50_TASK_DIR/${request}" || exit 1
-rm -f "$F50_TASK_DIR/${request}" || kano_task_rc=1
-rmdir "$F50_TASK_DIR" 2>/dev/null || true
-f50_writer_leave || kano_task_rc=1
+rm -f "$F50_TASK_DIR/${request}.output" || exit 1
+sed '1d' "$F50_TASK_DIR/${request}" || exit 1
+f50_writer_leave || exit 1
 printf '\\nF50_TASK_FINISHED=${request}:%s\\n' "$kano_task_rc"
 exit "$kano_task_rc"`;
       let result;
       try { result = await hostRunShellWithRoot.call(globalThis, command, timeout); }
-      catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
-      const text = String(result?.content || '');
+      catch (error) { result = { success: false, content: error?.message || String(error) }; }
+      let text = String(result?.content || '');
       if (text.trim() === 'F50_TASK_NOT_STARTED=' + request) {
         op.token.cancelled = true;
         throw operationCancelled();
       }
-      const tail = text.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+      let tail = text.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+      if ((!tail || tail[1] !== request) && !op.token.cancelled) {
+        const checked = await hostRunShellWithRoot.call(globalThis,
+          buildF50LeaseFunctions() + '\nf50_task_result ' + shellQuote(tag) + ' ' + shellQuote(request), 6000)
+          .catch(error => ({ success: false, content: error?.message || String(error) }));
+        const receiptText = String(checked?.content || '');
+        const receiptTail = receiptText.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+        if (receiptTail?.[1] === request) { result = checked; text = receiptText; tail = receiptTail; }
+      }
       if (!tail || tail[1] !== request) throw f50UnknownCompletion(op, text);
       if (op.token.cancelled) throw operationCancelled();
-      return { ...result, success: result?.success === true && Number(tail[2]) === 0,
+      op.heartbeatError = '';
+      syncCriticalOperationStatus();
+      return { ...result, success: Number(tail[2]) === 0,
         content: text.slice(0, tail.index), deviceCompleted: true, deviceExitCode: Number(tail[2]) };
     } finally {
       op.requests--;
@@ -4300,12 +4376,12 @@ exit "$kano_task_rc"`;
     const label = activeCriticalOperation && activeCriticalOperation.label
       ? activeCriticalOperation.label
       : '';
-    statusEl.dataset.state = label ? 'running' : 'idle';
-    statusEl.textContent = label ? `任务：${label}` : '任务：空闲';
+    statusEl.dataset.state = deviceTaskUncertain ? 'failed' : label ? 'running' : 'idle';
+    statusEl.textContent = deviceTaskUncertain ? '任务：失败' : label ? `任务：${label}` : '任务：空闲';
   };
   const acquireCriticalOperation = (label = '关键操作', token = null) => {
     if (deviceTaskUncertain || transientShellOperation) {
-      createToast(deviceTaskUncertain ? '请先恢复网络以确认后台任务已结束' : '设备读取尚未结束，请稍后重试', 'yellow');
+      createToast(deviceTaskUncertain ? '上次操作失败，请先执行“恢复网络”后重试' : '设备读取尚未结束，请稍后重试', 'yellow');
       return null;
     }
     if (recoveryInProgress) {
@@ -6190,7 +6266,7 @@ KANO_WRITE_CHECK_EOF
       appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate failed step=${step} detail=${detail.replace(/[\r\n]+/g, ' ').slice(0, 500)}`);
       const checkRes = await runShellWithRoot(`cat ${shellQuote(KANO_TEMPLATE_WRITE_CHECK)} 2>/dev/null || true`, 10 * 1000);
       createToast(
-        `${configCommitted ? "配置已写入，但来源标记提交失败；本次应用未完成" : "生成运行配置失败，config.yaml 未提交"}<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
+        `${configCommitted ? "配置已写入，但来源标记提交失败；本次应用失败" : "生成运行配置失败，config.yaml 未提交"}<br>${safeTextToHtml(detail)}<br><br>[kano_template_write_check.out]<br>${safeTextToHtml(checkRes.content || '')}`,
         'red',
         12000,
       );
@@ -6524,7 +6600,7 @@ KANO_WRITE_CHECK_EOF
         ok: false,
         message: sanitizeSubscriptionSecrets([
           '保存 config.yaml 控制 API 设置失败',
-          configRestored && templateRestored ? '已恢复原配置' : '原配置回滚未完整完成',
+          configRestored && templateRestored ? '已恢复原配置' : '原配置回滚失败',
           configWrite.content || '',
         ].filter(Boolean).join('\n')),
       };
@@ -6552,7 +6628,7 @@ KANO_WRITE_CHECK_EOF
       const runtimeRecovered = rollbackReload.success || (configRestored && await restartClashOk({ skipCheck: true }));
       const rollbackSummary = configRestored && templateRestored
         ? (runtimeRecovered ? '已恢复原配置，核心运行正常' : '已恢复原配置，但核心未能恢复运行')
-        : '原配置回滚未完整完成';
+        : '原配置回滚失败';
       return {
         ...checked,
         ok: false,
@@ -6929,11 +7005,11 @@ KANO_WRITE_CHECK_EOF
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
-      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但节点为空' : '节点加载状态未确认')};
+      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但节点为空' : '节点加载状态读取失败')};
   });
   const result=buildProviderUpdateResult(results,{controllerInfo:info,corePid:pid,
     notRunReason:!pid && names.length ? '核心未运行' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
-  if (showToast) createToast(result.failed?'部分节点来源更新未完成':'节点已加载；连通性未测试',result.failed?'yellow':'green');
+  if (showToast) createToast(result.failed?'部分节点来源更新失败':'节点已加载；连通性未测试',result.failed?'yellow':'green');
   return result;
 };
 
@@ -6988,7 +7064,7 @@ KANO_WRITE_CHECK_EOF
     });
     return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : (results.find(provider => !provider.ok)?.message || formatSubscriptionDownloadError({}, r.content))});
   } catch (_) {
-    const message = '无法确认订阅下载结果，请检查设备连接后重试';
+    const message = '订阅下载失败：设备响应读取失败，请检查连接后重试';
     return buildProviderUpdateResult(clean.map(source => ({ type: 'proxy-provider', name: source.name, ok: false, attempts: 1,
       statusCode: 0, message, errorType: 'local_download_failed' })), { ok: false, via: 'local', committed: false, message });
   } finally {
@@ -7024,7 +7100,7 @@ KANO_WRITE_CHECK_EOF
         ...reloaded,
         ok,
         errorType: ok ? '' : (emptyProvider ? 'empty_provider' : countMismatch ? 'provider_count_mismatch' : reloaded.errorType),
-        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? `订阅已下载 ${converted.proxyCount} 个节点，核心加载 ${proxyCount === null ? '未确认' : proxyCount + ' 个'}，数量不一致` : reloaded.message),
+        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? (proxyCount === null ? `订阅已下载 ${converted.proxyCount} 个节点，但核心节点数量读取失败` : `订阅已下载 ${converted.proxyCount} 个节点，核心加载 ${proxyCount} 个，数量不一致`) : reloaded.message),
         proxyCount,
         cacheAvailable: proxyCount === null ? null : proxyCount > 0,
         format: converted.format,
@@ -7347,23 +7423,32 @@ kano_stop_watchers() (
   const networkRescue = async ({ showOutput = true, preempt = false } = {}) => {
   if (recoveryInProgress) return false;
   recoveryInProgress = true;
+  const interruptedOperations = [];
   if (preempt) {
     try {
       const checked = await hostRunShellWithRoot.call(globalThis,
         buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', 10000);
       if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
         const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
-        createToast('恢复资格未确认；活跃任务或归属不明的租约已保留。<br>' + safeTextToHtml(detail), 'red', 12000);
-        lastInstallDiagnostic = { ...f50Diagnostic(detail), ok: false, summary: '恢复资格未确认' };
+        const summary = /^F50_RECOVERY_ELIGIBLE=0$/m.test(String(checked?.content || ''))
+          ? '恢复失败，请查看状态与日志' : '恢复失败：无法读取设备状态，请检查连接后重试';
+        createToast(summary, 'red', 12000);
+        lastInstallDiagnostic = { ...f50Diagnostic(detail), ok: false, summary };
         recoveryInProgress = false;
         return false;
       }
     } catch (error) {
-      createToast('恢复资格检查失败：' + safeTextToHtml(error.message || String(error)), 'red', 12000);
+      lastInstallDiagnostic = { ...f50Diagnostic(error.message || String(error)), ok: false, summary: '恢复失败：无法读取设备状态' };
+      createToast('恢复失败：无法读取设备状态，请检查连接后重试', 'red', 12000);
       recoveryInProgress = false;
       return false;
     }
-    if (activeCriticalOperation) activeCriticalOperation.token.cancelled = true;
+    for (const op of [activeCriticalOperation, transientShellOperation]) {
+      if (!op) continue;
+      interruptedOperations.push(op);
+      op.token.cancelled = true;
+      clearInterval(op.heartbeat);
+    }
   }
   const own = preempt || !activeCriticalOperation;
   const progress = own ? createOperationProgress('恢复网络') : activeCriticalOperation.progress;
@@ -7389,23 +7474,30 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const resumeTag = canResume ? f50TaskTag(activeCriticalOperation.token) : '';
     const r = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !preempt && !canResume), 120000);
     const ok = !!r.success && /^RECOVERY_VERIFIED$/m.test(String(r.content || ''));
-    if (ok) deviceTaskUncertain = false;
+    if (ok) {
+      for (const op of interruptedOperations) { op.recovered = true; op.leaseOwned = false; }
+      deviceTaskUncertain = false;
+    } else deviceTaskUncertain = true;
+    const confirmed = ok || /^F50_(CLEAN_ERROR=|RECOVERY_(PARTIAL=1|ELIGIBLE=0|STATE=))/m.test(String(r.content || ''));
+    const summary = ok ? '网络接管已释放' : confirmed ? '恢复失败，请查看详情' : '恢复失败：无法读取执行结果，请检查连接后重试';
     lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
-      summary: ok ? '网络接管已释放' : '恢复未完成，未确认的资源已保留' };
+      summary };
     invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
-    const resultDetail = ok ? '已停止并释放网络' : '仍有残留，请查看详情';
+    const resultDetail = ok ? '已停止并释放网络' : summary;
     if (own) { if (progress) progress.finish(ok, resultDetail); }
     else { operationFinish(ok, resultDetail); if (progress && ok) progress.stage('网络清理完成，等待释放设备租约'); }
     if (ok) renderRuntimeStatus('stopped', '猫猫 - 已停止', document.querySelector('#running_mm'));
-    const resultToast = [ok ? '网络接管已释放' : '恢复未完成<br>' + safeTextToHtml(f50Error(r.content)), ok ? 'green' : 'red', ok ? 5000 : 15000];
+    const resultToast = [summary, ok ? 'green' : 'red', ok ? 5000 : 15000];
     if (!own && ok) activeCriticalOperation.finalToast = resultToast;
     else createToast(...resultToast);
-    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理结果；等待租约收尾') : '清理残留', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成，正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
     return ok;
   } catch (error) {
-    if (own) { if (progress) progress.finish(false, '请求失败，状态未知'); }
-    else operationFinish(false, '请求失败，状态未知');
-    createToast(safeTextToHtml(error.message || String(error)), 'red', 12000); return false;
+    deviceTaskUncertain = true;
+    lastInstallDiagnostic = { ...f50Diagnostic(error.message || String(error)), ok: false, summary: '恢复失败：无法读取执行结果' };
+    if (own) { if (progress) progress.finish(false, '恢复失败，请检查连接后重试'); }
+    else operationFinish(false, '恢复失败，请检查连接后重试');
+    createToast('恢复失败：无法读取执行结果，请检查连接后重试', 'red', 12000); return false;
   } finally { recoveryInProgress = false; syncCriticalOperationStatus(); }
 };
 
@@ -7470,7 +7562,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   if (prepared.success) restored=await commitStagedYaml({targetPath:CLASH_CONFIG,stagePath,backup:false,
     preserveSecret:false,sourceStagePath:/^SOURCE_STATE=present$/m.test(prepared.content)?rollbackPath+'.source':null,
     removeSource:/^SOURCE_STATE=absent$/m.test(prepared.content)});
-  if (showToast) createToast(escapeHtml(context)+(restored.ok?'失败，已恢复旧配置与来源标记':'失败，且配置回滚未完成'),restored.ok?'yellow':'red',9000);
+  if (showToast) createToast(escapeHtml(context)+(restored.ok?'失败，已恢复旧配置与来源标记':'失败，且配置回滚失败'),restored.ok?'yellow':'red',9000);
   return restored.ok;
 };
 
@@ -7698,7 +7790,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         `, 10 * 1000);
       }
       createToast(
-        `模板上传失败<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e || '未知错误'))}`,
+        `模板上传失败<br>${textToHtml(sanitizeSubscriptionSecrets(e && e.message ? e.message : e || '未返回错误信息'))}`,
         'red',
         9000,
       );
@@ -10160,8 +10252,8 @@ btn_disabled.onclick = async () => {
                 ? `本次更新失败，当前继续使用缓存的 ${item.proxyCount} 个节点。`
                 : '本次更新失败，继续使用原节点缓存。')
               : item.proxyCount === 0
-                ? '本次更新失败，当前没有可确认的缓存节点。'
-                : '配置已应用，但无法确认节点缓存是否更新。';
+                ? '本次更新失败，当前节点缓存为空。'
+                : '本次更新失败：节点缓存状态读取失败。';
           const technical = item.rawMessage
             ? `<details style="margin-top:6px;"><summary>展开技术详情</summary><pre style="margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(sanitizeSubscriptionSecrets(item.rawMessage).slice(0, 1200))}</pre></details>`
             : '';
@@ -10355,7 +10447,7 @@ btn_disabled.onclick = async () => {
     const loaded = mergeLocalConversionReloadResult(converted, refreshed);
     const ok = refreshed.failed === 0 && loaded.failed === 0;
     const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
-    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心未确认加载';
+    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心节点加载检查失败';
     createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
     return ok;
   }
@@ -10384,7 +10476,7 @@ btn_disabled.onclick = async () => {
   const ok = applied.failed === 0;
   operationFinish(ok, ok ? '节点已更新，未重启核心' : '下载完成，但本地加载失败');
   const failedProvider = (applied.providers || []).find(provider => !provider.ok);
-  const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心未确认加载';
+  const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心节点加载检查失败';
   createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green':'red', 8000);
   return ok;
 }
@@ -10523,7 +10615,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
       if (!fallback.ok) throw new Error('节点更新和本地转换回退均失败');
     } else if (providers.failed > 0) {
       const failed = (providers.providers || []).find((item) => !item.ok);
-      throw new Error(failed && failed.message || '节点来源更新未完成');
+      throw new Error(failed && failed.message || '节点来源更新失败');
     }
     committed = true;
     invalidateStatusSnapshot();
@@ -10540,7 +10632,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     let stopped = true;
     try { if (runtimeAttempted) stopped = await networkRescue({ showOutput: false }); } catch (_) { stopped = false; }
     if (!stopped) {
-      operationFinish(false, '核心未确认停止，未重启或覆盖缓存');
+      operationFinish(false, '回滚失败：核心停止检查未通过，未重启或覆盖缓存');
       createToast('回滚已停止，备份保留于 ' + escapeHtml(tx), 'red', 15000);
       return false;
     }
@@ -10556,8 +10648,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     } catch (_) { restored = false; }
     if (!restored) await networkRescue({ showOutput: false });
     const message = firstFailure;
-    operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复未完成'));
-    createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚未完成，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
+    operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复失败'));
+    createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚失败，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
   } finally {
     if (legacyMigration) {
@@ -11746,10 +11838,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
               break;
             }
-            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
+            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试。');break;}
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-        }catch(_){result('\u4efb\u52a1\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u8bf7\u5237\u65b0\u72b6\u6001\u3002');}
+        }catch(_){result('操作失败：设备请求中断，请检查连接后重试。');}
         finally{if(opened)busy(false);}
       };
       const formAction=async action=>{

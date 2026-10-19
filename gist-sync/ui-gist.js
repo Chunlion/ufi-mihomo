@@ -86,10 +86,10 @@
               if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
               break;
             }
-            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n\u8bf7\u5237\u65b0\u72b6\u6001\u6216\u6062\u590d\u540c\u6b65\u4e8b\u52a1\uff0c\u4e0d\u8981\u53cd\u590d\u91cd\u63d0\u4efb\u52a1\u3002');break;}
+            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试。');break;}
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-        }catch(_){result('\u4efb\u52a1\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u8bf7\u5237\u65b0\u72b6\u6001\u3002');}
+        }catch(_){result('操作失败：设备请求中断，请检查连接后重试。');}
         finally{if(opened)busy(false);}
       };
       const formAction=async action=>{

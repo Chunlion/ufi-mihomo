@@ -116,7 +116,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     http_403:'Gist 访问被拒绝。',
     download_timeout:'Gist 下载超时，请重试。',
     download_transport_failed:'Gist 下载失败，请检查网络。',
-    yaml_runtime_not_ready:'组件初始化未完成，请在组件管理中重新导入配套完整组件包。',
+    yaml_runtime_not_ready:'操作失败：组件未就绪，请在组件管理中重新导入配套完整组件包。',
     no_transaction_pending:'没有待恢复的同步事务。',
     components_missing:'当前完整组件版本不支持 Gist 同步，请在组件管理中更新。',
     base_components_missing:'原组件缺失，请在组件管理中更新完整组件包。',
@@ -124,15 +124,15 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     component_not_executable:'Gist 程序无法执行，请在组件管理中重新导入完整组件包。',
     device_execution_failed:'设备端执行失败，请检查组件架构、权限和设备状态。',
     response_format_invalid:'设备返回数据格式不正确，请刷新状态；持续出现时更新配套 JS 和组件。',
-    operation_timeout:'操作超时，设备任务可能仍在运行；请刷新状态后确认。',
-    device_state_unknown:'设备状态暂时无法确认，请检查连接后刷新状态。',
+    operation_timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
+    device_state_unknown:'操作失败：设备状态读取失败，请检查连接后重试。',
     secure_transport_unavailable:'当前宿主缺少加密能力，未传输私钥；请更新宿主。',
     request_encryption_failed:'同步请求加密失败，未发送明文私钥。',
     request_key_expired:'一次性请求密钥已过期，请刷新状态后重试。',
     sealed_request_invalid:'加密请求校验失败，未执行操作。',
     root_required:'设备未授予 root 执行权限。',
     too_many_tasks:'同步任务正在运行，请等待或在高级维护中取消任务。',
-    timeout:'设备操作超时，请刷新状态确认结果。',
+    timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
     idle:'等待同步',
 
     test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
@@ -148,13 +148,13 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
     age_unavailable:'age 无法执行，请在组件管理中更新',
     age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
-    committed_pending_finalize:'\u914d\u7f6e\u5df2\u63d0\u4ea4\uff0c\u4e8b\u52a1\u6536\u5c3e\u5f85\u786e\u8ba4\uff1b\u8bf7\u5148\u6062\u590d\u540c\u6b65\u4e8b\u52a1',
+    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”。',
     sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
     auto_disabled:'\u81ea\u52a8\u540c\u6b65\u5df2\u5173\u95ed',
-    task_receipt_missing:'\u4efb\u52a1\u56de\u6267\u4e22\u5931\uff0c\u7ed3\u679c\u672a\u786e\u8ba4\uff1b\u4e0d\u4ee3\u8868\u5df2\u56de\u6eda',
+    task_receipt_missing:'操作失败：任务回执读取失败，请执行“恢复同步事务”。',
     auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
   };
-  const f50GistMessage = value => F50_GIST_MESSAGES[value] || String(value || '\u672a\u786e\u8ba4');
+  const f50GistMessage = value => F50_GIST_MESSAGES[value] || (value ? '操作失败：' + String(value) : '操作失败：设备未返回结果');
 
   async function f50GistLeave() {
     const leave=async()=>{
@@ -219,7 +219,7 @@ fi`,8000);
       }
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
-    createToast('同步仍在设备上执行，请在 Gist 页面查看结果。','yellow');
+    createToast('同步失败：等待任务完成超时，请在 Gist 页面恢复同步事务。','red');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.

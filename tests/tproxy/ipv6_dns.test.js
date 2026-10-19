@@ -60,6 +60,21 @@ test('TUN keeps private-target DNS exemptions and pauses the device bypass list'
     assert.doesNotMatch(f.read('plan'), /-s 192\.168\.0\.248|fd00/);
   } finally { f.close(); }
 });
+
+for (const address of ['192.168.0.1 -j ACCEPT', '256.1.2.3', '1.2.3.4/33', '1.2.3.4/24/0', '1.2.3.4\t-j\tACCEPT']) {
+  for (const mode of ['tproxy', 'tun']) test(`DNS rejects malformed ${mode} address before restore / ${address}`, () => {
+    const f = fixture({ mode, privateRoute: true });
+    try {
+      if (mode === 'tproxy') fs.writeFileSync(path.join(f.dir, 'Policy/device_bypass.txt'), address + '\n');
+      else fs.writeFileSync(path.join(f.dir, 'Policy/options.conf'), f.options.replace('192.168.11.0/24 fd00::/64', address));
+      const before = f.read('Policy/options.conf'), result = f.invoke('start');
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /F50_ERROR=invalid_dns_/);
+      assert.equal(fs.existsSync(path.join(f.dir, 'plan')), false);
+      assert.equal(f.read('Policy/options.conf'), before);
+    } finally { f.close(); }
+  });
+}
 for (const capability of ['available', 'transient']) test(`${capability} IPv6 NAT follows the existing controller path`, () => {
   const f = fixture({ capability });
   try {

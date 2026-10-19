@@ -53,6 +53,15 @@ printf '%s\\n' '{"ok":true,"protocol":1,"settings":{"intervalHours":6},"ageReady
   assert.equal(status.ok,true);assert.equal(status.ageReady,false);
   assert.equal(fs.readFileSync(path.join(dir,'calls'),'utf8'),'status\n');
   checks.push({name:'status executes once and can diagnose missing companion components',result:'PASS'});
+  fs.writeFileSync(path.join(dir,'Tools/kano-gist-sync'),`#!/bin/sh
+cat > '${dir}/input'
+printf '%s\\n' '{"ok":true}'
+`,{mode:0o755});
+  const payload="'\nF50_SEALED_REQUEST\ntouch '"+dir+"/injected'\n#";
+  assert.equal((await ctx.api.exec(['dispatch','test'],10000,payload)).ok,true);
+  assert.equal(fs.readFileSync(path.join(dir,'input'),'utf8'),payload);
+  assert.equal(fs.existsSync(path.join(dir,'injected')),false);
+  checks.push({name:'raw stdin cannot terminate quoting and execute shell',result:'PASS'});
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
  ctx.hostRunShellWithRoot=async script=>{
   assert(script.includes("'dispatch' 'disable'"));

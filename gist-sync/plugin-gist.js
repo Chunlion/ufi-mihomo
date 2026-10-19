@@ -30,8 +30,8 @@
   }
   async function f50GistExec(args, timeout = 10000, input = '') {
     const tag = Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,'0')).join('');
-    const invocation = shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') +
-      (input ? ' <<\'F50_SEALED_REQUEST\'\n' + input + '\nF50_SEALED_REQUEST\n' : '\n');
+    const invocation = (input ? "printf '%s' " + shellQuote(input) + ' | ' : '') +
+      shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') + '\n';
     const script = `umask 077
 printf '\\nF50_GIST_BEGIN_${tag}\\n'
 (

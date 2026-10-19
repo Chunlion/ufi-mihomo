@@ -179,6 +179,7 @@ function installers(overrides = {}) {
     + source.slice(source.indexOf('async function ensureF50InstallLease()'), source.indexOf('  // KPR: dual-stack'))
     + '\n({network:installF50PackageFromNetwork,choose:chooseF50Package,diagnostic:()=>lastInstallDiagnostic})', {
     prior, document: { createElement: () => input, body: { appendChild() {} } },
+    deviceTaskUncertain: false,
     runCriticalOperation: async (_, action) => action(), operationStage() {}, operationFinish() {},
     f50Diagnostic: content => ({ ok: false, summary: String(content), details: String(content) }),
     safeTextToHtml: String, shellQuote: JSON.stringify, createToast() {},
@@ -203,6 +204,44 @@ test('online package failure replaces the previous installation diagnostic', asy
   assert.equal(await api.network(), false);
   assert.notEqual(api.diagnostic(), prior);
   assert.equal(api.diagnostic().details, 'F50_OPERATION_BUSY');
+});
+
+test('uncertain device state is auto-recovered before installation proceeds', async () => {
+  const op = { token: { id: 'fixture' }, leasePromise: Promise.resolve(false) };
+  let recoveries = 0, downloads = 0, probes = 0;
+  const { api } = installers({
+    activeCriticalOperation: op,
+    deviceTaskUncertain: true,
+    buildF50EmergencyScript: (tag, requireIdle, releaseOnly, forUninstall) => {
+      assert.equal(tag, ''); assert.equal(requireIdle, true); assert.equal(releaseOnly, true); assert.equal(forUninstall, false);
+      return 'RECOVER_IDLE';
+    },
+    hostRunShellWithRoot: async script => { assert.equal(script, 'RECOVER_IDLE'); recoveries++; return { success: true, content: 'F50_LEASE_RELEASED=1' }; },
+    runShellWithRoot: async script => { probes++; return { success: true }; },
+    downloadCoreArchive: async () => { downloads++; return { ok: true }; },
+    installF50PackageAtDevicePath: async () => true,
+    DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
+  });
+  assert.equal(await api.network(), true);
+  assert.equal(recoveries, 1);
+  assert.equal(downloads, 1);
+  assert.ok(probes >= 2); // lease 探活 + 收尾清理均放行
+});
+
+test('uncertain device state stays blocked when idle recovery reports an active task', async () => {
+  const op = { token: { id: 'fixture' }, leasePromise: Promise.resolve(false) };
+  let downloads = 0;
+  const { api } = installers({
+    activeCriticalOperation: op,
+    deviceTaskUncertain: true,
+    buildF50EmergencyScript: () => 'RECOVER_IDLE',
+    hostRunShellWithRoot: async () => ({ success: false, content: 'F50_RECOVERY_STATE=active_task\nF50_RECOVERY_ELIGIBLE=0' }),
+    runShellWithRoot: async () => { throw Object.assign(Error('cancelled'), { name: 'OperationCancelled' }); },
+    downloadCoreArchive: async () => { downloads++; return { ok: true }; },
+    DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
+  });
+  await assert.rejects(api.network(), { name: 'OperationCancelled' });
+  assert.equal(downloads, 0);
 });
 
 test('busy device prevents package upload and cleanup', async () => {

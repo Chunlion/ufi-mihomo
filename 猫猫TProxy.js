@@ -1105,6 +1105,12 @@ function f50Diagnostic(content, fallback = '操作失败') {
   const cause = backend || cleanup || code;
   const labels = F50_DIAGNOSTIC_LABELS;
   let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
+  if (/^F50_OPERATION_BUSY$/m.test(safe)) summary = '设备操作锁被上次未完成的操作占用；已自动尝试恢复未成功，请稍后重试或执行“恢复网络”。';
+  const downloadFailure = safe.match(/^ARCHIVE_DOWNLOAD_FAILED=(\d+)$/m);
+  if (downloadFailure) {
+    const curlCodes = { 6: '域名解析失败', 7: '无法连接下载服务器', 22: '下载服务器返回错误状态', 28: '下载超时', 35: 'SSL 握手失败', 47: '重定向次数过多', 56: '接收下载数据中断', 60: '下载服务器 SSL 证书无效' };
+    summary = '组件包下载失败：' + (curlCodes[Number(downloadFailure[1])] || ('curl 退出码 ' + downloadFailure[1])) + '；已依次尝试全部下载源，详见下方日志。';
+  }
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
   if (!code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时；请查看“状态与日志”。';
   if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
@@ -2571,6 +2577,20 @@ async function installF50PackageAtDevicePath(uploaded) {
 }
 
 async function ensureF50InstallLease() {
+  // deviceTaskUncertain 会让 runShellWithRoot 直接取消；先按下方 BUSY 分支同款模式恢复闲置锁。
+  // 设备端仍有活动任务时 recovery 自身会失败并保持阻塞，不会误清正在运行的下载 worker。
+  const pending = activeCriticalOperation;
+  if (deviceTaskUncertain && pending && !pending.leaseOwned && !pending.uncertain && !pending.token.cancelled && !pending.requests) {
+    let recovered;
+    try {
+      recovered = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true, false), 120000));
+    } catch (error) { throw f50UnknownCompletion(pending, error?.message || String(error)); }
+    if (recovered.success && /^F50_LEASE_RELEASED=1$/m.test(String(recovered.content || ''))) {
+      if (pending !== activeCriticalOperation || pending.token.cancelled) throw operationCancelled();
+      pending.leasePromise = null;
+      deviceTaskUncertain = false;
+    }
+  }
   const ready = await runShellWithRoot(':', 5000);
   const op = activeCriticalOperation;
   if (!/^F50_OPERATION_BUSY$/m.test(String(ready.content || '')) || !op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return ready;
@@ -2602,7 +2622,8 @@ async function installF50PackageFromNetwork() {
       const detail = archive.content || archive.message || '组件包下载失败';
       lastInstallDiagnostic = f50Diagnostic(detail);
       operationFinish(false, '组件包下载失败');
-      createToast('组件包下载失败<br>' + safeTextToHtml(detail), 'red', 15000);
+      // toast 显示人话摘要；完整各源日志保留在诊断详情（“状态与日志”）里。
+      createToast('组件包下载失败<br>' + safeTextToHtml(lastInstallDiagnostic.summary || detail), 'red', 15000);
       return false;
     }
     try { return await installF50PackageAtDevicePath(DOWNLOAD_ZIP); }
@@ -4417,7 +4438,8 @@ exit "$kano_task_rc"`;
         (
         NEW="$ZIP.new.$$"
         trap 'worker_rc=$?; rm -f "$NEW" "$NEW.verify"; if [ "$worker_rc" -ne 0 ]; then echo "ARCHIVE_WORKER_FAILED=$worker_rc"; fi' EXIT
-        "$CURL_BIN" -fsSL --connect-timeout 30 --max-time 590 --retry 0 \
+        # 瞬时连接失败/5xx 由 curl 有限重试（上限 2 次）；整体仍受 --max-time 限制。
+        "$CURL_BIN" -fsSL --connect-timeout 30 --max-time 590 --retry 2 --retry-delay 3 \
           ${shellQuote(packageUrl)} -o "$NEW"
         download_rc=$?
         if [ "$download_rc" -ne 0 ]; then
@@ -4437,11 +4459,13 @@ exit "$kano_task_rc"`;
         # v7.3.4 FINAL: do not reject an otherwise valid ZIP by exact internal path names here.
         # Package-root/component discovery happens after extraction, where nested/case-varied layouts can be normalized.
         mv -f "$NEW" "$ZIP" || exit 1
-        printf '%s\n' ${shellQuote(packageUrl)} > ${shellQuote(DOWNLOAD_SOURCE_FILE)} || exit 1
+        # source 文件仅供人工排查（无程序读取方）；写失败不应作废已下载并通过校验的包。
+        printf '%s\n' ${shellQuote(packageUrl)} > ${shellQuote(DOWNLOAD_SOURCE_FILE)} || true
         chmod 600 ${shellQuote(DOWNLOAD_SOURCE_FILE)} 2>/dev/null || true
         echo "ARCHIVE_SOURCE=${shellQuote(packageUrl)}"
         echo "ARCHIVE_BYTES=$size"
-        rm -f "$NEW.verify" || exit 1
+        # verify 残留无害：EXIT trap 亦会清理；不应作废已下载的包。
+        rm -f "$NEW.verify" 2>/dev/null || true
         trap - EXIT
         echo "ARCHIVE_READY=downloaded"
         ) >>"$LOG" 2>&1 < /dev/null &
@@ -4450,7 +4474,8 @@ exit "$kano_task_rc"`;
       let content = String(result.content || '');
       if (result.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: content, content };
       if (result.success && /^ARCHIVE_DOWNLOAD_STARTED=1$/m.test(content)) {
-        const deadline = Date.now() + 600000;
+        // 590s 下载（含有限重试）+ unzip -t 校验余量；原 600s 小于“下载+校验”总时长，会周期性误判未确认并遗留 uncertain 锁。
+        const deadline = Date.now() + 900000;
         let finished = false;
         while (Date.now() < deadline) {
           if (activeCriticalOperation?.token.cancelled) throw operationCancelled();

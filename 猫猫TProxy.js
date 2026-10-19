@@ -1112,7 +1112,7 @@ function f50Diagnostic(content, fallback = '操作失败') {
     summary = '组件包下载失败：' + (curlCodes[Number(downloadFailure[1])] || ('curl 退出码 ' + downloadFailure[1])) + '；已依次尝试全部下载源，详见下方日志。';
   }
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
-  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时；请查看“状态与日志”。';
+  if (!downloadFailure && !code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时；请查看“状态与日志”。';
   if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
   else if (cause === 'original_config_invalid') {
     const detail = lines.find(line => /^F50_CONFIG_TEST_DETAIL=.*(?:level=["']?(?:error|fatal)|parse config|yaml:)/i.test(line)) || lines.find(line => line.startsWith('F50_CONFIG_TEST_DETAIL='));
@@ -2577,21 +2577,8 @@ async function installF50PackageAtDevicePath(uploaded) {
 }
 
 async function ensureF50InstallLease() {
-  // deviceTaskUncertain 会让 runShellWithRoot 直接取消；先按下方 BUSY 分支同款模式恢复闲置锁。
-  // 设备端仍有活动任务时 recovery 自身会失败并保持阻塞，不会误清正在运行的下载 worker。
-  const pending = activeCriticalOperation;
-  if (deviceTaskUncertain && pending && !pending.leaseOwned && !pending.uncertain && !pending.token.cancelled && !pending.requests) {
-    let recovered;
-    try {
-      recovered = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true, false), 120000));
-    } catch (error) { throw f50UnknownCompletion(pending, error?.message || String(error)); }
-    if (recovered.success && /^F50_LEASE_RELEASED=1$/m.test(String(recovered.content || ''))) {
-      if (pending !== activeCriticalOperation || pending.token.cancelled) throw operationCancelled();
-      pending.leasePromise = null;
-      deviceTaskUncertain = false;
-    }
-  }
-  const ready = await runShellWithRoot(':', 5000);
+  const ready = deviceTaskUncertain ? { success: false, content: 'F50_OPERATION_BUSY', deviceCompleted: false }
+    : await runShellWithRoot(':', 5000);
   const op = activeCriticalOperation;
   if (!/^F50_OPERATION_BUSY$/m.test(String(ready.content || '')) || !op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return ready;
   let recovered;
@@ -2603,6 +2590,7 @@ async function ensureF50InstallLease() {
   }
   if (op !== activeCriticalOperation || op.token.cancelled) throw operationCancelled();
   op.leasePromise = null;
+  deviceTaskUncertain = false;
   return runShellWithRoot(':', 5000);
 }
 
@@ -2632,7 +2620,7 @@ async function installF50PackageFromNetwork() {
         .catch(error => ({success:false, content:f50Diagnostic(error?.message || String(error)).details}));
       if (!removed?.success && lastInstallDiagnostic) lastInstallDiagnostic.details += '\nF50_INSTALL_WARNING=download_cache_cleanup_failed';
     }
-  });
+  }, null, true);
 }
 
 async function chooseF50Package() {
@@ -2674,7 +2662,7 @@ async function chooseF50Package() {
             }
           }
         }
-      });
+      }, null, true);
     };
   }
   f50PackageInput.click();
@@ -4438,8 +4426,7 @@ exit "$kano_task_rc"`;
         (
         NEW="$ZIP.new.$$"
         trap 'worker_rc=$?; rm -f "$NEW" "$NEW.verify"; if [ "$worker_rc" -ne 0 ]; then echo "ARCHIVE_WORKER_FAILED=$worker_rc"; fi' EXIT
-        # 瞬时连接失败/5xx 由 curl 有限重试（上限 2 次）；整体仍受 --max-time 限制。
-        "$CURL_BIN" -fsSL --connect-timeout 30 --max-time 590 --retry 2 --retry-delay 3 \
+        "$CURL_BIN" -fsSL --connect-timeout 30 --max-time 590 --retry 0 \
           ${shellQuote(packageUrl)} -o "$NEW"
         download_rc=$?
         if [ "$download_rc" -ne 0 ]; then
@@ -4474,7 +4461,6 @@ exit "$kano_task_rc"`;
       let content = String(result.content || '');
       if (result.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: content, content };
       if (result.success && /^ARCHIVE_DOWNLOAD_STARTED=1$/m.test(content)) {
-        // 590s 下载（含有限重试）+ unzip -t 校验余量；原 600s 小于“下载+校验”总时长，会周期性误判未确认并遗留 uncertain 锁。
         const deadline = Date.now() + 900000;
         let finished = false;
         while (Date.now() < deadline) {
@@ -4536,8 +4522,8 @@ exit "$kano_task_rc"`;
     statusEl.dataset.state = deviceTaskUncertain ? 'failed' : label ? 'running' : 'idle';
     statusEl.textContent = deviceTaskUncertain ? '任务：失败' : label ? `任务：${label}` : '任务：空闲';
   };
-  const acquireCriticalOperation = (label = '关键操作', token = null, allowUninstallRecovery = false) => {
-    if ((deviceTaskUncertain && !allowUninstallRecovery) || transientShellOperation) {
+  const acquireCriticalOperation = (label = '关键操作', token = null, allowUninstallRecovery = false, allowInstallRecovery = false) => {
+    if ((deviceTaskUncertain && !allowUninstallRecovery && !allowInstallRecovery) || transientShellOperation) {
       createToast(deviceTaskUncertain ? '上次操作失败；请先执行“恢复网络”后重试' : '设备读取尚未结束；请稍后重试', 'yellow');
       return null;
     }
@@ -4575,9 +4561,9 @@ exit "$kano_task_rc"`;
     }
   };
 
-  const runCriticalOperation = async (label, action, token = null) => {
+  const runCriticalOperation = async (label, action, token = null, allowInstallRecovery = false) => {
     const reentrant = !!(token && activeCriticalOperation && activeCriticalOperation.token === token);
-    const operationToken = acquireCriticalOperation(label, token);
+    const operationToken = acquireCriticalOperation(label, token, false, allowInstallRecovery);
     if (!operationToken) return false;
     const ownsLock = !reentrant;
     let result = false;

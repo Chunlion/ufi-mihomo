@@ -42,7 +42,7 @@ function downloader(responses, logs = []) {
       return logs.length ? logs.shift() : currentLog;
     },
   });
-  return { download, calls, reads, op };
+  return { download, calls, reads, op, elapsed: () => now };
 }
 
 test('GitCode package succeeds without contacting other mirrors', async () => {
@@ -118,10 +118,14 @@ test('background downloads tolerate a failed log read without restarting the wor
 });
 
 test('unconfirmed background download retains the lease and never tries another source', async () => {
-  const { download, calls, op } = downloader([{ success: true, content: 'ARCHIVE_DOWNLOAD_STARTED=1' }]);
+  const { download, calls, op, elapsed } = downloader([{ success: true, content: 'ARCHIVE_DOWNLOAD_STARTED=1' }]);
   await assert.rejects(download(), { name: 'OperationCancelled' });
   assert.equal(op.uncertain, true);
   assert.equal(calls.length, 1);
+  const attempt = Number(calls[0].match(/--max-time (\d+)/)[1]);
+  const retries = Number(calls[0].match(/--retry (\d+)/)[1]);
+  const delay = Number(calls[0].match(/--retry-delay (\d+)/)?.[1] || 0);
+  assert.ok((attempt * (retries + 1) + delay * retries) * 1000 < elapsed(), 'worker budget must leave time for ZIP verification before polling expires');
 });
 
 for (const valid of [true, false]) test('device background worker verifies ZIP before replacement / ' + valid, { skip: process.platform === 'win32' }, async () => {
@@ -172,14 +176,19 @@ for (const allowCached of [false, true]) {
   }
 }
 
-function installers(overrides = {}) {
+function installers(overrides = {}, realEntry = false) {
   const input = { files: [{}], click() {} }, calls = [];
   const prior = { ok: false, summary: 'previous install', details: 'F50_INSTALL_WARNING=uploaded_package_cleanup_failed' };
   const api = vm.runInNewContext('let lastInstallDiagnostic = prior, f50PackageInput = null;\n'
+    + (realEntry ? source.slice(source.indexOf('const acquireCriticalOperation ='), source.indexOf('const runCriticalButtonOperation =')) : '')
     + source.slice(source.indexOf('async function ensureF50InstallLease()'), source.indexOf('  // KPR: dual-stack'))
-    + '\n({network:installF50PackageFromNetwork,choose:chooseF50Package,diagnostic:()=>lastInstallDiagnostic})', {
+    + '\n({network:installF50PackageFromNetwork,choose:chooseF50Package,diagnostic:()=>lastInstallDiagnostic,run:runCriticalOperation,state:()=>deviceTaskUncertain,operation:()=>activeCriticalOperation})', {
     prior, document: { createElement: () => input, body: { appendChild() {} } },
     deviceTaskUncertain: false,
+    transientShellOperation: null, recoveryInProgress: false,
+    createOperationProgress: () => ({ finish() {} }), createRandomString: () => 'fixture',
+    invalidateStatusSnapshot() {}, syncCriticalOperationStatus() {}, f50ReleaseLease: async () => {},
+    sanitizeSubscriptionSecrets: String, escapeHtml: String,
     runCriticalOperation: async (_, action) => action(), operationStage() {}, operationFinish() {},
     f50Diagnostic: content => ({ ok: false, summary: String(content), details: String(content) }),
     safeTextToHtml: String, shellQuote: JSON.stringify, createToast() {},
@@ -206,42 +215,45 @@ test('online package failure replaces the previous installation diagnostic', asy
   assert.equal(api.diagnostic().details, 'F50_OPERATION_BUSY');
 });
 
-test('uncertain device state is auto-recovered before installation proceeds', async () => {
-  const op = { token: { id: 'fixture' }, leasePromise: Promise.resolve(false) };
-  let recoveries = 0, downloads = 0, probes = 0;
-  const { api } = installers({
-    activeCriticalOperation: op,
-    deviceTaskUncertain: true,
-    buildF50EmergencyScript: (tag, requireIdle, releaseOnly, forUninstall) => {
-      assert.equal(tag, ''); assert.equal(requireIdle, true); assert.equal(releaseOnly, true); assert.equal(forUninstall, false);
-      return 'RECOVER_IDLE';
-    },
-    hostRunShellWithRoot: async script => { assert.equal(script, 'RECOVER_IDLE'); recoveries++; return { success: true, content: 'F50_LEASE_RELEASED=1' }; },
-    runShellWithRoot: async script => { probes++; return { success: true }; },
-    downloadCoreArchive: async () => { downloads++; return { ok: true }; },
-    installF50PackageAtDevicePath: async () => true,
-    DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
+for (const entry of ['online', 'upload']) for (const outcome of ['idle', 'active_task', 'unknown_owner', 'transport_lost']) {
+  test(`uncertain device state through real installation entry / ${entry} / ${outcome}`, async () => {
+    let recoveries = 0, downloads = 0, uploads = 0, probes = 0;
+    const { api, input } = installers({
+      activeCriticalOperation: null, deviceTaskUncertain: true,
+      buildF50EmergencyScript: (tag, requireIdle, releaseOnly, forUninstall) => {
+        assert.equal(tag, ''); assert.equal(requireIdle, true); assert.equal(releaseOnly, true); assert.equal(forUninstall, false);
+        return 'RECOVER_IDLE';
+      },
+      hostRunShellWithRoot: async script => {
+        assert.equal(script, 'RECOVER_IDLE'); recoveries++;
+        assert.equal(api.operation().uninstall, false);
+        if (outcome === 'transport_lost') throw Error('transport_fixture_failure');
+        return outcome === 'idle' ? { success: true, content: 'F50_LEASE_RELEASED=1' }
+          : { success: false, content: 'F50_RECOVERY_STATE=' + outcome + '\nF50_RECOVERY_ELIGIBLE=0' };
+      },
+      runShellWithRoot: async () => { assert.equal(api.state(), false); probes++; return { success: true }; },
+      downloadCoreArchive: async () => { downloads++; return { ok: true }; },
+      uploadFileToDevice: async () => { uploads++; return '/fixture/upload.zip'; },
+      DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
+    }, true);
+    if (entry === 'online') assert.equal(await api.network(), outcome === 'idle');
+    else { await api.choose(); await input.onchange(); }
+    assert.equal(recoveries, 1);
+    assert.equal(downloads, entry === 'online' && outcome === 'idle' ? 1 : 0);
+    assert.equal(uploads, entry === 'upload' && outcome === 'idle' ? 1 : 0);
+    assert.equal(probes, outcome === 'idle' ? 2 : 0);
+    assert.equal(api.state(), outcome !== 'idle');
+    assert.equal(api.operation(), null);
+    if (['active_task', 'unknown_owner'].includes(outcome)) assert.match(api.diagnostic().details, new RegExp('F50_RECOVERY_STATE=' + outcome));
   });
-  assert.equal(await api.network(), true);
-  assert.equal(recoveries, 1);
-  assert.equal(downloads, 1);
-  assert.ok(probes >= 2); // lease 探活 + 收尾清理均放行
-});
+}
 
-test('uncertain device state stays blocked when idle recovery reports an active task', async () => {
-  const op = { token: { id: 'fixture' }, leasePromise: Promise.resolve(false) };
-  let downloads = 0;
-  const { api } = installers({
-    activeCriticalOperation: op,
-    deviceTaskUncertain: true,
-    buildF50EmergencyScript: () => 'RECOVER_IDLE',
-    hostRunShellWithRoot: async () => ({ success: false, content: 'F50_RECOVERY_STATE=active_task\nF50_RECOVERY_ELIGIBLE=0' }),
-    runShellWithRoot: async () => { throw Object.assign(Error('cancelled'), { name: 'OperationCancelled' }); },
-    downloadCoreArchive: async () => { downloads++; return { ok: true }; },
-    DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
-  });
-  await assert.rejects(api.network(), { name: 'OperationCancelled' });
-  assert.equal(downloads, 0);
+test('uncertain device state still blocks ordinary critical operations', async () => {
+  let actions = 0;
+  const { api } = installers({ activeCriticalOperation: null, deviceTaskUncertain: true }, true);
+  assert.equal(await api.run('ordinary operation', async () => { actions++; }), false);
+  assert.equal(actions, 0);
+  assert.equal(api.state(), true);
 });
 
 test('busy device prevents package upload and cleanup', async () => {

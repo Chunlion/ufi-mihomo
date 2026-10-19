@@ -98,6 +98,7 @@ test('cleanup preserves all diagnostic labels and result fields', () => {
   // 文案可以调整，但特殊分支仍必须描述正确的失败原因。
   for (const [input, pattern] of [
     ['timed out', /超时/],
+    ['ARCHIVE_DOWNLOAD_FAILED=28\ncurl: (28) Operation timed out after 590000 milliseconds', /组件包下载失败.*下载超时/],
     ['F50_ERROR=original_config_invalid\nF50_CONFIG_TEST_DETAIL=yaml: invalid mapping', /核心校验/],
     ['F50_ERROR=subscription URL must use HTTP(S), no userinfo.', /订阅地址/],
     ['START_SERVICE_RC=124', /超时/],

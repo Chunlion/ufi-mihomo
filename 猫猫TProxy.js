@@ -2572,10 +2572,12 @@ async function installF50PackageAtDevicePath(uploaded) {
 
 async function installF50PackageFromNetwork() {
   return runCriticalOperation('安装核心', async () => {
+    lastInstallDiagnostic = null;
     operationStage('下载组件包');
     const archive = await downloadCoreArchive({ allowCached: false });
     if (!archive.ok) {
       const detail = archive.content || archive.message || '组件包下载失败';
+      lastInstallDiagnostic = f50Diagnostic(detail);
       operationFinish(false, '组件包下载失败');
       createToast('组件包下载失败<br>' + safeTextToHtml(detail), 'red', 15000);
       return false;
@@ -2601,13 +2603,17 @@ async function chooseF50Package() {
     f50PackageInput.value = '';
     if (!file) return;
     await runCriticalOperation('安装核心', async () => {
+        lastInstallDiagnostic = null;
         let uploaded = '';
         try {
+          const ready = await runShellWithRoot(':', 5000);
+          if (!ready.success) throw new Error(ready.content);
           operationStage('上传组件包');
           uploaded = await uploadFileToDevice(file);
           return await installF50PackageAtDevicePath(uploaded);
         } catch (error) {
-          const message = f50Error(error && (error.message || String(error)));
+          lastInstallDiagnostic = f50Diagnostic(error && (error.message || String(error)));
+          const message = lastInstallDiagnostic.summary;
           operationFinish(false, message);
           createToast('安装失败<br>' + safeTextToHtml(message), 'red', 15000);
           return false;
@@ -3798,7 +3804,7 @@ fi`,8000);
               .catch(error => ({ success: false, content: error?.message || String(error) }));
             const state = String(checked?.content || '');
             if (checked?.success && /^F50_LEASE_OWNED=1$/m.test(state)) { result = { success: true }; text = 'F50_LEASE_ACQUIRED=1'; }
-            else if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) return false;
+            else if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) return { success: false, content: text || state, deviceCompleted: false };
           }
           if (result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) { op.leaseOwned = true;
             op.heartbeat = setInterval(() => {
@@ -3814,11 +3820,12 @@ fi`,8000);
                 }).finally(() => { op.heartbeatPending = null; });
             }, 20000);
             return true; }
-          if (/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return false;
+          if (/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return { ...result, success: false, content: text, deviceCompleted: false };
           throw f50UnknownCompletion(op, text);
         })();
       }
-      if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
+      const lease = await op.leasePromise;
+      if (lease !== true) return lease;
       if (op.token.cancelled || op.closing) throw operationCancelled();
       const request = tag + '.' + (++taskCommandSequence);
       const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${op.uninstall ? '' : buildF50GistFence()}\n${script}`;
@@ -4368,6 +4375,7 @@ exit "$kano_task_rc"`;
         unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
         echo "ARCHIVE_READY=cached"
       `, 20 * 1000);
+      if (cached.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: cached.content, content: cached.content };
       if (cached.success && String(cached.content || '').includes('ARCHIVE_READY=cached')) {
         return { ok: true, stage: 'ready', source: 'cached', message: '', content: String(cached.content || '') };
       }
@@ -4418,6 +4426,7 @@ exit "$kano_task_rc"`;
         echo "ARCHIVE_BYTES=$size"
       `, 140 * 1000);
       const content = String(result.content || '');
+      if (result.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: content, content };
       if (result.success && content.includes('ARCHIVE_READY=downloaded')) {
         return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
       }

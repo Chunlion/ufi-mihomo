@@ -561,7 +561,7 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
   });
 }
 
-for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'missing_receipt', 'timeout', 'other_page_busy', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost', 'host_footer', 'nested_reply', 'string_reply', 'wrong_receipt']) {
+for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'missing_receipt', 'timeout', 'other_page_busy', 'unsafe_path', 'released_before_acquire', 'response_lost', 'response_truncated', 'failed_response_lost', 'heartbeat_lost', 'acquire_lost', 'host_footer', 'nested_reply', 'string_reply', 'wrong_receipt']) {
   test('browser task ownership and receipt / ' + outcome, async () => {
     const op = { token: { id: 'fixture', cancelled: outcome === 'cancelled_before' }, requests: 0 };
     let calls = 0, payloads = 0, lookups = 0, heartbeat;
@@ -576,9 +576,11 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
         calls++;
         if (command.includes('\nf50_lease_acquire ')) {
           if (outcome === 'acquire_lost') throw Error('Load failed');
+          if (outcome === 'unsafe_path') return { success: false, content: 'F50_OPERATION_UNSAFE_PATH' };
+          if (outcome === 'released_before_acquire') return { success: false, content: 'acquire_fixture_failure' };
           return wrap({ success: true, content: outcome === 'other_page_busy' ? 'F50_OPERATION_BUSY' : 'F50_LEASE_ACQUIRED=1' });
         }
-        if (command.includes('\nf50_lease_status ')) return { success: true, content: 'F50_LEASE_OWNED=1' };
+        if (command.includes('\nf50_lease_status ')) return { success: true, content: outcome === 'released_before_acquire' ? 'F50_LEASE_RELEASED=1' : 'F50_LEASE_OWNED=1' };
         if (command.includes('\nf50_frontend_touch ')) throw Error('signal is aborted without reason');
         if (command.includes('\nf50_task_result ')) {
           lookups++;
@@ -608,15 +610,20 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
       assert.equal(result.content, 'payload');
       assert.equal(op.uncertain, undefined);
       assert.equal(op.heartbeatError, '');
-    } else if (outcome === 'other_page_busy') {
-      assert.equal((await execute('printf payload')).success, false);
+    } else if (['other_page_busy', 'unsafe_path', 'released_before_acquire'].includes(outcome)) {
+      const result = await execute('printf payload');
+      assert.equal(result.success, false);
+      assert.equal(result.deviceCompleted, false);
+      assert.equal(result.content, outcome === 'other_page_busy' ? 'F50_OPERATION_BUSY' : outcome === 'unsafe_path' ? 'F50_OPERATION_UNSAFE_PATH' : 'acquire_fixture_failure');
+      assert.equal((await execute('printf payload again')).content, result.content);
+      assert.equal(calls, outcome === 'released_before_acquire' ? 2 : 1);
       assert.equal(payloads, 0);
     } else await assert.rejects(execute('printf payload'), { name: 'OperationCancelled' });
     assert.equal(op.requests, 0);
     if (['missing_receipt', 'timeout', 'wrong_receipt'].includes(outcome)) assert.equal(op.uncertain, true);
     if (outcome === 'cancelled_before') assert.equal(calls, 0);
     assert.equal(lookups, ['missing_receipt', 'timeout', 'response_lost', 'response_truncated', 'failed_response_lost', 'wrong_receipt'].includes(outcome) ? 1 : 0);
-    assert.equal(payloads, ['cancelled_before', 'other_page_busy'].includes(outcome) ? 0 : 1);
+    assert.equal(payloads, ['cancelled_before', 'other_page_busy', 'unsafe_path', 'released_before_acquire'].includes(outcome) ? 0 : 1);
   });
 }
 

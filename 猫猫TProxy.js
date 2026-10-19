@@ -3810,7 +3810,12 @@ fi`,8000);
     if (typeof script !== 'string' || script.includes(String.fromCharCode(0))) {
       return { success: false, content: 'SHELL_INVALID_TEXT: command contains NUL or is not a string' };
     }
-    if (deviceTaskUncertain) throw operationCancelled();
+    // uncertain 阻塞新操作（而非用户主动中止）：deviceTaskUncertain 时 recovery 要么已恢复、要么确认设备任务仍在运行。
+    if (deviceTaskUncertain) {
+      const blocked = operationCancelled();
+      blocked.message = '操作失败：上次任务结果未确认，设备后台任务可能仍在运行；请稍后重试，仍失败时执行“恢复网络”。';
+      throw blocked;
+    }
     const critical = activeCriticalOperation;
     if (!critical && !transientShellOperation) {
       transientShellOperation = { token: { id: `${Date.now()}_${createRandomString(10)}` }, requests: 0 };

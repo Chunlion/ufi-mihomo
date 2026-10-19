@@ -83,6 +83,32 @@ test('cleanup preserves all diagnostic labels and result fields', () => {
       }
     }
   }
-  for (const input of inputs) assert.deepEqual(plain(newDiagnostic(input, 'fallback')), plain(oldDiagnostic(input, 'fallback')));
-  console.log(`diagnostic equivalence: ${inputs.length} inputs`);
+  // 文案允许随产品调整；标签表由上面的契约断言锁定，这里锁定诊断字段与特殊分支语义。
+  for (const input of inputs) {
+    const beforeFields = plain(oldDiagnostic(input, 'fallback'));
+    const afterFields = plain(newDiagnostic(input, 'fallback'));
+    const summary = afterFields.summary;
+    delete beforeFields.summary;
+    delete afterFields.summary;
+    assert.deepEqual(afterFields, beforeFields, input.slice(0, 80));
+    assert.equal(typeof summary, 'string');
+    assert.ok(summary.trim().length > 0);
+    assert.ok(summary.length <= 280);
+  }
+  // 文案可以调整，但特殊分支仍必须描述正确的失败原因。
+  for (const [input, pattern] of [
+    ['timed out', /超时/],
+    ['F50_ERROR=original_config_invalid\nF50_CONFIG_TEST_DETAIL=yaml: invalid mapping', /核心校验/],
+    ['F50_ERROR=subscription URL must use HTTP(S), no userinfo.', /订阅地址/],
+    ['START_SERVICE_RC=124', /超时/],
+    ['F50_ERROR=unknown_cleanup_code\nF50_ROLLBACK=blocked_by_cleanup', /回滚失败.*blocked_by_cleanup/],
+    ['F50_ERROR=unknown_cleanup_code\nF50_ROLLBACK=restored', /已恢复安装前状态/],
+    ['F50_INSTALL_COMPONENTS_OK=1\nF50_INSTALL_TRANSACTION_STATE=finalize_failed\nF50_INSTALL_STATUS=installed_running', /组件已安装并启动.*事务收尾失败.*组件未回滚/],
+    ['F50_INSTALL_COMPONENTS_OK=1\nF50_INSTALL_TRANSACTION_STATE=finalize_failed\nF50_INSTALL_STATUS=installed_stopped', /组件已安装，核心保持停止.*事务收尾失败.*组件未回滚/],
+  ]) assert.match(newDiagnostic(input, 'fallback').summary, pattern);
+  assert.doesNotMatch(
+    newDiagnostic('secret: fixture-value\nhttps://example.invalid/private', 'fallback').summary,
+    /fixture-value|example\.invalid/,
+  );
+  console.log(`diagnostic field equivalence: ${inputs.length} inputs`);
 });

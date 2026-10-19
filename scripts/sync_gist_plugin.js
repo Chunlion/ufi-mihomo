@@ -10,7 +10,7 @@ function block(name){const a=source.indexOf('function '+name+'('),b=source.index
 function arrow(name,next){const a=source.indexOf('  const '+name+' ='),b=source.indexOf('  const '+next+' =',a+1);if(a<0||b<0)throw Error('Missing generator '+name);return source.slice(a,b);}
 const context={shellQuote:v=>"'"+String(v).replace(/'/g,"'\\''")+"'"};vm.createContext(context);
 const profile=source.slice(source.indexOf('const F50_ZASHBOARD_UI_URL'),source.indexOf('function buildF50EmergencyScript'));
-vm.runInContext(profile+block('buildF50ConfigTransactionFunctions')+arrow('prepareYqRuntimeCmd','requireMikeFarahYqV4Cmd')+arrow('yqVersionCheckCmd','readYamlObject')+block('buildF50YamlCommitBody')+'\nthis.body=buildF50YamlCommitBody(false);this.recover=buildF50ConfigTransactionFunctions();this.profiles=F50_FIXED_PROFILES;',context);
+vm.runInContext(profile+block('buildF50ConfigTransactionFunctions')+arrow('prepareYqRuntimeCmd','pruneKanoBackupsCmd')+arrow('yqExecutableCheckCmd','readYamlObject')+block('buildF50YamlCommitBody')+'\nthis.body=buildF50YamlCommitBody(false);this.recover=buildF50ConfigTransactionFunctions();this.profiles=F50_FIXED_PROFILES;',context);
 const dir=path.join(root,'build/gist-sync/clash/Scripts');fs.mkdirSync(dir,{recursive:true});
 const header=`#!/system/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later

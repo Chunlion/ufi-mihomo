@@ -6,6 +6,201 @@ const { Worker: NodeWorker } = require('node:worker_threads');
 const { fs, path, assert, slice, run, shell, shellApi, source, plain, quote, temp, write } = require('./optimization_harness');
 const api = shellApi(), yq = process.env.F50_TEST_YQ;
 const shellReply = run(slice('const f50ShellReply =', 'const f50TaskTag') + 'f50ShellReply');
+const productionQuote = run(slice('const shellQuote =', 'const templateFlowMessages') + 'shellQuote');
+
+for (const fault of ['stat', 'busy', 'frontend', 'release_absent', 'release_owner', 'release_cancelled', 'release_worker', 'receipt']) {
+  test('writer failure releases its lock and preserves the caller trap / ' + fault, () => {
+    const dir = temp(), lock = path.join(dir, 'lease'), recovery = path.join(dir, 'recovery');
+    try {
+      if (!['stat', 'frontend', 'release_absent'].includes(fault)) write(lock, 'owner', ['busy', 'release_owner'].includes(fault) ? 'mm_other\n' : 'mm_fixture\n');
+      if (fault === 'release_cancelled' || fault === 'frontend') write(lock, 'cancelled', '1');
+      if (fault === 'release_worker') write(dir, 'tasks/mm_fixture.1', 'unfinished\n');
+      const command = fault.startsWith('release_') ? 'f50_lease_release mm_fixture'
+        : fault === 'receipt' ? 'f50_task_result mm_fixture mm_fixture.1' : 'f50_lease_acquire mm_fixture browser';
+      const result = shell(api.lease() + `
+trap 'echo CALLER_TRAP' EXIT
+${fault === 'stat' ? 'awk() { return 1; }' : ''}
+${command}
+rc=$?
+[ ! -e "$F50_RECOVERY_LOCK" ] || exit 9
+echo OP_RC=$rc
+`, { F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: recovery, F50_TASK_DIR: path.join(dir, 'tasks') });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, fault === 'release_absent' ? /OP_RC=0/ : /OP_RC=1/);
+      assert.match(result.stdout, /CALLER_TRAP/);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test('API curl keeps sensitive values off argv and preserves request bytes', async () => {
+  const http = require('node:http'), { execFile } = require('node:child_process'), { promisify } = require('node:util');
+  const dir = temp(), body = '{"value":"quotes \\\" 中文"}\nsecond line\t$(not-a-command)';
+  let received;
+  const server = http.createServer((request, response) => {
+    let data = ''; request.setEncoding('utf8'); request.on('data', chunk => { data += chunk; });
+    request.on('end', () => { received = { method: request.method, auth: request.headers.authorization, data }; response.end('ok'); });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const curl = write(dir, 'curl', '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGV_FILE"\nexec /usr/bin/curl "$@"\n');
+    fs.chmodSync(curl, 0o755);
+    const build = run(slice('const buildApiCurl =', 'const callMihomoApi =') + 'buildApiCurl', { shellQuote: productionQuote });
+    const command = build('/configs', 'PUT', body, { apiBase: `http://127.0.0.1:${server.address().port}`, secret: 'fixture-"\\secret' });
+    const { stdout } = await promisify(execFile)('sh', ['-c', 'CURL_BIN=' + productionQuote(curl) + '\n' + command], { env: { ...process.env, ARGV_FILE: path.join(dir, 'argv') } });
+    assert.equal(stdout, 'ok');
+    assert.deepEqual(received, { method: 'PUT', auth: 'Bearer fixture-"\\secret', data: body });
+    assert.doesNotMatch(fs.readFileSync(path.join(dir, 'argv'), 'utf8'), /fixture-|not-a-command|Authorization/);
+  } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('YAML omits undefined object values and rejects nonfinite numbers', () => {
+  const dump = run(slice('const yamlScalar =', '// ===== Compatibility-first YAML JSON bridge') + 'dumpConfigYaml');
+  assert.equal(dump({ keep: true, omit: undefined, nested: { omit: undefined }, list: [undefined] }), 'keep: true\nnested: {}\nlist:\n  - null\n');
+  for (const value of [NaN, Infinity, -Infinity]) assert.throws(() => dump({ value }), /NaN|Infinity/);
+});
+
+test('cancelled upload removes the returned file before reporting cancellation', async () => {
+  const dir = temp(), uploaded = write(dir, 'uploaded.yaml', 'fixture');
+  try {
+    const operation = { token: { cancelled: false } };
+    const upload = run(slice('const uploadFileToDevice =', '// ===== File and boot helpers') + 'uploadFileToDevice', {
+      activeCriticalOperation: operation, FormData: class { append() {} }, KANO_baseURL: '', common_headers: {},
+      fetch: async () => { operation.token.cancelled = true; return { ok: true, json: async () => ({ url: 'uploaded.yaml' }) }; },
+      getUploadedPath: () => uploaded, shellQuote: productionQuote, operationCancelled: () => Error('cancelled'),
+      hostRunShellWithRoot: async command => { const r = shell(command); return { success: r.status === 0 }; },
+    });
+    await assert.rejects(upload({}), /cancelled/);
+    assert.equal(fs.existsSync(uploaded), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('service command quotes each argument without executing path contents', async () => {
+  const dir = temp();
+  try {
+    const service = write(dir, 'Service file', '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+    const command = run(slice('async function f50Command(', 'let f50PackageInput') + 'f50Command', {
+      CLASH_SERVICE: service, shellQuote: productionQuote, ensureCompatBackend: async () => true,
+      runShellWithRoot: async script => { const r = shell(script); return { success: r.status === 0, content: r.stdout }; },
+    });
+    const argument = "file'; touch " + path.join(dir, 'injected') + "; echo '";
+    const result = await command('fetch-batch', 1000, [argument]);
+    assert.equal(result.success, true);
+    assert.equal(result.content, 'fetch-batch\n' + argument + '\n');
+    assert.equal(fs.existsSync(path.join(dir, 'injected')), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('editor failure removes an upload without changing the destination', async () => {
+  const dir = temp(), uploaded = write(dir, 'upload.txt', 'new'), target = write(dir, 'list.txt', 'old');
+  try {
+    const allowed = { path: target, label: 'list.txt', allowEmpty: true };
+    const save = run(slice('const writeEditableLocalFile =', 'const showEditableLocalFilesDialog =') + 'writeEditableLocalFile', {
+      findEditableLocalFile: () => allowed, CLASH_CONFIG: '/config', CLASH_TEMPLATE: '/template', CLASH_TEMPLATE_BASE: '/base',
+      CLASH_OVERRIDE_JS: '/override', CLASH_SUB_URLS: '/sub', CLASH_RULE_OVERRIDE_JSON: '/rules', CLASH_RULE_OVERRIDE_APPLIED_JSON: '/applied',
+      uploadEditorContent: async () => uploaded, shellQuote: productionQuote, createToast() {}, escapeHtml: String, safeTextToHtml: String,
+      runShellWithRoot: async () => { throw Error('cancelled'); },
+      hostRunShellWithRoot: async command => { const r = shell(command); return { success: r.status === 0 }; },
+    });
+    assert.equal(await save(allowed, 'new'), false);
+    assert.equal(fs.existsSync(uploaded), false);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'old');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('backup pruning handles spaces and matching source sidecars', () => {
+  const dir = temp(), config = path.join(dir, 'config.yaml');
+  try {
+    for (const [name, seconds] of [['old backup', 1], ['new backup', 2]]) {
+      for (const suffix of ['', '.source']) { const p = write(dir, 'config.yaml.before_' + name + suffix, name); fs.utimesSync(p, seconds, seconds); }
+    }
+    const prune = run(slice('const pruneKanoBackupsCmd =', 'const addBootLinesCmd') + 'pruneKanoBackupsCmd', {
+      shellQuote: productionQuote, CLASH_CONFIG: config, CLASH_TEMPLATE: path.join(dir, 'template'), CLASH_TEMPLATE_BASE: path.join(dir, 'base'),
+    });
+    assert.equal(shell(prune(1)).status, 0);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['config.yaml.before_new backup', 'config.yaml.before_new backup.source']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('failed template validation removes the original upload', async () => {
+  const dir = temp(), uploaded = write(dir, 'uploaded.yaml', 'fixture');
+  try {
+    const save = run(slice('const saveTemplate =', 'const showInfoDialog =') + 'saveTemplate', {
+      createRandomString: () => 'fixture', readConfigSource: async () => 'template.yaml', uploadFileToDevice: async () => uploaded,
+      shellQuote: productionQuote, runShellWithRoot: async () => ({ success: false, content: '0' }),
+      hostRunShellWithRoot: async command => { const r = shell(command.replaceAll('/data/', dir + '/data/')); return { success: r.status === 0 }; },
+      createToast() {}, textToHtml: String, sanitizeSubscriptionSecrets: String, console: { error() {} },
+    });
+    assert.equal(await save({}), false);
+    assert.equal(fs.existsSync(uploaded), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('export cleanup runs on the device after the browser handler has returned', async () => {
+  const dir = temp(), backupBtn = {}, uploaded = path.join(dir, 'web', 'uploads');
+  let script = '';
+  try {
+    const config = write(dir, 'config.yaml', 'secret: fixture\n');
+    await run(slice('backupBtn.onclick =', '\n  (async () => {') + 'backupBtn.onclick', {
+      backupBtn, crypto: require('node:crypto').webcrypto, ensureReady: async () => true,
+      acquireCriticalOperation: () => ({}), releaseCriticalOperation: async () => {}, setButtonBusy() {}, createToast() {}, safeTextToHtml: String,
+      configPackageBackupFiles: () => [{ label: 'config.yaml', path: config }], buildDefaultOverrideJs: () => '', defaultRuleOverrideConfig: () => ({}),
+      shellQuote: productionQuote, F50_FILES_DIR: path.join(dir, 'web'),
+      runShellWithRoot: async value => { script = value; return { success: false }; },
+    })();
+    assert.ok(script);
+    const sleep = write(dir, 'bin/sleep', `#!/bin/sh
+printf '%s' "\${KANO_TPROXY_TASK:-}" > ${productionQuote(path.join(dir, 'owner'))}
+touch ${productionQuote(path.join(dir, 'scheduled'))}
+while [ ! -f ${productionQuote(path.join(dir, 'release'))} ]; do /bin/sleep 0.01; done
+`);
+    fs.chmodSync(sleep, 0o755);
+    const result = shell(script.replaceAll('/data/kano_config_package_', dir + '/private-package_'), {
+      PATH: path.dirname(sleep) + ':' + process.env.PATH, KANO_TPROXY_TASK: 'mm_fixture',
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const name = result.stdout.match(/^PACKAGE_NAME=(.+)$/m)[1];
+    const archive = path.join(uploaded, name);
+    assert.match(name, /^mm_config_package_\d+_[a-f0-9]{32}\.tar\.gz$/);
+    assert.equal(fs.existsSync(archive), true);
+    assert.deepEqual(fs.readdirSync(uploaded), [name]);
+    for (let n = 0; !fs.existsSync(path.join(dir, 'scheduled')) && n < 200; n++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(fs.readFileSync(path.join(dir, 'owner'), 'utf8'), '');
+    write(dir, 'release', '1');
+    for (let n = 0; fs.existsSync(archive) && n < 200; n++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(fs.existsSync(archive), false);
+  } finally { write(dir, 'release', '1'); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const name of ['../escape', '..', '/absolute', 'dir/../escape', 'dir\\escape', 'name\tbad', 'config.yaml', './config.yaml']) {
+  test('configuration restore validates fallback ZIP listings before extraction / ' + name, async () => {
+    const dir = temp(); let script = '';
+    try {
+      const restore = run(slice('const restoreConfigPackageFromFile =', 'const packageUploadEl =') + 'restoreConfigPackageFromFile', {
+        createRandomString: () => 'fixture', configPackageBackupFiles: () => [{ label: 'config.yaml', path: path.join(dir, 'config.yaml') }],
+        askConfirm: async () => true, textToHtml: String, safeTextToHtml: String, createToast() {},
+        buildControllerInfo: async () => ({}), createConfigRollbackPoint: async () => '', uploadFileToDevice: async () => path.join(dir, 'upload.zip'),
+        shellQuote: productionQuote, CLASH_DIR: path.join(dir, 'clash'), CLASH_PROXY_DIR: path.join(dir, 'clash/Proxy'), CLASH_CONFIG: path.join(dir, 'config.yaml'),
+        F50_DEFAULT_SECRET: '123456', prepareYqRuntimeCmd: () => '', yqExecutableCheckCmd: () => '', pruneKanoBackupsCmd: () => '',
+        runShellWithRoot: async value => { script = value; return { success: false, content: 'captured' }; },
+      });
+      assert.equal(await restore({ name: 'backup.zip', size: 1 }), false);
+      write(dir, 'upload.zip', 'fixture');
+      const extracted = path.join(dir, 'extracted');
+      const mock = `unzip() {
+case "$1" in
+ -t) return 0;; -Z1) return 1;;
+ -l) printf ' 12  2026-10-19 00:00 %s\\n' ${productionQuote(name)}; return 0;;
+ -q) touch ${productionQuote(extracted)}; return 9;;
+esac
+}\n`;
+      const result = shell(mock + script.replaceAll('/data/', dir + '/data/'));
+      assert.notEqual(result.status, 0);
+      const safe = ['config.yaml', './config.yaml'].includes(name);
+      assert.equal(fs.existsSync(extracted), safe, result.stdout + result.stderr);
+      if (!safe) assert.match(result.stdout, /unsafe archive path/);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 
 test('all final operation shells parse in sh and BusyBox ash', () => {
   const scripts = [api.install('/data/upload.zip'), api.start('start'), api.start('restart'),
@@ -26,10 +221,10 @@ for (const stage of ['tun', 'original', 'audit5', 'tun6', 'dns']) {
     const dir = temp();
     try {
       let before = service.replace('# KANO_TUN_RULE_CLEANUP=2', '# KANO_TUN_RULE_CLEANUP=1');
-      if (stage === 'original') before = before.replace('# KANO_ORIGINAL_CONFIG_PRESERVATION=13', '# KANO_ORIGINAL_CONFIG_PRESERVATION=12');
+      if (stage === 'original') before = before.replace(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=\d+$/m, '# KANO_ORIGINAL_CONFIG_PRESERVATION=0');
       if (stage === 'audit5') before = before.replace('# KANO_CURL_ABSOLUTE=1', '# KANO_CURL_ABSOLUTE=0');
       if (stage === 'tun6') before = before.replace('# KANO_TUN_IPV6_RETURN=2', '# KANO_TUN_IPV6_RETURN=1');
-      if (stage === 'dns') before = before.replace('# KANO_IPV6_DNS_SPLIT=1', '# KANO_IPV6_DNS_SPLIT=0');
+      if (stage === 'dns') before = before.replace(/^# KANO_IPV6_DNS_SPLIT=\d+$/m, '# KANO_IPV6_DNS_SPLIT=0');
       const file = write(dir, 'Clash.Service', before);
       const fail = `awk() { for arg in "$@"; do case "$arg" in *candidate.${stage}.*.functions) echo INJECTED_STAGE=${stage} >&2; return 1;; esac; done; command awk "$@"; }\n`;
       const result = shell(fail + api.patch(quote(file)));
@@ -51,6 +246,19 @@ test('Service patch is idempotent and preserves file permissions', () => {
     assert.equal(fs.readFileSync(file, 'utf8'), before);
     assert.equal(fs.statSync(file).ino, stat.ino);
     if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o700);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('packaged Service migration installs executable DNS address validation', () => {
+  const dir = temp();
+  try {
+    const file = write(dir, 'Clash.Service', service);
+    const patched = shell(shellApi(source, '', { shellQuote: productionQuote }).patch(productionQuote(file)));
+    assert.equal(patched.status, 0, patched.stdout + patched.stderr);
+    const text = fs.readFileSync(file, 'utf8');
+    const validator = slice('f50_dns4_address() {', 'f50_dns4_rule() {', text);
+    const result = shell(validator + "\nf50_dns4_address '192.168.0.0/24' || exit 1\nif f50_dns4_address '192.168.0.0/24 -j ACCEPT'; then exit 2; fi\n");
+    assert.equal(result.status, 0, result.stdout + result.stderr);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -154,6 +362,12 @@ test('override validation blocks import, self and escaped spellings while accept
 for (const code of ['function main() { throw new Error("override failure"); }', 'function main() { return []; }', 'function main() { return {rules:"bad"}; }']) test('override rejects invalid result / ' + code, async () => {
   await assert.rejects(overrideApi().apply(code, {}));
 });
+for (const expression of ['function() {}', 'async function() {}', 'function*() {}', 'async function*() {}']) {
+  test('override blocks computed dynamic constructors / ' + expression, async () => {
+    const code = `function main(config) { const f = ${expression}; return f["con"+"structor"]("return this")(); }`;
+    await assert.rejects(overrideApi().apply(code), /not a function/);
+  });
+}
 
 function recoveryCase({ receipt = true, active = false, reused = false, foreign = false, background = false, backgroundComm = 'curl', transaction = false, legacy = false, reclaim = false, output = false, snapshot = false, preempt = false, unrelated = false } = {}) {
   const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');

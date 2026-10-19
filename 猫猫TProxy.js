@@ -295,7 +295,7 @@ f50_writer_enter() {
     [ "$writer_tries" -lt 20 ] || { echo F50_OPERATION_RECOVERY_BUSY; return 1; }
     sleep 0.1
   done
-  writer_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$$/stat) || return 1
+  writer_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$$/stat) || { rmdir "$F50_RECOVERY_LOCK"; return 1; }
   case "$writer_start" in ''|*[!0-9]*) rmdir "$F50_RECOVERY_LOCK"; return 1;; esac
   printf '%s %s\\n' "$$" "$writer_start" > "$F50_RECOVERY_LOCK/owner" || { rmdir "$F50_RECOVERY_LOCK"; return 1; }
   trap 'f50_writer_leave' EXIT
@@ -320,13 +320,13 @@ f50_frontend_write() {
     mv -f "$F50_OPERATION_LOCK/frontend.$$" "$F50_OPERATION_LOCK/frontend" || return 1
   return 0
 }
-f50_frontend_touch() {
+f50_frontend_touch() (
   f50_writer_enter || return 1
   f50_frontend_write "$@"; frontend_rc=$?
   f50_writer_leave || return 1
   [ "$frontend_rc" != 0 ] || echo F50_FRONTEND_RECORDED=1
   return "$frontend_rc"
-}
+)
 f50_task_receipt() {
   receipt_tag=$1; receipt_file=$2
   [ -f "$receipt_file" ] && [ ! -L "$receipt_file" ] || return 1
@@ -339,13 +339,13 @@ f50_task_receipt() {
   done
   [ "$receipt_pid" -gt 0 ] && [ "$receipt_manager" -gt 0 ] && [ "$receipt_manager_start" -gt 0 ] && [ "$F50_RECEIPT_RC" -le 255 ]
 }
-f50_task_result() {
+f50_task_result() (
   f50_writer_enter || return 1
   f50_task_receipt "$1" "$F50_TASK_DIR/$2" || { echo F50_TASK_RESULT_UNCONFIRMED; return 1; }
   sed '1d' "$receipt_file" || return 1
   f50_writer_leave || return 1
   printf '\\nF50_TASK_FINISHED=%s:%s\\n' "$2" "$F50_RECEIPT_RC"
-}
+)
 f50_lease_status() {
   [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
   if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1
@@ -358,7 +358,7 @@ f50_lease_status() {
     else echo F50_OPERATION_OWNER_CHANGED; fi
   fi
 }
-` : ''}f50_lease_acquire() {
+` : ''}f50_lease_acquire() (
   lease_tag=$1
   case "$lease_tag" in mm_*) ;; *) echo F50_OPERATION_INVALID_OWNER; return 1 ;; esac
   [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_TASK_DIR" ] || { echo F50_OPERATION_UNSAFE_PATH; return 1; }
@@ -373,8 +373,8 @@ ${includeFrontend ? '  if [ "$2" = browser ]; then f50_writer_enter || return 1;
   [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
   [ ! -e "$F50_OPERATION_LOCK/cancelled" ] && [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_BUSY; return 1; }
 ${includeFrontend ? '  if [ "$2" = browser ]; then f50_frontend_write "$lease_tag" running && f50_writer_leave || return 1; fi\n' : ''}  echo F50_LEASE_ACQUIRED=1
-}
-f50_lease_release() {
+)
+f50_lease_release() (
   lease_tag=$1
 ${includeFrontend ? '  f50_writer_enter || return 1\n' : ''}  if [ ! -e "$F50_OPERATION_LOCK" ]; then echo F50_LEASE_RELEASED=1; return 0; fi
   [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
@@ -386,7 +386,7 @@ ${includeFrontend ? '    f50_task_receipt "$lease_tag" "$lease_task" || { echo F
   done
 ${includeFrontend ? '  for lease_task in "$F50_TASK_DIR/$lease_tag."*; do\n    [ ! -e "$lease_task" ] || rm -f "$lease_task" || return 1\n  done\n  rmdir "$F50_TASK_DIR" 2>/dev/null || true\n' : ''}${includeFrontend ? '  [ ! -L "$F50_OPERATION_LOCK/frontend" ] || return 1\n  rm -f "$F50_OPERATION_LOCK/frontend" ' : '  rm -f '}"$F50_OPERATION_LOCK/owner" && rmdir "$F50_OPERATION_LOCK" || return 1
 ${includeFrontend ? '  f50_writer_leave || return 1\n' : ''}  echo F50_LEASE_RELEASED=1
-}
+)
 `; }
 
 function buildF50ServiceLeaseGate() { return buildF50LeaseFunctions(false) + "\n" + `# Serialize direct boot/CLI mutations with browser operations; no stale lock is stolen.
@@ -964,13 +964,13 @@ awk -v functions="$FUNCTIONS" '
 ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish}
 fi
-if ! grep -qx '# KANO_IPV6_DNS_SPLIT=2' "$SERVICE"; then
+if ! grep -qx '# KANO_IPV6_DNS_SPLIT=3' "$SERVICE"; then
 TMP="$SERVICE.dns.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
 awk -v functions="$FUNCTIONS" '
   /^f50_disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ { legacy=1 }
-  legacy { if($0=="# KANO_IPV6_DNS_SPLIT=1") legacy=0; next }
+  legacy { if($0 ~ /^# KANO_IPV6_DNS_SPLIT=[0-9]+$/) legacy=0; next }
   /^disable_unsupported_ipv6_dns_hijack\\(\\) \\{/ {
     while ((getline line < functions) > 0) print line
     close(functions); helpers++; skipping=1; next
@@ -1214,12 +1214,12 @@ async function performF50Uninstall() {
   return result;
 }
 
-async function f50Command(action, timeout = 60000) {
+async function f50Command(action, timeout = 60000, args = []) {
   if (!(await ensureCompatBackend())) return { success: false, content: 'F50_BACKEND_REQUIRED' };
   if (/^(?:stop|recover|restart)$/.test(action) && !(await ensureOriginalSubscriptionService())) {
     return { success: false, content: 'F50_ERROR=tun_rule_cleanup_patch_failed' };
   }
-  return runShellWithRoot('sh ' + shellQuote(CLASH_SERVICE) + ' ' + action, timeout);
+  return runShellWithRoot('sh ' + [CLASH_SERVICE, action, ...args].map(shellQuote).join(' '), timeout);
 }
 let f50PackageInput = null;
 function buildF50ZashboardValidationFunction() { return `
@@ -1706,6 +1706,13 @@ f50_dns_restore_options() {
       echo F50_ERROR=ipv6_dns_options_restore_failed; return 1
     }
 }
+f50_dns4_address() {
+  printf '%s\\n' "$1" | awk '
+    {n=split($0,p,"/"); if(n>2 || p[1] !~ /^[0-9.]+$/ || (n==2 && (p[2] !~ /^[0-9]+$/ || p[2]>32))) exit 1
+     if(split(p[1],o,".")!=4) exit 1
+     for(i=1;i<=4;i++) if(o[i]=="" || length(o[i])>3 || o[i]>255) exit 1}
+  '
+}
 f50_dns4_rule() {
   if [ "$dns4_action" = verify ]; then
     iptables -w 5 -t nat -C "$@" || { echo F50_ERROR=ipv4_dns_rule_missing; return 1; }
@@ -1745,6 +1752,7 @@ f50_ipv4_dns_rules() {
               done
             fi ;;
           *)
+            f50_dns4_address "$dns4_device" || { echo F50_ERROR=invalid_dns_bypass_address; exit 1; }
             for dns4_protocol in udp tcp; do
               f50_dns4_rule KANO_F50_DNS -s "$dns4_device" -p "$dns4_protocol" --dport 53 -j ACCEPT || exit 1
             done ;;
@@ -1754,6 +1762,7 @@ f50_ipv4_dns_rules() {
   if [ "$dns4_mode" = tun ] && grep -qx 'private_route_enabled=on' "$f50_dns_options"; then
     for dns4_cidr in $(sed -n 's/^private_route_cidrs=//p' "$f50_dns_options"); do
       case "$dns4_cidr" in *:*) continue;; esac
+      f50_dns4_address "$dns4_cidr" || { echo F50_ERROR=invalid_dns_private_route; return 1; }
       f50_dns4_rule KANO_F50_DNS -d "$dns4_cidr" -j ACCEPT || return 1
     done
   fi
@@ -1812,7 +1821,7 @@ f50_run_controller() (
   case "$1:$2" in policy:verify) f50_ipv4_dns_rules verify;; *) f50_ipv4_dns_rules apply;; esac || exit 1
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 )
-# KANO_IPV6_DNS_SPLIT=2
+# KANO_IPV6_DNS_SPLIT=3
 `; }
 
 function buildF50InspectHelpers() { return `f50_inspect() {
@@ -3470,8 +3479,8 @@ exit "$delete_rc"
   }
   async function f50GistExec(args, timeout = 10000, input = '') {
     const tag = Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,'0')).join('');
-    const invocation = shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') +
-      (input ? ' <<\'F50_SEALED_REQUEST\'\n' + input + '\nF50_SEALED_REQUEST\n' : '\n');
+    const invocation = (input ? "printf '%s' " + shellQuote(input) + ' | ' : '') +
+      shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') + '\n';
     const script = `umask 077
 printf '\\nF50_GIST_BEGIN_${tag}\\n'
 (
@@ -4017,13 +4026,17 @@ exit "$kano_task_rc"`;
       headers: common_headers,
       body: formData,
     });
-    if (operation && operation.token.cancelled) throw operationCancelled();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
     if (!result || typeof result.url !== 'string' || !result.url.trim()) {
       throw new Error((result && result.error) || '上传失败');
     }
-    return getUploadedPath(result.url);
+    const uploadedPath = getUploadedPath(result.url);
+    if (operation && operation.token.cancelled) {
+      await hostRunShellWithRoot.call(globalThis, `rm -f ${shellQuote(uploadedPath)}`, 5000);
+      throw operationCancelled();
+    }
+    return uploadedPath;
   };
 
   // ===== File and boot helpers =====
@@ -4164,7 +4177,7 @@ exit "$kano_task_rc"`;
           base="$1"
           max_keep="$2"
           count=0
-          for stale in $(ls -1t "\${base}".before_* 2>/dev/null); do
+          ls -1t "\${base}".before_* 2>/dev/null | while IFS= read -r stale; do
             case "$stale" in *.source|*.source.absent) continue ;; esac
             count=$((count + 1))
             [ "$count" -le "$max_keep" ] || rm -f "$stale" "$stale.source" "$stale.source.absent" 2>/dev/null || true
@@ -4629,10 +4642,12 @@ exit "$kano_task_rc"`;
   const createRandomString = (length = 8) => {
     const characters =
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const random = globalThis.crypto?.getRandomValues
+      ? crypto.getRandomValues(new Uint8Array(length)) : null;
     let result = '';
     for (let i = 0; i < length; i++) {
       result += characters.charAt(
-        Math.floor(Math.random() * characters.length),
+        random ? random[i] % characters.length : Math.floor(Math.random() * characters.length),
       );
     }
     return result;
@@ -5236,6 +5251,7 @@ exit "$kano_task_rc"`;
 
   const yamlScalar = (value) => {
     if (value === null || value === undefined) return 'null';
+    if (typeof value == 'number' && !Number.isFinite(value)) throw new TypeError('YAML 不支持 NaN 或 Infinity');
     if (typeof value == 'number' || typeof value == 'boolean') return String(value);
     return JSON.stringify(String(value));
   };
@@ -5267,14 +5283,15 @@ exit "$kano_task_rc"`;
       }).join('\n');
     }
     if (isPlainYamlObject(value)) {
-      const entries = Object.entries(value);
+      const entries = Object.entries(value).filter(([, item]) => item !== undefined);
       if (entries.length == 0) return '{}';
       return entries.map(([key, item]) => {
         if (Array.isArray(item)) {
           return `${pad}${yamlKey(key)}:${item.length ? `\n${dumpYamlValue(item, indent + 2)}` : ' []'}`;
         }
         if (isPlainYamlObject(item)) {
-          return `${pad}${yamlKey(key)}:${Object.keys(item).length ? `\n${dumpYamlValue(item, indent + 2)}` : ' {}'}`;
+          const rendered = dumpYamlValue(item, indent + 2);
+          return `${pad}${yamlKey(key)}:${rendered === '{}' ? ' {}' : `\n${rendered}`}`;
         }
         return `${pad}${yamlKey(key)}: ${yamlScalar(item)}`;
       }).join('\n');
@@ -6074,8 +6091,14 @@ ${buildF50YamlCommitBody(withBase)}
     const input = JSON.parse(JSON.stringify(config || {}));
     const workerSource = `
       "use strict";
+      (() => {
+      const FunctionConstructor = Function;
       const safePostMessage = self.postMessage.bind(self);
+      for (const prototype of [Function.prototype, Object.getPrototypeOf(async function() {}), Object.getPrototypeOf(function*() {}), Object.getPrototypeOf(async function*() {})]) {
+        Object.defineProperty(prototype, "constructor", { value: undefined, writable: false, configurable: false });
+      }
       const blockedGlobals = [
+        "Function", "eval",
         "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport",
         "Worker", "SharedWorker", "importScripts", "indexedDB", "caches",
         "navigator", "location", "postMessage", "close"
@@ -6108,7 +6131,7 @@ ${buildF50YamlCommitBody(withBase)}
             'if (!fn) return config;\\n' +
             'const out = fn(config);\\n' +
             'return out || config;\\n';
-          const runner = new Function("config", "module", "exports", runnerBody);
+          const runner = new FunctionConstructor("config", "module", "exports", runnerBody);
           const output = runner(config, module, exports);
           safePostMessage({ ok: true, output });
         } catch (error) {
@@ -6118,6 +6141,7 @@ ${buildF50YamlCommitBody(withBase)}
           });
         }
       };
+      })();
     `;
 
     const blobUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
@@ -6722,26 +6746,23 @@ KANO_WRITE_CHECK_EOF
     const url = `${info.apiBase}${path}`;
     const bodyText = body == null ? null : typeof body === 'string' ? body : JSON.stringify(body);
     if (body != null && typeof bodyText !== 'string') throw new TypeError('Invalid API JSON body');
-    const bodyArg = bodyText == null ? '' : `--data-binary ${shellQuote(bodyText)}`;
-    const typeArg = body == null ? '' : `-H ${shellQuote('Content-Type: application/json')}`;
+    const configValue = value => '"' + String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"';
+    const curlConfig = [
+      `url = ${configValue(url)}`,
+      `request = ${configValue(String(method || 'GET').toUpperCase())}`,
+      ...(info.secretSet || info.secret ? [`header = ${configValue(`Authorization: Bearer ${info.secret}`)}`] : []),
+      ...(bodyText == null ? [] : [`header = "Content-Type: application/json"`, `data-binary = ${configValue(bodyText)}`]),
+    ].join('\n') + '\n';
     const outputArg = outputFile
       ? `-o ${shellQuote(outputFile)} -w ${shellQuote('%{http_code}')}`
       : '';
-    const authorizationArgs = info.secretSet || info.secret
-      ? `-H ${shellQuote(`Authorization: Bearer ${info.secret}`)}`
-      : '';
-    return [
+    return `printf '%s' ${shellQuote(curlConfig)} | ` + [
       '"$CURL_BIN"',
       '-sS',
       "--noproxy '*' --connect-timeout 2",
       `-m ${Math.max(1, Number(requestTimeout) || 8)}`,
       outputArg,
-      '-X',
-      shellQuote(String(method || 'GET').toUpperCase()),
-      authorizationArgs,
-      typeArg,
-      bodyArg,
-      shellQuote(url),
+      '-K -',
     ].filter(Boolean).join(' ');
   };
 
@@ -7107,7 +7128,7 @@ KANO_WRITE_CHECK_EOF
   let r;
   try {
     operationStage('下载并验证订阅');
-    r = await f50Command('fetch-batch ' + shellQuote(staged.stagePath), 100000);
+    r = await f50Command('fetch-batch', 100000, [staged.stagePath]);
     const line = String(r.content || '').split(/\r?\n/).find(s => s.startsWith('F50_FETCH_RESULT='));
     let data = null;
     try { if (line) data = JSON.parse(line.slice('F50_FETCH_RESULT='.length)); } catch (_) {}
@@ -7688,9 +7709,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const txTemplate = `/data/kano_template_upload_${txId}.yaml`;
     let subRollbackPath = '';
     let subSourcesPersisted = false;
+    let uploadedPath = '';
     try {
       const preserveSubscription = ['uploaded_config', 'subscription_original'].includes(await readConfigSource());
-      const uploadedPath = await uploadFileToDevice(file);
+      uploadedPath = await uploadFileToDevice(file);
       const foundFile = await runShellWithRoot(`
                         [ -s ${shellQuote(uploadedPath)} ] && echo 1 || echo 0
                     `);
@@ -7703,7 +7725,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         mkdir -p /data ${shellQuote(`${CLASH_DIR}/Tools`)}
         mv ${shellQuote(uploadedPath)} ${shellQuote(txBase)}
         cp ${shellQuote(txBase)} ${shellQuote(txTemplate)}
-        chmod 644 ${shellQuote(txBase)} ${shellQuote(txTemplate)}
+        chmod 600 ${shellQuote(txBase)} ${shellQuote(txTemplate)}
         [ -s ${shellQuote(txBase)} ] && [ -s ${shellQuote(txTemplate)} ] && echo TEMPLATE_STAGED
       `);
       if (!stageRes.success || !String(stageRes.content || '').includes('TEMPLATE_STAGED')) {
@@ -7856,6 +7878,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       );
       return false;
     } finally {
+      if (uploadedPath) await hostRunShellWithRoot.call(globalThis, `rm -f ${shellQuote(uploadedPath)}`, 5000);
       await runShellWithRoot(`
         rm -f ${shellQuote(txBase)} ${shellQuote(txTemplate)} ${shellQuote(`${txBase}.new`)} ${shellQuote(`${txTemplate}.new`)} ${shellQuote(subRollbackPath)} 2>/dev/null || true
       `, 5000);
@@ -9224,12 +9247,12 @@ btn_disabled.onclick = async () => {
             cat /data/kano_config_package_archive_test.out 2>/dev/null || true
             exit 1
           }
-          archive_names="$(unzip -Z1 "$SRC" 2>/dev/null || true)"
-          if [ -n "$archive_names" ] && printf '%s\\n' "$archive_names" | grep -Eq '(^/|(^|/)\\.\\.(/|$))'; then
-            echo "RESTORE_FAILED: unsafe zip path detected"
-            exit 1
+          archive_names=$(unzip -Z1 "$SRC" 2>/dev/null); list_rc=$?
+          if [ "$list_rc" != 0 ]; then
+            archive_listing=$(unzip -l "$SRC" 2>/dev/null); list_rc=$?
+            archive_names=$(printf '%s\\n' "$archive_listing" | awk '/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/ {sub(/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/,"");print}')
           fi
-          unzip -q "$SRC" -d "$STAGE" || { echo "RESTORE_FAILED: unzip failed"; exit 1; }
+          [ "$list_rc" = 0 ] || { echo "RESTORE_FAILED: zip listing failed"; exit 1; }
         else
           command -v tar >/dev/null 2>&1 || { echo "RESTORE_FAILED: tar missing"; exit 1; }
           tar -tzf "$SRC" >/data/kano_config_package_archive_list.out 2>&1 || {
@@ -9237,10 +9260,17 @@ btn_disabled.onclick = async () => {
             cat /data/kano_config_package_archive_list.out 2>/dev/null || true
             exit 1
           }
-          if grep -Eq '(^/|(^|/)\\.\\.(/|$))' /data/kano_config_package_archive_list.out; then
-            echo "RESTORE_FAILED: unsafe tar path detected"
-            exit 1
-          fi
+          archive_names=$(cat /data/kano_config_package_archive_list.out) || exit 1
+        fi
+        [ -n "$archive_names" ] || { echo "RESTORE_FAILED: empty archive listing"; exit 1; }
+        while IFS= read -r member; do
+          case "$member" in /*|../*|*/../*|*/..|..|*\\\\*|*[[:cntrl:]]*) echo "RESTORE_FAILED: unsafe archive path"; exit 1;; esac
+        done <<EOF_F50_RESTORE_MEMBERS
+$archive_names
+EOF_F50_RESTORE_MEMBERS
+        if [ ${shellQuote(isZipPackage ? '1' : '0')} = '1' ]; then
+          unzip -q "$SRC" -d "$STAGE" || { echo "RESTORE_FAILED: unzip failed"; exit 1; }
+        else
           tar -xzf "$SRC" -C "$STAGE" || { echo "RESTORE_FAILED: tar failed"; exit 1; }
         fi
         if find "$STAGE" -type l 2>/dev/null | grep -q .; then
@@ -9477,7 +9507,7 @@ btn_disabled.onclick = async () => {
     setButtonBusy(backupBtn, true, '导出中…');
     try {
     createToast('正在导出猫猫配置包...', 'green');
-    const t = Math.floor(Date.now() + Math.random());
+    const t = `${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')}`;
     const backupFiles = configPackageBackupFiles();
     const defaultOverrideJsForBackup = buildDefaultOverrideJs();
     const defaultRuleOverrideJsonForBackup = JSON.stringify(defaultRuleOverrideConfig(), null, 2) + '\n';
@@ -9487,8 +9517,11 @@ btn_disabled.onclick = async () => {
     const res = await runShellWithRoot(`
         set -e
         UPLOAD_DIR=${shellQuote(`${F50_FILES_DIR}/uploads`)}
-        PKG_DIR="$UPLOAD_DIR/mm_config_package_${t}"
+        PKG_DIR=/data/kano_config_package_${t}
         PKG_BASE="$UPLOAD_DIR/mm_config_package_${t}"
+        PKG=
+        PACK_READY=0
+        trap 'rm -rf "$PKG_DIR"; [ "$PACK_READY" = 1 ] || rm -f "$PKG"' EXIT
         mkdir -p "$UPLOAD_DIR"
         rm -rf "$UPLOAD_DIR"/mm_config_package_* 2>/dev/null || true
         mkdir -p "$PKG_DIR"
@@ -9551,9 +9584,14 @@ btn_disabled.onclick = async () => {
           exit 1
         fi
         rm -rf "$PKG_DIR" 2>/dev/null || true
-        chmod 644 "$PKG" 2>/dev/null || true
         [ -s "$PKG" ] || { echo "PACK_FAILED: empty package"; exit 1; }
+        (
+          unset KANO_TPROXY_TASK
+          exec nohup sh -c 'sleep 300; rm -f "$1"' sh "$PKG"
+        ) </dev/null >/dev/null 2>&1 &
+        chmod 644 "$PKG"
         echo "PACKAGE_NAME=$(basename "$PKG")"
+        PACK_READY=1
         `, 30 * 1000);
     if (!res.success) return createToast(`备份失败<br>${safeTextToHtml(res.content || '')}`, 'red');
     const outputLines = String(res.content || '').split('\n');
@@ -9582,9 +9620,8 @@ btn_disabled.onclick = async () => {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => {
-      runShellWithRoot(`rm -f ${shellQuote(`${F50_FILES_DIR}/uploads/${packageName}`)} 2>/dev/null || true`).catch(() => {});
-    }, 5 * 60 * 1000);
+    } catch (error) {
+      createToast(`备份失败<br>${safeTextToHtml(error?.message || String(error))}`, 'red');
     } finally {
       setButtonBusy(backupBtn, false);
       await releaseCriticalOperation(operationToken);
@@ -10877,9 +10914,14 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const uploadedPath = await uploadFileToDevice(
         new File([content], filename, { type: 'text/plain;charset=utf-8' }),
       );
-      const found = await runShellWithRoot(`[ -f ${shellQuote(uploadedPath)} ] && echo 1 || echo 0`);
-      if (!found.success || String(found.content || '').trim() != '1') throw new Error('上传文件未找到');
-      return uploadedPath;
+      try {
+        const found = await runShellWithRoot(`[ -f ${shellQuote(uploadedPath)} ] && echo 1 || echo 0`);
+        if (!found.success || String(found.content || '').trim() != '1') throw new Error('上传文件未找到');
+        return uploadedPath;
+      } catch (error) {
+        await hostRunShellWithRoot.call(globalThis, `rm -f ${shellQuote(uploadedPath)}`, 5000);
+        throw error;
+      }
     };
 
     const commitUploadedConfigWithValidation = async (uploadedPath, controllerInfo = null) => {
@@ -11024,8 +11066,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         }
       }
 
+      let uploadedPath = '';
       try {
-        const uploadedPath = await uploadEditorContent(content, allowedFile.label);
+        uploadedPath = await uploadEditorContent(content, allowedFile.label);
         const targetDir = allowedFile.path.replace(/\/[^/]+$/, '') || '/';
         const res = await runShellWithRoot(`
           set -e
@@ -11048,6 +11091,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       } catch (e) {
         createToast(`${escapeHtml(allowedFile.label)} 保存失败<br>${safeTextToHtml(e && e.message ? e.message : e)}`, 'red', 9000);
         return false;
+      } finally {
+        if (uploadedPath) await hostRunShellWithRoot.call(globalThis, `rm -f ${shellQuote(uploadedPath)}`, 5000);
       }
     };
 

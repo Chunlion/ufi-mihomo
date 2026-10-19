@@ -4386,8 +4386,7 @@ exit "$kano_task_rc"`;
 
 
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
-    // UFI root-shell requests have a finite request window. Keep every foreground
-    // download attempt below that window and try sources one-by-one from JS.
+    // Keep the device download independent of the host request window.
     operationStage('检查组件包缓存');
     if (allowCached) {
       const cached = await runShellWithRoot(`
@@ -4411,47 +4410,61 @@ exit "$kano_task_rc"`;
       const result = await runShellWithRoot(`
         set +e
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
-        NEW="$ZIP.new.$$"
         LOG=${shellQuote(DOWNLOAD_LOG)}
-        rm -f "$NEW" 2>/dev/null || true
         ${getCurlBinCmd()}
         command -v unzip >/dev/null 2>&1 || { echo "ARCHIVE_VERIFY_FAILED=unzip_missing"; exit 1; }
-        echo "TRY_PACKAGE_URL=${packageUrl ? shellQuote(packageUrl) : "''"}" > "$LOG"
-        "$CURL_BIN" -fsSL --connect-timeout 8 --max-time 120 --retry 0 --speed-time 20 --speed-limit 1024 \
-          ${shellQuote(packageUrl)} -o "$NEW" >>"$LOG" 2>&1
+        printf 'TRY_PACKAGE_URL=%s\\n' ${shellQuote(packageUrl)} > "$LOG" || exit 1
+        (
+        NEW="$ZIP.new.$$"
+        trap 'worker_rc=$?; rm -f "$NEW" "$NEW.verify"; if [ "$worker_rc" -ne 0 ]; then echo "ARCHIVE_WORKER_FAILED=$worker_rc"; fi' EXIT
+        "$CURL_BIN" -fsSL --connect-timeout 30 --max-time 590 --retry 0 \
+          ${shellQuote(packageUrl)} -o "$NEW"
         download_rc=$?
         if [ "$download_rc" -ne 0 ]; then
-          rm -f "$NEW" 2>/dev/null || true
           echo "ARCHIVE_DOWNLOAD_FAILED=$download_rc"
-          cat "$LOG" 2>/dev/null || true
           exit 1
         fi
         [ -s "$NEW" ] || {
-          rm -f "$NEW" 2>/dev/null || true
           echo "ARCHIVE_VERIFY_FAILED=empty"
           exit 1
         }
         size="$(wc -c < "$NEW" 2>/dev/null || echo 0)"
-        unzip -t "$NEW" >"$LOG.verify" 2>&1 || {
-          rm -f "$NEW" 2>/dev/null || true
+        unzip -t "$NEW" >"$NEW.verify" 2>&1 || {
           echo "ARCHIVE_VERIFY_FAILED=zip"
-          cat "$LOG.verify" 2>/dev/null || true
+          cat "$NEW.verify" 2>/dev/null || true
           exit 1
         }
         # v7.3.4 FINAL: do not reject an otherwise valid ZIP by exact internal path names here.
         # Package-root/component discovery happens after extraction, where nested/case-varied layouts can be normalized.
         mv -f "$NEW" "$ZIP" || exit 1
-        printf '%s\n' ${shellQuote(packageUrl)} > ${shellQuote(DOWNLOAD_SOURCE_FILE)}
+        printf '%s\n' ${shellQuote(packageUrl)} > ${shellQuote(DOWNLOAD_SOURCE_FILE)} || exit 1
         chmod 600 ${shellQuote(DOWNLOAD_SOURCE_FILE)} 2>/dev/null || true
-        rm -f "$LOG.verify" 2>/dev/null || true
-        echo "ARCHIVE_READY=downloaded"
         echo "ARCHIVE_SOURCE=${shellQuote(packageUrl)}"
         echo "ARCHIVE_BYTES=$size"
-      `, 140 * 1000);
-      const content = String(result.content || '');
+        rm -f "$NEW.verify" || exit 1
+        trap - EXIT
+        echo "ARCHIVE_READY=downloaded"
+        ) >>"$LOG" 2>&1 < /dev/null &
+        echo "ARCHIVE_DOWNLOAD_STARTED=1"
+      `, 10 * 1000);
+      let content = String(result.content || '');
       if (result.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: content, content };
-      if (result.success && content.includes('ARCHIVE_READY=downloaded')) {
-        return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
+      if (result.success && /^ARCHIVE_DOWNLOAD_STARTED=1$/m.test(content)) {
+        const deadline = Date.now() + 600000;
+        let finished = false;
+        while (Date.now() < deadline) {
+          if (activeCriticalOperation?.token.cancelled) throw operationCancelled();
+          const log = await hostRunShellWithRoot.call(globalThis, 'tail -n 100 ' + shellQuote(DOWNLOAD_LOG), 5000)
+            .then(f50ShellReply).catch(error => ({ success: false, content: error?.message || String(error) }));
+          content = String(log.content || '');
+          if (log.success && /^ARCHIVE_READY=downloaded$/m.test(content)) {
+            return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
+          }
+          if (log.success && /^ARCHIVE_WORKER_FAILED=/m.test(content)) { finished = true; break; }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        // An unconfirmed worker must retain its lease and block installation.
+        if (!finished) throw f50UnknownCompletion(activeCriticalOperation, content);
       }
       errors.push(`[${packageUrl}]\n${content || 'download failed'}`);
     }
@@ -4637,11 +4650,11 @@ exit "$kano_task_rc"`;
 
   const loadProviderUserAgent = async ({ fresh = false } = {}) => {
     if (!fresh && providerUserAgentLoaded) return currentProviderUserAgent;
-    const res = await runShellWithRoot(`
+    const res = await hostRunShellWithRoot.call(globalThis, `
         if [ -f ${shellQuote(CLASH_SUB_USER_AGENT_FILE)} ]; then
           sed -n '1p' ${shellQuote(CLASH_SUB_USER_AGENT_FILE)}
         fi
-        `, 10 * 1000);
+        `, 10 * 1000).then(f50ShellReply);
     if (!res.success) throw new Error('读取订阅 User-Agent 失败，未继续更新');
     try {
       currentProviderUserAgent =
@@ -4866,11 +4879,11 @@ exit "$kano_task_rc"`;
     String(value || '').trim().toLowerCase() == 'original'
       ? 'original' : SUB_RULE_MODE_TEMPLATE;
   const readCurrentSubRuleMode = async () => {
-    const res = await runShellWithRoot(`
+    const res = await hostRunShellWithRoot.call(globalThis, `
       if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then
         sed -n '/^# KANO_SUB_RULE_MODE=/p' ${shellQuote(CLASH_SUB_URLS)} | head -n 1
       fi
-    `, 10 * 1000);
+    `, 10 * 1000).then(f50ShellReply);
     if (!res.success) throw new Error('读取订阅模式失败，未修改配置');
     return parseSubRuleModeFromText(res.content || '');
   };
@@ -4881,11 +4894,11 @@ exit "$kano_task_rc"`;
   };
 
   const readConfigSource = async () => {
-    const res = await runShellWithRoot(`
+    const res = await hostRunShellWithRoot.call(globalThis, `
       if [ -f ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} ]; then
         sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} | head -n 1
       fi
-    `, 10 * 1000);
+    `, 10 * 1000).then(f50ShellReply);
     if (!res.success) throw new Error('读取配置来源失败，未修改配置');
     return String(res.content || '').trim();
   };
@@ -4899,10 +4912,10 @@ exit "$kano_task_rc"`;
   };
 
   const readSavedSubConvertMode = async () => {
-    const res = await runShellWithRoot(`
+    const res = await hostRunShellWithRoot.call(globalThis, `
       if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then cat ${shellQuote(CLASH_SUB_URLS)} || exit 1; fi
       if [ -s ${shellQuote(CLASH_CONFIG)} ]; then printf '\\nKANO_CONFIG_PRESENT=1\\n'; fi
-    `, 10 * 1000);
+    `, 10 * 1000).then(f50ShellReply);
     if (!res.success) throw new Error('读取订阅转换模式失败，未修改配置');
     const text = String(res.content || '');
     const match = text.match(/^# KANO_SUB_CONVERT_MODE=(provider|local)\s*$/im);

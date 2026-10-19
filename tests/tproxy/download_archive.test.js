@@ -10,22 +10,39 @@ const constants = source.match(/  const CLASH_PACKAGE_(?:URL|FALLBACK_URL|REPO_U
 const start = source.indexOf('  const downloadCoreArchive = async');
 const end = source.indexOf('  const setButtonBusy =', start);
 
-function downloader(responses) {
+function downloader(responses, logs = []) {
   // Keep fixture mirrors independent of the live distribution URL.
   const mirrors = ['https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip'];
   let index = 0;
   const fixtureConstants = constants.replace(/= [^;]*;/g, () => "= " + JSON.stringify(mirrors[index++]) + ";");
-  const calls = [];
+  const calls = [], reads = [], op = { token: { id: 'fixture' } };
+  let currentLog, now = 0;
   const download = vm.runInNewContext(fixtureConstants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
     DOWNLOAD_ZIP: '/data/package.zip', DOWNLOAD_LOG: '/data/package.log', DOWNLOAD_SOURCE_FILE: '/data/package.source',
     shellQuote: value => `'${value}'`, operationStage() {}, getCurlBinCmd: () => '', dataSpaceGuardCmd: () => '',
-    runShellWithRoot: async script => {
+    activeCriticalOperation: op, f50ShellReply: value => value,
+    Date: { now: () => now }, setTimeout: (resolve, delay) => { now += delay; resolve(); },
+    operationCancelled: () => Object.assign(Error('cancelled'), { name: 'OperationCancelled' }),
+    f50UnknownCompletion: operation => { operation.uncertain = true; return Object.assign(Error('unconfirmed'), { name: 'OperationCancelled' }); },
+    runShellWithRoot: async (script, timeout) => {
       calls.push(script);
       assert.ok(responses.length, 'unexpected download attempt');
-      return responses.shift();
+      const result = responses.shift();
+      if (result.deviceCompleted === false || result.content === 'ARCHIVE_READY=cached') return result;
+      assert.equal(timeout, 10000);
+      if (/^ARCHIVE_(?:READY=downloaded|DOWNLOAD_FAILED=|VERIFY_FAILED=|DOWNLOAD_STARTED=)/.test(result.content)) {
+        currentLog = { success: true, content: result.content === 'ARCHIVE_DOWNLOAD_STARTED=1' ? ''
+          : result.content + (result.success ? '' : '\nARCHIVE_WORKER_FAILED=1') };
+        return { success: true, content: 'ARCHIVE_DOWNLOAD_STARTED=1' };
+      }
+      return result;
+    },
+    hostRunShellWithRoot: async (script, timeout) => {
+      reads.push(script); assert.equal(timeout, 5000); assert.match(script, /^tail -n 100 /);
+      return logs.length ? logs.shift() : currentLog;
     },
   });
-  return { download, calls };
+  return { download, calls, reads, op };
 }
 
 test('GitCode package succeeds without contacting other mirrors', async () => {
@@ -86,6 +103,60 @@ test('cached compatible packages do not require a pinned release hash',async()=>
   assert.equal(calls.length,1);
   assert.match(calls[0],/unzip -t "\$ZIP"/);
   assert.doesNotMatch(calls[0],/sha256sum/);
+});
+
+test('background downloads tolerate a failed log read without restarting the worker', async () => {
+  const { download, calls, reads } = downloader([{ success: true, content: 'ARCHIVE_READY=downloaded' }], [
+    { success: true, content: 'downloading' }, { success: false, content: 'Load failed' },
+  ]);
+  assert.equal((await download()).ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(reads.length, 3);
+  assert.match(calls[0], /--max-time 590/);
+  assert.doesNotMatch(calls[0], /--speed-time|--speed-limit/);
+  assert.match(calls[0], /< \/dev\/null &/);
+});
+
+test('unconfirmed background download retains the lease and never tries another source', async () => {
+  const { download, calls, op } = downloader([{ success: true, content: 'ARCHIVE_DOWNLOAD_STARTED=1' }]);
+  await assert.rejects(download(), { name: 'OperationCancelled' });
+  assert.equal(op.uncertain, true);
+  assert.equal(calls.length, 1);
+});
+
+for (const valid of [true, false]) test('device background worker verifies ZIP before replacement / ' + valid, { skip: process.platform === 'win32' }, async () => {
+  const { execFile } = require('node:child_process'), { promisify } = require('node:util');
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'f50-download-'));
+  const quote = value => "'" + value.replace(/'/g, "'\"'\"'") + "'";
+  const archive = Buffer.from('UEsDBBQAAAAAAJm4U13uQOUFBwAAAAcAAAALAAAAZml4dHVyZS50eHRmaXh0dXJlUEsBAhQAFAAAAAAAmbhTXe5A5QUHAAAABwAAAAsAAAAAAAAAAAAAAIABAAAAAGZpeHR1cmUudHh0UEsFBgAAAAABAAEAOQAAADAAAAAAAA==', 'base64');
+  const zip = path.join(dir, 'package.zip'), log = path.join(dir, 'download.log');
+  const fixture = path.join(dir, 'fixture.zip'), curl = path.join(dir, 'curl');
+  let launches = 0, reads = 0;
+  try {
+    fs.writeFileSync(fixture, valid ? archive : 'invalid zip');
+    fs.writeFileSync(zip, 'previous package');
+    fs.writeFileSync(log, 'ARCHIVE_READY=downloaded\n');
+    fs.writeFileSync(curl, '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nshift\nsleep 0.1\ncp ' + quote(fixture) + ' "$1"\n', { mode: 0o700 });
+    const execute = async (script, timeout) => {
+      try { const r = await promisify(execFile)('sh', ['-c', script], { timeout }); return { success: true, content: r.stdout + r.stderr }; }
+      catch (e) { return { success: false, content: (e.stdout || '') + (e.stderr || '') }; }
+    };
+    const download = vm.runInNewContext(constants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
+      DOWNLOAD_ZIP: zip, DOWNLOAD_LOG: log, DOWNLOAD_SOURCE_FILE: path.join(dir, 'source'),
+      shellQuote: quote, operationStage() {}, getCurlBinCmd: () => 'CURL_BIN=' + quote(curl),
+      activeCriticalOperation: { token: {} }, f50ShellReply: value => value, setTimeout,
+      f50UnknownCompletion: () => Error('worker completion unconfirmed'),
+      runShellWithRoot: async (script, timeout) => { launches++; return execute(script, timeout); },
+      hostRunShellWithRoot: async (script, timeout) => { reads++; return execute(script, timeout); },
+    });
+    const result = await download();
+    assert.equal(result.ok, valid);
+    assert.equal(launches, valid ? 1 : 3);
+    assert.ok(reads > launches);
+    assert.deepEqual(fs.readFileSync(zip), valid ? archive : Buffer.from('previous package'));
+    assert.equal(fs.readdirSync(dir).some(name => name.includes('.new.')), false);
+    if (!valid) assert.match(result.content, /ARCHIVE_VERIFY_FAILED=zip/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 for (const allowCached of [false, true]) {

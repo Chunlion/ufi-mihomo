@@ -8,6 +8,24 @@ const api = shellApi(), yq = process.env.F50_TEST_YQ;
 const shellReply = run(slice('const f50ShellReply =', 'const f50TaskTag') + 'f50ShellReply');
 const productionQuote = run(slice('const shellQuote =', 'const templateFlowMessages') + 'shellQuote');
 
+for (const [name, end, content] of [
+  ['loadProviderUserAgent', 'const persistProviderUserAgent', 'fixture-agent'],
+  ['readCurrentSubRuleMode', 'const parseSubRuleModeFromText', 'template'],
+  ['readConfigSource', 'const normalizeSubConvertModeValue', 'uploaded_config'],
+]) test('ordinary settings read does not acquire a device lease / ' + name, async () => {
+  let calls = 0;
+  const read = run('let providerUserAgentLoaded=false,currentProviderUserAgent="";\n'
+    + slice('const ' + name + ' =', end) + '\n' + name, {
+    shellQuote: quote, f50ShellReply: shellReply, CLASH_SUB_USER_AGENT_FILE: '/fixture/agent',
+    CLASH_SUB_URLS: '/fixture/sources', CLASH_CONFIG_SOURCE_FILE: '/fixture/source',
+    KANO_PROVIDER_USER_AGENT: 'default-agent', parseStoredProviderUserAgent: String, parseSubRuleModeFromText: String,
+    runShellWithRoot: async () => { throw Error('read must not acquire a lease'); },
+    hostRunShellWithRoot: async () => { calls++; return { success: true, content: 'host wrapper', data: { content } }; },
+  });
+  assert.equal(await read(), content);
+  assert.equal(calls, 1);
+});
+
 for (const fault of ['stat', 'busy', 'frontend', 'release_absent', 'release_owner', 'release_cancelled', 'release_worker', 'receipt']) {
   test('writer failure releases its lock and preserves the caller trap / ' + fault, () => {
     const dir = temp(), lock = path.join(dir, 'lease'), recovery = path.join(dir, 'recovery');

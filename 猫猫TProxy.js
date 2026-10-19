@@ -208,8 +208,8 @@ f50_recovery_eligible() {
   for recovery_entry in "$F50_TASK_DIR"/* "$F50_TASK_DIR"/.[!.]* "$F50_TASK_DIR"/..?*; do
     [ -e "$recovery_entry" ] || [ -L "$recovery_entry" ] || continue
     [ -f "$recovery_entry" ] && [ ! -L "$recovery_entry" ] || { f50_recovery_block unknown_task; return 1; }
-    case "$recovery_entry" in *.output)
-      [ -f "\${recovery_entry%.output}" ] && [ ! -L "\${recovery_entry%.output}" ] || { f50_recovery_block unknown_task; return 1; }
+    case "$recovery_entry" in *.output|*.receipt)
+      [ -f "\${recovery_entry%.*}" ] && [ ! -L "\${recovery_entry%.*}" ] || { f50_recovery_block unknown_task; return 1; }
       continue;; esac
     read -r recovery_format recovery_tag recovery_request recovery_pid recovery_start recovery_manager recovery_manager_start recovery_state recovery_rc recovery_extra < "$recovery_entry" || { f50_recovery_block unknown_task; return 1; }
     [ "$recovery_format" = F50_TASK_V2 ] && [ -z "$recovery_extra" ] || { f50_recovery_block stale_task_record; return 1; }
@@ -272,7 +272,7 @@ f50_recovery_eligible() {
     if [ "\${emergency_locked:-0}" = 1 ]; then
       for recovery_record in $recovery_records; do
         recovery_file="$F50_TASK_DIR/\${recovery_record%:*}"
-        [ ! -L "$recovery_file" ] && [ "$(sha256sum "$recovery_file" | awk '{print $1}')" = "\${recovery_record#*:}" ] && rm -f "$recovery_file" "$recovery_file.output" || { f50_recovery_block task_cleanup_failed; return 1; }
+        [ ! -L "$recovery_file" ] && [ "$(sha256sum "$recovery_file" | awk '{print $1}')" = "\${recovery_record#*:}" ] && rm -f "$recovery_file" "$recovery_file.output" "$recovery_file.receipt" || { f50_recovery_block task_cleanup_failed; return 1; }
       done
       rmdir "$F50_TASK_DIR" || { f50_recovery_block task_directory_changed; return 1; }
       echo F50_RECOVERY_TASKS_RECLAIMED=1

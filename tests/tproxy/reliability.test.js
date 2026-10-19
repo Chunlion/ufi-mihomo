@@ -8,7 +8,7 @@ const api = shellApi(), yq = process.env.F50_TEST_YQ;
 
 test('all final operation shells parse in sh and BusyBox ash', () => {
   const scripts = [api.install('/data/upload.zip'), api.start('start'), api.start('restart'),
-    api.emergency('', true), api.patch("'/data/clash/Scripts/Clash.Service'"),
+    api.emergency('', true), api.emergency('', true, true), api.patch("'/data/clash/Scripts/Clash.Service'"),
     api.inspect(), api.cleanup(), api.final(), ...api.uninstall().map(item => item.script)];
   for (const script of scripts) for (const [bin, args] of [['sh', ['-n']], [process.env.F50_BUSYBOX || 'busybox', ['ash', '-n']]]) {
     const result = spawnSync(bin, args, { input: script, encoding: 'utf8' });
@@ -198,7 +198,7 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
     const op = { token: { id: 'uninstall' }, requests: 0, leaseOwned: outcome === 'owned_busy' };
     const stages = [], recovery = [];
     const sandbox = {
-      activeCriticalOperation: op, lastInstallDiagnostic: null,
+      activeCriticalOperation: op, deviceTaskUncertain: false, lastInstallDiagnostic: null,
       operationStage() {}, operationCancelled: () => Object.assign(new Error('cancelled'), { name: 'OperationCancelled' }),
       f50UnknownCompletion: (operation, cause) => {
         operation.uncertain = true;
@@ -206,8 +206,8 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
         return Object.assign(new Error(String(cause)), { name: 'OperationCancelled' });
       },
       buildUninstallStages: () => ['stop', 'boot', 'delete'].map(title => ({ title, script: title, timeout: 60000 })),
-      buildF50EmergencyScript: (tag, requireIdle) => {
-        assert.equal(tag, ''); assert.equal(requireIdle, true); return 'RECOVER_IDLE';
+      buildF50EmergencyScript: (tag, requireIdle, releaseIdleOnly) => {
+        assert.equal(tag, ''); assert.equal(requireIdle, true); assert.equal(releaseIdleOnly, true); return 'RECOVER_IDLE';
       },
       buildF50FinalCheckScript: () => 'FINAL_CHECK',
       f50Diagnostic: detail => ({ details: detail }),
@@ -226,7 +226,7 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
         assert.equal(script, 'RECOVER_IDLE'); recovery.push(script);
         if (outcome === 'recovery_timeout') throw new Error('transport timeout');
         return outcome === 'active' ? { success: false, content: 'F50_RECOVERY_STATE=active_task' }
-          : { success: true, content: 'RECOVERY_VERIFIED' };
+          : { success: true, content: 'F50_LEASE_RELEASED=1' };
       },
     };
     const uninstall = run(slice('async function performF50Uninstall()', 'async function f50Command') + 'performF50Uninstall', sandbox);
@@ -236,7 +236,7 @@ for (const outcome of ['idle', 'active', 'retry_busy', 'recovery_timeout', 'owne
     } else {
       const result = await uninstall();
       assert.equal(result.ok, ['idle', 'normal'].includes(outcome));
-      if (!result.ok) assert.match(result.summary, /卸载未执行.*操作锁/);
+      if (!result.ok) assert.match(result.summary, /卸载失败.*操作锁/);
       if (outcome === 'active') assert.match(result.details, /F50_RECOVERY_STATE=active_task/);
     }
     assert.deepEqual(stages, outcome === 'normal' ? ['stop', 'boot', 'delete']
@@ -301,6 +301,130 @@ for (const outcome of ['completed', 'cancelled_before', 'cancelled_during', 'mis
     assert.equal(payloads, ['cancelled_before', 'other_page_busy'].includes(outcome) ? 0 : 1);
   });
 }
+
+for (const failure of ['stop', 'stop_throw', 'boot']) test('uninstall stops after a failed stage / ' + failure, async () => {
+  const stages = [];
+  const sandbox = {
+    deviceTaskUncertain: false, operationStage() {}, f50Diagnostic: detail => ({ details: detail }),
+    buildUninstallStages: () => ['stop', 'boot', 'delete'].map(title => ({ title, script: title })),
+    buildF50FinalCheckScript: () => 'FINAL', f50UninstallVerdict: () => ({ ok: false, code: 'residual', detail: 'F50_REMAINS=path:fixture' }),
+    hostRunShellWithRoot: async script => { assert.equal(script, 'FINAL'); return { success: true, content: 'residual' }; },
+    runShellWithRoot: async script => {
+      stages.push(script);
+      if (failure === 'stop_throw') throw Error('cleanup failed');
+      return { success: script !== failure, content: script === failure ? 'F50_CLEAN_ERROR=fixture_failure' : 'done' };
+    },
+  };
+  const uninstall = run(slice('async function performF50Uninstall()', 'async function f50Command') + 'performF50Uninstall', sandbox);
+  const result = await uninstall();
+  assert.equal(result.ok, false); assert.match(result.summary, new RegExp('卸载失败：' + (failure === 'boot' ? 'boot' : 'stop') + '失败'));
+  assert.deepEqual(stages, failure === 'boot' ? ['stop', 'boot'] : ['stop']);
+});
+
+for (const idle of [false, true]) test('uninstall recovers a prior failed operation before running stages / ' + idle, async () => {
+  const op = { token: { id: 'uninstall' }, requests: 0 }, stages = [];
+  const sandbox = {
+    activeCriticalOperation: op, deviceTaskUncertain: true, operationStage() {},
+    buildUninstallStages: () => ['stop', 'boot', 'delete'].map(title => ({ title, script: title })),
+    buildF50EmergencyScript: () => 'RECLAIM', buildF50FinalCheckScript: () => 'FINAL',
+    f50Diagnostic: details => ({ details }), f50UninstallVerdict: () => ({ ok: true, code: 'clean', detail: 'UNINSTALL_VERIFIED' }),
+    runShellWithRoot: async command => { assert.equal(handlers.uncertain(), false); stages.push(command); return { success: true, content: 'done' }; },
+    hostRunShellWithRoot: async command => ({ success: command === 'FINAL' || idle, content: command === 'FINAL' ? 'UNINSTALL_VERIFIED' : idle ? 'F50_LEASE_RELEASED=1' : 'F50_RECOVERY_ELIGIBLE=0' }),
+  };
+  const handlers = run(slice('async function performF50Uninstall()', 'async function f50Command') + '({uninstall:performF50Uninstall,uncertain:()=>deviceTaskUncertain})', sandbox);
+  const result = await handlers.uninstall();
+  assert.equal(result.ok, idle); assert.equal(handlers.uncertain(), !idle);
+  assert.deepEqual(stages, idle ? ['stop', 'boot', 'delete'] : []);
+  if (!idle) assert.equal(result.code, 'operation_busy');
+});
+
+for (const outcome of ['idle', 'active_worker', 'active_frontend', 'active_installer', 'unknown_install_entry', 'foreign_receipt']) {
+  test('uninstall reclaims only idle abandoned leases / ' + outcome, () => {
+    const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
+    try {
+      fs.mkdirSync(proc);
+      write(dir, 'lease/owner', 'mm_old\n');
+      write(dir, 'lease/frontend', `mm_old ${outcome === 'active_frontend' ? '2147483647' : '0'}\n`);
+      write(tasks, 'mm_old.1', `F50_TASK_V2 ${outcome === 'foreign_receipt' ? 'mm_foreign' : 'mm_old'} mm_old.1 111 21 222 22 running 0\n`);
+      write(tasks, 'mm_old.1.output', 'partial output');
+      const backup = write(dir, 'kano_subscription_save_fixture/0', 'backup');
+      write(dir, 'clash.install.lock.d/pid', '333\n');
+      if (outcome === 'unknown_install_entry') write(dir, 'clash.install.lock.d/foreign', 'keep');
+      if (outcome === 'active_installer') fs.mkdirSync(path.join(proc, '333'));
+      if (outcome === 'active_worker') write(proc, '111/stat', `111 (sh) S ${Array(18).fill('0').join(' ')} 21\n`);
+      const result = shell(`mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n` + api.emergency('', true, true), {
+        F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: tasks, F50_RECOVERY_LOCK: path.join(dir, 'recovery'),
+      });
+      assert.equal(result.status, outcome === 'idle' ? 0 : 1, result.stdout + result.stderr);
+      if (outcome === 'idle') {
+        assert.match(result.stdout, /^F50_LEASE_RELEASED=1$/m);
+        assert.ok(!fs.existsSync(lease)); assert.ok(!fs.existsSync(tasks));
+      } else {
+        assert.match(result.stdout, /^F50_RECOVERY_ELIGIBLE=0$/m);
+        assert.equal(fs.readFileSync(path.join(lease, 'owner'), 'utf8'), 'mm_old\n');
+        assert.ok(fs.existsSync(path.join(tasks, 'mm_old.1')));
+      }
+      assert.equal(fs.readFileSync(backup, 'utf8'), 'backup');
+      assert.ok(fs.existsSync(path.join(dir, 'clash.install.lock.d/pid')));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const obstacle of ['', 'process', 'network', 'journal', 'installer']) test('uninstall removes abandoned backups only after runtime cleanup / ' + (obstacle || 'clean'), () => {
+  const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc'), work = path.join(dir, '.f50-delete.fixture');
+  try {
+    fs.mkdirSync(proc); fs.mkdirSync(work);
+    const config = write(root, 'Proxy/config.yaml', 'fixture configuration');
+    const backup = write(dir, 'clash.rollback.install.fixture/Proxy/config.yaml', 'old configuration');
+    const tx = write(dir, 'kano_subscription_save_fixture/0', 'subscription backup');
+    write(root, 'Tools/template.yaml.kano_tx/ready', '');
+    write(dir, '.f50-install.fixture/install.journal', 'incomplete');
+    write(dir, 'kano_yq_runtime/yq', 'component');
+    const foreign = write(dir, 'other-plugin/keep', 'foreign');
+    if (obstacle === 'journal') write(root, 'Policy/rp-filter.json', 'unrestored network state');
+    if (obstacle === 'installer') { write(dir, 'clash.install.lock.d/pid', '333\n'); fs.mkdirSync(path.join(proc, '333')); }
+    const script = api.maintenance('remove').replaceAll('/dev/kano_gist_sync', path.join(dir, 'gist-runtime')) + `
+F50_WORK=${quote(work)}
+f50_scan() { ${obstacle === 'process' ? 'echo "111 21 core"' : ':'} > "$1"; }
+f50_network_snapshot() { mkdir -p "$1"; ${obstacle === 'network' ? 'echo owned_rule' : ':'} > "$1/plan"; }
+f50_runtime_guard && f50_remove_artifacts
+`;
+    const result = shell(script, { F50_ROOT: root, F50_PROC: proc });
+    assert.equal(result.status, obstacle ? 1 : 0, result.stdout + result.stderr);
+    for (const file of [config, backup, tx]) assert.equal(fs.existsSync(file), !!obstacle);
+    assert.equal(fs.readFileSync(foreign, 'utf8'), 'foreign');
+    if (obstacle) assert.match(result.stdout, /F50_DELETE_BLOCKED=/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('uninstall artifact cleanup preserves its own task registry', () => {
+  const dir = temp(), data = path.join(dir, 'data'), dev = path.join(dir, 'dev');
+  try {
+    const receipt = write(dev, 'kano_tproxy_tasks/mm_fixture.1', 'running task');
+    const log = write(data, 'kano_clash_start.log', 'old log');
+    write(dev, 'kano_boot_write.lock/pid', '2147483647\n');
+    const constants = Object.fromEntries(['KANO_SUBSCRIPTION_RAW', 'KANO_SUBSCRIPTION_YAML', 'KANO_SUBSCRIPTION_MODE_CHECK', 'KANO_TEMPLATE_WRITE_CHECK', 'KANO_TEMPLATE_FLOW_DEBUG', 'DOWNLOAD_ZIP', 'DOWNLOAD_LOG', 'DOWNLOAD_SOURCE_FILE', 'LOG_FILE', 'KANO_YQ_RUNTIME_DIR', 'KANO_INSTALL_TOOLBOX_DIR'].map(name => [name, path.join(dir, name)]));
+    const script = run(slice('const removePluginOwnedArtifactsCmd =', 'const networkRescue =') + 'removePluginOwnedArtifactsCmd()', { ...constants, shellQuote: quote })
+      .replaceAll('/data/', data + '/').replaceAll('/dev/', dev + '/');
+    const result = shell(script);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(receipt, 'utf8'), 'running task');
+    assert.ok(!fs.existsSync(log)); assert.ok(!fs.existsSync(path.join(dev, 'kano_boot_write.lock')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const installer of ['exited', 'running', 'unknown_entry']) test('uninstall cleanup releases only an exited installer lock / ' + installer, () => {
+  const dir = temp(), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
+  try {
+    fs.mkdirSync(proc); write(lock, 'pid', '333\n');
+    if (installer === 'running') fs.mkdirSync(path.join(proc, '333'));
+    if (installer === 'unknown_entry') write(lock, 'foreign', 'keep');
+    const script = api.uninstall()[0].script.replace('f50_inspect || exit 1', 'f50_inspect() { F50_OLD_FOUND=0; }\nf50_inspect || exit 1');
+    const result = shell(script, { F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc });
+    assert.equal(result.status, installer === 'exited' ? 0 : 1, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(lock), installer !== 'exited');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 for (const outcome of ['released_response_lost', 'still_owned', 'release_unknown', 'recovered', 'recovered_during_release']) {
   test('browser lease release reconciliation / ' + outcome, async () => {

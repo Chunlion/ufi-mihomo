@@ -581,19 +581,19 @@ function f50AssertSafeJsonNumbers(value) {
 }
 
 function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
-  let providers='来源状态读取失败';
+  let providers='无法读取节点来源状态';
   if (provider.success) {
     try {
       const value=JSON.parse(provider.responseText || '');
       if (!value.providers || typeof value.providers!=='object') throw Error('invalid provider snapshot');
       const entries=Object.values(value.providers);
       const known=entries.filter(item=>Array.isArray(item?.proxies));
-      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分来源状态读取失败';
-    } catch (_) { providers='响应格式错误'; }
+      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分节点来源状态无法读取';
+    } catch (_) { providers='响应格式不正确'; }
   }
   return {core:pid?'进程存在':'未检测到核心进程',
     api:api.success?'可访问':'访问失败',
-    takeover:'未做数据面实测（不以进程或 API 取代）',
+    takeover:'未做数据面实测（进程与 API 状态不能替代）',
     panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'访问失败',providers,
     connectivity:'未测试（已加载节点不代表可连通）'};
 }
@@ -1026,72 +1026,72 @@ async function ensureCompatBackend() {
 ${buildF50HttpSubscriptionPatchScript()} || exit 1
 sh /data/clash/Scripts/Clash.Service version`, 15000);
   f50BackendReady = !!r.success && /^F50_CONTROLLER=\S+/m.test(String(r.content || ''));
-  if (!f50BackendReady) createToast(/controller_http_patch_/.test(String(r.content || '')) ? 'HTTP 订阅兼容修复失败，请使用配套组件包。' : '请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
+  if (!f50BackendReady) createToast(/controller_http_patch_/.test(String(r.content || '')) ? 'HTTP 订阅兼容修复失败；请改用配套组件包重试。' : '组件尚未就绪；请先点击“在线安装/更新”或“导入组件包”。', 'red', 9000);
   return f50BackendReady;
 }
 
 let lastInstallDiagnostic = null;
 const F50_DIAGNOSTIC_LABELS = {
-  gist_components_missing: '此完整组件包不含 Gist 同步，请导入随附的 RC4 完整组件包。原组件未替换。',
-  gist_manifest_mismatch: 'Gist 组件清单版本不匹配，请重新获取配套完整组件包。',
-  gist_component_hash_mismatch: 'Gist 组件缺失或校验失败，请重新获取完整组件包。',
-  gist_runtime_probe_failed: 'Gist 程序无法在设备执行，请检查 ARM64 架构和配套版本。',
-  gist_age_runtime_probe_failed: '完整组件中的 age 无法执行或版本不匹配，请重新导入配套完整组件包。',
-  gist_permission_failed: '安装失败：无法设置 Gist 组件执行权限。',
-  gist_script_invalid: '安装失败：Gist 组件脚本校验失败。',
-  gist_backup_cleanup_failed: '组件已安装，旧同步数据副本清理失败；请按原恢复流程处理，勿重复提交任务。',
-  gist_transient_cleanup_failed: '同步临时数据清理失败，未替换原组件。',
-  zip_missing_or_empty: '安装包不存在或为空，请重新上传。',
-  archive_size_unknown: '安装失败：ZIP 解压后大小读取失败。',
-  data_space_insufficient_for_archive: '存储空间不足以完成解压和回滚，未替换组件。',
-  controller_interface_incompatible: '控制器缺少所需命令接口。',
-  config_transaction_pending: '操作失败：配置事务需要恢复，请先执行“恢复网络”。',
-  install_transaction_pending: '启动失败：安装事务未结束，请先执行“恢复网络”；事务日志已保留。',
-  data_space_low: '设备 /data 可用空间不足 50 MB，安装未执行。',
-  unzip_missing: '设备缺少解压程序，安装未执行。',
-  archive_list_failed: '无法读取 ZIP 目录，请重新上传有效的组件包。',
-  unsafe_archive_path: '安装包含越界路径，已拒绝解压。',
-  archive_symlink: '安装包含符号链接，未替换现有组件。',
-  unzip_failed: '安装包解压失败或超时，旧组件尚未替换。',
-  missing_controller: '安装包缺少控制器，旧组件尚未替换。',
-  missing_core: '全新安装需要包含 Mihomo 内核的完整组件包。',
-  controller_not_executable: '控制器无法执行，请检查架构和执行权限。',
-  core_not_executable: 'Mihomo 内核无法执行，请检查架构和执行权限。',
-  yaml_parser_not_executable: '配置解析组件无法执行，请检查 yq 架构和权限。',
-  secret_write_failed: '控制密钥写入失败，原配置未被替换。',
-  secret_ensure_failed: '控制密钥补全失败，核心未启动。',
-  panel_config_write_failed: 'Zashboard 配置固定失败，核心未启动。',
-  service_script_invalid: 'Clash.Service 存在 Shell 语法错误，旧组件尚未替换。',
-  service_script_failed: 'Clash.Service 无法调用控制器，旧组件尚未替换。',
-  controller_protocol_mismatch: '控制器与当前 JS 的接口版本不兼容。',
-  service_protocol_mismatch: '服务脚本与控制器不配套。',
-  panel_candidate_rejected: '组件包中的面板不是有效 Zashboard，已保留原面板。',
-  panel_postcheck_failed: 'Zashboard 替换后校验失败，已回滚安装。',
-  missing_service_wrapper: '组件包缺少启动包装器 Clash.Service，已停止安装。',
-  service_patch_failed: '启动组件更新失败，请重新安装组件包。',
-  invalid_subscription: '订阅地址未配置或无效，请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
-  invalid_config: '用户配置格式错误，请修正 YAML/JSON；原配置未被覆盖。',
-  configuration_missing: '组件包没有初始配置，原安装保持不变。',
-  old_environment_inspection_failed: '旧运行环境检查失败，已停止安装。',
-  old_environment_cleanup_failed: '旧运行环境清理失败，已停止替换组件。',
-  finalization_failed: '安装事务收尾失败。',
-  installation_busy: '另一个安装事务仍在运行或未结束，未修改现有安装。',
-  preserve_user_data_failed: '保留用户配置失败，已取消安装。',
-  commit_failed: '组件目录替换失败，请查看回滚结果。',
-  network_apply_failed: '网络接管应用失败，请查看具体防火墙或路由错误。',
-  service_finalize_failed: '核心已启动，Service 收尾失败；请查看面板重载诊断。',
-  service_failed: '服务脚本执行失败。',
-  start_timeout: '启动失败：等待核心启动超时。',
+  gist_components_missing: '当前组件包不含 Gist 同步组件；请导入随附的 RC4 完整组件包。原组件未替换。',
+  gist_manifest_mismatch: 'Gist 组件清单版本不匹配；请重新获取配套完整组件包。',
+  gist_component_hash_mismatch: 'Gist 组件缺失或校验失败；请重新获取完整组件包。',
+  gist_runtime_probe_failed: 'Gist 程序无法在设备上执行；请检查 ARM64 架构与组件版本是否配套。',
+  gist_age_runtime_probe_failed: '完整组件中的 age 无法执行或版本不匹配；请重新导入配套完整组件包。',
+  gist_permission_failed: '安装失败：无法设置 Gist 组件的执行权限。',
+  gist_script_invalid: '安装失败：Gist 组件脚本校验未通过。',
+  gist_backup_cleanup_failed: '组件已安装，但旧同步数据副本清理失败；请按原恢复流程处理，不要重复提交任务。',
+  gist_transient_cleanup_failed: '同步临时数据清理失败；原组件未被替换。',
+  zip_missing_or_empty: '组件包不存在或内容为空；请重新上传。',
+  archive_size_unknown: '安装失败：无法读取 ZIP 解压后的大小。',
+  data_space_insufficient_for_archive: '存储空间不足，无法完成解压与回滚；组件未被替换。',
+  controller_interface_incompatible: '控制器缺少所需命令接口；当前操作无法继续。',
+  config_transaction_pending: '操作失败：配置事务尚未收尾；请先执行“恢复网络”后重试。',
+  install_transaction_pending: '启动失败：上次安装事务尚未结束；请先执行“恢复网络”后重试，事务日志已保留。',
+  data_space_low: '安装未执行：设备 /data 可用空间不足 50 MB；请清理空间后重试。',
+  unzip_missing: '安装未执行：设备缺少解压程序。',
+  archive_list_failed: '无法读取 ZIP 目录；请重新上传有效的组件包。',
+  unsafe_archive_path: '组件包包含越界路径，已拒绝解压。',
+  archive_symlink: '组件包包含符号链接；安装已停止，现有组件未替换。',
+  unzip_failed: '组件包解压失败或超时；旧组件尚未替换。',
+  missing_controller: '组件包缺少控制器；旧组件尚未替换。',
+  missing_core: '全新安装需要包含 Mihomo 内核的组件包；当前组件包不含内核。',
+  controller_not_executable: '控制器无法执行；请检查设备架构与执行权限。',
+  core_not_executable: 'Mihomo 内核无法执行；请检查设备架构与执行权限。',
+  yaml_parser_not_executable: '配置解析组件（yq）无法执行；请检查设备架构与执行权限。',
+  secret_write_failed: '控制密钥写入失败；原配置未被替换。',
+  secret_ensure_failed: '控制密钥补全失败；核心未启动。',
+  panel_config_write_failed: 'Zashboard 配置写入失败；核心未启动。',
+  service_script_invalid: 'Clash.Service 存在 Shell 语法错误；旧组件尚未替换。',
+  service_script_failed: 'Clash.Service 无法调用控制器；旧组件尚未替换。',
+  controller_protocol_mismatch: '控制器与当前页面的接口版本不兼容；请使用配套的 JS 与组件包。',
+  service_protocol_mismatch: '服务脚本与控制器版本不配套；请使用同一套组件包。',
+  panel_candidate_rejected: '组件包中的面板不是有效的 Zashboard；已保留原面板。',
+  panel_postcheck_failed: 'Zashboard 替换后校验未通过；已回滚本次安装。',
+  missing_service_wrapper: '组件包缺少启动包装器 Clash.Service；安装已停止。',
+  service_patch_failed: '启动组件更新失败；请重新安装组件包。',
+  invalid_subscription: '订阅地址未配置或无效；请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
+  invalid_config: '用户配置格式错误；请修正 YAML/JSON 后重试，原配置未被覆盖。',
+  configuration_missing: '组件包不含初始配置；原安装未改动。',
+  old_environment_inspection_failed: '旧运行环境检查失败；安装已停止。',
+  old_environment_cleanup_failed: '旧运行环境清理失败；安装已停止，现有组件未替换。',
+  finalization_failed: '安装事务收尾失败；请查看“状态与日志”确认最终状态。',
+  installation_busy: '另一个安装事务仍在进行；本次安装未执行，现有安装未改动。',
+  preserve_user_data_failed: '未能保留用户配置；安装已取消。',
+  commit_failed: '组件目录替换失败；请查看回滚结果。',
+  network_apply_failed: '网络接管规则应用失败；请查看具体的防火墙或路由错误。',
+  service_finalize_failed: '核心已启动，但 Service 收尾失败；请查看面板重载诊断。',
+  service_failed: '服务脚本执行失败；请查看“状态与日志”。',
+  start_timeout: '启动失败：等待核心启动超时；请查看“状态与日志”。',
   activation_unverified: '启动失败：服务未返回启动结果。',
-  activation_failed: '新组件启动失败，请查看后端具体原因。',
-  interrupted: '安装失败：任务被中断。',
-  transaction_interrupted: '安装失败：安装事务被中断，请查看状态与日志。',
-  config_probe_failed: '配置读取超时或解析组件执行失败，未覆盖用户配置。',
-  process_respawned: '停止后仍检测到猫猫进程，已停止安装。',
-  process_table_unreadable: '进程表读取失败，已停止后续操作。',
-  journal_restore_incomplete: '网络参数或配置事务恢复失败，已停止安装。',
-  network_rules_remain: '猫猫网络规则仍有残留，已停止安装。',
-  owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用，未删除共享路由。',
+  activation_failed: '新组件启动失败；请查看后端返回的具体原因。',
+  interrupted: '安装失败：任务已中断。',
+  transaction_interrupted: '安装失败：安装事务被中断；请查看“状态与日志”。',
+  config_probe_failed: '配置读取超时或解析组件执行失败；用户配置未被覆盖。',
+  process_respawned: '停止核心后仍检测到猫猫进程；安装已停止。',
+  process_table_unreadable: '无法读取进程表；后续操作已停止。',
+  journal_restore_incomplete: '网络参数或配置事务恢复失败；安装已停止。',
+  network_rules_remain: '猫猫网络规则仍有残留；安装已停止。',
+  owned_route_table_still_used_by_foreign_rule: '猫猫路由表仍被其他规则引用；未删除共享路由。',
 };
 function f50Diagnostic(content, fallback = '操作失败') {
   const safe = sanitizeSubscriptionSecrets(String(content || ''))
@@ -1106,28 +1106,28 @@ function f50Diagnostic(content, fallback = '操作失败') {
   const labels = F50_DIAGNOSTIC_LABELS;
   let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
   if (code === 'old_environment_cleanup_failed' && cleanup) summary += ' ' + (labels[cleanup] || cleanup);
-  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时，请查看状态与日志。';
+  if (!code && /timeout|timed out|超时/i.test(safe)) summary = '操作失败：设备命令超时；请查看“状态与日志”。';
   if (/subscription URL must (?:be HTTPS without userinfo|use HTTP\(S\), no userinfo)|empty provider URL/i.test(cause)) summary = labels.invalid_subscription;
   else if (cause === 'original_config_invalid') {
     const detail = lines.find(line => /^F50_CONFIG_TEST_DETAIL=.*(?:level=["']?(?:error|fatal)|parse config|yaml:)/i.test(line)) || lines.find(line => line.startsWith('F50_CONFIG_TEST_DETAIL='));
-    summary = '用户配置恢复后未通过核心校验' + (detail ? '：' + detail.slice('F50_CONFIG_TEST_DETAIL='.length).trim() : '，请查看校验详情。');
+    summary = '用户配置恢复后未通过核心校验' + (detail ? '：' + detail.slice('F50_CONFIG_TEST_DETAIL='.length).trim() : '；详见下方校验详情。');
   }
-  else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过，请检查配置格式和策略引用。';
+  else if (/CONFIG_TEST_FAILED|configuration is not a YAML mapping|yq parse failed|rules must be a list/i.test(cause)) summary = '配置校验未通过；请检查配置格式与策略引用。';
   else if (/policy|iptables|ip6tables|route|downstream|network|TUN|listener/i.test(cause) && code === 'activation_failed') summary = '网络接管规则应用失败：' + cause;
   else if (['activation_failed','service_failed','network_apply_failed'].includes(code) && backend) summary = '启动失败：' + backend;
   const serviceRc = (lines.filter(line => line.startsWith('START_SERVICE_RC=')).pop() || '').slice('START_SERVICE_RC='.length).trim();
-  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '启动失败：等待核心启动超时。';
+  if (!backend && (serviceRc === '124' || serviceRc === '137')) summary = '启动失败：等待核心启动超时；请查看“状态与日志”。';
   const rollback = get('F50_ROLLBACK');
-  if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += ' 回滚失败：' + rollback;
-  else if (rollback === 'restored') summary += ' 已恢复安装前状态。';
+  if (rollback && !['restored', 'restored_stopped'].includes(rollback)) summary += '；回滚失败：' + rollback;
+  else if (rollback === 'restored') summary += '；已恢复安装前状态。';
   const componentsInstalled = get('F50_INSTALL_COMPONENTS_OK') === '1';
   const transactionState = get('F50_INSTALL_TRANSACTION_STATE') || 'unknown';
   if (componentsInstalled && transactionState !== 'complete') {
     const installed = get('F50_INSTALL_STATUS') === 'installed_running'
-      ? '组件已安装并启动' : '组件已安装，保持停止';
+      ? '组件已安装并启动' : '组件已安装，核心保持停止';
     const warning = lines.filter(line => /^F50_INSTALL_WARNING=(?!previous_components_retained$)/.test(line)).pop() || '';
     const reason = warning.slice('F50_INSTALL_WARNING='.length) || code || transactionState;
-    summary = installed + '；事务收尾失败（' + reason + '），未执行组件回滚。';
+    summary = installed + '；事务收尾失败（' + reason + '），组件未回滚。';
   }
   const keyLines = lines.filter(line => /^(F50_(?:INSTALL_[A-Z_]+|CONFIG_STATE|BACKUP_LEFT|ERROR|START_(?:CODE|OK)|ROLLBACK|RECOVERY_[A-Z_]+)|KANO_INSTALL_OK|START_SERVICE_RC|START_STATE)=/.test(line));
   const details = safe.length <= 6000 ? safe : keyLines.slice(0, 12).join('\n').slice(0, 2500) + '\n[OUTPUT_TRUNCATED]\n' + safe.slice(-3500);
@@ -1143,7 +1143,7 @@ function f50StartResult(response = {}, fallback = '') {
   const panelFailed=last('F50_HEALTH_PANEL')==='failed';
   const coreStarted=last('START_STATE')==='started_verified_process';
   return {...response,ok,success:ok,code:last('F50_START_CODE') || diagnostic.code || (ok?'started':'start_result_unknown'),
-    detail:text,content:text,panelFailed,coreStarted,finalized:ok,summary:ok ? (panelFailed?'核心已启动；Zashboard 暂不可用':'核心启动已确认；实际代理连通性未测试') : diagnostic.summary,
+    detail:text,content:text,panelFailed,coreStarted,finalized:ok,summary:ok ? (panelFailed?'核心已启动；Zashboard 面板暂不可用':'核心已启动；代理连通性未测试') : diagnostic.summary,
     serviceRc:diagnostic.serviceRc,transportOk:response.success===true};
 }
 const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
@@ -1222,10 +1222,10 @@ async function performF50Uninstall() {
   const details = diagnostics.map(item => 'STAGE=' + item.stage + '\nTRANSPORT_OK=' + Number(item.transportOk) + '\n' + item.detail).join('\n')
     + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
   const summary = ok ? '猫猫及全部组件数据已卸载'
-    : operationBlocked ? '卸载失败：设备操作锁检查未通过，请查看状态与日志'
-    : failedStage ? '卸载失败：' + failedStage + '失败，请查看状态与日志'
-    : verdict.code === 'residual' ? '卸载失败：仍有猫猫残留，详细项见\u201c状态与日志\u201d'
-    : '卸载失败：最终状态读取失败，请检查连接后重试';
+    : operationBlocked ? '卸载失败：设备操作锁检查未通过；请查看“状态与日志”'
+    : failedStage ? '卸载失败：' + failedStage + '失败；请查看“状态与日志”'
+    : verdict.code === 'residual' ? '卸载失败：仍有猫猫残留；残留项见“状态与日志”'
+    : '卸载失败：无法读取最终状态；请检查设备连接后重试';
   const result = {...verdict, ok, code:operationBlocked ? 'operation_busy' : failedStage ? 'stage_failed' : verdict.code, summary, details};
   lastInstallDiagnostic = {...result, diagnostics};
   return result;
@@ -2534,7 +2534,7 @@ async function installF50PackageAtDevicePath(uploaded) {
       throw new Error(text || 'F50_INSTALL_CODE=old_environment_inspection_failed');
     }
     const hasOld = /^F50_OLD_FOUND=1$/m.test(text);
-    operationStage(hasOld ? '安装组件并清理已检测到的旧环境' : '解压、验证并安装组件');
+    operationStage(hasOld ? '清理旧环境并安装组件' : '解压、校验并安装组件');
     const result = await runShellWithRoot(buildF50InstallScript(uploaded), 150000);
     const output = String(result?.content || '');
     if (/^F50_INSTALL_COMPONENTS_OK=1$/m.test(output)) {
@@ -2548,24 +2548,24 @@ async function installF50PackageAtDevicePath(uploaded) {
     }
     const state = (output.match(/^F50_INSTALL_STATUS=(.+)$/m) || [])[1];
     const configState = (output.match(/^F50_CONFIG_STATE=(.+)$/m) || [])[1];
-    let message = state === 'installed_running' ? '组件已安装，核心与接管规则已启动'
-      : state === 'installed_stopped' ? '组件已更新，保持原来的停止状态'
-      : configState === 'invalid_subscription' ? '组件已安装；订阅地址无效，请配置无账号信息的 HTTP 或 HTTPS 地址'
-      : configState === 'invalid_config' ? '组件已安装；请修正原配置格式后启动'
-      : '组件已安装，请先配置订阅（核心未启动）';
+    let message = state === 'installed_running' ? '组件已安装并启动，网络接管规则已生效'
+      : state === 'installed_stopped' ? '组件已更新；核心保持停止，接管规则未下发'
+      : configState === 'invalid_subscription' ? '组件已安装，但订阅地址无效；请填写不含账号信息的 HTTP 或 HTTPS 订阅地址后启动'
+      : configState === 'invalid_config' ? '组件已安装，但原配置格式有误；请修正后启动'
+      : '组件已安装；尚未配置订阅，核心未启动';
     const warning = (output.match(/^F50_INSTALL_WARNING=(.+)$/m) || [])[1];
     const recoveredWithFallback = /^F50_CLEAN_WARNING=/m.test(output);
-    if (recoveredWithFallback) message += '；旧恢复报错后已通过兜底清理复查';
-    if (warning) message += warning === 'previous_components_retained' ? '；已保留旧组件回滚目录' : '；安装告警：' + warning;
+    if (recoveredWithFallback) message += '；旧环境恢复曾报错，已通过兜底清理复查';
+    if (warning) message += warning === 'previous_components_retained' ? '；旧组件回滚目录已保留' : '；安装告警：' + warning;
     lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
     operationFinish(true, message);
     createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
     return true;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
-    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装失败');
+    lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装失败：未获取到具体原因');
     operationFinish(false, lastInstallDiagnostic.summary);
-    if (error?.name !== 'OperationCancelled') createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细信息见“状态与日志”。', 'red', 15000);
+    createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细进度与错误原因见“状态与日志”。', 'red', 15000);
     return false;
   }
 }
@@ -2575,9 +2575,9 @@ async function installF50PackageFromNetwork() {
     operationStage('下载组件包');
     const archive = await downloadCoreArchive({ allowCached: false });
     if (!archive.ok) {
-      const detail = archive.content || archive.message || '下载安装包失败';
-      operationFinish(false, '下载安装包失败');
-      createToast('下载安装包失败<br>' + safeTextToHtml(detail), 'red', 15000);
+      const detail = archive.content || archive.message || '组件包下载失败';
+      operationFinish(false, '组件包下载失败');
+      createToast('组件包下载失败<br>' + safeTextToHtml(detail), 'red', 15000);
       return false;
     }
     try { return await installF50PackageAtDevicePath(DOWNLOAD_ZIP); }
@@ -2607,7 +2607,7 @@ async function chooseF50Package() {
           uploaded = await uploadFileToDevice(file);
           return await installF50PackageAtDevicePath(uploaded);
         } catch (error) {
-          const message = f50Error(error && (error.message || String(error))) || '上传组件包失败';
+          const message = f50Error(error && (error.message || String(error)));
           operationFinish(false, message);
           createToast('安装失败<br>' + safeTextToHtml(message), 'red', 15000);
           return false;
@@ -2619,7 +2619,7 @@ async function chooseF50Package() {
             } catch (cleanupError) {
               if (cleanupError?.name !== 'OperationCancelled') {
                 if (lastInstallDiagnostic) lastInstallDiagnostic.details += '\nF50_INSTALL_WARNING=uploaded_package_cleanup_failed';
-                createToast('上传包临时文件删除失败，未改变安装结果。', 'yellow', 7000);
+                createToast('临时上传文件删除失败；安装结果未受影响。', 'yellow', 7000);
               }
             }
           }
@@ -2712,15 +2712,15 @@ function createPrivateRouteLogic() {
     const enabled = input.enabled === true || input.enabled === 'on';
     const raw = Array.isArray(input.cidrs) ? input.cidrs : String(input.cidrs || '').replace(/#[^\n]*/g, '').split(/[\s,;]+/);
     const values = raw.map((v) => String(v).trim()).filter(Boolean);
-    if (values.length > 64) throw new Error('最多配置 64 个私网网段');
+    if (values.length > 64) throw new Error('私网网段最多可配置 64 个');
     const cidrs = compact(values);
     for (const n of cidrs) if (!PRIVATE.some((p) => contains(cidr(p), cidr(n)))) {
-      throw new Error('仅支持 IPv4 RFC1918 或 IPv6 ULA（fc00::/7）：' + n);
+      throw new Error('仅支持 IPv4 私网网段（RFC1918）或 IPv6 ULA 网段（fc00::/7）：' + n);
     }
     const policy = String(input.policy || '').trim();
-    if (/[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('代理组名含不支持的字符');
-    if (enabled && (!cidrs.length || !policy)) throw new Error('启用前请填写网段并选择代理出站');
-    if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('不能选择内置策略 ' + policy);
+    if (/[,\r\n\x00-\x1f\x7f]/.test(policy)) throw new Error('代理组名称包含不支持的字符');
+    if (enabled && (!cidrs.length || !policy)) throw new Error('启用前请填写目标网段并选择代理出站');
+    if (enabled && ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE', 'GLOBAL'].includes(policy.toUpperCase())) throw new Error('不能选择内置策略：' + policy);
     return { enabled, cidrs, policy };
   }
   function fromOptions(o = {}) {
@@ -2756,12 +2756,12 @@ function createPrivateRouteLogic() {
   function transform(out, state, mode, connected) {
     if (!state.enabled || mode === 'off') return out;
     checkConnected(state, connected);
-    if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('私网定向代理需要 Mihomo 规则模式');
-    if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('远端网段包含 IPv6，请先勾选 IPv6 接管');
+    if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('私网定向代理仅在 Mihomo 规则模式下可用');
+    if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('目标网段包含 IPv6；请先启用 IPv6 接管');
     const groups = out['proxy-groups'] || [], proxies = out.proxies || [];
     const target = [...groups, ...proxies].find((p) => p && p.name === state.policy);
-    if (!target) throw new Error('配置中不存在出站：' + state.policy);
-    if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('所选出站不是代理');
+    if (!target) throw new Error('配置中不存在该出站：' + state.policy);
+    if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('所选出站不是代理类型');
     const meta = { version: 2, mode, cidrs: state.cidrs, policy: state.policy, rules: [], tun: {}, rulesPresent: own(out, 'rules'), tunPresent: own(out, 'tun') };
     const rule = (n, policy) => (cidr(n).family === 4 ? 'IP-CIDR,' : 'IP-CIDR6,') + n + ',' + policy + ',no-resolve';
     meta.rules = [...state.cidrs.map((n) => rule(n, state.policy)), ...PRIVATE.map((n) => rule(n, 'DIRECT'))];
@@ -2848,10 +2848,10 @@ function createPrivateRouteLogic() {
       visited.add(current);
       if (['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(String(current).toUpperCase())) throw new Error('代理组当前指向 ' + current);
       const value = proxies[current];
-      if (!value) throw new Error('核心未加载出站 ' + current);
+      if (!value) throw new Error('核心未加载该出站：' + current);
       if (value.now) { current = value.now; continue; }
-      if (['direct', 'reject', 'reject-drop', 'pass', 'compatible'].includes(String(value.type || '').toLowerCase())) throw new Error('所选出站为直连或拒绝');
-      if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('请选择固定节点或能确认当前出站的手动选择组');
+      if (['direct', 'reject', 'reject-drop', 'pass', 'compatible'].includes(String(value.type || '').toLowerCase())) throw new Error('所选出站为直连或拒绝类型，无法用于代理');
+      if (Array.isArray(value.all) || /^(selector|select|urltest|fallback|loadbalance|relay)$/i.test(String(value.type || '').replace(/[-_]/g, ''))) throw new Error('请选择固定节点，或选择可确认当前出站的手动选择组');
       return current;
     }
   }
@@ -2868,20 +2868,20 @@ function readF50TproxyPortCmd() { return `printf \"tproxy_port=${F50_PORTS.tprox
 
 async function kprReadOptions() {
   const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' || exit 1; fi\n' + readF50TproxyPortCmd(), 10000);
-  if (!result.success) throw new Error('无法读取网络设置，未修改配置');
+  if (!result.success) throw new Error('无法读取网络设置；配置未修改');
   return parsePolicyOptionsText(String(result.content || ''));
 }
 
 async function kprReadConnected(config = {}, options = {}) {
   const v6 = options.ipv6 === 'on';
   const result = await runShellWithRoot('ip -o -4 addr show' + (v6 ? ' && ip -o -6 addr show' : ''), 10000);
-  if (!result.success) throw new Error('无法检查 F50 直连网段');
+  if (!result.success) throw new Error('无法检查 F50 直连网段；配置未修改');
   const tun = String(config.tun && config.tun.device || 'KanoTun');
   const addresses = String(result.content || '').split('\n').map((line) => {
     const match = line.match(/^\s*\d+:\s+(\S+)\s+inet6?\s+(\S+)/);
     return match ? { iface: match[1].split('@')[0], cidr: match[2] } : null;
   }).filter((item) => item && item.iface !== tun && !/^(Mihomo|Meta|utun\d*|tun\d*)$/i.test(item.iface));
-  if (!addresses.length) throw new Error('没有读到网络接口');
+  if (!addresses.length) throw new Error('未读取到网络接口');
   return addresses;
 }
 
@@ -2889,7 +2889,7 @@ async function kprShapeRuntimeConfig(value, options = null, configSource = null)
   options = options || await kprReadOptions();
   const stack = await verifyF50TunStack(options);
   const preserveConfig = (configSource === null ? await readConfigSource() : configSource) === 'subscription_original';
-  if (!(await ensureOriginalSubscriptionService())) throw new Error('配置处理组件更新失败，未修改配置');
+  if (!(await ensureOriginalSubscriptionService())) throw new Error('配置处理组件更新失败；配置未修改');
   const feature = KPR.fromOptions(options);
   const connected = feature.enabled && options.traffic_mode !== 'off' ? await kprReadConnected(value, options) : [];
   return KPR.runtime(value, options.traffic_mode === 'tun' ? { ...options, tun_stack: stack } : options, connected, preserveConfig, feature);
@@ -2929,9 +2929,9 @@ async function kprVerifySelection(options) {
   const feature = KPR.fromOptions(options);
   if (!feature.enabled || options.traffic_mode === 'off') return '';
   const live = await callMihomoApi('/configs', 'GET', null, null, 5);
-  if (!live.success || String(JSON.parse(live.responseText || '{}').mode).toLowerCase() !== 'rule') throw new Error('私网定向代理需要核心实际运行在规则模式');
+  if (!live.success || String(JSON.parse(live.responseText || '{}').mode).toLowerCase() !== 'rule') throw new Error('私网定向代理要求核心实际运行在规则模式');
   const response = await callMihomoApi('/proxies', 'GET', null, null, 8);
-    if (!response.success) throw new Error('代理组实际出站读取失败');
+    if (!response.success) throw new Error('无法读取代理组的实际出站');
   const payload = JSON.parse(response.responseText || '{}');
   return KPR.resolveSelection(payload.proxies || {}, feature.policy);
 }
@@ -2949,7 +2949,7 @@ async function normalizeIpv6DnsCapability(state) {
   if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
   const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
   if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
-  createToast('内核不支持 IPv6 NAT，保留 IPv4 DNS 劫持；IPv6 接管保持启用。', 'yellow', 10000);
+  createToast('当前内核不支持 IPv6 NAT；已保留 IPv4 DNS 劫持，IPv6 接管仍保持开启。', 'yellow', 10000);
   return true;
 }
 async function verifyF50TunStack(options) {
@@ -2957,11 +2957,11 @@ async function verifyF50TunStack(options) {
   const automatic = !options.tun_stack || options.tun_stack === 'auto';
   if (options.traffic_mode !== 'tun' || (!automatic && stack !== 'mips')) return stack;
   const result = await runShellWithRoot(buildF50Tun6CompatFunctions() + '\nf50_check_mips_version', 5000);
-  if (!result?.success) throw new Error('无法检查 Mihomo 版本，未修改配置。');
+  if (!result?.success) throw new Error('无法检查 Mihomo 版本；配置未修改。');
   if (/^F50_MIPS_VERSION_OK=1$/m.test(String(result.content || ''))) return 'mips';
-  if (!/^F50_ERROR=mips_requires_mihomo_/m.test(String(result.content || ''))) throw new Error('无法检查 Mihomo 版本，未修改配置。');
+  if (!/^F50_ERROR=mips_requires_mihomo_/m.test(String(result.content || ''))) throw new Error('无法检查 Mihomo 版本；配置未修改。');
   if (automatic) return stack;
-  throw new Error(`mips 需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上；当前内核版本未通过检查。`);
+  throw new Error(`MIPS 架构需要 Mihomo v${F50_MIPS_MIN_VERSION} 或以上；当前内核版本未通过检查。`);
 }
 
 const policyTransactionFiles = () => [
@@ -2993,25 +2993,25 @@ async function kprSaveNetworkState(previous, next) {
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
     await normalizeIpv6DnsCapability(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
-      operationFinish(true, '设置未变更');
-      if (activeCriticalOperation) activeCriticalOperation.finalToast = ['设置未变更', 'green'];
-      else createToast('设置未变更', 'green');
+      operationFinish(true, '设置未变更，未写入任何配置');
+      if (activeCriticalOperation) activeCriticalOperation.finalToast = ['设置未变更，未写入任何配置', 'green'];
+      else createToast('设置未变更，未写入任何配置', 'green');
       return true;
     }
     configChanged = networkStateKey(previous, true) !== networkStateKey(next, true);
     const devices = normalizeDeviceBypassText(next.deviceBypass || '');
-    if (devices.invalid.length) throw new Error('设备列表格式错误：' + devices.invalid.join('; '));
+    if (devices.invalid.length) throw new Error('直连设备列表格式错误：' + devices.invalid.join('; '));
     // Preserve the list; PolicyTools disables its effect outside TProxy.
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!source.ok) throw new Error(source.message || '无法读取运行配置');
+    if (!source.ok) throw new Error(source.message || '无法读取运行配置（config.yaml）');
     configChanged = configChanged || source.value.mode !== 'rule';
     const prepared = await kprShapeRuntimeConfig(source.value, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
     if (configChanged) {
       backup = await createConfigRollbackPoint('network');
-      if (!backup) throw new Error('无法创建配置回滚点');
+      if (!backup) throw new Error('无法创建 config.yaml 回滚点；操作已中止');
     }
     policySnapshot = `/data/kano_network_save_${Date.now()}_${createRandomString(6)}`;
     const snapshot = await runShellWithRoot(`set -e
@@ -3021,13 +3021,13 @@ mkdir "$TX"
 ${fileSnapshotHelpersCmd()}
 ${policyTransactionFiles().map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo NETWORK_SNAPSHOT_READY`, 20000);
-    if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照创建失败，未保存新设置');
+    if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照创建失败；新设置未保存');
     operationStage('写入设置与运行配置', 1, 4);
     saved = true;
     if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
     if (configChanged) {
       const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, prepared, { label: 'config.yaml', backup: false });
-      if (!written.ok) throw new Error(written.content || '配置写入失败');
+      if (!written.ok) throw new Error(written.content || 'config.yaml 写入失败');
     }
     if (wasRunning) {
       operationStage('同步内核模式与接管规则', 2, 4);
@@ -3045,15 +3045,15 @@ echo NETWORK_SNAPSHOT_READY`, 20000);
     if (wasRunning && typeof refreshDashboardAfterModeChange === 'function') {
       try { await refreshDashboardAfterModeChange(); } catch (_) {}
     }
-    if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN 已暂停设备绕过，名单保留；切回 TProxy 自动恢复', 'yellow', 8000);
-    operationFinish(true, wasRunning ? '网络设置已应用' : '已保存，核心保持停止');
-    const successToast = [wasRunning ? '网络设置已应用' : '设置已保存；核心保持停止', 'green', 8000];
+    if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN 模式已暂停直连设备生效，名单保留；切回 TProxy 后自动恢复', 'yellow', 8000);
+    operationFinish(true, wasRunning ? '网络设置已保存并应用' : '网络设置已保存；核心保持停止');
+    const successToast = [wasRunning ? '网络设置已保存并应用' : '网络设置已保存；核心保持停止', 'green', 8000];
     if (activeCriticalOperation) activeCriticalOperation.finalToast = successToast;
     else createToast(...successToast);
     return true;
   } catch (error) {
     if (error.name === 'OperationCancelled' || activeCriticalOperation?.token.cancelled) return false;
-    operationStage('应用失败，恢复原设置');
+    operationStage('应用失败，正在恢复原设置');
     let recovered = !saved;
     if (saved) {
       let restoredSettings = false, restoredConfig = !backup;
@@ -3078,15 +3078,15 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         try { await networkRescue({ showOutput: false }); } catch (_) {}
       }
     }
-    operationFinish(false, recovered ? '应用失败，已恢复原设置' : '应用与回滚失败');
+    operationFinish(false, recovered ? '应用失败，已恢复原设置' : '应用失败，且回滚未完成');
     createToast(safeTextToHtml(error.message || String(error)) + '<br>' +
-      (recovered ? (saved ? '已恢复原设置和配置' : '未应用新设置') : '回滚失败，已尝试停止核心并清理规则'), recovered ? 'yellow' : 'red', 14000);
+      (recovered ? (saved ? '已恢复原设置与配置' : '新设置未应用') : '回滚失败；已尝试停止核心并清理规则，详见“状态与日志”'), recovered ? 'yellow' : 'red', 14000);
     return false;
   } finally {
     if (policySnapshot && (snapshotCommitted || snapshotRestored || !saved) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
       try {
         const cleaned = await runShellWithRoot('rm -rf ' + shellQuote(policySnapshot), 10000);
-        if (!cleaned.success) createToast('网络设置快照清理失败：' + escapeHtml(policySnapshot), 'yellow', 10000);
+        if (!cleaned.success) createToast('网络设置临时快照清理失败（不影响已保存的设置）：' + escapeHtml(policySnapshot), 'yellow', 10000);
       } catch (_) {}
     }
   }
@@ -3202,7 +3202,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
         element.dataset.pending = 'false';
         element.dataset.result = ok === true ? 'done' : ok === false ? 'failed' : 'ended';
         element.setAttribute('aria-busy', 'false');
-        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '已完成' : ok === false ? '失败，请查看错误详情' : '已结束'));
+        const safe = sanitizeSubscriptionSecrets(message || (ok === true ? '操作已完成' : ok === false ? '操作失败；请查看错误详情' : '操作已结束，结果未确认'));
         setText(get('.mm-op-phase'), safe); get('.mm-op-phase').title = safe;
         if (ok === true) { get('.mm-op-fill').style.width = '100%'; get('.mm-op-track').setAttribute('aria-valuenow', '100'); }
         else get('.mm-op-track').removeAttribute('aria-valuenow');
@@ -3219,7 +3219,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
       else { collapsed = !collapsed; get('.mm-op-body').hidden = collapsed; setText(get('button'), collapsed ? '+' : '\u2212'); }
     };
     element.dataset.pending = 'true';
-    setText(get('.mm-op-phase'), '处理中');
+    setText(get('.mm-op-phase'), '处理中…');
     operationProgress = progress;
     return progress;
   }
@@ -3236,7 +3236,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
     }
   }
   function operationCancelled() {
-    const error = new Error('已被恢复网络中止，不再继续安装或重启');
+    const error = new Error('已被“恢复网络”中止，不再继续安装或重启');
     error.name = 'OperationCancelled';
     return error;
   }
@@ -3291,7 +3291,7 @@ exit 0`;
           installState: fields.F50_INSTALL_STATE, trafficMode: 'unknown',
           configError: '运行组件缺失', apiError: '无法读取面板连接配置'};
       } else {
-        throw new Error(f50Error(text) || '状态命令未返回结果（超时或执行失败）');
+        throw new Error(f50Error(text));
       }
       return value;
     })();
@@ -3311,7 +3311,7 @@ exit 0`;
     const stored = normalizeStoredSubSourceList(sources);
     const enabled = normalizeSubSourceList(stored);
     if (normalizeSubRuleModeValue(mode) !== SUB_RULE_MODE_TEMPLATE) {
-      throw new Error('订阅原配置模式已停用；请主动迁移到本地模板，原配置不会自动覆盖');
+      throw new Error('订阅原配置模式已停用；请迁移到本地模板，原配置不会自动覆盖');
     }
     return { stored, enabled };
   }
@@ -3566,66 +3566,66 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
-    manual_source_invalid:'手动订阅链接无效。',
-    manual_source_limit:'手动订阅最多保存 100 条。',
-    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
-    manual_sources_changed:'手动订阅已变更，请重新同步。',
-    manual_provider_update_failed:'手动订阅下载失败。',
-    manual_provider_empty:'手动订阅没有可用节点。',
-    invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
-    invalid_gist_path:'Gist Raw 链接路径不正确。',
-    invalid_gist_revision:'Gist 版本号无效。',
-    invalid_gist_filename:'Gist 链接应指向 .age 加密文件。',
-    invalid_age_identity:'age 私钥格式不正确。',
-    age_identity_missing:'请先填写 age 私钥。',
-    http_404:'Gist 文件不存在或无法访问。',
-    http_403:'Gist 访问被拒绝。',
-    download_timeout:'Gist 下载超时，请重试。',
-    download_transport_failed:'Gist 下载失败，请检查网络。',
-    yaml_runtime_not_ready:'操作失败：组件未就绪，请在组件管理中重新导入配套完整组件包。',
-    no_transaction_pending:'没有待恢复的同步事务。',
-    components_missing:'当前完整组件版本不支持 Gist 同步，请在组件管理中更新。',
-    base_components_missing:'原组件缺失，请在组件管理中更新完整组件包。',
-    component_version_mismatch:'Gist 组件与页面版本不匹配，请更新配套 JS 和完整组件包。',
-    component_not_executable:'Gist 程序无法执行，请在组件管理中重新导入完整组件包。',
-    device_execution_failed:'设备端执行失败，请检查组件架构、权限和设备状态。',
-    response_format_invalid:'设备返回数据格式不正确，请刷新状态；持续出现时更新配套 JS 和组件。',
-    operation_timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
-    device_state_unknown:'操作失败：设备状态读取失败，请检查连接后重试。',
-    secure_transport_unavailable:'当前宿主缺少加密能力，未传输私钥；请更新宿主。',
-    request_encryption_failed:'同步请求加密失败，未发送明文私钥。',
-    request_key_expired:'一次性请求密钥已过期，请刷新状态后重试。',
-    sealed_request_invalid:'加密请求校验失败，未执行操作。',
-    root_required:'设备未授予 root 执行权限。',
-    too_many_tasks:'同步任务正在运行，请等待或在高级维护中取消任务。',
-    timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
+    manual_source_invalid:'手动订阅链接无效',
+    manual_source_limit:'手动订阅最多保存 100 条',
+    manual_sources_unreadable:'无法读取手动订阅；配置未更新',
+    manual_sources_changed:'手动订阅已变更；请重新同步',
+    manual_provider_update_failed:'手动订阅下载失败',
+    manual_provider_empty:'手动订阅未提供可用节点',
+    invalid_gist_url:'Gist 链接无效；请填写完整的 Raw 下载地址',
+    invalid_gist_path:'Gist Raw 链接路径不正确',
+    invalid_gist_revision:'Gist 版本号无效',
+    invalid_gist_filename:'Gist 链接必须指向 .age 加密文件',
+    invalid_age_identity:'age 私钥格式不正确',
+    age_identity_missing:'请先填写 age 私钥',
+    http_404:'Gist 文件不存在或无法访问',
+    http_403:'Gist 访问被拒绝',
+    download_timeout:'Gist 下载超时；请重试',
+    download_transport_failed:'Gist 下载失败；请检查设备网络',
+    yaml_runtime_not_ready:'操作失败：组件未就绪；请在组件管理中重新导入配套完整组件包。',
+    no_transaction_pending:'没有待恢复的同步事务',
+    components_missing:'当前组件版本不支持 Gist 同步；请在组件管理中更新',
+    base_components_missing:'原组件缺失；请在组件管理中更新完整组件包',
+    component_version_mismatch:'Gist 组件与页面版本不匹配；请更新配套 JS 与完整组件包',
+    component_not_executable:'Gist 程序无法执行；请在组件管理中重新导入完整组件包',
+    device_execution_failed:'设备端执行失败；请检查组件架构、权限与设备状态',
+    response_format_invalid:'设备返回数据格式不正确；请刷新状态，若持续出现请更新配套 JS 与组件',
+    operation_timeout:'操作失败：设备响应超时；请先恢复同步事务，再重试',
+    device_state_unknown:'操作失败：无法读取设备状态；请检查连接后重试',
+    secure_transport_unavailable:'当前宿主缺少加密能力，私钥未传输；请更新宿主',
+    request_encryption_failed:'同步请求加密失败；未发送明文私钥',
+    request_key_expired:'一次性请求密钥已过期；请刷新状态后重试',
+    sealed_request_invalid:'加密请求校验未通过；操作未执行',
+    root_required:'设备未授予 root 执行权限',
+    too_many_tasks:'同步任务正在运行；请等待完成，或在高级维护中取消任务',
+    timeout:'操作失败：设备响应超时；请先恢复同步事务，再重试',
     idle:'等待同步',
 
-    test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
-    settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
+    test_passed:'下载、解密与最终配置校验均通过；尚未应用',
+    settings_saved:'设置已保存；配置尚未应用',
     up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
-    saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
+    saved_stopped:'配置已保存；核心保持停止，配置未加载',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
-    source_changed:'\u540c\u6b65\u6e90\u5df2\u66f4\u6362\uff0c\u65e7\u4efb\u52a1\u672a\u63d0\u4ea4',
+    source_changed:'同步源已更换；旧任务未提交',
     settings_changed:'\u8bbe\u7f6e\u5df2\u88ab\u5176\u4ed6\u9875\u9762\u66f4\u6539\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u8868\u5355',
-    operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
-    blocked_dns_address:'DNS 返回了内网或 Fake-IP 地址，已拒绝下载。请让 Gist 域名使用真实公网 DNS。',
-    dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
-    age_unavailable:'age 无法执行，请在组件管理中更新',
+    operation_busy:'设备正在执行其他操作；本次未抢占设备租约',
+    blocked_dns_address:'DNS 返回内网或 Fake-IP 地址，已拒绝下载；请让 Gist 域名使用真实公网 DNS',
+    dns_failed:'Gist 域名解析失败；请检查设备 DNS 与网络',
+    age_unavailable:'age 无法执行；请在组件管理中更新组件包',
     age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
-    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”。',
-    sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
+    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”确认最终状态',
+    sync_settings_deleted:'同步设置与私钥已删除；运行配置未删除',
     auto_disabled:'\u81ea\u52a8\u540c\u6b65\u5df2\u5173\u95ed',
-    task_receipt_missing:'操作失败：任务回执读取失败，请执行“恢复同步事务”。',
-    auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
+    task_receipt_missing:'操作失败：无法读取任务回执；请执行“恢复同步事务”后重试',
+    auto_paused_core_stopped:'核心已停止；自动应用已暂停'
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || (value ? '操作失败：' + String(value) : '操作失败：设备未返回结果');
 
   async function f50GistLeave() {
     const leave=async()=>{
       const read=await readYamlObject(CLASH_CONFIG,'config.yaml');
-      if (!read.ok) throw Error(read.message || '读取配置失败');
+      if (!read.ok) throw Error(read.message || '无法读取配置');
       const paused=await runShellWithRoot(`set -e
 settings=/data/clash/Tools/gist-sync/settings.conf
 if [ -f "$settings" ]; then
@@ -3648,9 +3648,9 @@ fi`,8000);
     const st = await f50GistExec(['status'], 15000);
     if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!read.ok) throw Error(read.message || '读取配置失败');
+    if (!read.ok) throw Error(read.message || '无法读取配置');
     if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
-      if (window.confirm('Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？')) {
+      if (window.confirm('Gist 同步不可用。是否退出 Gist 管理并保留当前配置，继续使用普通订阅？')) {
         if (await f50GistLeave()) return null;
       }
       throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
@@ -3675,7 +3675,7 @@ fi`,8000);
       if (job.status === 'finished') {
         invalidateStatusSnapshot();
         const ok = job.result?.ok === true;
-        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
+        const message = ok ? 'Gist 配置已更新；手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
         operationFinish(ok,message);
         createToast(safeTextToHtml(message),ok?'green':'red');
         return ok;
@@ -3685,7 +3685,7 @@ fi`,8000);
       }
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
-    createToast('同步失败：等待任务完成超时，请在 Gist 页面恢复同步事务。','red');
+    createToast('同步失败：等待任务完成超时；请在 Gist 设置中执行“恢复同步事务”','red');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
@@ -3722,7 +3722,7 @@ fi`,8000);
     op.token.cancelled = true;
     deviceTaskUncertain = true;
     const error = operationCancelled();
-    error.message = '操作失败：无法读取设备执行结果，请检查连接后执行\u201c恢复网络\u201d。';
+    error.message = '操作失败：无法读取设备执行结果；请检查连接后执行“恢复网络”。';
     error.code = 'device_completion_unknown';
     lastInstallDiagnostic = f50Diagnostic('F50_ERROR=device_completion_unknown\n' + String(cause) + (op.heartbeatError ? '\n' + op.heartbeatError : ''));
     lastInstallDiagnostic.summary = error.message;
@@ -4349,7 +4349,7 @@ exit "$kano_task_rc"`;
       echo "BOOT_MESSAGE=猫猫未写入开机启动命令"
     `, 10 * 1000);
     if (!result.success || !/(^|\n)BOOT_STATE=/.test(String(result.content || ''))) {
-      throw new Error('未能读取开机自启状态，请重试');
+      throw new Error('无法读取开机自启状态；请重试');
     }
     return parseBootIntegrationResult(result);
   };
@@ -4358,7 +4358,7 @@ exit "$kano_task_rc"`;
   const downloadCoreArchive = async ({ allowCached = false } = {}) => {
     // UFI root-shell requests have a finite request window. Keep every foreground
     // download attempt below that window and try sources one-by-one from JS.
-    operationStage('检查安装包缓存');
+    operationStage('检查组件包缓存');
     if (allowCached) {
       const cached = await runShellWithRoot(`
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -4376,7 +4376,7 @@ exit "$kano_task_rc"`;
     const sources = [CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
-      operationStage('下载并校验安装包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
+      operationStage('下载并校验组件包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
       const result = await runShellWithRoot(`
         set +e
         ZIP=${shellQuote(DOWNLOAD_ZIP)}
@@ -4428,7 +4428,7 @@ exit "$kano_task_rc"`;
       ok: false,
       stage: /ARCHIVE_DOWNLOAD_FAILED/.test(content) ? 'download' : 'archive_verify',
       source: '',
-      message: '所有安装包来源均下载或校验失败',
+      message: '所有组件包下载源均下载或校验失败',
       content,
     };
   };
@@ -4468,16 +4468,16 @@ exit "$kano_task_rc"`;
   };
   const acquireCriticalOperation = (label = '关键操作', token = null, allowUninstallRecovery = false) => {
     if ((deviceTaskUncertain && !allowUninstallRecovery) || transientShellOperation) {
-      createToast(deviceTaskUncertain ? '上次操作失败，请先执行“恢复网络”后重试' : '设备读取尚未结束，请稍后重试', 'yellow');
+      createToast(deviceTaskUncertain ? '上次操作失败；请先执行“恢复网络”后重试' : '设备读取尚未结束；请稍后重试', 'yellow');
       return null;
     }
     if (recoveryInProgress) {
-      createToast('网络恢复正在执行', 'yellow');
+      createToast('网络恢复正在执行，请等待完成', 'yellow');
       return null;
     }
     if (activeCriticalOperation) {
       if (token && activeCriticalOperation.token === token) return token;
-      createToast(`“${escapeHtml(activeCriticalOperation.label)}”正在执行，请完成后再试。`, 'yellow', 5000);
+      createToast(`“${escapeHtml(activeCriticalOperation.label)}”正在执行；请等待完成后再试。`, 'yellow', 5000);
       return null;
     }
     const operationToken = token || { id: `${Date.now()}_${createRandomString(6)}` };
@@ -4574,7 +4574,7 @@ exit "$kano_task_rc"`;
 
   const ensureAdvanced = async () => {
     if (await checkAdvanceFunc()) return true;
-    createToast('没有开启高级功能，无法使用！', 'red');
+    createToast('未开启高级功能；无法执行此操作', 'red');
     return false;
   };
 
@@ -4610,7 +4610,7 @@ exit "$kano_task_rc"`;
           sed -n '1p' ${shellQuote(CLASH_SUB_USER_AGENT_FILE)}
         fi
         `, 10 * 1000);
-    if (!res.success) throw new Error('读取订阅请求头失败，未继续更新');
+    if (!res.success) throw new Error('读取订阅 User-Agent 失败，未继续更新');
     try {
       currentProviderUserAgent =
         parseStoredProviderUserAgent(res.content || '') ||
@@ -5036,7 +5036,7 @@ exit "$kano_task_rc"`;
         if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
         `, 10 * 1000);
     if (!current.success) {
-      createToast(`规则模式状态读取失败<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
+      createToast(`无法读取规则模式状态<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
       return false;
     }
     const storedSources = parseStoredSubSourcesFromText(current.content || '');
@@ -5125,7 +5125,7 @@ exit "$kano_task_rc"`;
     const tproxyPort = await detectF50TproxyPort();
     const existsRes = await runShellWithRoot(`[ -s ${shellQuote(templatePath)} ] && echo 1 || echo 0`, 10 * 1000);
     if (!existsRes.success) {
-      createToast('模板状态探测失败，已中止且未改写原模板。', 'red', 9000);
+      createToast('模板状态探测失败；操作已中止，原模板未改写。', 'red', 9000);
       return false;
     }
     const exists = String(existsRes.content || '').trim() == '1';
@@ -5147,7 +5147,7 @@ exit "$kano_task_rc"`;
       baseObject = read.value;
       generated = await yamlHasGeneratedMarker(templatePath);
       if (generated === null) {
-        createToast('template.yaml 生成标记读取失败，已中止且未改写原文件。', 'red', 9000);
+        createToast('无法读取 template.yaml 生成标记；操作已中止，原文件未改写。', 'red', 9000);
         return false;
       }
     }
@@ -5160,7 +5160,7 @@ exit "$kano_task_rc"`;
         tproxyPort,
       });
     } catch (e) {
-      createToast(`模板结构不兼容，未改写原文件<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
+      createToast(`模板结构不兼容；原文件未改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
       return false;
     }
 
@@ -5171,13 +5171,13 @@ exit "$kano_task_rc"`;
       backupTag: 'f50_template',
     });
     if (!write.ok) {
-      createToast(`模板自动处理失败，原文件未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
+      createToast(`模板自动处理失败；原文件未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
       return false;
     }
 
     if (showToast) {
       createToast(
-        `模板已处理为 F50 可用格式，节点来源 ${normalized.providerNames.length} 个`,
+        `模板已转换为 F50 可用格式，共 ${normalized.providerNames.length} 个节点来源`,
         'green',
         7000,
       );
@@ -5904,14 +5904,14 @@ ${buildF50YamlCommitBody(withBase)}
 
   const updateAirportDnsTemplate = (template, policy) => {
     const config = cloneJsonValue(assertYamlRootMap(template, '基础模板'));
-    if (config.dns != null && !isPlainYamlObject(config.dns)) throw new Error('模板 DNS 必须是映射');
-    if (!isPlainYamlObject(policy)) throw new Error('节点 DNS 策略必须是域名到 DNS 的映射');
+    if (config.dns != null && !isPlainYamlObject(config.dns)) throw new Error('模板中的 DNS 必须是映射对象');
+    if (!isPlainYamlObject(policy)) throw new Error('节点 DNS 策略必须是“域名 → DNS”的映射');
     const entries = Object.entries(policy).map(([domain, value]) => {
       const name = domain.trim();
       if (!name || /[\s/?#]/.test(name)) throw new Error('填写节点域名或域名后缀，不要填写订阅链接');
       const servers = Array.isArray(value) ? value : [value];
       if (!servers.length || servers.some((server) => typeof server !== 'string' || !server.trim() || /\s/.test(server.trim()))) {
-        throw new Error('每个节点域名至少需要一个 DNS 地址，每行填写一个');
+        throw new Error('每个节点域名至少需要一个 DNS 地址，每行一个');
       }
       const clean = [...new Set(servers.map((server) => server.trim()))];
       return [name, Array.isArray(value) ? clean : clean[0]];
@@ -5935,14 +5935,14 @@ ${buildF50YamlCommitBody(withBase)}
       elif [ -s ${shellQuote(CLASH_TEMPLATE)} ]; then printf current;
       elif [ -s ${shellQuote(CLASH_CONFIG)} ]; then printf runtime; fi
     `, 5000);
-    if (!probe.success) return { ok: false, message: '读取模板状态失败' };
+    if (!probe.success) return { ok: false, message: '无法读取模板状态' };
     const kind = String(probe.content || '').trim();
     if (!['base', 'current', 'runtime'].includes(kind)) return { ok: false, message: '请先上传模板或配置文件' };
     const path = kind === 'base' ? CLASH_TEMPLATE_BASE : kind === 'current' ? CLASH_TEMPLATE : CLASH_CONFIG;
     const read = await readYamlObject(path, '基础模板');
     if (!read.ok) return read;
     const generated = await yamlHasGeneratedMarker(path);
-    if (generated === null) return { ok: false, message: '读取模板标记失败' };
+    if (generated === null) return { ok: false, message: '无法读取模板标记' };
     try {
       updateAirportDnsTemplate(read.value, read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {});
       return { ...read, generated };
@@ -5958,7 +5958,7 @@ ${buildF50YamlCommitBody(withBase)}
       const write = await writeYamlObjectAtomic(CLASH_TEMPLATE_BASE, updateAirportDnsTemplate(read.value, policy), {
         label: '基础模板', marker: read.generated ? GENERATED_TEMPLATE_MARKER : '', backup: true, backupTag: 'airport_dns',
       });
-      if (!write.ok) { createToast(`保存节点 DNS 策略失败<br>${safeTextToHtml(write.content || '')}`, 'red', 8000); return false; }
+      if (!write.ok) { createToast(`节点 DNS 策略保存失败<br>${safeTextToHtml(write.content || '')}`, 'red', 8000); return false; }
       return true;
     } catch (error) {
       createToast(safeTextToHtml(error.message), 'red', 8000);
@@ -5979,10 +5979,10 @@ ${buildF50YamlCommitBody(withBase)}
   const parseAirportDnsText = async (text) => {
     if (!String(text || '').trim()) throw new Error('请先粘贴节点 DNS 策略配置');
     const staged = await stageTextBesideTarget(CLASH_TEMPLATE_BASE, text, '节点 DNS 策略');
-    if (!staged.ok) throw new Error('节点 DNS 策略暂存失败，请检查设备连接和可用空间');
+    if (!staged.ok) throw new Error('节点 DNS 策略暂存失败；请检查设备连接与可用空间');
     try {
       const read = await readYamlObject(staged.stagePath, '节点 DNS 策略');
-      if (!read.ok) throw new Error('无法解析粘贴内容，请检查 YAML 缩进和 DNS 地址');
+      if (!read.ok) throw new Error('无法解析粘贴内容；请检查 YAML 缩进与 DNS 地址');
       return extractAirportDnsPolicy(read.value);
     } finally {
       await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000);
@@ -6060,7 +6060,7 @@ ${buildF50YamlCommitBody(withBase)}
     const safeCode = normalizeOverrideJs(code);
     const blockedPattern = /\b(eval|Function|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|Worker|SharedWorker|import|importScripts|self|document|window|globalThis|localStorage|sessionStorage|indexedDB|caches|navigator|location|history|opener|parent|top|frames|runShellWithRoot|KANO_baseURL|common_headers|constructor|__proto__|prototype)\b/;
     if (safeCode.length > 20000) {
-      throw new Error('JS 覆写过长，请精简后再保存');
+      throw new Error('JS 覆写内容过长；请精简后保存');
     }
     const decoded = safeCode.replace(/\\(?:u([0-9a-fA-F]{4})|u\{([0-9a-fA-F]{1,6})\}|x([0-9a-fA-F]{2}))/g,
       (match, utf16, point, byte) => {
@@ -6068,7 +6068,7 @@ ${buildF50YamlCommitBody(withBase)}
         return value <= 0x10ffff ? String.fromCodePoint(value) : match;
       });
     if (blockedPattern.test(decoded)) {
-      throw new Error('JS 覆写包含被禁止的浏览器、网络、动态执行或原型访问能力');
+      throw new Error('JS 覆写包含被禁止的浏览器、网络、动态执行或原型访问能力；已拒绝保存');
     }
     return safeCode;
   };
@@ -6102,7 +6102,7 @@ ${buildF50YamlCommitBody(withBase)}
   const runJsOverrideOnConfig = async (code = '', config = {}) => {
     const safeCode = validateOverrideJsSafety(code);
     if (typeof Worker != 'function' || typeof Blob != 'function' || !globalThis.URL || typeof globalThis.URL.createObjectURL != 'function') {
-      throw new Error('当前浏览器不支持隔离 Worker，已拒绝在管理页面主线程执行 JS 覆写');
+      throw new Error('当前浏览器不支持隔离 Worker；已拒绝在主线程执行 JS 覆写');
     }
 
     const input = JSON.parse(JSON.stringify(config || {}));
@@ -6168,7 +6168,7 @@ ${buildF50YamlCommitBody(withBase)}
       const output = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           try { worker.terminate(); } catch (_) {}
-          reject(new Error('JS 覆写执行超时（3.5 秒），已终止隔离 Worker'));
+          reject(new Error('JS 覆写执行超时（3.5 秒）；隔离 Worker 已终止'));
         }, 3500);
         worker.onmessage = (event) => {
           clearTimeout(timer);
@@ -6196,7 +6196,7 @@ ${buildF50YamlCommitBody(withBase)}
       }
       const serialized = JSON.stringify(output);
       if (serialized.length > 5 * 1024 * 1024) {
-        throw new Error('JS 覆写输出超过 5 MiB，已拒绝写入');
+        throw new Error('JS 覆写输出超过 5 MiB；已拒绝写入');
       }
       return JSON.parse(serialized);
     } finally {
@@ -6240,7 +6240,7 @@ fi`, 20000);
       if (!committed.ok) throw new Error(committed.content || '模板事务提交失败');
       return true;
     } catch (error) {
-      createToast(`准备模板失败，旧模板和运行配置已保留<br>${safeTextToHtml(error.message || error)}`, 'red', 9000);
+      createToast(`准备模板失败；旧模板与运行配置已保留<br>${safeTextToHtml(error.message || error)}`, 'red', 9000);
       return false;
     } finally {
       await runShellWithRoot('rm -f ' + shellQuote(candidate) + ' ' + shellQuote(baseCandidate), 10000);
@@ -6260,26 +6260,26 @@ fi`, 20000);
     const ruleOverrideConfig = await readRuleOverrideConfig();
     const hasUiOverride = hasActiveRuleOverride(ruleOverrideConfig);
     if (!saved && !hasUiOverride) {
-      if (showToast) createToast('还没有保存界面规则或 JS 规则', 'yellow', 5000);
+      if (showToast) createToast('尚未保存图形规则或 JS 覆写', 'yellow', 5000);
       return true;
     }
 
     const templateRes = await runShellWithRoot(`[ -s ${shellQuote(templatePath)} ] && echo 1 || echo 0`);
     if (String(templateRes.content || '').trim() != '1') {
-      if (showToast) createToast('没有 template.yaml，覆写未应用', 'yellow', 6000);
+      if (showToast) createToast('没有 template.yaml；覆写未应用', 'yellow', 6000);
       return true;
     }
 
     const cleanSources = sources ? normalizeSubSourceList(sources) : await readSavedSubSourcesForTemplate();
     if (prepareTemplate) {
       if (!(await prepareTemplateFromBase(cleanSources, { templateBasePath, templatePath }))) return false;
-      if (showToast) createToast('覆写已应用到 template.yaml', 'green', 7000);
+      if (showToast) createToast('覆写已写入 template.yaml', 'green', 7000);
       return restart ? restartClashOk({ skipCheck: true }) : true;
     }
 
     const read = await readYamlObject(templatePath, 'template.yaml');
     if (!read.ok) {
-      createToast(`读取模板失败<br>${safeTextToHtml(read.message || '')}`, 'red', 9000);
+      createToast(`无法读取 template.yaml<br>${safeTextToHtml(read.message || '')}`, 'red', 9000);
       return false;
     }
 
@@ -6300,7 +6300,7 @@ fi`, 20000);
 
     const generated = await yamlHasGeneratedMarker(templatePath);
     if (generated === null) {
-      createToast('template.yaml 生成标记读取失败，已中止且未改写原文件。', 'red', 9000);
+      createToast('无法读取 template.yaml 生成标记；操作已中止，原文件未改写。', 'red', 9000);
       return false;
     }
     const write = await writeYamlObjectAtomic(templatePath, outputObj, {
@@ -6310,11 +6310,11 @@ fi`, 20000);
       backupTag: 'override',
     });
     if (!write.ok) {
-      createToast(`写入覆写结果失败，原模板未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
+      createToast(`覆写结果写入失败；原模板未被覆盖<br>${safeTextToHtml(write.content || '')}`, 'red', 10000);
       return false;
     }
     if (showToast) {
-      createToast('覆写已应用到 template.yaml', 'green', 7000);
+      createToast('覆写已写入 template.yaml', 'green', 7000);
     }
     if (restart) return await restartClashOk({ skipCheck: true });
     return true;
@@ -6373,7 +6373,7 @@ KANO_WRITE_CHECK_EOF
 
     await writeCheckStart();
 
-    if (cleanSources.length == 0) return fail('validate_sources', '没有订阅链接，无法生成运行配置');
+    if (cleanSources.length == 0) return fail('validate_sources', '没有订阅链接；无法生成运行配置');
     const invalidSource = cleanSources.find((source) => !isHttpUrl(source.url));
     if (invalidSource) return fail('validate_sources', `订阅链接格式不正确：${invalidSource.url}`);
 
@@ -6381,10 +6381,10 @@ KANO_WRITE_CHECK_EOF
     if (!storage.ok) return fail('prepare_policy_storage', storage.content || '策略文件目录准备失败');
 
     const read = await readYamlObject(CLASH_TEMPLATE, 'template.yaml');
-    if (!read.ok) return fail('read_template', read.message || 'template.yaml 读取失败');
+    if (!read.ok) return fail('read_template', read.message || 'template.yaml 无法读取');
 
     const generated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
-    if (generated === null) return fail('read_template_marker', 'template.yaml 生成标记读取失败');
+    if (generated === null) return fail('read_template_marker', 'template.yaml 生成标记无法读取');
     const tproxyPort = await detectF50TproxyPort();
     let normalized;
     try {
@@ -6432,7 +6432,7 @@ KANO_WRITE_CHECK_EOF
     appendTemplateFlowDebug(`writeRuntimeConfigFromTemplate committed json_bridge=1 providers=${normalized.providerNames.join(',')} unchanged=${write.unchanged ? '1' : '0'}`);
     if (showToast) {
       createToast(
-        '运行配置已通过结构检查并原子写入',
+        '运行配置已通过结构检查并写入',
         'green',
         8000,
       );
@@ -6618,11 +6618,11 @@ KANO_WRITE_CHECK_EOF
     const oldInfo = await buildControllerInfo();
     const rollbackPath = await createConfigRollbackPoint('controller_settings');
     if (rollbackPath === null) {
-      return { ...checked, ok: false, message: '无法创建 config.yaml 回滚点，未保存设置' };
+      return { ...checked, ok: false, message: '无法创建 config.yaml 回滚点；设置未保存' };
     }
     const configRead = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!configRead.ok) {
-      return { ...checked, ok: false, message: configRead.message || 'config.yaml 读取失败' };
+      return { ...checked, ok: false, message: configRead.message || 'config.yaml 无法读取' };
     }
 
     const configObject = cloneJsonValue(configRead.value);
@@ -6636,14 +6636,14 @@ KANO_WRITE_CHECK_EOF
     if (templateExists) {
       const templateRead = await readYamlObject(CLASH_TEMPLATE, 'template.yaml');
       if (!templateRead.ok) {
-        return { ...checked, ok: false, message: templateRead.message || 'template.yaml 读取失败' };
+        return { ...checked, ok: false, message: templateRead.message || 'template.yaml 无法读取' };
       }
       templateObject = cloneJsonValue(templateRead.value);
       templateObject['external-controller'] = checked.controller;
       templateObject.secret = checked.secret;
       templateGenerated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
       if (templateGenerated === null) {
-        return { ...checked, ok: false, message: 'template.yaml 生成标记读取失败，未改写原文件' };
+        return { ...checked, ok: false, message: '无法读取 template.yaml 生成标记；原文件未改写' };
       }
     }
 
@@ -6947,7 +6947,7 @@ KANO_WRITE_CHECK_EOF
       if (await probeZashboardGuard()) return { ok: true, repaired: false };
 
       const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-      if (!read.ok) return { ok: false, message: read.message || 'config.yaml 读取失败' };
+      if (!read.ok) return { ok: false, message: read.message || 'config.yaml 无法读取' };
 
       const config = cloneJsonValue(read.value);
       const configChanged = applyManagedDashboardFields(config, { preserveConfig: await readConfigSource() === 'subscription_original' });
@@ -7032,26 +7032,26 @@ KANO_WRITE_CHECK_EOF
     const configOk = !!configValidationResult.ok;
     const allOk = configOk && providerOk;
     const title = !configOk
-      ? '订阅配置检查异常'
+      ? '订阅配置检查未通过'
       : providerNotRun
-        ? '订阅配置正常 · 节点来源未更新'
+        ? '订阅配置正常，节点来源未更新'
         : allOk
           ? '订阅更新成功'
           : providerResult.success > 0
-            ? '订阅配置正常 · 节点来源部分更新'
-            : '订阅配置正常 · 节点来源更新失败';
+            ? '订阅配置正常，部分节点来源更新失败'
+            : '订阅配置正常，节点来源更新失败';
     const color = !configOk || (!providerNotRun && (confirmedNoCache || noUsableProvider))
       ? 'red'
       : allOk
         ? 'green'
         : 'yellow';
     const summary = !configOk
-      ? '订阅配置检查异常，请查看详细结果。'
+      ? '订阅配置检查未通过；详见下方检查结果。'
       : providerNotRun
-        ? `配置检查通过；${providerResult.notRunReason || '节点来源更新未执行'}。`
+        ? `配置检查通过；节点来源未更新（${providerResult.notRunReason || '未执行更新'}）。`
         : allOk
-          ? `订阅更新成功：节点来源 ${providerResult.success}/${providerResult.total}`
-          : `配置检查通过；节点来源更新 ${providerResult.success}/${providerResult.total}`;
+          ? `订阅更新成功：已更新 ${providerResult.success}/${providerResult.total} 个节点来源`
+          : `配置检查通过；已更新 ${providerResult.success}/${providerResult.total} 个节点来源`;
     return {
       providerResult,
       providerNotRun,
@@ -7100,11 +7100,11 @@ KANO_WRITE_CHECK_EOF
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
-      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但节点为空' : '节点加载状态读取失败')};
+      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但未返回可用节点' : '无法读取节点加载状态')};
   });
   const result=buildProviderUpdateResult(results,{controllerInfo:info,corePid:pid,
     notRunReason:!pid && names.length ? '核心未运行' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
-  if (showToast) createToast(result.failed?'部分节点来源更新失败':'节点已加载；连通性未测试',result.failed?'yellow':'green');
+  if (showToast) createToast(result.failed?'部分节点来源更新失败':'节点已加载；代理连通性未测试',result.failed?'yellow':'green');
   return result;
 };
 
@@ -7113,15 +7113,15 @@ KANO_WRITE_CHECK_EOF
   const formatSubscriptionDownloadError = (provider = {}, detail = '') => {
     const status = Number(provider.statusCode || 0);
     const reason = String(provider.message || detail || '');
-    if (status === 401 || status === 403) return `订阅服务器拒绝访问（HTTP ${status}），请检查链接是否有效或已到期`;
-    if (status === 404) return '订阅链接不存在（HTTP 404），请检查下载地址';
-    if (status >= 300 && status < 400) return `订阅返回重定向（HTTP ${status}），请使用最终下载链接`;
-    if (status >= 500) return `订阅服务器暂时不可用（HTTP ${status}），请稍后重试`;
-    if (/certificate|x509|tls handshake/i.test(reason)) return '订阅服务器的 HTTPS 校验失败，请检查证书和设备时间';
-    if (/timeout|timed out|deadline exceeded/i.test(reason)) return '订阅下载超时，请检查网络或稍后重试';
-    if (/resolve|no such host|dns/i.test(reason)) return '订阅服务器域名解析失败，请检查网络和 DNS';
-    if (/yaml|json|parse|html|empty|no proxies|unsupported|no nodes/i.test(reason)) return '订阅返回内容无法识别，请检查是否为有效的节点订阅或完整 Mihomo 配置';
-    return '订阅下载或解析失败，请检查链接和返回格式';
+    if (status === 401 || status === 403) return `订阅服务器拒绝访问（HTTP ${status}）；请检查链接是否有效或已到期`;
+    if (status === 404) return '订阅链接不存在（HTTP 404）；请检查下载地址';
+    if (status >= 300 && status < 400) return `订阅返回重定向（HTTP ${status}）；请使用最终下载链接`;
+    if (status >= 500) return `订阅服务器暂时不可用（HTTP ${status}）；请稍后重试`;
+    if (/certificate|x509|tls handshake/i.test(reason)) return '订阅服务器的 HTTPS 校验失败；请检查证书与设备时间';
+    if (/timeout|timed out|deadline exceeded/i.test(reason)) return '订阅下载超时；请检查网络或稍后重试';
+    if (/resolve|no such host|dns/i.test(reason)) return '订阅服务器域名解析失败；请检查网络与 DNS';
+    if (/yaml|json|parse|html|empty|no proxies|unsupported|no nodes/i.test(reason)) return '订阅返回内容无法识别；请检查是否为有效的节点订阅或完整 Mihomo 配置';
+    return '订阅下载或解析失败；请检查链接与返回格式';
   };
 
   const convertSubscriptionsLocally = async (sources = [], { preserveNames = false } = {}) => {
@@ -7134,14 +7134,14 @@ KANO_WRITE_CHECK_EOF
       name: source.name,
       ok: false,
       attempts: 1,
-      message: check.ok ? '订阅地址校验未通过，已停止本地转换' : (check.message || '订阅地址无效'),
+      message: check.ok ? '订阅地址校验未通过；本地转换已停止' : (check.message || '订阅地址无效'),
       errorType: 'invalid_subscription_url',
     })));
   }
-  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载组件未就绪，请先修复组件'})));
+  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载组件未就绪；请先修复组件'})));
   const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
   const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent() }), 'subscription request');
-  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败，请检查设备连接和可用空间'})));
+  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败；请检查设备连接与可用空间'})));
   let r;
   try {
     operationStage('下载并验证订阅');
@@ -7159,7 +7159,7 @@ KANO_WRITE_CHECK_EOF
     });
     return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : (results.find(provider => !provider.ok)?.message || formatSubscriptionDownloadError({}, r.content))});
   } catch (_) {
-    const message = '订阅下载失败：设备响应读取失败，请检查连接后重试';
+    const message = '订阅下载失败：无法确认下载结果；请检查设备连接后重试';
     return buildProviderUpdateResult(clean.map(source => ({ type: 'proxy-provider', name: source.name, ok: false, attempts: 1,
       statusCode: 0, message, errorType: 'local_download_failed' })), { ok: false, via: 'local', committed: false, message });
   } finally {
@@ -7179,7 +7179,7 @@ KANO_WRITE_CHECK_EOF
           ok: false,
           attempts: 0,
           errorType: 'provider_reload_missing',
-          message: '本地转换已提交，但运行核心未返回节点来源刷新结果',
+          message: '本地转换已提交，但核心未返回节点来源刷新结果',
           proxyCount: null,
           cacheAvailable: null,
         };
@@ -7195,7 +7195,7 @@ KANO_WRITE_CHECK_EOF
         ...reloaded,
         ok,
         errorType: ok ? '' : (emptyProvider ? 'empty_provider' : countMismatch ? 'provider_count_mismatch' : reloaded.errorType),
-        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但没有可用节点' : countMismatch ? (proxyCount === null ? `订阅已下载 ${converted.proxyCount} 个节点，但核心节点数量读取失败` : `订阅已下载 ${converted.proxyCount} 个节点，核心加载 ${proxyCount} 个，数量不一致`) : reloaded.message),
+        message: ok ? '' : (emptyProvider ? '节点来源已刷新，但未返回可用节点' : countMismatch ? (proxyCount === null ? `订阅已下载 ${converted.proxyCount} 个节点，但无法读取核心节点数量` : `订阅已下载 ${converted.proxyCount} 个节点，核心加载 ${proxyCount} 个，数量不一致`) : reloaded.message),
         proxyCount,
         cacheAvailable: proxyCount === null ? null : proxyCount > 0,
         format: converted.format,
@@ -7315,7 +7315,7 @@ KANO_WRITE_CHECK_EOF
       if (requestId !== runningStatusRequestId) return !!pid;
       if (label) label.title = [snapshot.processError, snapshot.configError, snapshot.optionsError, snapshot.apiError, snapshot.networkWarning].filter(Boolean).join('\n');
       if (snapshot.processReadStatus === 'unavailable') {
-        renderRuntimeStatus('unknown', '猫猫 - 进程状态不可读', label);
+        renderRuntimeStatus('unknown', '猫猫 - 进程状态无法读取', label);
         return false;
       }
       if (!pid && snapshot.installState === 'missing') {
@@ -7324,7 +7324,7 @@ KANO_WRITE_CHECK_EOF
       }
       renderRuntimeStatus(pid ? 'checking' : 'stopped', pid ? '猫猫 - 检查 API' : '猫猫 - 已停止', label);
       // Badges are supplementary: they must not delay the API indicator.
-      Promise.allSettled([refreshRuleModeStatus(), refreshModeBadge()]).catch(() => {});
+      Promise.allSettled([refreshRuleModeStatus(), refreshModeBadge()]);
       let apiOk = snapshot.apiOk === true;
       if (pid && typeof snapshot.apiOk !== 'boolean') {
         const info = snapshot.externalController !== undefined ? { ...normalizeController(snapshot.externalController || `127.0.0.1:${F50_PORTS.controller}`), secret: snapshot.secret || '', secretSet: !!snapshot.secret } : null;
@@ -7336,7 +7336,7 @@ KANO_WRITE_CHECK_EOF
       return !!pid;
     } catch (error) {
       if (requestId === runningStatusRequestId && label) label.title = f50Error(error?.message || error);
-      if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '猫猫 - 状态读取失败', label);
+      if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '猫猫 - 状态无法读取', label);
       return false;
     }
   };
@@ -7526,7 +7526,7 @@ kano_stop_watchers() (
       if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
         const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
         const summary = /^F50_RECOVERY_ELIGIBLE=0$/m.test(String(checked?.content || ''))
-          ? '恢复失败，请查看状态与日志' : '恢复失败：无法读取设备状态，请检查连接后重试';
+          ? '恢复失败；详见“状态与日志”' : '恢复失败：无法读取设备状态；请检查设备连接后重试';
         createToast(summary, 'red', 12000);
         lastInstallDiagnostic = { ...f50Diagnostic(detail), ok: false, summary };
         recoveryInProgress = false;
@@ -7534,7 +7534,7 @@ kano_stop_watchers() (
       }
     } catch (error) {
       lastInstallDiagnostic = { ...f50Diagnostic(error.message || String(error)), ok: false, summary: '恢复失败：无法读取设备状态' };
-      createToast('恢复失败：无法读取设备状态，请检查连接后重试', 'red', 12000);
+      createToast('恢复失败：无法读取设备状态；请检查设备连接后重试', 'red', 12000);
       recoveryInProgress = false;
       return false;
     }
@@ -7562,7 +7562,7 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
       } catch (error) { nativeDetail = 'F50_NATIVE_RECOVERY_UNCONFIRMED=1\n' + f50Diagnostic(error.message || String(error)).details + '\n'; }
     }
     if (!preempt && activeCriticalOperation && !activeCriticalOperation.leaseOwned) {
-      throw new Error('未取得设备操作租约，停止未执行；请等待其他页面任务结束');
+      throw new Error('未取得设备操作租约；停止操作未执行，请等待其他页面任务结束');
     }
     const canResume = !preempt && activeCriticalOperation?.leaseOwned && !activeCriticalOperation.uncertain &&
       !activeCriticalOperation.token.cancelled && !activeCriticalOperation.requests;
@@ -7576,26 +7576,26 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const confirmed = ok || /^F50_(CLEAN_ERROR=|RECOVERY_(PARTIAL=1|ELIGIBLE=0|STATE=))/m.test(String(r.content || ''));
     const summary = ok ? (/^F50_RECOVERY_BACKUP=/m.test(r.content) ? '网络接管已释放，配置备份已保留' : '网络接管已释放')
       : /^F50_NETWORK_RELEASED=1$/m.test(r.content) ? (/^F50_RECOVERY_CONFIG_FAILED=1$/m.test(r.content)
-        ? '网络已释放，但配置恢复失败，请查看详情' : '网络规则已释放，但恢复失败，请查看详情')
-      : confirmed ? '恢复失败，请查看详情' : '恢复失败：无法读取执行结果，请检查连接后重试';
+        ? '网络接管已释放，但配置恢复失败；详见“状态与日志”' : '网络规则已释放，但配置恢复失败；详见“状态与日志”')
+      : confirmed ? '恢复失败；详见“状态与日志”' : '恢复失败：无法读取执行结果；请检查设备连接后重试';
     lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
       summary };
     invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;
-    const resultDetail = ok ? '已停止并释放网络' : summary;
+    const resultDetail = ok ? '已停止核心并释放网络接管' : summary;
     if (own) { if (progress) progress.finish(ok, resultDetail); }
-    else { operationFinish(ok, resultDetail); if (progress && ok) progress.stage('网络清理完成，等待释放设备租约'); }
+    else { operationFinish(ok, resultDetail); if (progress && ok) progress.stage('网络清理完成；正在等待设备租约释放'); }
     if (ok) renderRuntimeStatus('stopped', '猫猫 - 已停止', document.querySelector('#running_mm'));
     const resultToast = [summary, ok ? 'green' : 'red', ok ? 5000 : 15000];
     if (!own && ok) activeCriticalOperation.finalToast = resultToast;
     else createToast(...resultToast);
-    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成，正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成；正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
     return ok;
   } catch (error) {
     deviceTaskUncertain = true;
     lastInstallDiagnostic = { ...f50Diagnostic(error.message || String(error)), ok: false, summary: '恢复失败：无法读取执行结果' };
-    if (own) { if (progress) progress.finish(false, '恢复失败，请检查连接后重试'); }
-    else operationFinish(false, '恢复失败，请检查连接后重试');
-    createToast('恢复失败：无法读取执行结果，请检查连接后重试', 'red', 12000); return false;
+    if (own) { if (progress) progress.finish(false, '恢复失败；请检查设备连接后重试'); }
+    else operationFinish(false, '恢复失败；请检查设备连接后重试');
+    createToast('恢复失败：无法读取执行结果；请检查设备连接后重试', 'red', 12000); return false;
   } finally { recoveryInProgress = false; syncCriticalOperationStatus(); }
 };
 
@@ -7660,7 +7660,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   if (prepared.success) restored=await commitStagedYaml({targetPath:CLASH_CONFIG,stagePath,backup:false,
     preserveSecret:false,sourceStagePath:/^SOURCE_STATE=present$/m.test(prepared.content)?rollbackPath+'.source':null,
     removeSource:/^SOURCE_STATE=absent$/m.test(prepared.content)});
-  if (showToast) createToast(escapeHtml(context)+(restored.ok?'失败，已恢复旧配置与来源标记':'失败，且配置回滚失败'),restored.ok?'yellow':'red',9000);
+  if (showToast) createToast(escapeHtml(context)+(restored.ok?'失败；已恢复旧配置与来源标记':'失败，且配置未能回滚'),restored.ok?'yellow':'red',9000);
   return restored.ok;
 };
 
@@ -7672,7 +7672,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
 
     if (rollbackPath === null) {
       createToast(
-        `${escapeHtml(context)}失败，且没有可用的 config.yaml 回滚点。已清理运行规则以避免断网。`,
+        `${escapeHtml(context)}失败，且没有可用的 config.yaml 回滚点；已清理运行规则以避免断网。`,
         'red',
         12000,
       );
@@ -7690,7 +7690,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       createToast(
         removed.success
           ? `${escapeHtml(context)}失败；写入前没有 config.yaml，已移除新配置并清理网络规则。`
-          : `${escapeHtml(context)}失败；写入前没有 config.yaml，但新配置移除失败。`,
+          : `${escapeHtml(context)}失败；写入前没有 config.yaml，且新配置移除失败。`,
         removed.success ? 'yellow' : 'red',
         12000,
       );
@@ -7701,7 +7701,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     appendTemplateFlowDebug(`restart failed, restoring config rollback=${rollbackPath}`);
     const restored = await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
     if (!restored) {
-      createToast(`${escapeHtml(context)}失败，且上一份 config.yaml 回滚失败。`, 'red', 12000);
+      createToast(`${escapeHtml(context)}失败，且上一份 config.yaml 未能回滚。`, 'red', 12000);
       await isMMRunning();
       return false;
     }
@@ -7768,7 +7768,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "TEMPLATE_YAML_OK"
       `, 30 * 1000);
       if (!yamlCheckRes.success) {
-        throw yamlCheckRes.content || '模板 YAML 校验失败，已保留原 template.base.yaml / template.yaml';
+        throw yamlCheckRes.content || '模板 YAML 校验未通过；已保留原 template.base.yaml 与 template.yaml';
       }
 
       let savedSources = await readSavedSubSourcesForTemplate();
@@ -7783,14 +7783,14 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         if (savedSources.length == 0) {
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = '已从模板 proxy-providers 导入订阅链接，并统一命名为 Provider1/Provider2。';
+          templateSubSyncMessage = '已从模板 proxy-providers 导入订阅链接，并统一命名为 Provider1、Provider2 等。';
         } else if (savedKey != templateKey) {
           const oldSources = normalizeSubSourceList(savedSources);
           const newSources = normalizeSubSourceList(templateSources);
           const confirmed = await askConfirm(
             `mm_template_sub_replace_confirm_${createRandomString(4)}`,
             '替换订阅链接？',
-            `模板包含 ${newSources.length} 个订阅链接，将替换当前 ${oldSources.length} 个已保存链接。`,
+            `模板包含 ${newSources.length} 个订阅链接；将替换当前已保存的 ${oldSources.length} 个链接。`,
             '替换',
             '取消',
           );
@@ -7798,13 +7798,13 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           const oldCount = savedSources.length;
           savedSources = templateSources;
           templateSubSourcesToPersist = templateSources;
-          templateSubSyncMessage = `已按新模板 proxy-providers 替换订阅链接：${oldCount} \u2192 ${templateSources.length}。`;
+          templateSubSyncMessage = `已按新模板的 proxy-providers 替换订阅链接：${oldCount} 个 → ${templateSources.length} 个。`;
         } else {
           savedSources = templateSources;
         }
       }
       if (!(await prepareTemplateFromBase(savedSources, { templateBasePath: txBase, templatePath: txTemplate }))) {
-        throw '准备模板失败，已保留原 template.base.yaml / template.yaml';
+        throw '准备模板失败；已保留原 template.base.yaml 与 template.yaml';
       }
       if (templateSubSourcesToPersist.length > 0) {
         const subBackupRes = await runShellWithRoot(`
@@ -7829,7 +7829,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           SUB_RULE_MODE_TEMPLATE,
           await readSavedSubConvertMode(),
         ))) {
-          throw '写入新模板对应的订阅链接失败，已保留原 template.base.yaml / template.yaml';
+          throw '订阅链接写入失败；已保留原 template.base.yaml 与 template.yaml';
         }
       }
       const commitRes = await runShellWithRoot(`
@@ -7866,12 +7866,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "backup_template=$backup_template"
       `);
       if (!commitRes.success || !String(commitRes.content || '').includes('TEMPLATE_OK')) {
-        throw commitRes.content || '提交模板失败，已尝试恢复原模板';
+        throw commitRes.content || '模板提交失败；已尝试恢复原模板';
       }
       if (templateSubSyncMessage) {
         createToast(templateSubSyncMessage, 'yellow', 7000);
       }
-      createToast('模板已保存；点击\u201c应用模板与覆写\u201d写入 config.yaml。', 'green');
+      createToast('模板已保存；请在“配置与规则”中点击“应用模板”写入 config.yaml。', 'green');
       return true;
     } catch (e) {
       console.error(e);
@@ -7999,8 +7999,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         const res = await callMihomoApi('/version', 'GET', null, checked.info);
         setStatus(
           res.success
-            ? `连通性正常：HTTP ${res.statusCode}`
-            : `连通性失败：HTTP ${res.statusCode || '无'}\n${res.responseText || ''}`.trim(),
+            ? `连接正常：HTTP ${res.statusCode}`
+            : `连接失败：HTTP ${res.statusCode || '无'}\n${res.responseText || ''}`.trim(),
           res.success ? '#bbf7d0' : '#fecaca',
         );
       } finally {
@@ -8016,10 +8016,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           return;
         }
         const checkText = res.connectivity && res.connectivity.success
-          ? `连通性正常：HTTP ${res.connectivity.statusCode}`
-          : `连通性失败：HTTP ${(res.connectivity && res.connectivity.statusCode) || '无'}`;
+          ? `连接正常：HTTP ${res.connectivity.statusCode}`
+          : `连接失败：HTTP ${(res.connectivity && res.connectivity.statusCode) || '无'}`;
         setStatus(`已保存\n${checkText}`, res.connectivity && res.connectivity.success ? '#bbf7d0' : '#fde68a');
-        createToast(res.connectivity && res.connectivity.success ? 'Web 面板连接已保存' : 'Web 面板连接已保存，但测试失败', res.connectivity && res.connectivity.success ? 'green' : 'yellow', 6000);
+        createToast(res.connectivity && res.connectivity.success ? 'Web 面板连接已保存' : 'Web 面板连接已保存，但连接测试失败', res.connectivity && res.connectivity.success ? 'green' : 'yellow', 6000);
         if (afterSave) await afterSave();
       });
     };
@@ -8101,10 +8101,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         START_LOG=${shellQuote('/data/kano_clash_start.log')}
         RUN_LOG=${shellQuote(LOG_FILE)}
         echo "[Clash.Service 启动输出]"
-        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null || echo "（启动日志读取失败）"; else echo "（暂无启动输出）"; fi
+        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null || echo "（无法读取启动日志）"; else echo "（暂无启动输出）"; fi
         echo
         echo "[Clash 内核运行日志]"
-        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（内核日志读取失败）"; else echo "（暂无内核日志）"; fi
+        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（无法读取内核日志）"; else echo "（暂无内核日志）"; fi
         `);
     const versionPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
       callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid }));
@@ -8139,14 +8139,14 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       .replace(/^size=/, '');
     const proc = parseKeyValueOutput(processRes.content || '');
     let connectionStatus = pid
-      ? (connectionsRes.success ? '已连接' : '读取失败')
+      ? (connectionsRes.success ? '已连接' : '无法读取')
       : '核心未运行';
     if (connectionsRes.success) {
       try {
         const connectionData = JSON.parse(connectionsRes.responseText || '{}');
         connectionStatus = `${Array.isArray(connectionData.connections) ? connectionData.connections.length : 0} 个`;
       } catch {
-        connectionStatus = '响应格式不支持';
+        connectionStatus = '响应格式不受支持';
       }
     }
     const [providerHealth,panelHealth] = await Promise.all([
@@ -8156,14 +8156,14 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
     const rows = [
       ['核心层',health.core],['控制 API',health.api],['接管有效性',health.takeover],
-      ['Zashboard',health.panel],['Provider 加载',health.providers],['代理连通性',health.connectivity],
+      ['Zashboard',health.panel],['节点来源加载',health.providers],['代理连通性',health.connectivity],
       ['安装/运行状态', runtimeState.state],
       ['预检信息', runtimeState.message || '无'],
       ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
       ['核心进程 PID', pid || '未运行'],
       ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
       ['核心命令行', proc.CMDLINE || '无'],
-      ['7788 监听', proc.PORT_7788 == '1' ? '已监听' : '未监听'],
+      ['控制端口 7788', proc.PORT_7788 == '1' ? '已监听' : '未监听'],
       ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
       ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
       ['接管模式（配置）', policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy')],
@@ -8183,7 +8183,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       </div>`).join('');
     showInfoDialog(
       'mm_status_diagnostic',
-      '运行日志/诊断',
+      '运行日志与诊断',
       `${rowHtml}
       ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
@@ -8205,7 +8205,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "config_source=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)"
         `, 15 * 1000);
     if (!runtimeRes.success) {
-      if (errorToast) createToast(`配置自检环境读取失败<br>${safeTextToHtml(runtimeRes.content || '')}`, 'red', 9000);
+      if (errorToast) createToast(`无法读取配置自检环境<br>${safeTextToHtml(runtimeRes.content || '')}`, 'red', 9000);
       return false;
     }
     const values = {};
@@ -8224,7 +8224,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
 
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) {
-      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(read.message || '')}`, 'red', 10000);
+      if (errorToast) createToast(`配置自检与修复失败；原 config.yaml 未改写<br>${safeTextToHtml(read.message || '')}`, 'red', 10000);
       return false;
     }
 
@@ -8252,7 +8252,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         }
       }
     } catch (e) {
-      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
+      if (errorToast) createToast(`配置自检与修复失败；原 config.yaml 未改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
       return false;
     }
 
@@ -8263,12 +8263,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       ? { ok: true }
       : await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, shaped, { label: 'config.yaml', backup: true, backupTag: 'f50_sanitize' });
     if (!write.ok) {
-      if (errorToast) createToast(`配置自检/修复失败，原 config.yaml 未被改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
+      if (errorToast) createToast(`配置自检与修复失败；原 config.yaml 未改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
       return false;
     }
     if (showToast) {
       createToast(
-        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '开启' : '关闭'} · 端口 ${tproxyPort}`,
+        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '已开启' : '已关闭'} · 端口 ${tproxyPort}`,
         'green',
         6000,
       );
@@ -8367,7 +8367,7 @@ btn_disabled.onclick = async () => {
         emit_policy_file proxyDomain ${shellQuote(CLASH_PROXY_DOMAIN_FILE)}
         emit_policy_file rejectDomain ${shellQuote(CLASH_REJECT_DOMAIN_FILE)}
         `);
-    if (!res.success) throw new Error('无法读取网络设置，未修改配置');
+    if (!res.success) throw new Error('无法读取网络设置；配置未修改');
     const sections = {
       options: [],
       deviceBypass: [],
@@ -8492,12 +8492,12 @@ btn_disabled.onclick = async () => {
 
   const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
     if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(state.options.tun_stack || 'auto') || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
-      createToast('模式或 DNS 端口无效', 'red', 8000);
+      createToast('流量模式或 DNS 端口无效', 'red', 8000);
       return false;
     }
     const normalizedDevice = normalizeDeviceBypassText(state.deviceBypass || '');
     if (normalizedDevice.invalid.length > 0) {
-      createToast(`设备绕过列表有格式错误：<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
+      createToast(`直连设备列表格式错误：<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
       return false;
     }
     const macMirrorRows = normalizedDevice.text.split('\n')
@@ -8642,28 +8642,28 @@ btn_disabled.onclick = async () => {
         `, 60 * 1000);
     const policyOutput = String(res.content || '');
     if (!policyOutput.includes('POLICY_STATE_COMMITTED')) {
-      createToast(`保存策略配置失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
+      createToast(`策略配置保存失败<br>${safeTextToHtml(res.content || '')}`, 'red', 8000);
       return false;
     }
     invalidateBinarySnapshot();
     if (apply) {
       if (res.success && policyOutput.includes('POLICY_RULES_APPLIED')) {
-        createToast('策略规则已应用', 'green', 7000);
+        createToast('策略规则已应用并生效', 'green', 7000);
         return true;
       }
       const recoveryOk = policyOutput.includes('POLICY_APPLY_ROLLBACK=restored')
         && policyOutput.includes('POLICY_APPLY_RECOVERY=reapplied');
       createToast(
         recoveryOk
-          ? '新策略应用失败，已恢复并重新应用上一版策略'
-          : `新策略应用失败，上一版策略恢复不完整<br>${safeTextToHtml(policyOutput)}`,
+          ? '新策略应用失败；已恢复并重新应用上一版策略'
+          : `新策略应用失败，且上一版策略恢复不完整<br>${safeTextToHtml(policyOutput)}`,
         recoveryOk ? 'yellow' : 'red',
         10000,
       );
       return false;
     }
     if (!res.success || !policyOutput.includes('POLICY_STATE_SAVED')) {
-      createToast(`保存策略配置失败<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
+      createToast(`策略配置保存失败<br>${safeTextToHtml(policyOutput)}`, 'red', 8000);
       return false;
     }
     if (!activeCriticalOperation) createToast('策略配置已保存', 'green');
@@ -8673,7 +8673,7 @@ btn_disabled.onclick = async () => {
   const applyPolicyToolsRules = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
     if (!(await getCorePid())) {
-      createToast('规则脚本已更新；核心未运行，未下发接管规则', 'yellow', 7000);
+      createToast('规则脚本已更新；核心未运行，接管规则未下发', 'yellow', 7000);
       return false;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply`);
@@ -8681,7 +8681,7 @@ btn_disabled.onclick = async () => {
       createToast(`策略规则应用失败<br>${safeTextToHtml(res.content || '')}`, 'red', 9000);
       return false;
     }
-    createToast('策略规则已应用', 'green', 7000);
+    createToast('策略规则已应用并生效', 'green', 7000);
     return true;
   };
 
@@ -8710,7 +8710,7 @@ btn_disabled.onclick = async () => {
         ip -4 neigh show 2>/dev/null || exit 1
         if [ -f /proc/net/if_inet6 ]; then ip -6 neigh show 2>/dev/null || exit 1; fi
         `, 8000);
-    if (!res.success) throw new Error('无法读取客户端邻居表');
+    if (!res.success) throw new Error('无法读取客户端列表（邻居表）');
     const seen = new Set(), rows = ['IP MAC SOURCE'];
     for (const line of String(res.content || '').split('\n')) {
       if (/\b(?:FAILED|INCOMPLETE)\b/.test(line)) continue;
@@ -8727,7 +8727,7 @@ btn_disabled.onclick = async () => {
   const showPolicyStatus = async () => {
     const exists = await runShellWithRoot(`[ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] && echo 1 || echo 0`, 10 * 1000);
     if (String(exists.content || '').trim() != '1') {
-      createToast('网络规则脚本不存在，请在“检查修复”中点击“重建网络规则”。', 'yellow', 7000);
+      createToast('网络规则脚本不存在；请在“检查修复”中点“重建网络规则”。', 'yellow', 7000);
       return;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} status`);
@@ -8819,18 +8819,18 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">QUIC</div>
-                    <label><input id="mm_policy_quic" type="checkbox"> 拦截下游 UDP/443（直连设备、定向私网除外）</label>
+                    <label><input id="mm_policy_quic" type="checkbox"> 拦截下游 UDP/443（直连设备、私网定向代理除外）</label>
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS 劫持</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 mihomo DNS 端口 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
+                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 Mihomo DNS 端口 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
                   </div>
                 </div>
               </section>
 
               <section class="kp-panel" data-policy-panel="device">
                 <div class="kp-card">
-                  <div class="kp-card-title">设备直连</div>
+                  <div class="kp-card-title">直连设备</div>
                   <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。</div>
                   <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
                   <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF"></textarea>
@@ -8857,7 +8857,7 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-maintain-item">
                     <button type="button" id="mm_policy_status_btn">查看规则状态</button>
-                    <span>显示实际使用的 iptables 后端、设备直连项和当前规则链，不会改动配置。</span>
+                    <span>显示实际使用的 iptables 后端、直连设备列表和当前规则链，不会改动配置。</span>
                   </div>
                 </div>
               </section>
@@ -8907,9 +8907,9 @@ btn_disabled.onclick = async () => {
       if (disabled) get('#mm_policy_clients').innerHTML = '';
       note.classList.toggle('kp-warning', disabled);
       setText(note, mode === 'tun'
-        ? 'TUN 使用固定路由接管，设备绕过已暂停。名单保留，切回 TProxy 自动恢复。'
-        : mode === 'off' ? '流量接管已关闭，名单保留但不生效。'
-        : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配它的全部 IP。勿将下级路由器 MAC 当作单台设备。');
+        ? 'TUN 使用固定路由接管，直连设备已暂停生效；名单保留，切回 TProxy 后自动恢复。'
+        : mode === 'off' ? '流量接管已关闭；名单保留但不生效。'
+        : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配其全部 IP。不要将下级路由器 MAC 当作单台设备。');
     };
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
     updateDeviceBypassScope();
@@ -8927,7 +8927,7 @@ btn_disabled.onclick = async () => {
       const scanBtn = get('#mm_policy_scan_clients');
       const box = get('#mm_policy_clients');
       setButtonBusy(scanBtn, true, '扫描中…');
-      setText(box, '扫描中...');
+      setText(box, '扫描中…');
       try {
         const text = await readClientListText();
         if (get('#mm_policy_traffic_mode').value !== 'tproxy') return;
@@ -8939,7 +8939,7 @@ btn_disabled.onclick = async () => {
         for (const line of lines) { const [ip, mac] = line.trim().split(/\s+/); const key=normalizeMac(mac); if(!macCounts.has(key))macCounts.set(key,new Set());macCounts.get(key).add(ip); }
         resetChildren(box);
         if (lines.length == 0) {
-          setText(box, '没有扫描到客户端。设备需要先产生流量，ARP 表里才会出现。');
+          setText(box, '未扫描到客户端；设备产生流量后才会出现在 ARP 表中。');
           return;
         }
         lines.forEach((line) => {
@@ -8954,13 +8954,13 @@ btn_disabled.onclick = async () => {
           addIp.className = 'add_ip';
           addIp.style.fontSize = '.58rem';
           addIp.dataset.ip = ip || '';
-          addIp.textContent = '加 IP';
+          addIp.textContent = '添加 IP';
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
-          addMac.title = '此 MAC 的全部 IPv4/IPv6；路由器可能代表多台设备';
+          addMac.title = '将包含此 MAC 的全部 IPv4/IPv6 地址；若为下级路由器，可能代表多台设备';
           addMac.style.fontSize = '.58rem';
           addMac.dataset.mac = mac || '';
-          addMac.textContent = '加 MAC';
+          addMac.textContent = '添加 MAC';
           row.appendChild(ipEl);
           row.appendChild(macEl);
           row.appendChild(addIp);
@@ -8974,7 +8974,7 @@ btn_disabled.onclick = async () => {
           btn.onclick = async () => {
             const value = normalizeMac(btn.dataset.mac);
             if (!value || get('#mm_policy_device').disabled) return;
-            const yes = await askConfirm('mm_mac_scope', '按 MAC 直连？', '会包含此 MAC 的全部 IP；下级路由器可能代表多台终端。');
+            const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。');
             if (yes) appendDeviceBypassValue(value);
           };
         });
@@ -9043,7 +9043,7 @@ btn_disabled.onclick = async () => {
         const leaf = await kprVerifySelection(savedOptions);
         liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
       } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
-      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不等于远端服务可达；请从下游访问实际 TCP/UDP 服务验证。</p>');
+      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
     };
     get('#mm_policy_save_apply').onclick = async () => {
       const token = acquireCriticalOperation('保存网络与私网设置');
@@ -9138,7 +9138,7 @@ btn_disabled.onclick = async () => {
       if (!(await ensureReady())) return;
       // \u68c0\u67e5\u6587\u4ef6\u5927\u5c0f
       if (file.size > 2 * 1024 * 1024) {
-        createToast(`模板文件大小不能超过${2}MB！`, 'red');
+        createToast(`模板文件大小不能超过 ${2} MB`, 'red');
         return;
       }
       await runCriticalOperation('上传模板', async () => saveTemplate(file));
@@ -9159,7 +9159,7 @@ btn_disabled.onclick = async () => {
     const confirmed = await askConfirm(
       `mm_config_package_restore_confirm_${createRandomString(4)}`,
       '导入配置包？',
-      `将按以下顺序回灌配置文件：<br>${textToHtml(restoreOrderText)}<br><br>缺少任意必要文件时不会覆盖现有配置。`,
+      `将按以下顺序回灌配置文件：<br>${textToHtml(restoreOrderText)}<br><br>缺少任一必要文件时不会覆盖现有配置。`,
       '开始导入',
       '取消',
     );
@@ -9168,7 +9168,7 @@ btn_disabled.onclick = async () => {
     const isZipPackage = /\.zip$/i.test(file.name || '');
     const isTarPackage = /\.(tar\.gz|tgz)$/i.test(file.name || '');
     if (!isZipPackage && !isTarPackage) {
-      createToast('只支持导入 .tar.gz / .tgz / .zip 配置包', 'red');
+      createToast('仅支持 .tar.gz、.tgz 或 .zip 格式的配置包', 'red');
       return false;
     }
     if (file.size > 8 * 1024 * 1024) {
@@ -9179,7 +9179,7 @@ btn_disabled.onclick = async () => {
     const oldControllerInfo = await buildControllerInfo();
     const rollbackPath = await createConfigRollbackPoint('config_package_restore');
     if (rollbackPath === null) {
-      createToast('无法创建 config.yaml 回滚点，已取消配置包导入。', 'red', 9000);
+      createToast('无法创建 config.yaml 回滚点；配置包导入已取消，现有配置未改动。', 'red', 9000);
       return false;
     }
     let uploadedPath = '';
@@ -9394,7 +9394,7 @@ EOF_F50_RESTORE_MEMBERS
         .map((line) => line.replace(/^RESTORE_MISSING: /, '').trim())
         .filter(Boolean);
       if (missingFiles.length > 0) {
-        createToast(`配置包缺少文件，已停止导入<br>${textToHtml(missingFiles.join('\n'))}`, 'red', 10000);
+        createToast(`配置包缺少必要文件，导入已停止<br>${textToHtml(missingFiles.join('\n'))}`, 'red', 10000);
       } else {
         createToast(`配置包导入失败<br>${safeTextToHtml(restoreOutput)}`, 'red', 10000);
       }
@@ -9461,7 +9461,7 @@ EOF_F50_RESTORE_MEMBERS
     const reloadRes = await reloadConfigHot(oldControllerInfo);
     let runningOk = reloadRes.success;
     if (!runningOk) {
-      createToast(`热重载失败，已改用服务重启<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
+      createToast(`配置热重载失败，已改用服务重启<br>${safeTextToHtml(reloadRes.responseText || reloadRes.content || '')}`, 'yellow');
       runningOk = await restartClashOk({ skipCheck: true });
     } else {
       runningOk = await reapplyPolicyRulesSilent();
@@ -9479,7 +9479,7 @@ EOF_F50_RESTORE_MEMBERS
       .filter((line) => line.startsWith('RESTORED: '))
       .map((line) => line.replace(/^RESTORED: /, '').trim())
       .filter(Boolean);
-    createToast(`配置包已回灌<br>已恢复：${textToHtml(restoredFiles.join('\n') || restoreOrderText)}`, 'green', 9000);
+    createToast(`配置包已回灌<br>已恢复文件：${textToHtml(restoredFiles.join('\n') || restoreOrderText)}`, 'green', 9000);
     if (refreshSubscriptionAfterRestore) await refreshSubscriptionAfterRestore();
     return true;
   };
@@ -9516,14 +9516,14 @@ EOF_F50_RESTORE_MEMBERS
 
   const backupBtn = document.createElement('button');
   backupBtn.classList.add('btn');
-  backupBtn.textContent = '导出配置';
+  backupBtn.textContent = '导出配置包';
   backupBtn.onclick = async () => {
     if (!(await ensureReady())) return;
     const operationToken = acquireCriticalOperation('导出配置包');
     if (!operationToken) return;
     setButtonBusy(backupBtn, true, '导出中…');
     try {
-    createToast('正在导出猫猫配置包...', 'green');
+    createToast('正在导出猫猫配置包…', 'green');
     const t = `${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')}`;
     const backupFiles = configPackageBackupFiles();
     const defaultOverrideJsForBackup = buildDefaultOverrideJs();
@@ -9610,7 +9610,7 @@ EOF_F50_RESTORE_MEMBERS
         echo "PACKAGE_NAME=$(basename "$PKG")"
         PACK_READY=1
         `, 30 * 1000);
-    if (!res.success) return createToast(`备份失败<br>${safeTextToHtml(res.content || '')}`, 'red');
+    if (!res.success) return createToast(`配置包导出失败<br>${safeTextToHtml(res.content || '')}`, 'red');
     const outputLines = String(res.content || '').split('\n');
     const packageName = ((outputLines.find((line) => line.startsWith('PACKAGE_NAME=')) || '')
       .replace(/^PACKAGE_NAME=/, '')
@@ -9624,7 +9624,7 @@ EOF_F50_RESTORE_MEMBERS
       .map((line) => line.replace(/^DEFAULTED: /, '').trim())
       .filter(Boolean);
     createToast(
-      `配置包已导出<br>包含：${textToHtml([...packedFiles, ...defaultedFiles].join('\n') || '无')}` +
+      `配置包已导出<br>包含文件：${textToHtml([...packedFiles, ...defaultedFiles].join('\n') || '无')}` +
         (defaultedFiles.length ? `<br>已补默认文件：${textToHtml(defaultedFiles.join('\n'))}` : ''),
       defaultedFiles.length ? 'yellow' : 'green',
       8000,
@@ -9638,7 +9638,7 @@ EOF_F50_RESTORE_MEMBERS
     a.click();
     a.remove();
     } catch (error) {
-      createToast(`备份失败<br>${safeTextToHtml(error?.message || String(error))}`, 'red');
+      createToast(`配置包导出失败<br>${safeTextToHtml(error?.message || String(error))}`, 'red');
     } finally {
       setButtonBusy(backupBtn, false);
       await releaseCriticalOperation(operationToken);
@@ -9653,7 +9653,7 @@ EOF_F50_RESTORE_MEMBERS
     }
     const mmContainer = document.querySelector('.functions-container');
     if (!mmContainer) {
-      createToast('猫猫入口初始化失败：未获取到 F50 页面容器。', 'red');
+      createToast('猫猫入口初始化失败：未找到 F50 页面容器。', 'red');
       return;
     }
     const oldPanel = document.querySelector('#IFRAME_KANO');
@@ -9747,7 +9747,7 @@ EOF_F50_RESTORE_MEMBERS
       if (!wrap || !iframe) return;
       localStorage.setItem(WEB_VISIBLE_KEY, visible ? 'visible' : 'hidden');
       wrap.style.display = visible ? '' : 'none';
-      if (typeof webPanelToggleBtn != 'undefined' && webPanelToggleBtn) {
+      if (webPanelToggleBtn) {
         webPanelToggleBtn.textContent = visible ? '隐藏面板' : '显示面板';
         webPanelToggleBtn.classList.toggle('kano-primary', visible);
       }
@@ -9762,7 +9762,7 @@ EOF_F50_RESTORE_MEMBERS
     const refreshPanel = async ({ forceShow = false, forceReload = true } = {}) => {
       if (forceShow) await setWebPanelVisible(true, { load: false });
       if (!isWebPanelVisible()) {
-        createToast('面板已隐藏，请先点击“显示面板”。', 'yellow', 4500);
+        createToast('面板已隐藏；请点击“显示面板”重新打开。', 'yellow', 4500);
         return;
       }
       const iframe = document.querySelector('#mm_iframe');
@@ -9797,7 +9797,7 @@ EOF_F50_RESTORE_MEMBERS
       const url = zashboardPanelUrl;
       const panelWindow = window.open(url || 'about:blank', '_blank');
       if (!panelWindow) {
-        createToast('浏览器阻止了新窗口，请允许此页面打开弹窗。', 'yellow', 7000);
+        createToast('浏览器阻止了新窗口；请允许本页面打开弹窗后重试。', 'yellow', 7000);
         return;
       }
       try {
@@ -9812,7 +9812,7 @@ EOF_F50_RESTORE_MEMBERS
         }
       } catch (error) {
         panelWindow.close();
-        createToast(`打开面板失败<br>${safeTextToHtml(error.message || String(error))}`, 'red', 8000);
+        createToast(`面板打开失败<br>${safeTextToHtml(error.message || String(error))}`, 'red', 8000);
       }
     };
 
@@ -9847,12 +9847,12 @@ EOF_F50_RESTORE_MEMBERS
         const before = await inspectBootIntegration();
         const disable = before.enabled && before.state != 'incomplete' && before.state != 'manager_damaged';
         if (!disable && (!(await ensureServiceWrapper()).success || !(await ensurePolicyToolsScript()))) {
-          createToast('自启组件修复失败，请重试', 'red');
+          createToast('自启组件修复失败；请重试', 'red');
           return;
         }
         const result = await runShellWithRoot(disable ? removeBootLinesCmd() : addBootLinesCmd());
         if (!result.success) {
-          createToast(`修改开机自启失败<br>${safeTextToHtml(result.content || '')}`, 'red', 8000);
+          createToast(`开机自启设置修改失败<br>${safeTextToHtml(result.content || '')}`, 'red', 8000);
           return;
         }
         const after = await inspectBootIntegration();
@@ -9860,8 +9860,8 @@ EOF_F50_RESTORE_MEMBERS
         const color = after.state == 'direct' || after.state == 'disabled' ? 'green' : 'yellow';
         createToast(
           after.state == 'disabled'
-            ? '已取消开机自启'
-            : `${escapeHtml(after.message)}<br>使用 UFI-TOOLS 原生 ufi_tools_boot.sh 启动。`,
+            ? '开机自启已关闭'
+            : `${escapeHtml(after.message)}<br>已启用 UFI-TOOLS 原生 ufi_tools_boot.sh 启动。`,
           color,
           8000,
         );
@@ -9893,7 +9893,7 @@ EOF_F50_RESTORE_MEMBERS
 
     const userAgentBtn = document.createElement('button');
     userAgentBtn.classList.add('btn');
-    userAgentBtn.textContent = '订阅请求头';
+    userAgentBtn.textContent = '订阅 User-Agent';
     userAgentBtn.onclick = async () => {
       if (!(await ensureReady({ readOnly: true }))) return;
       const currentValue = await loadProviderUserAgent({ fresh: true });
@@ -9902,7 +9902,7 @@ EOF_F50_RESTORE_MEMBERS
         'mm_provider_user_agent',
         `
           <div style="pointer-events:all;width:86vw;max-width:720px;">
-            <div class="title" style="margin:0">订阅请求头</div>
+            <div class="title" style="margin:0">订阅 User-Agent</div>
             <div style="margin:14px 0 8px;font-size:.62rem;line-height:1.55;opacity:.82;">
               设置订阅请求使用的 User-Agent；留空使用默认值 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}，下次更新生效。
             </div>
@@ -10008,7 +10008,7 @@ EOF_F50_RESTORE_MEMBERS
         const runtimeLines = runtimeResults.map((item) => {
           if (item.success) return `${item.label}：已刷新`;
           if (item.errorType == 'core_not_running') return `${item.label}：已跳过（核心未运行）`;
-          if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}：当前内核不支持`;
+          if (item.statusCode == 404 || item.statusCode == 405) return `${item.label}：当前内核不支持此操作`;
           return `${item.label}：${item.message || '刷新失败'}`;
         });
         const runtimeOk = runtimeResults.every((item) =>
@@ -10021,7 +10021,7 @@ EOF_F50_RESTORE_MEMBERS
             ? '离线自愈包：损坏文件已清理'
             : '离线自愈包：当前不存在';
         createToast(
-          `${allOk ? '缓存已清理' : '缓存清理部分完成'}<br>${textToHtml([...runtimeLines, archiveLine, res.success ? '临时文件：已清理' : '临时文件：清理失败'].join('\n'))}`,
+          `${allOk ? '缓存已清理' : '缓存部分清理完成'}<br>${textToHtml([...runtimeLines, archiveLine, res.success ? '临时文件：已清理' : '临时文件：清理失败'].join('\n'))}`,
           allOk ? 'green' : 'yellow',
           8000,
         );
@@ -10064,10 +10064,10 @@ EOF_F50_RESTORE_MEMBERS
         await runShellWithRoot(`
           rm -f ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} 2>/dev/null || true
           `);
-        createToast('订阅源已清空，当前运行配置保持不变', 'green');
+        createToast('订阅源已清空；当前运行配置未改动', 'green');
         await refreshRuleModeStatus();
       } else {
-        createToast('清空订阅源失败', 'red');
+        createToast('清空订阅源失败；订阅源未改动', 'red');
       }
       return saved;
     };
@@ -10115,7 +10115,7 @@ EOF_F50_RESTORE_MEMBERS
     ) => {
       const sources = normalizeSubSourceList(cleanSources);
       if (sources.length == 0) return { ok: false, conversion: buildProviderUpdateResult([]) };
-      createToast(`HTTP Provider 更新失败（${escapeHtml(reason)}），正在改用设备本地下载/转换...`, 'yellow', 10000);
+      createToast(`HTTP Provider 更新失败（${escapeHtml(reason)}）；正在改用设备本地下载与转换…`, 'yellow', 10000);
       appendTemplateFlowDebug(`provider_auto_local_fallback enter reason=${reason} sources=${sources.length}`);
       const storedSources = await readCurrentSubSources({ includeDisabled: true });
       const stored = storedSources.length > 0 ? storedSources : sources;
@@ -10127,7 +10127,7 @@ EOF_F50_RESTORE_MEMBERS
       });
       if (ok) {
         appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
-        createToast('已自动切换为设备本地转换并恢复可用节点。', 'green', 10000);
+        createToast('已自动切换为设备本地转换，节点恢复可用', 'green', 10000);
         await showSubscriptionUpdateSelfCheck(sources, cleanMode, conversion, null, SUB_CONVERT_MODE_LOCAL);
       }
       return { ok, conversion };
@@ -10246,7 +10246,7 @@ EOF_F50_RESTORE_MEMBERS
             sources: [],
             nodeCheck,
             requiresTemplateRebuild: true,
-            message: '没有已保存订阅链接；将使用 template.yaml 内嵌节点或带 URL 的 proxy-providers 生成 config.yaml。',
+            message: '未保存订阅链接；将使用 template.yaml 内嵌节点或带 URL 的 proxy-providers 生成 config.yaml',
           };
         }
         return {
@@ -10261,14 +10261,14 @@ EOF_F50_RESTORE_MEMBERS
       const detail = nodeCheck.status == 'missing'
         ? 'template.yaml 不存在。'
         : nodeCheck.status == 'invalid'
-          ? `template.yaml 解析失败。<br>${safeTextToHtml(nodeCheck.content || '')}`
-          : 'template.yaml 没有 proxies 节点，也没有带 URL 的 proxy-providers。';
+          ? `template.yaml 解析失败<br>${safeTextToHtml(nodeCheck.content || '')}`
+          : 'template.yaml 未包含 proxies 节点或带 URL 的 proxy-providers';
       return {
         ok: false,
         source: 'none',
         sources: [],
         nodeCheck,
-        message: `没有可用节点来源：没有已保存订阅链接，${detail}<br>请先点\u201c订阅链接\u201d填写并保存，或在\u201c模板与覆写\u201d上传包含节点的 template.yaml。`,
+        message: `没有可用节点来源：未保存订阅链接，${detail}<br>请先点“订阅设置”添加并保存订阅，或在“配置与规则”中上传包含节点的 template.yaml`,
       };
     };
 
@@ -10288,16 +10288,16 @@ EOF_F50_RESTORE_MEMBERS
   const readable = !!read.ok && !!meta.success && String(meta.content || '').includes('SUBSCRIPTION_META_READ');
   const providers = isPlainYamlObject(config['proxy-providers']) ? config['proxy-providers'] : {};
   const issues = [];
-  if (!read.ok) issues.push(read.message || '运行配置无法读取');
-  if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('订阅标记读取失败');
+  if (!read.ok) issues.push(read.message || '无法读取运行配置');
+  if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('无法读取订阅标记');
   const modeLineOk = data.mode === cleanMode, convertModeOk = data.convert === cleanConvertMode;
   const providerCount = Object.keys(providers).length;
   const providerUrlCount = Object.values(providers).filter(p => p && /^https?:\/\//.test(String(p.url || ''))).length;
   const rulesCount = Array.isArray(config.rules) ? config.rules.length : 0;
   const proxyGroupsCount = Array.isArray(config['proxy-groups']) ? config['proxy-groups'].length : 0;
   let missingUrls = 0, providerShapeErrors = 0;
-  if (!modeLineOk) issues.push('配置来源标记不匹配');
-  if (!convertModeOk) issues.push('节点处理方式标记不匹配');
+  if (!modeLineOk) issues.push('配置来源标记不一致');
+  if (!convertModeOk) issues.push('节点处理方式标记不一致');
   {
     const local = cleanConvertMode === SUB_CONVERT_MODE_LOCAL;
     for (const source of cleanSources) {
@@ -10308,10 +10308,10 @@ EOF_F50_RESTORE_MEMBERS
         if (!p.header || !Array.isArray(p.header['User-Agent']) || p.header['User-Agent'][0] !== (ua || currentProviderUserAgent)) providerShapeErrors++;
       }
     }
-    if (providerCount !== cleanSources.length || providerUrlCount !== (local ? 0 : cleanSources.length)) issues.push('节点来源数量不匹配');
-    if (missingUrls || providerShapeErrors) issues.push('订阅 URL、类型、路径或 User-Agent 不匹配');
+    if (providerCount !== cleanSources.length || providerUrlCount !== (local ? 0 : cleanSources.length)) issues.push('节点来源数量不一致');
+    if (missingUrls || providerShapeErrors) issues.push('订阅 URL、类型、路径或 User-Agent 不一致');
     if (!rulesCount || !proxyGroupsCount) issues.push('规则或策略组为空');
-    if (cleanSources.length && data.source !== 'template.yaml') issues.push('当前配置不是本地模板生成');
+    if (cleanSources.length && data.source !== 'template.yaml') issues.push('当前配置不是由本地模板生成');
   }
   return { ok: !issues.length, readable, config: read.ok ? config : null, status: !readable ? 'read_failed' : issues.length ? 'invalid' : 'ok', providerCount, providerUrlCount,
     rulesCount, proxyGroupsCount, missingUrls, providerShapeErrors, modeLineOk, convertModeOk,
@@ -10363,11 +10363,11 @@ EOF_F50_RESTORE_MEMBERS
             ? (Number.isInteger(item.proxyCount) ? `当前节点：${item.proxyCount} 个` : '节点缓存：已更新')
             : item.cacheAvailable
               ? (Number.isInteger(item.proxyCount)
-                ? `本次更新失败，当前继续使用缓存的 ${item.proxyCount} 个节点。`
-                : '本次更新失败，继续使用原节点缓存。')
+                ? `本次更新失败；继续使用缓存的 ${item.proxyCount} 个节点`
+                : '本次更新失败；继续使用原节点缓存')
               : item.proxyCount === 0
-                ? '本次更新失败，当前节点缓存为空。'
-                : '本次更新失败：节点缓存状态读取失败。';
+                ? '本次更新失败；当前节点缓存为空'
+                : '本次更新失败；无法读取节点缓存状态';
           const technical = item.rawMessage
             ? `<details style="margin-top:6px;"><summary>展开技术详情</summary><pre style="margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(sanitizeSubscriptionSecrets(item.rawMessage).slice(0, 1200))}</pre></details>`
             : '';
@@ -10377,7 +10377,7 @@ EOF_F50_RESTORE_MEMBERS
             尝试次数：${item.attempts}<br>
             ${item.ok ? '' : `原因：${escapeHtml(item.message)}<br>`}
             ${item.urlMasked ? `服务器：${escapeHtml(item.urlMasked)}<br>` : ''}
-            ${escapeHtml(cacheText)}<br>节点连通性：未测试
+            ${escapeHtml(cacheText)}<br>代理连通性：未测试
             ${technical}
           </div>`;
         }).join('')
@@ -10393,9 +10393,9 @@ EOF_F50_RESTORE_MEMBERS
           <div class="title" style="margin:0">${escapeHtml(title)}</div>
           <div style="margin-top:10px;max-height:68vh;overflow-y:auto;overflow-x:hidden;padding-right:3px;font-size:.64rem;line-height:1.62;">
             <div style="padding:9px 10px;border:1px solid rgba(148,163,184,.25);border-radius:9px;margin-bottom:9px;">
-              <b>配置检查：${configValidationResult.ok ? '通过' : '异常'}</b><br>
+              <b>配置检查：${configValidationResult.ok ? '通过' : '未通过'}</b><br>
               ${textToHtml(configSummary)}<br>${escapeHtml(controllerText)}
-              ${issueText ? `<details style="margin-top:6px;"><summary>异常详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(sanitizeSubscriptionSecrets(issueText || diagnosticSummary))}</pre></details>` : ''}
+              ${issueText ? `<details style="margin-top:6px;"><summary>问题详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(sanitizeSubscriptionSecrets(issueText || diagnosticSummary))}</pre></details>` : ''}
             </div>
             <div style="margin-bottom:7px;"><b>节点来源更新：${providerResult.success}/${providerResult.total}</b></div>
             <div style="display:flex;flex-direction:column;gap:8px;">${providerRows}</div>
@@ -10520,7 +10520,7 @@ EOF_F50_RESTORE_MEMBERS
       const convertMode = await readSavedSubConvertMode();
       const configSource = await readConfigSource();
       if (configSource == 'subscription_original' || mode == 'original') {
-        createToast('旧订阅原配置已保留；请在订阅设置中迁移到本地模板后更新', 'yellow', 8000);
+        createToast('旧订阅原配置已保留；请先在订阅设置中迁移到本地模板，再更新', 'yellow', 8000);
         return;
       }
       if (configSource == 'uploaded_config') {
@@ -10532,21 +10532,21 @@ EOF_F50_RESTORE_MEMBERS
 
     const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
   if (!(await ensureCompatBackend())) return false;
-  if (await readConfigSource() === 'uploaded_config') {
+  const configSource = await readConfigSource();
+  if (configSource === 'uploaded_config') {
     const gist = await f50GistManaged();
     if (gist) return await f50GistUpdateSources(gist);
   }
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const cleanSources = normalizeSubSourceList(sources);
-  const configSource = await readConfigSource();
   if (cleanMode === 'original' || configSource === 'subscription_original') {
-    createToast('旧订阅原配置已保留；请在订阅设置中迁移到本地模板后更新', 'yellow', 8000);
+    createToast('旧订阅原配置已保留；请先在订阅设置中迁移到本地模板，再更新', 'yellow', 8000);
     return false;
   }
   if (configSource === 'uploaded_config') {
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!read.ok) { createToast(safeTextToHtml(read.message || '读取配置失败'), 'red'); return false; }
+    if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
     const definitions = read.value['proxy-providers'] || {};
     const localSources = normalizeSubSourceList(cleanSources.length ? cleanSources : await readCurrentSubSources()).filter(source =>
       definitions[source.name]?.type === 'file' && definitions[source.name]?.path === `./proxies/${source.name}.yaml`);
@@ -10561,13 +10561,13 @@ EOF_F50_RESTORE_MEMBERS
     const loaded = mergeLocalConversionReloadResult(converted, refreshed);
     const ok = refreshed.failed === 0 && loaded.failed === 0;
     const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
-    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心节点加载检查失败';
+    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点已下载，但核心节点加载检查失败';
     createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
     return ok;
   }
   if (!cleanSources.length) { createToast('没有已启用的订阅', 'red'); return false; }
   const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-  if (!read.ok) { createToast(safeTextToHtml(read.message || '读取配置失败'), 'red'); return false; }
+  if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
   const definitions = read.value['proxy-providers'] || {};
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
   const modeReady = cleanSources.every(s => definitions[s.name]?.type === expectedType);
@@ -10585,12 +10585,12 @@ EOF_F50_RESTORE_MEMBERS
     const message = (converted.providers || []).find(p => !p.ok)?.message || '订阅下载失败';
     operationFinish(false, message); createToast(safeTextToHtml(message), 'red', 10000); return false;
   }
-  if (!(await getCorePid())) { operationFinish(true, '节点已保存，核心保持停止'); return true; }
+  if (!(await getCorePid())) { operationFinish(true, '节点已保存；核心保持停止'); return true; }
   const applied = await reloadLocalSubscriptionProviders(cleanSources, converted);
   const ok = applied.failed === 0;
-  operationFinish(ok, ok ? '节点已更新，未重启核心' : '下载完成，但本地加载失败');
+  operationFinish(ok, ok ? '节点已更新；核心未重启' : '节点已下载，但本地加载失败');
   const failedProvider = (applied.providers || []).find(provider => !provider.ok);
-  const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点下载成功，但核心节点加载检查失败';
+  const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点已下载，但核心节点加载检查失败';
   createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green':'red', 8000);
   return ok;
 }
@@ -10601,9 +10601,9 @@ EOF_F50_RESTORE_MEMBERS
         if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
         `);
       if (!source.success) {
-        createToast(`读取订阅源失败，未执行旧配置迁移。<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
+        createToast(`无法读取订阅源；旧配置迁移未执行。<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
         appendTemplateFlowDebug('readCurrentSubSources failed before legacy migration');
-        throw new Error('读取订阅列表失败，未继续更新');
+        throw new Error('无法读取订阅列表；更新已停止');
       }
       const sourceItems = parseStoredSubSourcesFromText(source.content || '');
       if (sourceItems.length > 0) {
@@ -10619,11 +10619,11 @@ EOF_F50_RESTORE_MEMBERS
       const legacySources = parseLegacySubConfig(res.content);
       if (legacySources.length > 0) {
         if (!(await persistSubSourceState(legacySources, SUB_RULE_MODE_TEMPLATE, await readSavedSubConvertMode()))) {
-          createToast('旧版订阅入口迁移失败，未继续使用未保存的订阅源。', 'red', 9000);
+          createToast('旧版订阅入口迁移失败；未使用未保存的订阅源。', 'red', 9000);
           appendTemplateFlowDebug(`legacy entrypoint persist failed sources=${legacySources.length}`);
           return [];
         }
-        createToast('已迁移旧版订阅入口。', 'yellow', 6500);
+        createToast('旧版订阅入口已迁移', 'yellow', 6500);
         appendTemplateFlowDebug(`legacy entrypoint migrated sources=${legacySources.length}`);
         return legacySources;
       }
@@ -10657,7 +10657,7 @@ EOF_F50_RESTORE_MEMBERS
   try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
   if (storedSources.some((source) => !isHttpUrl(source.url))) {
-    operationFinish(false, '请输入有效订阅链接');
+    operationFinish(false, '请输入有效的订阅链接');
     return false;
   }
   const invalidSubSource = cleanSources
@@ -10675,7 +10675,7 @@ EOF_F50_RESTORE_MEMBERS
     const gist = await f50GistManaged();
     if (gist) return await f50GistUpdateSources(gist, storedSources);
   }
-  if (!storedSources.length) { operationFinish(false, '请输入有效订阅链接'); return false; }
+  if (!storedSources.length) { operationFinish(false, '请输入有效的订阅链接'); return false; }
   const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
   if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
     createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
@@ -10683,7 +10683,7 @@ EOF_F50_RESTORE_MEMBERS
   }
   if ((!applyToCustom && configSource === 'uploaded_config') || !cleanSources.length) {
     const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
-    operationFinish(saved, saved ? '订阅设置已保存，当前配置未更改' : '订阅设置保存失败');
+    operationFinish(saved, saved ? '订阅设置已保存；当前运行配置未更改' : '订阅设置保存失败');
     return saved;
   }
   const tx = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
@@ -10698,13 +10698,13 @@ ${fileSnapshotHelpersCmd()}
 ${paths.map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
 echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
   if (!snapshot.success || !String(snapshot.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
-    operationFinish(false, '无法创建回滚点，未更改订阅');
+    operationFinish(false, '无法创建 config.yaml 回滚点；订阅未更改');
     return false;
   }
   let runtimeAttempted = false, wasRunning = false, restored = false, committed = false;
   try {
     wasRunning = !!(await getCorePid());
-    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('保存订阅设置失败');
+    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('订阅设置保存失败');
     operationStage('根据本地模板生成配置', 1, 5);
     let conversion = null;
     if (cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
@@ -10716,7 +10716,7 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
       throw new Error('订阅配置生成失败');
     }
     operationStage('停止并启动已校验的新配置', 2, 5);
-    if (!wasRunning) { const prepared=await f50Command('prepare',120000); if(!prepared.success)throw new Error(f50Error(prepared.content)); committed=true; invalidateStatusSnapshot(); operationFinish(true,'配置已保存，核心保持停止'); createToast('订阅已保存，未启动核心','green'); return true; }
+    if (!wasRunning) { const prepared=await f50Command('prepare',120000); if(!prepared.success)throw new Error(f50Error(prepared.content)); committed=true; invalidateStatusSnapshot(); operationFinish(true,'配置已保存；核心保持停止'); createToast('订阅已保存；核心未启动','green'); return true; }
     runtimeAttempted = true;
     if (!(await restartClashOk({ skipCheck: true }))) throw new Error('新配置未通过运行检查');
     operationStage('更新并确认节点来源', 3, 5);
@@ -10726,14 +10726,14 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     if (onProviderUpdate) onProviderUpdate(providers);
     if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providers)) {
       const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
-      if (!fallback.ok) throw new Error('节点更新和本地转换回退均失败');
+      if (!fallback.ok) throw new Error('节点更新与本地转换回退均失败');
     } else if (providers.failed > 0) {
       const failed = (providers.providers || []).find((item) => !item.ok);
       throw new Error(failed && failed.message || '节点来源更新失败');
     }
     committed = true;
     invalidateStatusSnapshot();
-    const message = '已根据本地模板更新订阅配置';
+    const message = '已按本地模板更新订阅配置';
     operationFinish(true, message);
     createToast(message, 'green', 7000);
     return true;
@@ -10741,12 +10741,12 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     if (error.name === 'OperationCancelled' || (activeCriticalOperation && activeCriticalOperation.token.cancelled)) return false;
     const firstFailure = sanitizeSubscriptionSecrets(activeCriticalOperation && activeCriticalOperation.failure || error.message || String(error));
     createToast(safeTextToHtml(firstFailure) + '<br>正在恢复原配置', 'red', 10000);
-    operationStage('更新失败，恢复原配置');
+    operationStage('更新失败，正在恢复原配置');
     // Stop a timed-out provider update before restoring cache files it could still replace.
     let stopped = true;
     try { if (runtimeAttempted) stopped = await networkRescue({ showOutput: false }); } catch (_) { stopped = false; }
     if (!stopped) {
-      operationFinish(false, '回滚失败：核心停止检查未通过，未重启或覆盖缓存');
+      operationFinish(false, '回滚失败：核心停止检查未通过；未重启核心，也未覆盖节点缓存');
       createToast('回滚已停止，备份保留于 ' + escapeHtml(tx), 'red', 15000);
       return false;
     }
@@ -10763,7 +10763,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     if (!restored) await networkRescue({ showOutput: false });
     const message = firstFailure;
     operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复失败'));
-    createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅和配置' : '回滚失败，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
+    createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅与配置' : '回滚失败，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
   } finally {
     if (legacyMigration) {
@@ -10779,7 +10779,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     const overwriteConfigByTemplate = async ({ confirm = true } = {}) => {
       const configSource = await readConfigSource();
       if (!confirm && ['uploaded_config', 'subscription_original'].includes(configSource)) {
-        createToast('当前配置已保留；要使用模板替换，请手动点击“应用模板与覆写”', 'yellow', 8000);
+        createToast('当前配置已保留；如需改用模板，请在“配置与规则”中点击“应用模板”', 'yellow', 8000);
         return false;
       }
       const storedSources = await readCurrentSubSources({ includeDisabled: true });
@@ -10788,11 +10788,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const currentConvertMode = await readSavedSubConvertMode();
       if (currentMode == 'original' || configSource == 'subscription_original') {
         if (!confirm) {
-          createToast('旧订阅原配置已保留；请主动迁移到本地模板', 'yellow', 8000);
+          createToast('旧订阅原配置已保留；请先迁移到本地模板', 'yellow', 8000);
           return false;
         }
         if (!sources.length) { createToast('请先添加并启用订阅，再迁移到本地模板', 'yellow', 8000); return false; }
-        const accepted = await askConfirm('mm_original_to_template', '迁移到本地模板？', '旧配置及来源文件会备份；规则和策略组将由本地模板提供，失败时恢复旧状态。', '迁移并应用', '取消');
+        const accepted = await askConfirm('mm_original_to_template', '迁移到本地模板？', '旧配置与来源文件会备份；规则和策略组改由本地模板提供，失败时恢复旧状态。', '迁移并应用', '取消');
         if (!accepted) return false;
         return await saveSubSources(storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true, migrateLegacy: true });
       }
@@ -10805,8 +10805,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }
       const hasTemplate = await hasUserTemplateYaml();
       const body = sourceCheck.source == 'saved_subscription'
-        ? `将按 ${sources.length} 个已保存订阅和${hasTemplate ? '当前' : '默认'}模板重建运行配置。`
-        : '将使用 template.yaml 中的节点或订阅重建运行配置。';
+        ? `将按 ${sources.length} 个已保存订阅与${hasTemplate ? '当前' : '默认'}模板重建运行配置。`
+        : '将使用 template.yaml 中的节点或订阅重建运行配置';
       if (confirm) {
         const confirmed = await askConfirm(
           'mm_template_overwrite_confirm',
@@ -10820,11 +10820,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
       if (sourceCheck.source == 'saved_subscription') {
         createToast(hasTemplate
-          ? '正在按配置模板生成 config.yaml...'
-          : '正在按默认 F50 模板生成 config.yaml...', 'yellow');
+          ? '正在按配置模板生成 config.yaml…'
+          : '正在按默认 F50 模板生成 config.yaml…', 'yellow');
         const rollbackPath = await createConfigRollbackPoint('template_rebuild_sources');
         if (rollbackPath === null) {
-          createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
+          createToast('无法创建 config.yaml 回滚点；模板未应用。', 'red', 9000);
           return false;
         }
         if (!(await ensureTemplateProviders(sources, { forceTemplate: true, showToast: true }))) return false;
@@ -10833,7 +10833,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           localConversion = await convertSubscriptionsLocally(sources);
           if (localConversion.failed > 0) {
             const failed = localConversion.providers.find((item) => !item.ok);
-            createToast(`${escapeHtml(failed && failed.name || '订阅')}：${escapeHtml(failed && failed.message || '本地转换失败')}，运行配置未修改。`, 'red', 9000);
+            createToast(`${escapeHtml(failed && failed.name || '订阅')}：${escapeHtml(failed && failed.message || '本地转换失败')}；运行配置未修改`, 'red', 9000);
             return false;
           }
         }
@@ -10866,7 +10866,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }))) return false;
       const rollbackPath = await createConfigRollbackPoint('template_rebuild_embedded');
       if (rollbackPath === null) {
-        createToast('无法创建 config.yaml 回滚点，未应用模板。', 'red', 9000);
+        createToast('无法创建 config.yaml 回滚点；模板未应用。', 'red', 9000);
         return false;
       }
       const stagePath = CLASH_CONFIG + '.kano_template_' + Date.now() + '_' + createRandomString(6);
@@ -10879,11 +10879,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
         return false;
       }
-      createToast('模板已写入，正在检查并重启核心...', 'yellow', 6500);
+      createToast('模板已写入；正在检查配置并重启核心…', 'yellow', 6500);
       if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
         const restored = await restoreConfigRollbackPoint(rollbackPath, '模板覆写', { showToast: false });
         createToast(
-          restored ? '模板配置整理失败，已恢复上一份 config.yaml' : '模板配置整理失败，且 config.yaml 回滚失败',
+          restored ? '模板配置整理失败；已恢复上一份 config.yaml' : '模板配置整理失败，且 config.yaml 回滚失败',
           restored ? 'yellow' : 'red',
           10000,
         );
@@ -10908,7 +10908,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
     const readEditableLocalFile = async (fileInfo) => {
       const allowedFile = fileInfo && findEditableLocalFile(fileInfo.path);
-      if (!allowedFile) return { ok: false, exists: false, content: '', message: '文件不在允许编辑列表中' };
+      if (!allowedFile) return { ok: false, exists: false, content: '', message: '该文件不在允许编辑的列表中' };
       const res = await runShellWithRoot(`
         FILE=${shellQuote(allowedFile.path)}
         if [ -f "$FILE" ]; then
@@ -10933,7 +10933,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       );
       try {
         const found = await runShellWithRoot(`[ -f ${shellQuote(uploadedPath)} ] && echo 1 || echo 0`);
-        if (!found.success || String(found.content || '').trim() != '1') throw new Error('上传文件未找到');
+        if (!found.success || String(found.content || '').trim() != '1') throw new Error('未找到已上传的文件');
         return uploadedPath;
       } catch (error) {
         await hostRunShellWithRoot.call(globalThis, `rm -f ${shellQuote(uploadedPath)}`, 5000);
@@ -10945,7 +10945,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const rollbackPath = await createConfigRollbackPoint('uploaded_config');
       if (rollbackPath === null) {
         await runShellWithRoot(`rm -f ${shellQuote(uploadedPath)} 2>/dev/null || true`);
-        createToast('无法创建 config.yaml 回滚点，已取消写入（原 config.yaml 未改动）。', 'red', 9000);
+        createToast('无法创建 config.yaml 回滚点；写入已取消，原 config.yaml 未改动。', 'red', 9000);
         return false;
       }
       const rollbackUploadedConfig = async (context) => {
@@ -10970,7 +10970,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       `);
       if (!stageRes.success) {
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} ${shellQuote(uploadedPath)} 2>/dev/null || true`);
-        createToast(`配置暂存失败，原 config.yaml 未改动<br>${safeTextToHtml(stageRes.content || '')}`, 'red', 9000);
+        createToast(`配置暂存失败；原 config.yaml 未改动<br>${safeTextToHtml(stageRes.content || '')}`, 'red', 9000);
         return false;
       }
       const committed = await commitStagedYaml({targetPath: CLASH_CONFIG, stagePath,
@@ -10980,7 +10980,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         await runShellWithRoot(`rm -f ${shellQuote(stagePath)} 2>/dev/null || true`);
         const restored = await rollbackUploadedConfig('上传配置');
         createToast(
-          `配置写入失败，${restored ? '已恢复写入前状态' : '且写入前状态恢复失败'}<br>${safeTextToHtml(commitRes.content || '')}`,
+          `config.yaml 写入失败，${restored ? '已恢复写入前状态' : '且写入前状态恢复失败'}<br>${safeTextToHtml(commitRes.content || '')}`,
           restored ? 'yellow' : 'red',
           10000,
         );
@@ -10989,7 +10989,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       if (!(await sanitizeConfigForTProxy({ showToast: false, errorToast: false }))) {
         const restored = await rollbackUploadedConfig('上传配置自检');
         createToast(
-          restored ? '配置整理失败，已恢复写入前状态' : '配置整理失败，且写入前状态恢复失败',
+          restored ? '配置整理失败；已恢复写入前状态' : '配置整理失败，且写入前状态恢复失败',
           restored ? 'yellow' : 'red',
           10000,
         );
@@ -11012,7 +11012,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         }
         createToast(
           restored && recoveryOk
-            ? '新配置运行态检查失败，已恢复写入前配置和网络策略'
+            ? '新配置运行态检查失败；已恢复写入前的配置与网络策略'
             : '新配置运行态检查失败，且写入前运行状态未能完整恢复',
           restored && recoveryOk ? 'yellow' : 'red',
           10000,
@@ -11020,7 +11020,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         await isMMRunning();
         return false;
       }
-      createToast('热加载失败，正在通过重启应用配置…', 'yellow', 7000);
+      createToast('热加载失败；正在通过重启应用配置…', 'yellow', 7000);
       return await restartClashWithConfigRollback(rollbackPath, '上传配置后重启');
     };
 
@@ -11038,7 +11038,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     const writeEditableLocalFile = async (fileInfo, text) => {
       const allowedFile = fileInfo && findEditableLocalFile(fileInfo.path);
       if (!allowedFile) {
-        createToast('文件不在允许编辑列表中', 'red');
+        createToast('该文件不在允许编辑的列表中', 'red');
         return false;
       }
       const content = String(text || '');
@@ -11076,7 +11076,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       if ([CLASH_RULE_OVERRIDE_JSON, CLASH_RULE_OVERRIDE_APPLIED_JSON].includes(allowedFile.path) && content.trim()) {
         try {
           const parsed = JSON.parse(content);
-          if (!isPlainYamlObject(parsed)) throw new Error('根节点必须是对象');
+          if (!isPlainYamlObject(parsed)) throw new Error('配置根节点必须是对象');
         } catch (e) {
           createToast(`${escapeHtml(allowedFile.label)} JSON 无效：${escapeHtml(e && e.message ? e.message : e)}`, 'red', 9000);
           return false;
@@ -11156,7 +11156,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           textarea.value = result.content;
           loadedContent = result.content;
           if (result.ok) readyPath = fileInfo.path;
-          status.textContent = result.ok ? fileInfo.path : '读取失败：' + (result.message || 'unknown');
+          status.textContent = result.ok ? fileInfo.path : '无法读取：' + (result.message || 'unknown');
         } catch (error) {
           if (!editorClosed && generation === readGeneration) status.textContent = String(error.message || error);
         } finally {
@@ -11180,7 +11180,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             const current = await readEditableLocalFile(fileInfo);
             if (!current.ok || current.content !== expectedContent) {
               readyPath = '';
-              createToast('文件已变化或无法读取，未覆盖；请重新读取后编辑。','yellow',9000);
+              createToast('文件已变化或无法读取；未覆盖原文件，请重新读取后编辑','yellow',9000);
               return false;
             }
             const saved = await writeEditableLocalFile(fileInfo, content);
@@ -11213,7 +11213,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       let gistOverview = '';
       if (gist) {
         const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-        if (!read.ok) throw Error(read.message || '读取配置失败');
+        if (!read.ok) throw Error(read.message || '无法读取配置');
         const config = read.value, manual = new Set(config['x-f50-gist-manual-providers'] || []);
         const providers = Object.entries(config['proxy-providers'] || {}).filter(([name])=>!manual.has(name)).map(([name,p])=>{
           const source = config['x-f50-provider-sources']?.[name];
@@ -11353,7 +11353,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const confirmed = await askConfirm(
           'mm_sub_clear_confirm',
           '清空当前编辑内容？',
-          '仅清空当前窗口的输入。点「保存并更新」后才会清空已保存的订阅源；直接关闭不会修改设备。',
+          '仅清空当前窗口的输入；点击“保存并更新”才会清空已保存的订阅源，直接关闭不会修改设备。',
           '清空',
           '取消',
         );
@@ -11371,10 +11371,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
         const hasSubscriptionUrl = sources.some((source) => String(source.url || '').trim());
 
-        const operationToken = acquireCriticalOperation('保存更新订阅');
+        const operationToken = acquireCriticalOperation('保存并更新订阅');
         if (!operationToken) return;
 
-        setButtonBusy(submitBtn, true, '处理中\u2026');
+        setButtonBusy(submitBtn, true, '处理中…');
 
         try {
           if (!hasSubscriptionUrl && !gist) {
@@ -11382,7 +11382,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             if (success) close();
             return;
           }
-          createToast('正在处理订阅...', 'yellow');
+          createToast('正在处理订阅…', 'yellow');
           const success = await saveSubSources(
             sources,
             ruleModeSelect.value,
@@ -11439,7 +11439,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         validateSubscriptionMode(storedSources, ruleMode);
         const convertMode = await readSavedSubConvertMode();
         if (storedSources.length > 0 && sources.length == 0) {
-          createToast('所有订阅链接均已禁用，请先启用至少一个订阅。', 'yellow', 7000);
+          createToast('所有订阅链接均已禁用；请先启用至少一个订阅。', 'yellow', 7000);
           return;
         }
         if (sources.length == 0) {
@@ -11449,7 +11449,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             return;
           }
         }
-        createToast('正在检查订阅并选择更新方式...', 'yellow');
+        createToast('正在检查订阅并选择更新方式…', 'yellow');
         const updated = await updateSubProviders(sources, ruleMode, convertMode);
         operationFinish(updated);
       } catch (error) {
@@ -11463,7 +11463,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     const applySavedOverrides = async () => {
-      createToast('正在重建配置并应用自定义规则...', 'yellow');
+      createToast('正在重建配置并应用自定义规则…', 'yellow');
       return await overwriteConfigByTemplate({ confirm: false });
     };
 
@@ -11598,16 +11598,16 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           noResolve: noResolveInput.checked,
         });
         if (!rule) {
-          createToast('请填写完整的规则类型、内容和策略', 'yellow', 5000);
+          createToast('请填写完整的规则类型、规则内容与策略', 'yellow', 5000);
           return;
         }
         if (rule.content.includes(',')) {
-          createToast('复杂规则请使用 JS 覆写，图形规则内容不能包含英文逗号', 'yellow', 6000);
+          createToast('复杂规则请使用 JS 覆写；图形规则内容不能包含英文逗号', 'yellow', 6000);
           return;
         }
         const key = `${rule.position}|${formatRuleOverrideRule(rule)}`;
         if (config.rules.some((item) => `${item.position}|${formatRuleOverrideRule(item)}` == key)) {
-          createToast('这条规则已经存在', 'yellow', 4000);
+          createToast('该规则已存在', 'yellow', 4000);
           return;
         }
         syncConfig();
@@ -11692,7 +11692,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
           </div>
           <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
-          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `识别到 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '读取失败'}</div>
+          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `已识别 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '无法读取'}</div>
           <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
           <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
             <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
@@ -11769,13 +11769,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         try {
           if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(yaml.value);
           else { yaml.focus(); yaml.select(); if (!document.execCommand('copy')) throw new Error(); }
-          createToast('节点 DNS 策略已复制', 'green', 5000);
-        } catch (_) { yaml.focus(); yaml.select(); createToast('已选中配置，请手动复制', 'yellow', 5000); }
+          createToast('节点 DNS 策略已复制到剪贴板', 'green', 5000);
+        } catch (_) { yaml.focus(); yaml.select(); createToast('已选中配置；请手动复制', 'yellow', 5000); }
       };
       const save = el.querySelector('#mm_airport_dns_save');
       save.onclick = () => runCriticalButtonOperation('保存节点 DNS 策略', save, '保存中…', async () => {
         if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return;
-        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('节点 DNS 策略已保存；点击“应用模板”生效', 'green', 7000);
+        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('节点 DNS 策略已保存；点击“应用模板”后生效', 'green', 7000);
       });
       el.querySelector('#mm_airport_dns_close').onclick = close;
       render();
@@ -11812,7 +11812,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                 <div class="kano-dialog-menu-title">配置文件</div>
                 <div class="kano-dialog-menu-grid" style="--kano-menu-cols:3;">
                   <button id="mm_template_upload_btn">上传模板</button>
-                  <button id="mm_template_restore_package_btn">导入配置</button>
+                  <button id="mm_template_restore_package_btn">导入配置包</button>
                   <button id="mm_template_rebuild_btn">应用模板</button>
                 </div>
               </div>
@@ -11864,7 +11864,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
     const quickRunBtn = document.createElement('button');
     quickRunBtn.classList.add('btn');
-    quickRunBtn.textContent = '安装 / 启动';
+    quickRunBtn.textContent = '安装/启动';
     quickRunBtn.onclick = async ()=>{
  if(!(await ensureAdvanced()))return false;
  const r=await runShellWithRoot('test -s /data/clash/Scripts/Clash.Service && test -x /data/clash/Scripts/clashctl_arm64',4000);
@@ -11927,16 +11927,16 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           revision=saved.revision || 0; settingsLoaded=true;
           pendingKey='';q('key').value='';
         }
-        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
-        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
+        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '留空则保留已保存的私钥' : 'AGE-SECRET-KEY-1...';
+        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥；留空表示不更换':'';
         currentFingerprint=st.currentFingerprint || null;
         const state=st.state?.generation===st.settings?.generation?st.state:null;
         const last=state?.last;
         const recent=(st.jobs||[])[0];
         if(!foreground && recent && ['queued','running'].includes(recent.status)) currentJob=recent.id;
         const syncMode=st.settings.auto
-          ? (st.schedulerRunning ? '自动同步开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步开启 · 设备调度未运行')
-          : '自动同步关闭';
+          ? (st.schedulerRunning ? '自动同步已开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步已开启，设备调度未运行')
+          : '自动同步已关闭';
         const lastTime=state?.lastSuccess ? '上次同步 '+fmt(state.lastSuccess) : '尚未同步';
         const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_unavailable' : '') || (last && !last.ok ? last.code : '');
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
@@ -11960,17 +11960,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
               break;
             }
-            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试。');break;}
+            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试');break;}
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-        }catch(_){result('操作失败：设备请求中断，请检查连接后重试。');}
+        }catch(_){result('操作失败：设备请求中断；请检查连接后重试');}
         finally{if(opened)busy(false);}
       };
       const formAction=async action=>{
-        if(!settingsLoaded){result('无法读取设置，请稍后重试。');return;}
+        if(!settingsLoaded){result('无法读取 Gist 设置；请稍后重试');return;}
         const url=f50GistCleanUrl(q('url').value);
         if(!f50GistValidUrl(url)){
-          result(url?'请填写完整的 Gist Raw .age 下载链接。':'请先填写 Gist Raw 链接。');
+          result(url?'请填写完整的 Gist Raw .age 下载链接':'请先填写 Gist Raw 链接');
           return;
         }
         q('url').value=url;
@@ -11980,18 +11980,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
       q('test').onclick=()=>formAction('test');
       q('save').onclick=()=>formAction('save');
-      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
-      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
+      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置');
+      q('refresh').onclick=()=>{if(window.confirm('重新读取已保存的设置？当前未保存的输入将丢失。'))return refresh(true);};
       q('leave').onclick=async()=>{
-        if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
+        if(!window.confirm('退出 Gist 管理并关闭自动同步？当前配置与已保存私钥将保留。'))return;
         busy(true);
-        try {await f50GistLeave();result('已退出 Gist 管理，可使用普通订阅设置。');await refresh(true);}
+        try {await f50GistLeave();result('已退出 Gist 管理；可继续使用普通订阅设置');await refresh(true);}
         catch(error){result(error.message || '退出 Gist 管理失败');}
         finally{if(opened)busy(false);}
       };
-      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
+      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'已请求取消；最终结果以任务回执为准':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
-      q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
+      q('delete').onclick=()=>{if(window.confirm('删除 Gist 链接、私钥与同步记录，并停止自动同步？当前 config.yaml 不会被删除。'))return launch('delete');};
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
       const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
       observer.observe(document.body,{childList:true,subtree:true});
@@ -12030,7 +12030,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         boot_on.style.background = isBootUp ? 'var(--dark-btn-color-active)' : '';
         bootProbeLoaded = true;
       } catch (e) {
-        console.error('猫猫自启状态读取失败', e);
+        console.error('无法读取猫猫自启状态', e);
       } finally {
         bootProbePending = false;
       }
@@ -12063,10 +12063,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         }
         // 先完成首屏渲染，再异步读取运行状态；不自动写防火墙、不迁移自启、不下载 Go helper。
         setTimeout(() => {
-          isMMRunning().catch((e) => console.error('猫猫运行状态读取失败', e));
+          isMMRunning().catch((e) => console.error('猫猫运行状态无法读取', e));
         }, 0);
       } catch (e) {
-        console.error('猫猫TProxy background initialization failed', e);
+        console.error('猫猫 TProxy 后台初始化失败', e);
       }
     })();
   })();

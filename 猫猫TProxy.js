@@ -52,8 +52,8 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-function buildF50EmergencyScript(resumeTag = '', requireIdle = false) {
-  return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions() + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
+function buildF50EmergencyScript(resumeTag = '', requireIdle = false, releaseIdleOnly = false) {
+  return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions(releaseIdleOnly) + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
 F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
 F50_RECOVERY_LOCK=\${F50_RECOVERY_LOCK:-/dev/kano_tproxy_recovery.lock}
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
@@ -72,7 +72,7 @@ f50_emergency_finish() {
     fi
   fi
   if [ "$F50_RECOVERY_BODY_OK" = 1 ]; then
-    if [ "$emergency_rc" = 0 ]; then echo RECOVERY_VERIFIED
+    if [ "$emergency_rc" = 0 ]; then echo ${releaseIdleOnly ? 'F50_LEASE_RELEASED=1' : 'RECOVERY_VERIFIED'}
     else echo F50_RECOVERY_PARTIAL=1; fi
   fi
   exit "$emergency_rc"
@@ -87,9 +87,14 @@ if ! mkdir "$F50_RECOVERY_LOCK" 2>/dev/null; then
   rm -f "$F50_RECOVERY_LOCK/owner" && rmdir "$F50_RECOVERY_LOCK" && mkdir "$F50_RECOVERY_LOCK" || { echo F50_CLEAN_ERROR=recovery_busy; exit 1; }
 fi
 emergency_locked=1
-${requireIdle ? 'f50_recovery_eligible || exit 1' : ''}
+${requireIdle || releaseIdleOnly ? 'f50_recovery_eligible || exit 1' : ''}
 f50_stat "$$" || { echo F50_CLEAN_ERROR=recovery_identity_failed; exit 1; }
 printf '%s %s\\n' "$$" "$F50_STAT_START" > "$F50_RECOVERY_LOCK/owner" || exit 1
+${releaseIdleOnly ? `if [ -d "$F50_OPERATION_LOCK" ]; then
+  rm -f "$F50_OPERATION_LOCK/frontend" "$F50_OPERATION_LOCK/owner" "$F50_OPERATION_LOCK/cancelled" && rmdir "$F50_OPERATION_LOCK" || exit 1
+fi
+F50_RECOVERY_BODY_OK=1
+exit 0` : ''}
 if [ -n "$F50_RESUME_TAG" ]; then
   [ -d "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
     [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$F50_RESUME_TAG" ] || { echo F50_CLEAN_ERROR=resume_lease_owner_changed; exit 1; }
@@ -160,7 +165,7 @@ exit 1
 `;
 }
 
-function buildF50RecoveryEligibilityFunctions() { return `F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
+function buildF50RecoveryEligibilityFunctions(forUninstall = false) { return `F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
 F50_TASK_DIR=\${F50_TASK_DIR:-/dev/kano_tproxy_tasks}
 f50_recovery_block() { echo "F50_RECOVERY_STATE=$1"; echo F50_RECOVERY_ELIGIBLE=0; return 1; }
 f50_recovery_eligible() {
@@ -171,7 +176,7 @@ f50_recovery_eligible() {
   if [ -e "$F50_TASK_DIR" ]; then
     [ -d "$F50_TASK_DIR" ] && [ -r "$F50_TASK_DIR" ] && [ -x "$F50_TASK_DIR" ] || { f50_recovery_block unknown_task_directory; return 1; }
   fi
-  [ ! -e "$F50_DATA/clash.install.lock.d" ] || { f50_recovery_block install_transaction_unresolved; return 1; }
+  ${forUninstall ? 'f50_install_lock_idle' : '[ ! -e "$F50_DATA/clash.install.lock.d" ]'} || { f50_recovery_block install_transaction_unresolved; return 1; }
   recovery_owner=
   if [ -e "$F50_OPERATION_LOCK" ]; then
     [ -d "$F50_OPERATION_LOCK" ] && [ -r "$F50_OPERATION_LOCK/owner" ] || { f50_recovery_block unknown_owner; return 1; }
@@ -219,7 +224,7 @@ f50_recovery_eligible() {
         fi
       fi
     done
-    [ "$recovery_state" = finished ] || { [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] && [ "$recovery_state" = running ]; } || { f50_recovery_block task_receipt_missing; return 1; }
+    [ "$recovery_state" = finished ] || { ${forUninstall ? ':' : '[ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ]'} && [ "$recovery_state" = running ]; } || { f50_recovery_block task_receipt_missing; return 1; }
     recovery_hash=$(sha256sum "$recovery_entry" | awk '{print $1}')
     [ -n "$recovery_hash" ] || { f50_recovery_block task_receipt_unreadable; return 1; }
     recovery_records="$recovery_records $recovery_request:$recovery_hash"
@@ -253,7 +258,7 @@ f50_recovery_eligible() {
       [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] || { f50_recovery_block active_frontend; return 1; }
     fi;; esac
   if [ -n "$recovery_records" ]; then
-    if [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ]; then
+    ${forUninstall ? '' : `if [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ]; then
       # These transaction types are not restored by this emergency script; keep their existing guard.
       for recovery_tx in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
         [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
@@ -264,7 +269,7 @@ f50_recovery_eligible() {
         [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
         [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
       done
-    fi
+    fi`}
     if [ "\${emergency_locked:-0}" = 1 ]; then
       for recovery_record in $recovery_records; do
         recovery_file="$F50_TASK_DIR/\${recovery_record%:*}"
@@ -1147,36 +1152,45 @@ async function performF50Uninstall() {
   const diagnostics = [];
   const stages = buildUninstallStages();
   let operationBlocked = false;
+  let failedStage = '';
+  const recoverIdleLease = async () => {
+    const op = activeCriticalOperation;
+    if (!op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return false;
+    operationStage('检查并恢复闲置操作锁', 0, stages.length+1);
+    let recovered;
+    try {
+      recovered = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true), 120000);
+    } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
+    diagnostics.push({stage:'恢复闲置操作锁', transportOk:recovered?.success === true,
+      detail:f50Diagnostic(recovered?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details});
+    if (!(recovered?.success && /^F50_LEASE_RELEASED=1$/m.test(String(recovered.content || '')))) return false;
+    if (op !== activeCriticalOperation || op.token.cancelled) throw operationCancelled();
+    op.leasePromise = null;
+    deviceTaskUncertain = false;
+    return true;
+  };
+  if (deviceTaskUncertain && !(await recoverIdleLease())) operationBlocked = true;
   for (let i=0; i<stages.length; i++) {
+    if (operationBlocked) break;
     operationStage(stages[i].title, i, stages.length+1);
     try {
       let response = await runShellWithRoot(stages[i].script, stages[i].timeout);
       if (i === 0 && /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''))) {
-        const op = activeCriticalOperation;
-        if (op && !op.leaseOwned && !op.uncertain && !op.token.cancelled && !op.requests) {
-          operationStage('检查并恢复闲置操作锁', i, stages.length+1);
-          let recovered;
-          try {
-            recovered = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true), 120000);
-          } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
-          diagnostics.push({stage:'恢复闲置操作锁', transportOk:recovered?.success === true,
-            detail:f50Diagnostic(recovered?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details});
-          if (recovered?.success && /^RECOVERY_VERIFIED$/m.test(String(recovered.content || ''))) {
-            if (op !== activeCriticalOperation || op.token.cancelled) throw operationCancelled();
-            op.leasePromise = null;
-            operationStage(stages[i].title, i, stages.length+1);
-            response = await runShellWithRoot(stages[i].script, stages[i].timeout);
-          }
+        if (await recoverIdleLease()) {
+          operationStage(stages[i].title, i, stages.length+1);
+          response = await runShellWithRoot(stages[i].script, stages[i].timeout);
         }
       }
       operationBlocked = /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''));
       diagnostics.push({stage:stages[i].title, transportOk:response?.success === true,
         detail:f50Diagnostic(response?.content || 'F50_STAGE_ERROR=empty_response').details});
-      if (operationBlocked) break;
+      if (!response?.success) { failedStage = stages[i].title; break; }
     } catch (error) {
       if (error?.name === 'OperationCancelled') throw error;
       diagnostics.push({stage:stages[i].title, transportOk:false,
         detail:f50Diagnostic(error?.message || String(error)).details});
+      failedStage = stages[i].title;
+      break;
     }
   }
   operationStage('复查卸载结果', stages.length, stages.length+1);
@@ -1188,14 +1202,17 @@ async function performF50Uninstall() {
     finalResponse = {success:false, content:'F50_CHECK_UNKNOWN=final_transport\n' + f50Diagnostic(error?.message || String(error)).details};
   }
   const verdict = f50UninstallVerdict(finalResponse);
+  const ok = verdict.ok && !operationBlocked && !failedStage;
   const details = diagnostics.map(item => 'STAGE=' + item.stage + '\nTRANSPORT_OK=' + Number(item.transportOk) + '\n' + item.detail).join('\n')
     + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
-  const summary = verdict.ok ? '猫猫及全部组件数据已卸载'
-    : operationBlocked ? '卸载未执行：设备操作锁未释放，请等待其他页面任务结束，或恢复网络后重试'
-    : verdict.code === 'residual' ? '最终复查发现猫猫残留，详细项见\u201c状态与日志\u201d'
+  const summary = ok ? '猫猫及全部组件数据已卸载'
+    : operationBlocked ? '卸载失败：设备操作锁检查未通过，请查看状态与日志'
+    : failedStage ? '卸载失败：' + failedStage + '失败，请查看状态与日志'
+    : verdict.code === 'residual' ? '卸载失败：仍有猫猫残留，详细项见\u201c状态与日志\u201d'
     : '卸载失败：最终状态读取失败，请检查连接后重试';
-  lastInstallDiagnostic = {...verdict, summary, details, diagnostics};
-  return {...verdict, summary, details};
+  const result = {...verdict, ok, code:operationBlocked ? 'operation_busy' : failedStage ? 'stage_failed' : verdict.code, summary, details};
+  lastInstallDiagnostic = {...result, diagnostics};
+  return result;
 }
 
 async function f50Command(action, timeout = 60000) {
@@ -1368,6 +1385,18 @@ f50_same_process() {
   f50_stat "$1" || return 1
   [ "$F50_STAT_START" = "$2" ] || return 1
   case "$F50_STAT_STATE" in Z|X) return 1 ;; esac
+}
+f50_install_lock_idle() {
+  install_lock="$F50_DATA/clash.install.lock.d"
+  [ -e "$install_lock" ] || [ -L "$install_lock" ] || return 0
+  [ -d "$install_lock" ] && [ ! -L "$install_lock" ] && [ -f "$install_lock/pid" ] && [ ! -L "$install_lock/pid" ] || return 1
+  read -r install_pid install_extra < "$install_lock/pid" || return 1
+  case "$install_pid" in ''|0|*[!0-9]*) return 1;; esac
+  [ -z "$install_extra" ] && [ -r "$F50_PROC" ] && [ -x "$F50_PROC" ] && [ ! -d "$F50_PROC/$install_pid" ] || return 1
+  for install_entry in "$install_lock"/* "$install_lock"/.[!.]* "$install_lock"/..?*; do
+    [ -e "$install_entry" ] || [ -L "$install_entry" ] || continue
+    [ "$install_entry" = "$install_lock/pid" ] || return 1
+  done
 }
 f50_stop_recorded() {
   ps_list=$1
@@ -1886,6 +1915,7 @@ function buildF50InstallHelpers() { return `f50_root_has_data() {
 }
 `; }
 function buildF50RemovalHelpers() { return `f50_runtime_guard() {
+  f50_install_lock_idle || { echo F50_DELETE_BLOCKED=installation_active_or_invalid; return 1; }
   for guard_journal in download.transaction.json rp-filter.json legacy-policy.json; do
     [ ! -s "$F50_ROOT/Policy/$guard_journal" ] || { echo F50_DELETE_BLOCKED=unresolved_journal; return 1; }
   done
@@ -1895,9 +1925,7 @@ function buildF50RemovalHelpers() { return `f50_runtime_guard() {
   if [ -s "$F50_WORK/guard.net/plan" ]; then echo F50_DELETE_BLOCKED=owned_network_active; return 1; fi
 }
 f50_remove_artifacts() {
-  for recovery_tx in "$F50_ROOT"/Tools/gist-sync/activation "$F50_ROOT"/Proxy/config.yaml.kano_tx "$F50_ROOT"/Tools/template.yaml.kano_tx "$F50_ROOT"/Tools/template.base.yaml.kano_tx "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_config_package_restore_*_rollback "$F50_DATA"/.f50-install.*/install.journal; do
-    [ ! -e "$recovery_tx" ] || { echo "F50_DELETE_BLOCKED=recovery_data:$recovery_tx"; return 1; }
-  done
+  # Uninstall discards configuration backups only after the runtime guard has passed.
   delete_failed=0
   f50_artifact_paths > "$F50_WORK/artifacts" || return 1
   while IFS= read -r artifact; do
@@ -3265,10 +3293,14 @@ exit 0`;
 
 
 
-function buildF50CleanupScript() {
+function buildF50CleanupScript(forUninstall = false) {
   return buildF50MaintenanceFunctions('cleanup') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
+${forUninstall ? `f50_install_lock_idle || { echo F50_CLEAN_ERROR=installation_active_or_invalid; exit 1; }
+if [ -d "$F50_DATA/clash.install.lock.d" ]; then
+  rm -f "$F50_DATA/clash.install.lock.d/pid" && rmdir "$F50_DATA/clash.install.lock.d" || exit 1
+fi` : ''}
 f50_inspect || exit 1
 if [ "$F50_OLD_FOUND" = 1 ]; then
   f50_clean_environment || exit 1
@@ -3292,7 +3324,7 @@ echo UNINSTALL_VERIFIED
 `;
 }
 function buildUninstallStages() { return [
-  {title:'停止猫猫并恢复网络', timeout:60000, script:buildF50CleanupScript()},
+  {title:'停止猫猫并恢复网络', timeout:60000, script:buildF50CleanupScript(true)},
   {title:'移除猫猫开机启动项', timeout:15000, script:`set -e
 if [ -f ${shellQuote(BOOT_FILE)} ]; then
   ${removeBootLinesCmd()}
@@ -4379,8 +4411,8 @@ exit "$kano_task_rc"`;
     statusEl.dataset.state = deviceTaskUncertain ? 'failed' : label ? 'running' : 'idle';
     statusEl.textContent = deviceTaskUncertain ? '任务：失败' : label ? `任务：${label}` : '任务：空闲';
   };
-  const acquireCriticalOperation = (label = '关键操作', token = null) => {
-    if (deviceTaskUncertain || transientShellOperation) {
+  const acquireCriticalOperation = (label = '关键操作', token = null, allowUninstallRecovery = false) => {
+    if ((deviceTaskUncertain && !allowUninstallRecovery) || transientShellOperation) {
       createToast(deviceTaskUncertain ? '上次操作失败，请先执行“恢复网络”后重试' : '设备读取尚未结束，请稍后重试', 'yellow');
       return null;
     }
@@ -7406,7 +7438,7 @@ kano_stop_watchers() (
     fi
   done
   # Never remove the shared UFI upload directory or another plugin's boot entries.
-  for lock in /dev/kano_boot_write.lock /dev/kano_clash_boot.lock /dev/kano_policy_apply.lock /dev/kano_tproxy_tasks; do
+  for lock in /dev/kano_boot_write.lock /dev/kano_clash_boot.lock /dev/kano_policy_apply.lock; do
     [ -d "$lock" ] || continue
     owner="$(cat "$lock/pid" 2>/dev/null)"
     case "$owner" in
@@ -8191,7 +8223,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   btn_disabled.textContent = '卸载插件';
 
 btn_disabled.onclick = async () => {
-  const operationToken = acquireCriticalOperation('卸载猫猫');
+  const operationToken = acquireCriticalOperation('卸载猫猫', null, true);
   if (!operationToken) return;
   setButtonBusy(btn_disabled, true, '卸载中\u2026');
   pluginArtifactsRemoved = true;

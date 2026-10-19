@@ -61,7 +61,7 @@ created → preflight → cleanup_intent → backup_rename_intent
 2. 真正恢复获取 recovery lock，重新核对资格或 resume owner，设置取消栅栏。
 3. 尝试原生 Service recover，再仅按归属清理捕获进程和网络。再次检查进程重生、剩余规则和 journal。
 4. 锁和记录只删除已确认条目；unknown、active、未回执、部分恢复不能自动强清。
-5. 卸载先确认无归属运行资源及恢复材料，再处理限定文件/自启动；最终探针区分 clean、residual、unknown。
+5. 卸载可回收进程已退出、前端期限已过的旧租约，以及原进程已退出且仅含已知 pid 文件的安装锁。任一卸载阶段失败即停止后续阶段；确认进程和网络已释放后删除限定组件、配置及事务备份，最后独立复查。
 
 回滚清理失败时，不覆盖活跃的新目录；输出 `F50_RECOVERY_BACKUP` / `F50_RECOVERY_WORK` 并保留材料。`transport_unknown`、超时、回执丢失不能触发自动重复写请求。
 

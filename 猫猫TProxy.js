@@ -90,11 +90,15 @@ emergency_locked=1
 ${requireIdle || releaseIdleOnly ? 'f50_recovery_eligible || exit 1' : ''}
 f50_stat "$$" || { echo F50_CLEAN_ERROR=recovery_identity_failed; exit 1; }
 printf '%s %s\\n' "$$" "$F50_STAT_START" > "$F50_RECOVERY_LOCK/owner" || exit 1
+f50_install_lock_idle || { echo F50_CLEAN_ERROR=installation_active_or_invalid; exit 1; }
 ${releaseIdleOnly ? `if [ -d "$F50_OPERATION_LOCK" ]; then
   rm -f "$F50_OPERATION_LOCK/frontend" "$F50_OPERATION_LOCK/owner" "$F50_OPERATION_LOCK/cancelled" && rmdir "$F50_OPERATION_LOCK" || exit 1
 fi
 F50_RECOVERY_BODY_OK=1
 exit 0` : ''}
+if [ -d "$F50_DATA/clash.install.lock.d" ]; then
+  rm -f "$F50_DATA/clash.install.lock.d/pid" && rmdir "$F50_DATA/clash.install.lock.d" || exit 1
+fi
 if [ -n "$F50_RESUME_TAG" ]; then
   [ -d "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
     [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$F50_RESUME_TAG" ] || { echo F50_CLEAN_ERROR=resume_lease_owner_changed; exit 1; }
@@ -128,6 +132,19 @@ for recovery_backup in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_net
   printf 'F50_RECOVERY_BACKUP=%s\\n' "$recovery_backup"
 done
 ${!requireIdle ? 'if [ "$config_recovery_failed" = 0 ] && [ -z "$F50_RESUME_TAG" ]; then F50_RECOVERY_PREEMPT=1 f50_recovery_eligible || exit 1; fi' : ''}
+# Service rejects the cancelled lease; restore native journals after its workers have stopped.
+for emergency_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+  [ -s "$F50_ROOT/Policy/$emergency_journal" ] || continue
+  case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
+    *arm64*|*aarch64*|*armv8*) emergency_binary="$F50_ROOT/Scripts/clashctl_arm64" ;;
+    *armeabi*|*armv7*) emergency_binary="$F50_ROOT/Scripts/clashctl_armv7" ;;
+    *) emergency_binary="$F50_ROOT/Scripts/clashctl" ;;
+  esac
+  emergency_detail=$(PATH="/system/bin:/system/xbin:/vendor/bin:/data/kano_tproxy_tools/bin:$PATH" CLASH_ROOT="$F50_ROOT" f50_limit 35 "$emergency_binary" recover 2>&1); emergency_native_rc=$?
+  printf 'F50_NATIVE_RECOVERY_RC=%s\\n' "$emergency_native_rc"
+  printf '%s\\n' "$emergency_detail" | f50_redact
+  break
+done
 if f50_clean_environment && [ "$config_recovery_failed" = 0 ]; then
   # Only the known lease files are removed; an unexpected file prevents release.
   emergency_owner=$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)
@@ -181,7 +198,7 @@ f50_recovery_eligible() {
   if [ -e "$F50_TASK_DIR" ]; then
     [ -d "$F50_TASK_DIR" ] && [ -r "$F50_TASK_DIR" ] && [ -x "$F50_TASK_DIR" ] || { f50_recovery_block unknown_task_directory; return 1; }
   fi
-  ${forUninstall ? 'f50_install_lock_idle' : '[ ! -e "$F50_DATA/clash.install.lock.d" ]'} || { f50_recovery_block install_transaction_unresolved; return 1; }
+  f50_install_lock_idle || { f50_recovery_block install_transaction_unresolved; return 1; }
   recovery_owner=
   if [ -e "$F50_OPERATION_LOCK" ]; then
     [ -d "$F50_OPERATION_LOCK" ] && [ -r "$F50_OPERATION_LOCK/owner" ] || { f50_recovery_block unknown_owner; return 1; }
@@ -1906,7 +1923,7 @@ function buildF50ArtifactHelpers() { return `f50_artifact_paths() {
     "$F50_DATA"/kano_clash_user_backup.* "$F50_DATA"/kano_policy_save.* \\
     "$F50_DATA"/kano_sub_persist.* "$F50_DATA"/kano_template_upload_* \\
     "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_network_save_* "$F50_DATA"/kano_subscription_urls_before_template_* \\
-    "$F50_DATA"/kano_config_package_restore_* "$F50_DATA"/kano_compat_*.json \\
+    "$F50_DATA"/kano_config_package_[0-9]* "$F50_DATA"/kano_config_package_restore_* "$F50_DATA"/kano_compat_*.json \\
     "$F50_DATA"/kano_compat_bootstrap_* "$F50_DATA"/kano_install_unzip.log \\
     "$F50_DATA"/kano_uninstall_recover.log "$F50_DATA"/kano_uninstall_boot.log \\
     "$F50_DATA"/kano_uninstall_artifacts.log "$F50_DATA"/f50_boot_fix/clash_boot.sh; do
@@ -7474,7 +7491,7 @@ kano_stop_watchers() (
     /data/clash.before_install.* /data/clash.before_repair.* /data/clash.failed_repair.* \
     /data/kano_policy_save.* /data/kano_sub_persist.* /data/kano_template_upload_* \
     /data/kano_subscription_save_* /data/kano_network_save_* /data/kano_subscription_urls_before_template_* \
-    /data/kano_config_package_restore_* \
+    /data/kano_config_package_[0-9]* /data/kano_config_package_restore_* \
     ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)}; do
     [ -e "$artifact" ] || [ -L "$artifact" ] || continue
     rm -rf "$artifact" || cleanup_rc=1

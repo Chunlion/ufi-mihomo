@@ -438,6 +438,63 @@ test('manual recovery releases the network and retains interrupted subscription 
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+for (const [abi, outcome] of [['arm64-v8a', 'restored'], ['armeabi-v7a', 'restored'], ['other', 'restored'], ['arm64-v8a', 'failed'], ['arm64-v8a', 'unrestored'], ['arm64-v8a', 'missing']]) {
+  test('manual recovery restores native network journals / ' + abi + '/' + outcome, () => {
+    const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc'), lease = path.join(dir, 'lease');
+    const journals = ['rp-filter.json', 'legacy-policy.json', 'download.transaction.json'];
+    try {
+      fs.mkdirSync(proc);
+      for (const journal of journals) write(root, 'Policy/' + journal, 'saved network settings');
+      const serviceMarker = path.join(dir, 'service-ran');
+      write(root, 'Scripts/Clash.Service', '#!/bin/sh\ntouch ' + productionQuote(serviceMarker) + '\nexit 99\n');
+      if (outcome !== 'missing') {
+        const name = abi === 'arm64-v8a' ? 'clashctl_arm64' : abi === 'armeabi-v7a' ? 'clashctl_armv7' : 'clashctl';
+        const binary = write(root, 'Scripts/' + name, `#!/bin/sh
+[ "$1" = recover ] && [ -f "$F50_OPERATION_LOCK/cancelled" ] && [ -s "$F50_RECOVERY_LOCK/owner" ] || exit 98
+${outcome === 'restored' ? 'rm -f "$CLASH_ROOT/Policy/rp-filter.json" "$CLASH_ROOT/Policy/legacy-policy.json" "$CLASH_ROOT/Policy/download.transaction.json"' : outcome === 'unrestored' ? 'exit 0' : 'exit 7'}
+`);
+        fs.chmodSync(binary, 0o755);
+      }
+      const overrides = `
+getprop() { echo ${productionQuote(abi)}; }
+uname() { echo x86_64; }
+f50_scan() { : > "$1"; }
+f50_network_snapshot() { mkdir -p "$1"; : > "$1/plan"; }
+f50_save() { return 1; }
+f50_ip_snapshot() { return 1; }
+`;
+      const script = shellApi(source, '', { shellQuote: productionQuote }).emergency().replace('\nF50_RESUME_TAG=', overrides + '\nF50_RESUME_TAG=');
+      const result = shell('mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n' + script, {
+        F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: lease, F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_LOCK: path.join(dir, 'recovery'),
+      });
+      assert.equal(result.status, outcome === 'restored' ? 0 : 1, result.stdout + result.stderr);
+      assert.equal(/^RECOVERY_VERIFIED$/m.test(result.stdout), outcome === 'restored');
+      assert.equal(fs.existsSync(lease), outcome !== 'restored');
+      assert.ok(!fs.existsSync(serviceMarker));
+      for (const journal of journals) assert.equal(fs.existsSync(path.join(root, 'Policy', journal)), outcome !== 'restored');
+      if (outcome !== 'restored') assert.match(result.stdout, /F50_CLEAN_ERROR=journal_restore_incomplete/);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const installer of ['exited', 'running', 'unknown_entry']) test('manual recovery releases only an exited installer lock / ' + installer, () => {
+  const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
+  try {
+    fs.mkdirSync(proc); write(lock, 'pid', '333\n');
+    if (installer === 'running') fs.mkdirSync(path.join(proc, '333'));
+    if (installer === 'unknown_entry') write(lock, 'foreign', 'keep');
+    const env = { F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: path.join(dir, 'lease'), F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_LOCK: path.join(dir, 'recovery') };
+    const precheck = shell(api.maintenance('cleanup') + api.eligibility() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', env);
+    assert.equal(precheck.status, installer === 'exited' ? 0 : 1, precheck.stdout + precheck.stderr);
+    assert.ok(fs.existsSync(lock));
+    const script = api.emergency().replace('\nF50_RESUME_TAG=', '\nf50_scan() { : > "$1"; }\nf50_clean_environment() { return 0; }\nF50_RESUME_TAG=');
+    const result = shell('mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n' + script, env);
+    assert.equal(result.status, installer === 'exited' ? 0 : 1, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(lock), installer !== 'exited');
+    assert.equal(/^RECOVERY_VERIFIED$/m.test(result.stdout), installer === 'exited');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const owned of [false, true]) test('recovery scan identifies orphaned file writers by task ownership / ' + owned, () => {
   const dir = temp(), proc = path.join(dir, 'proc');
   try {
@@ -631,6 +688,25 @@ for (const outcome of ['idle', 'active_worker', 'active_frontend', 'active_insta
   });
 }
 
+test('uninstall final probe detects an interrupted export without an installed core', () => {
+  const dir = temp(), proc = path.join(dir, 'proc'), work = path.join(dir, '.f50-verify.fixture');
+  try {
+    fs.mkdirSync(proc); fs.mkdirSync(work);
+    const exported = write(dir, 'kano_config_package_123_fixture/config.yaml', 'interrupted export');
+    const result = shell(api.maintenance('final') + `
+F50_WORK=${quote(work)}
+f50_scan() { : > "$1"; }
+f50_network_snapshot() { mkdir -p "$1"; : > "$1/links"; }
+f50_final_probe
+echo FINAL_REMAINS=$F50_FINAL_REMAINS
+`, { F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc, F50_BOOT: path.join(dir, 'boot.sh') });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes('F50_REMAINS=path:' + path.dirname(exported)));
+    assert.match(result.stdout, /^FINAL_REMAINS=1$/m);
+    assert.equal(fs.readFileSync(exported, 'utf8'), 'interrupted export');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const obstacle of ['', 'process', 'network', 'journal', 'installer']) test('uninstall removes abandoned backups only after runtime cleanup / ' + (obstacle || 'clean'), () => {
   const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc'), work = path.join(dir, '.f50-delete.fixture');
   try {
@@ -639,10 +715,12 @@ for (const obstacle of ['', 'process', 'network', 'journal', 'installer']) test(
     const backup = write(dir, 'clash.rollback.install.fixture/Proxy/config.yaml', 'old configuration');
     const tx = write(dir, 'kano_subscription_save_fixture/0', 'subscription backup');
     const networkTx = write(dir, 'kano_network_save_fixture/0', 'network backup');
+    const exported = write(dir, 'kano_config_package_123_fixture/config.yaml', 'interrupted export');
     write(root, 'Tools/template.yaml.kano_tx/ready', '');
     write(dir, '.f50-install.fixture/install.journal', 'incomplete');
     write(dir, 'kano_yq_runtime/yq', 'component');
     const foreign = write(dir, 'other-plugin/keep', 'foreign');
+    const foreignPackage = write(dir, 'kano_config_package_custom/keep', 'foreign');
     if (obstacle === 'journal') write(root, 'Policy/rp-filter.json', 'unrestored network state');
     if (obstacle === 'installer') { write(dir, 'clash.install.lock.d/pid', '333\n'); fs.mkdirSync(path.join(proc, '333')); }
     const script = api.maintenance('remove').replaceAll('/dev/kano_gist_sync', path.join(dir, 'gist-runtime')) + `
@@ -653,8 +731,9 @@ f50_runtime_guard && f50_remove_artifacts
 `;
     const result = shell(script, { F50_ROOT: root, F50_PROC: proc });
     assert.equal(result.status, obstacle ? 1 : 0, result.stdout + result.stderr);
-    for (const file of [config, backup, tx, networkTx]) assert.equal(fs.existsSync(file), !!obstacle);
+    for (const file of [config, backup, tx, networkTx, exported]) assert.equal(fs.existsSync(file), !!obstacle);
     assert.equal(fs.readFileSync(foreign, 'utf8'), 'foreign');
+    assert.equal(fs.readFileSync(foreignPackage, 'utf8'), 'foreign');
     if (obstacle) assert.match(result.stdout, /F50_DELETE_BLOCKED=/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -52,8 +52,8 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-function buildF50EmergencyScript(resumeTag = '', requireIdle = false, releaseIdleOnly = false) {
-  return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions(releaseIdleOnly) + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
+function buildF50EmergencyScript(resumeTag = '', requireIdle = false, releaseIdleOnly = false, forUninstall = releaseIdleOnly) {
+  return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions(forUninstall) + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
 F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
 F50_RECOVERY_LOCK=\${F50_RECOVERY_LOCK:-/dev/kano_tproxy_recovery.lock}
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
@@ -2570,10 +2570,33 @@ async function installF50PackageAtDevicePath(uploaded) {
   }
 }
 
+async function ensureF50InstallLease() {
+  const ready = await runShellWithRoot(':', 5000);
+  const op = activeCriticalOperation;
+  if (!/^F50_OPERATION_BUSY$/m.test(String(ready.content || '')) || !op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return ready;
+  let recovered;
+  try {
+    recovered = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true, false), 120000));
+  } catch (error) { throw f50UnknownCompletion(op, error?.message || String(error)); }
+  if (!(recovered.success && /^F50_LEASE_RELEASED=1$/m.test(String(recovered.content || '')))) {
+    return { ...ready, content: ready.content + '\n' + String(recovered.content || '') };
+  }
+  if (op !== activeCriticalOperation || op.token.cancelled) throw operationCancelled();
+  op.leasePromise = null;
+  return runShellWithRoot(':', 5000);
+}
+
 async function installF50PackageFromNetwork() {
   return runCriticalOperation('安装核心', async () => {
     lastInstallDiagnostic = null;
     operationStage('下载组件包');
+    const ready = await ensureF50InstallLease();
+    if (!ready.success) {
+      lastInstallDiagnostic = f50Diagnostic(ready.content);
+      operationFinish(false, lastInstallDiagnostic.summary);
+      createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 15000);
+      return false;
+    }
     const archive = await downloadCoreArchive({ allowCached: false });
     if (!archive.ok) {
       const detail = archive.content || archive.message || '组件包下载失败';
@@ -2606,7 +2629,7 @@ async function chooseF50Package() {
         lastInstallDiagnostic = null;
         let uploaded = '';
         try {
-          const ready = await runShellWithRoot(':', 5000);
+          const ready = await ensureF50InstallLease();
           if (!ready.success) throw new Error(ready.content);
           operationStage('上传组件包');
           uploaded = await uploadFileToDevice(file);

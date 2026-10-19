@@ -122,6 +122,11 @@ for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yam
   if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
   f50_config_tx_recover "$config_target" "$config_source_file" || config_recovery_failed=1
 done
+[ "$config_recovery_failed" = 0 ] || echo F50_RECOVERY_CONFIG_FAILED=1
+for recovery_backup in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
+  [ -d "$recovery_backup" ] && [ ! -f "$recovery_backup/committed" ] || continue
+  printf 'F50_RECOVERY_BACKUP=%s\\n' "$recovery_backup"
+done
 ${!requireIdle ? 'if [ "$config_recovery_failed" = 0 ] && [ -z "$F50_RESUME_TAG" ]; then F50_RECOVERY_PREEMPT=1 f50_recovery_eligible || exit 1; fi' : ''}
 if f50_clean_environment && [ "$config_recovery_failed" = 0 ]; then
   # Only the known lease files are removed; an unexpected file prevents release.
@@ -233,7 +238,7 @@ f50_recovery_eligible() {
     [ -d "$recovery_proc" ] || continue
     recovery_pid=\${recovery_proc##*/}
     { IFS= read -r recovery_comm < "$recovery_proc/comm"; } 2>/dev/null || continue
-    case "$recovery_comm" in sh|bash|dash|mksh|toybox|busybox|timeout) ;; *) [ -n "$recovery_records" ] || continue;; esac
+    case "$recovery_comm" in sh|ash|bash|dash|mksh|toybox|busybox|timeout|Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64) ;; *) continue;; esac
       [ "$recovery_pid" != "$$" ] || continue
       f50_stat "$recovery_pid" || { f50_recovery_block process_identity_unknown; return 1; }
       case "$F50_STAT_STATE" in Z|X) continue;; esac
@@ -258,13 +263,7 @@ f50_recovery_eligible() {
       [ "$recovery_deadline" -le "\${recovery_uptime%%.*}" ] || [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ] || { f50_recovery_block active_frontend; return 1; }
     fi;; esac
   if [ -n "$recovery_records" ]; then
-    ${forUninstall ? '' : `if [ "\${F50_RECOVERY_PREEMPT:-0}" = 1 ]; then
-      # These transaction types are not restored by this emergency script; keep their existing guard.
-      for recovery_tx in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
-        [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
-        [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
-      done
-    else
+    ${forUninstall ? '' : `if [ "\${F50_RECOVERY_PREEMPT:-0}" != 1 ]; then
       for recovery_tx in "$F50_ROOT/Proxy/"*.kano_tx "$F50_ROOT/Tools/"*.kano_tx "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
         [ -e "$recovery_tx" ] || [ -L "$recovery_tx" ] || continue
         [ -d "$recovery_tx" ] && [ ! -L "$recovery_tx" ] && [ -f "$recovery_tx/committed" ] && [ ! -L "$recovery_tx/committed" ] || { f50_recovery_block config_transaction_unresolved; return 1; }
@@ -1159,7 +1158,7 @@ async function performF50Uninstall() {
     operationStage('检查并恢复闲置操作锁', 0, stages.length+1);
     let recovered;
     try {
-      recovered = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true), 120000);
+      recovered = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true), 120000));
     } catch (error) { throw f50UnknownCompletion(op, error?.message || error); }
     diagnostics.push({stage:'恢复闲置操作锁', transportOk:recovered?.success === true,
       detail:f50Diagnostic(recovered?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details});
@@ -1327,7 +1326,7 @@ f50_scan() {
     case "$F50_STAT_STATE" in Z|X) ps_excluded=1 ;; esac
     if [ "$ps_excluded" = 0 ]; then
       case "$ps_name" in
-        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|sh|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout)
+        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|age|sh|ash|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout|cp|mv|rm|awk|sed|tee|dd|base64)
           ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)
           ps_exe=\${ps_exe% (deleted)}
           if f50_owned_exe "$ps_exe"; then
@@ -1357,7 +1356,7 @@ EOF_F50_ARGS
               ;;
           esac
           if [ "$ps_owned:$ps_excluded" = 0:0 ]; then
-            case "\${ps_exe##*/}" in sh|bash|dash|mksh|toybox|busybox|curl|wget|unzip|tar|gzip|xz|timeout)
+            case "\${ps_exe##*/}" in sh|ash|bash|dash|mksh|toybox|busybox|age|curl|wget|unzip|tar|gzip|xz|timeout|cp|mv|rm|awk|sed|tee|dd|base64)
               ps_env=$(tr '\\000' '\\n' < "$ps_dir/environ" 2>/dev/null)
               while IFS= read -r ps_var; do
                 case "$ps_var" in KANO_TPROXY_TASK=mm_*)
@@ -1897,7 +1896,7 @@ function buildF50ArtifactHelpers() { return `f50_artifact_paths() {
     "$F50_DATA"/kano_clash_install.* "$F50_DATA"/kano_clash_repair.* \\
     "$F50_DATA"/kano_clash_user_backup.* "$F50_DATA"/kano_policy_save.* \\
     "$F50_DATA"/kano_sub_persist.* "$F50_DATA"/kano_template_upload_* \\
-    "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_subscription_urls_before_template_* \\
+    "$F50_DATA"/kano_subscription_save_* "$F50_DATA"/kano_network_save_* "$F50_DATA"/kano_subscription_urls_before_template_* \\
     "$F50_DATA"/kano_config_package_restore_* "$F50_DATA"/kano_compat_*.json \\
     "$F50_DATA"/kano_compat_bootstrap_* "$F50_DATA"/kano_install_unzip.log \\
     "$F50_DATA"/kano_uninstall_recover.log "$F50_DATA"/kano_uninstall_boot.log \\
@@ -3294,13 +3293,22 @@ exit 0`;
 
 
 function buildF50CleanupScript(forUninstall = false) {
-  return buildF50MaintenanceFunctions('cleanup') + `
+  return buildF50MaintenanceFunctions('cleanup') + (forUninstall ? buildF50ConfigTransactionFunctions() : '') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
 ${forUninstall ? `f50_install_lock_idle || { echo F50_CLEAN_ERROR=installation_active_or_invalid; exit 1; }
 if [ -d "$F50_DATA/clash.install.lock.d" ]; then
   rm -f "$F50_DATA/clash.install.lock.d/pid" && rmdir "$F50_DATA/clash.install.lock.d" || exit 1
-fi` : ''}
+fi
+if [ -d "$F50_ROOT/Tools/gist-sync/activation" ]; then
+  KANO_GIST_TRANSACTION=$(cat "$F50_ROOT/Tools/gist-sync/activation/id" 2>/dev/null)
+  export KANO_GIST_TRANSACTION
+fi
+for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
+  config_source_file="$F50_ROOT/Tools/config_source.conf"
+  if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
+  f50_config_tx_recover "$config_target" "$config_source_file" || echo F50_CLEAN_WARNING=uninstall_config_restore_failed
+done` : ''}
 f50_inspect || exit 1
 if [ "$F50_OLD_FOUND" = 1 ]; then
   f50_clean_environment || exit 1
@@ -3327,9 +3335,8 @@ function buildUninstallStages() { return [
   {title:'停止猫猫并恢复网络', timeout:60000, script:buildF50CleanupScript(true)},
   {title:'移除猫猫开机启动项', timeout:15000, script:`set -e
 if [ -f ${shellQuote(BOOT_FILE)} ]; then
-  ${removeBootLinesCmd()}
+  ${removeBootLinesCmd({ removeGist: true })}
 fi
-if [ -x /data/clash/Tools/kano-gist-sync ]; then /data/clash/Tools/kano-gist-sync remove-boot || exit 1; fi
 if [ -f /data/f50_boot_fix/clash_boot.sh ]; then rm -f /data/f50_boot_fix/clash_boot.sh; fi
 echo F50_BOOT_REMOVED
 `},
@@ -3675,6 +3682,13 @@ fi`,8000);
   // ===== Basic helpers =====
     let transientShellOperation = null;
   let deviceTaskUncertain = false;
+  const f50ShellReply = response => {
+    const candidates = [response?.data?.content, response?.data?.result, response?.result, response?.content, response].filter(value => typeof value === 'string');
+    const receipt = /^(?:F50_(?:TASK_(?:FINISHED|NOT_STARTED)=|LEASE_(?:ACQUIRED|RELEASED|OWNED)=|FRONTEND_RECORDED=|OPERATION_(?:BUSY|INVALID_OWNER|UNSAFE_PATH|OWNER_CHANGED|RECOVERY_BUSY|RECOVERY_REQUIRED|WORKER_REMAINS)\r?$|RECOVERY_(?:ELIGIBLE|STATE|PARTIAL)=|CLEAN_ERROR=)|RECOVERY_VERIFIED\r?$)/m;
+    return { ...(response && typeof response === 'object' ? response : {}),
+      success: response?.success !== false && response?.data?.success !== false,
+      content: candidates.find(value => receipt.test(value)) || candidates[0] || '' };
+  };
   const f50TaskTag = (token) => 'mm_' + String(token.id).replace(/[^A-Za-z0-9_-]/g, '_');
   const f50UnknownCompletion = (op, cause = '') => {
     if (op.recovered) return operationCancelled();
@@ -3704,13 +3718,14 @@ fi`,8000);
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = await hostRunShellWithRoot.call(globalThis,
           buildF50LeaseFunctions() + '\nf50_lease_release ' + shellQuote(f50TaskTag(op.token)), 6000)
+          .then(f50ShellReply)
           .catch(error => ({ success: false, content: error?.message || String(error) }));
         if (result?.success && /^F50_LEASE_RELEASED=1$/m.test(String(result.content || ''))) {
           op.leaseOwned = false;
           return;
         }
-        const checked = await hostRunShellWithRoot.call(globalThis,
-          buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(f50TaskTag(op.token)), 6000);
+        const checked = f50ShellReply(await hostRunShellWithRoot.call(globalThis,
+          buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(f50TaskTag(op.token)), 6000));
         const state = String(checked?.content || '');
         if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) {
           op.leaseOwned = false;
@@ -3746,13 +3761,14 @@ fi`,8000);
         op.leasePromise = (async () => {
           let result;
           try {
-            result = await hostRunShellWithRoot.call(globalThis,
-              buildF50LeaseFunctions() + '\nf50_lease_acquire ' + shellQuote(tag) + ' browser', 6000);
+            result = f50ShellReply(await hostRunShellWithRoot.call(globalThis,
+              buildF50LeaseFunctions() + '\nf50_lease_acquire ' + shellQuote(tag) + ' browser', 6000));
           } catch (error) { result = { success: false, content: error?.message || String(error) }; }
           let text = String(result?.content || '');
           if (!(result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) && !/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) {
             const checked = await hostRunShellWithRoot.call(globalThis,
               buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(tag), 6000)
+              .then(f50ShellReply)
               .catch(error => ({ success: false, content: error?.message || String(error) }));
             const state = String(checked?.content || '');
             if (checked?.success && /^F50_LEASE_OWNED=1$/m.test(state)) { result = { success: true }; text = 'F50_LEASE_ACQUIRED=1'; }
@@ -3763,6 +3779,7 @@ fi`,8000);
               if (op.closing || op.uncertain || op.heartbeatPending) return;
               op.heartbeatPending = hostRunShellWithRoot.call(globalThis,
                 buildF50LeaseFunctions() + '\nf50_frontend_touch ' + shellQuote(tag) + ' running', 6000)
+                .then(f50ShellReply)
                 .catch(error => ({ success: false, content: error?.message || String(error) }))
                 .then(r => {
                   if (op.recovered) return;
@@ -3778,7 +3795,7 @@ fi`,8000);
       if (!(await op.leasePromise)) return { success: false, content: 'F50_OPERATION_BUSY' };
       if (op.token.cancelled || op.closing) throw operationCancelled();
       const request = tag + '.' + (++taskCommandSequence);
-      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${buildF50GistFence()}\n${script}`;
+      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${op.uninstall ? '' : buildF50GistFence()}\n${script}`;
       const command = `set +e
 exec 2>&1
 umask 077
@@ -3814,20 +3831,22 @@ f50_writer_leave || exit 1
 printf '\\nF50_TASK_FINISHED=${request}:%s\\n' "$kano_task_rc"
 exit "$kano_task_rc"`;
       let result;
-      try { result = await hostRunShellWithRoot.call(globalThis, command, timeout); }
+      try { result = f50ShellReply(await hostRunShellWithRoot.call(globalThis, command, timeout)); }
       catch (error) { result = { success: false, content: error?.message || String(error) }; }
       let text = String(result?.content || '');
       if (text.trim() === 'F50_TASK_NOT_STARTED=' + request) {
         op.token.cancelled = true;
         throw operationCancelled();
       }
-      let tail = text.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+      const receiptPattern = new RegExp('(?:^|\\n)F50_TASK_FINISHED=(' + request.replace(/\./g, '\\.') + '):([0-9]+)[ \\t]*(?=\\r?\\n|$)');
+      let tail = text.match(receiptPattern);
       if ((!tail || tail[1] !== request) && !op.token.cancelled) {
         const checked = await hostRunShellWithRoot.call(globalThis,
           buildF50LeaseFunctions() + '\nf50_task_result ' + shellQuote(tag) + ' ' + shellQuote(request), 6000)
+          .then(f50ShellReply)
           .catch(error => ({ success: false, content: error?.message || String(error) }));
         const receiptText = String(checked?.content || '');
-        const receiptTail = receiptText.match(/(?:^|\n)F50_TASK_FINISHED=([^\r\n:]+):([0-9]+)\r?\n?$/);
+        const receiptTail = receiptText.match(receiptPattern);
         if (receiptTail?.[1] === request) { result = checked; text = receiptText; tail = receiptTail; }
       }
       if (!tail || tail[1] !== request) throw f50UnknownCompletion(op, text);
@@ -4046,7 +4065,7 @@ exit "$kano_task_rc"`;
     editableLocalFiles().find((fileInfo) => fileInfo.path == path) || null;
 
 
-  const removeBootLinesCmd = ({ enable = false } = {}) => `
+  const removeBootLinesCmd = ({ enable = false, removeGist = false } = {}) => `
         (
           set -e
           BOOT_LOCK=/dev/kano_boot_write.lock
@@ -4079,6 +4098,7 @@ exit "$kano_task_rc"`;
           BOOT_SOURCE=${shellQuote(BOOT_FILE)}
           [ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
           awk \
+            -v remove_gist=${removeGist ? 1 : 0} \
             -v async=${shellQuote(BOOT_ASYNC_LINE)} \
             -v cleanup=${shellQuote(BOOT_CLEANUP_LINE)} \
             -v runtime=${shellQuote(LEGACY_BOOT_SERVICE_LINE)} \
@@ -4089,7 +4109,12 @@ exit "$kano_task_rc"`;
             -v legacy_policy=${shellQuote(LEGACY_BOOT_POLICY_TOOLS_LINE)} \
             -v policy=${shellQuote(BOOT_POLICY_TOOLS_LINE)} \
             -v mac=${shellQuote(LEGACY_BOOT_MAC_BYPASS_LINE)} \
-            '{ sub(/\\r$/, ""); line=$0; gsub(/^[ \t]+|[ \t]+$/, "", line); if(line != "/data/clash/Scripts/Clash.Service start" && line != async && line != cleanup && line != runtime && line != service && line != legacy_wrapper && line != legacy_inotify && line != inotify && line != legacy_policy && line != policy && line != mac) print }' \
+            '{ sub(/\\r$/, ""); line=$0; gsub(/^[ \t]+|[ \t]+$/, "", line);
+               if(remove_gist && line == "# KANO_GIST_SYNC_BEGIN") { if(gist) exit 1; gist=1; next }
+               if(remove_gist && line == "# KANO_GIST_SYNC_END") { if(!gist) exit 1; gist=0; next }
+               if(remove_gist && gist) next;
+               if(line != "/data/clash/Scripts/Clash.Service start" && line != async && line != cleanup && line != runtime && line != service && line != legacy_wrapper && line != legacy_inotify && line != inotify && line != legacy_policy && line != policy && line != mac) print }
+             END { if(remove_gist && gist) exit 1 }' \
             "$BOOT_SOURCE" > "$BOOT_TMP" || exit 1
           ${enable ? `printf '%s\\n' ${shellQuote(BOOT_ASYNC_LINE)} >> "$BOOT_TMP" || exit 1` : ''}
           sh -n "$BOOT_TMP" || exit 1
@@ -4426,7 +4451,7 @@ exit "$kano_task_rc"`;
       return null;
     }
     const operationToken = token || { id: `${Date.now()}_${createRandomString(6)}` };
-    activeCriticalOperation = { label: String(label || '关键操作'), token: operationToken, progress: createOperationProgress(label) };
+    activeCriticalOperation = { label: String(label || '关键操作'), token: operationToken, progress: createOperationProgress(label), uninstall: allowUninstallRecovery };
     invalidateStatusSnapshot();
     syncCriticalOperationStatus();
     return operationToken;
@@ -7427,7 +7452,7 @@ kano_stop_watchers() (
     /data/kano_clash_install.* /data/kano_clash_repair.* /data/kano_clash_user_backup.* \
     /data/clash.before_install.* /data/clash.before_repair.* /data/clash.failed_repair.* \
     /data/kano_policy_save.* /data/kano_sub_persist.* /data/kano_template_upload_* \
-    /data/kano_subscription_save_* /data/kano_subscription_urls_before_template_* \
+    /data/kano_subscription_save_* /data/kano_network_save_* /data/kano_subscription_urls_before_template_* \
     /data/kano_config_package_restore_* \
     ${shellQuote(KANO_YQ_RUNTIME_DIR)} ${shellQuote(KANO_INSTALL_TOOLBOX_DIR)}; do
     [ -e "$artifact" ] || [ -L "$artifact" ] || continue
@@ -7458,8 +7483,8 @@ kano_stop_watchers() (
   const interruptedOperations = [];
   if (preempt) {
     try {
-      const checked = await hostRunShellWithRoot.call(globalThis,
-        buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', 10000);
+      const checked = f50ShellReply(await hostRunShellWithRoot.call(globalThis,
+        buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', 10000));
       if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
         const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
         const summary = /^F50_RECOVERY_ELIGIBLE=0$/m.test(String(checked?.content || ''))
@@ -7504,14 +7529,17 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const canResume = !preempt && activeCriticalOperation?.leaseOwned && !activeCriticalOperation.uncertain &&
       !activeCriticalOperation.token.cancelled && !activeCriticalOperation.requests;
     const resumeTag = canResume ? f50TaskTag(activeCriticalOperation.token) : '';
-    const r = await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !preempt && !canResume), 120000);
+    const r = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript(resumeTag, !preempt && !canResume), 120000));
     const ok = !!r.success && /^RECOVERY_VERIFIED$/m.test(String(r.content || ''));
     if (ok) {
       for (const op of interruptedOperations) { op.recovered = true; op.leaseOwned = false; }
       deviceTaskUncertain = false;
     } else deviceTaskUncertain = true;
     const confirmed = ok || /^F50_(CLEAN_ERROR=|RECOVERY_(PARTIAL=1|ELIGIBLE=0|STATE=))/m.test(String(r.content || ''));
-    const summary = ok ? '网络接管已释放' : confirmed ? '恢复失败，请查看详情' : '恢复失败：无法读取执行结果，请检查连接后重试';
+    const summary = ok ? (/^F50_RECOVERY_BACKUP=/m.test(r.content) ? '网络接管已释放，配置备份已保留' : '网络接管已释放')
+      : /^F50_NETWORK_RELEASED=1$/m.test(r.content) ? (/^F50_RECOVERY_CONFIG_FAILED=1$/m.test(r.content)
+        ? '网络已释放，但配置恢复失败，请查看详情' : '网络规则已释放，但恢复失败，请查看详情')
+      : confirmed ? '恢复失败，请查看详情' : '恢复失败：无法读取执行结果，请检查连接后重试';
     lastInstallDiagnostic = { ...f50Diagnostic(nativeDetail + r.content), ok,
       summary };
     invalidateStatusSnapshot(); invalidateBinarySnapshot(); runtimePreflightCache = null;

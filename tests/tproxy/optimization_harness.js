@@ -23,7 +23,8 @@ function run(code, context = {}) {
   return vm.runInNewContext(slice('function buildF50GistFence', 'function f50AssertSafeJsonNumbers') + code, { console, ...context }, { timeout: 10000 });
 }
 function shell(input, env = {}) {
-  const result = spawnSync('sh', ['-s'], { input, encoding: 'utf8', timeout: 30000,
+  const busybox = process.env.F50_TEST_BUSYBOX === '1';
+  const result = spawnSync(busybox ? process.env.F50_BUSYBOX || 'busybox' : 'sh', busybox ? ['ash', '-s'] : ['-s'], { input, encoding: 'utf8', timeout: 30000,
     env: { ...process.env, ...env } });
   assert.ifError(result.error);
   return result;

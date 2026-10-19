@@ -369,13 +369,14 @@ for (const expression of ['function() {}', 'async function() {}', 'function*() {
   });
 }
 
-function recoveryCase({ receipt = true, active = false, reused = false, foreign = false, background = false, backgroundComm = 'curl', transaction = false, legacy = false, reclaim = false, output = false, snapshot = false, preempt = false, unrelated = false } = {}) {
+function recoveryCase({ receipt = true, active = false, reused = false, foreign = false, background = false, backgroundComm = 'curl', transaction = false, legacy = false, reclaim = false, output = false, pendingReceipt = '', snapshot = false, preempt = false, unrelated = false } = {}) {
   const dir = temp(), proc = path.join(dir, 'proc'), root = path.join(dir, 'clash'), lease = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
   fs.mkdirSync(proc); fs.mkdirSync(root);
   write(dir, 'lease/owner', 'mm_fixture\n'); write(dir, 'lease/frontend', 'mm_fixture 0\n');
   const record = legacy ? '111\n' : `F50_TASK_V2 ${foreign ? 'mm_foreign' : 'mm_fixture'} mm_fixture.1 111 21 222 22 ${receipt ? 'finished' : 'running'} 0\n`;
   write(dir, 'tasks/mm_fixture.1', record);
   if (output) write(dir, 'tasks/mm_fixture.1.output', 'partial output\n');
+  if (pendingReceipt) write(dir, 'tasks/mm_fixture.1.receipt', pendingReceipt === 'complete' ? record.replace('running', 'finished') : 'F50_TASK_V2');
   if (active || reused) {
     write(proc, '111/stat', `111 (sh) S ${Array(18).fill('0').join(' ')} ${reused ? 99 : 21}\n`);
     write(proc, '111/comm', 'sh\n'); write(proc, '111/environ', reused ? 'OTHER=foreign\0' : 'KANO_TPROXY_TASK=mm_fixture\0');
@@ -400,6 +401,9 @@ for (const [options, eligible, state] of [
   [{ background: true }, false, 'unreceipted_active_task'],
   [{ output: true, reclaim: true }, true, 'quiescent_lease'],
   [{ output: true, receipt: false }, false, 'task_receipt_missing'],
+  [{ pendingReceipt: 'complete', receipt: false, preempt: true, reclaim: true }, true, 'quiescent_lease'],
+  [{ pendingReceipt: 'partial', receipt: false, preempt: true, reclaim: true }, true, 'quiescent_lease'],
+  [{ pendingReceipt: 'partial', receipt: false, active: true, reclaim: true }, false, 'active_task'],
   [{ snapshot: true }, false, 'config_transaction_unresolved'],
   [{ snapshot: true, receipt: false, preempt: true, reclaim: true }, true, 'quiescent_lease'],
   [{ unrelated: true }, true, 'quiescent_lease'],

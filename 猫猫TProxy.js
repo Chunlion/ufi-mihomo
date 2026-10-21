@@ -8087,6 +8087,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   };
 
   const showStatusDiagnostic = async () => {
+    // 单项探测失败不应让整个诊断无法打开；降级项在结果里标出。
+    const degraded = [];
+    const settle = (label, promise, fallback) => Promise.resolve(promise).catch((error) => {
+      degraded.push(`${label}：${sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error))}`);
+      return fallback;
+    });
     const controllerInfoPromise = buildControllerInfo();
     const pidPromise = getCorePid();
     const runtimeStatePromise = checkInstallState({ fresh: true });
@@ -8183,16 +8189,18 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       versionRes,
       connectionsRes,
     ] = await Promise.all([
-      runtimeStatePromise,
-      bootStatePromise,
-      pidPromise,
-      controllerInfoPromise,
-      readPolicyState(),
-      configPromise,
-      processPromise,
-      logPromise,
-      versionPromise,
-      connectionsPromise,
+      settle('运行状态', runtimeStatePromise, { state: 'unknown', message: '读取失败' }),
+      settle('开机自启', bootStatePromise, { state: 'unknown', message: '读取失败' }),
+      settle('核心进程', pidPromise, ''),
+      settle('控制地址', controllerInfoPromise, {
+        raw: '', apiBase: '未读取', externalController: '', secretSet: false, usingFallbackController: false,
+      }),
+      settle('网络设置', readPolicyState(), { options: {} }),
+      settle('配置文件', configPromise, { success: false, content: '' }),
+      settle('核心进程详情', processPromise, { success: false, content: '' }),
+      settle('运行日志', logPromise, { success: false, content: '' }),
+      settle('控制 API', versionPromise, { success: false, statusCode: 0, message: '未读取' }),
+      settle('活动连接', connectionsPromise, { success: false, responseText: '' }),
     ]);
     const configLines = String(configRes.content || '').split('\n');
     const configExists = (configLines.find((line) => line == 'exists=1'));
@@ -8211,8 +8219,9 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       }
     }
     const [providerHealth,panelHealth] = await Promise.all([
-      callMihomoApi('/providers/proxies','GET',null,controllerInfo,5,{corePid:pid}),
-      runShellWithRoot(buildF50ShellBase()+buildF50PanelHelpers()+'\nf50_verify_zashboard_endpoint',12000),
+      settle('节点来源', callMihomoApi('/providers/proxies','GET',null,controllerInfo,5,{corePid:pid}), { success: false }),
+      settle('Zashboard', Promise.resolve().then(() =>
+        runShellWithRoot(buildF50ShellBase()+buildF50PanelHelpers()+'\nf50_verify_zashboard_endpoint',12000)), { success: false, content: '' }),
     ]);
     const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
     const rows = [
@@ -8227,8 +8236,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       ['控制端口 7788', proc.PORT_7788 == '1' ? '已监听' : '未监听'],
       ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
       ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
-      ['接管模式（配置）', policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy')],
-      ['IPv6', policyState.options.ipv6 == 'on' ? '已开启' : '未开启'],
+      ['接管模式（配置）', !policyState.options.traffic_mode ? '未读取' : (policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy'))],
+      ['IPv6', !policyState.options.ipv6 ? '未读取' : (policyState.options.ipv6 == 'on' ? '已开启' : '未开启')],
       ['config.yaml', configExists ? `存在，${configSize || 0} bytes` : '不存在'],
       ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
       ['API 地址', controllerInfo.apiBase],
@@ -8237,6 +8246,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         ? '核心未运行'
         : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : versionRes.message || '控制 API 不可用')],
       ['活动连接', connectionStatus],
+      ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
     ];
     const rowHtml = rows.map(([key, value]) =>
       `<div style="display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12);">
@@ -9947,6 +9957,8 @@ EOF_F50_RESTORE_MEMBERS
       setButtonBusy(showLogBtn, true, '读取中…');
       try {
         await showStatusDiagnostic();
+      } catch (error) {
+        createToast(`诊断读取失败<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 10000);
       } finally {
         setButtonBusy(showLogBtn, false);
       }
@@ -9956,8 +9968,14 @@ EOF_F50_RESTORE_MEMBERS
     userAgentBtn.classList.add('btn');
     userAgentBtn.textContent = '订阅 User-Agent';
     userAgentBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
-      const currentValue = await loadProviderUserAgent({ fresh: true });
+      let currentValue;
+      try {
+        if (!(await ensureReady({ readOnly: true }))) return;
+        currentValue = await loadProviderUserAgent({ fresh: true });
+      } catch (error) {
+        createToast(`无法读取订阅 User-Agent<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
+        return;
+      }
       const storedCustom = currentValue == KANO_PROVIDER_USER_AGENT ? '' : currentValue;
       const { el, close } = createFixedToast(
         'mm_provider_user_agent',
@@ -11257,8 +11275,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     editBtn.classList.add('btn');
     editBtn.textContent = '配置文件';
     editBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
-      await showEditableLocalFilesDialog();
+      try {
+        if (!(await ensureReady({ readOnly: true }))) return;
+        await showEditableLocalFilesDialog();
+      } catch (error) {
+        createToast(`无法打开配置文件<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
+      }
     };
 
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
@@ -11846,11 +11868,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     templateOverrideBtn.classList.add('btn');
     templateOverrideBtn.textContent = '配置与规则';
     templateOverrideBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
-      const [ruleOverride, jsOverrideSaved] = await Promise.all([
-        readRuleOverrideConfig(),
-        hasSavedJsOverride(),
-      ]);
+      let ruleOverride, jsOverrideSaved;
+      try {
+        if (!(await ensureReady({ readOnly: true }))) return;
+        [ruleOverride, jsOverrideSaved] = await Promise.all([
+          readRuleOverrideConfig(),
+          hasSavedJsOverride(),
+        ]);
+      } catch (error) {
+        createToast(`无法读取配置与规则<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
+        return;
+      }
       const activeRuleCount = ruleOverride.enabled === false ? 0 : ruleOverride.rules.length;
       const { el, close } = createFixedToast(
         'mm_template_override_center',
@@ -11919,8 +11947,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     policyToolsBtn.classList.add('btn');
     policyToolsBtn.textContent = '网络设置';
     policyToolsBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
-      await showPolicyToolsDialog({ initialTab: 'network' });
+      try {
+        if (!(await ensureReady({ readOnly: true }))) return;
+        await showPolicyToolsDialog({ initialTab: 'network' });
+      } catch (error) {
+        createToast(`无法打开网络设置<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
+      }
     };
 
     const quickRunBtn = document.createElement('button');

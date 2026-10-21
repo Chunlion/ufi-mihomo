@@ -2828,33 +2828,84 @@ function createPrivateRouteLogic() {
     out[META] = meta;
     return out;
   }
+  // 硬件与脚本依赖的键：用户写入任何值都以固定 profile 为准。
+  const CONTROLLED_TOP_KEYS = ['mode', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'tproxy-port', 'allow-lan'];
+  const CONTROLLED_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+  const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
+  const mergePlain = (base, delta) => {
+    const out = clone(base || {});
+    for (const [key, value] of Object.entries(delta || {})) out[key] = clone(value);
+    return out;
+  };
+  // dns/tun 按子键合并：受控子键取 profile，其余保留用户值；用户未写的键仍由 profile 补齐。
+  function mergeDnsValue(profileDns, userDns) {
+    if (!userDns || typeof userDns !== 'object' || Array.isArray(userDns)) return clone(profileDns);
+    const merged = mergePlain(profileDns, userDns);
+    for (const key of CONTROLLED_DNS_KEYS) merged[key] = clone(profileDns[key]);
+    return merged;
+  }
+  function mergeTunValue(profileTun, userTun) {
+    if (!userTun || typeof userTun !== 'object' || Array.isArray(userTun)) return clone(profileTun);
+    const merged = mergePlain(profileTun, userTun);
+    for (const key of CONTROLLED_TUN_KEYS) {
+      if (own(profileTun, key)) merged[key] = clone(profileTun[key]);
+      else delete merged[key];
+    }
+    if (own(userTun, 'mtu')) {
+      const mtu = Number(userTun.mtu);
+      if (!Number.isInteger(mtu) || mtu < 1280 || mtu > 65535) throw new Error('tun.mtu 需为 1280~65535 的整数');
+      merged.mtu = mtu;
+    }
+    return merged;
+  }
+  // 本地代理端口可自由指定，但不能互相重复或占用受管端口。
+  function checkLocalPorts(out, profile) {
+    const ports = ['port', 'socks-port', 'mixed-port']
+      .map((key) => Number(out[key])).filter((port) => Number.isInteger(port) && port > 0);
+    const reserved = new Set([
+      Number(profile['tproxy-port']) || 0,
+      Number(String((profile.dns || {}).listen || '').split(':').pop()) || 0,
+      Number(String(profile['external-controller'] || '').split(':').pop()) || 0,
+    ].filter(Boolean));
+    if (new Set(ports).size !== ports.length) throw new Error('port、socks-port、mixed-port 不能重复');
+    for (const port of ports) {
+      if (reserved.has(port)) throw new Error('本地代理端口与受管端口冲突：' + port);
+    }
+  }
+
   function runtime(config, options = {}, connected = [], preserveConfig = false, feature = fromOptions(options)) {
   const source = strip(config);
   const mode = options.traffic_mode || 'tproxy';
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
   const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
-  const out = clone(preserveConfig ? source : profile);
-  for (const key of Object.keys(source)) {
-    if (key.startsWith('x-') && !own(out, key)) out[key] = clone(source[key]);
-  }
-  for (const key of preserveConfig ? F50_ORIGINAL_MANAGED_KEYS : ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
-    if (preserveConfig) out[key] = clone(profile[key]);
-    else if (own(source, key)) out[key] = clone(source[key]);
-  }
-  if (preserveConfig) {
-    out.dns = clone(source.dns || profile.dns);
-    out.tun = clone(source.tun || {});
-    if (!f50IsPlainObject(out.dns) || !f50IsPlainObject(out.tun)) throw new Error('dns and tun must be mappings');
-    for (const key of F50_ORIGINAL_DNS_KEYS) out.dns[key] = clone(profile.dns[key]);
-    for (const key of F50_ORIGINAL_TUN_KEYS) {
-      if (own(profile.tun, key)) out.tun[key] = clone(profile.tun[key]);
-      else delete out.tun[key];
+    const out = clone(preserveConfig ? source : profile);
+    if (preserveConfig) {
+      for (const key of Object.keys(source)) {
+        if (key.startsWith('x-') && !own(out, key)) out[key] = clone(source[key]);
+      }
+      for (const key of F50_ORIGINAL_MANAGED_KEYS) out[key] = clone(profile[key]);
+      out.dns = clone(source.dns || profile.dns);
+      out.tun = clone(source.tun || {});
+      if (!f50IsPlainObject(out.dns) || !f50IsPlainObject(out.tun)) throw new Error('dns and tun must be mappings');
+      for (const key of F50_ORIGINAL_DNS_KEYS) out.dns[key] = clone(profile.dns[key]);
+      for (const key of F50_ORIGINAL_TUN_KEYS) {
+        if (own(profile.tun, key)) out.tun[key] = clone(profile.tun[key]);
+        else delete out.tun[key];
+      }
+      for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name', 'interface-name', 'routing-mark']) delete out[key];
+    } else {
+      // 固定 profile 打底，用户显式写入的非受控键全部保留；
+      // 缺失的键仍由 profile 补齐，因此默认行为与之前一致。
+      for (const key of Object.keys(source)) {
+        if (key === META) continue;
+        if (key === 'dns') { out.dns = mergeDnsValue(out.dns, source.dns); continue; }
+        if (key === 'tun') { out.tun = mergeTunValue(out.tun, source.tun); continue; }
+        if (key === 'sniffer' || key === 'profile') { out[key] = mergePlain(out[key], source[key]); continue; }
+        if (CONTROLLED_TOP_KEYS.includes(key) || key === 'external-ui-name') continue;
+        out[key] = clone(source[key]);
+      }
+      checkLocalPorts(out, profile);
     }
-    for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name', 'interface-name', 'routing-mark']) delete out[key];
-  }
-  if (!preserveConfig && own(source.dns || {}, 'proxy-server-nameserver-policy')) {
-    out.dns['proxy-server-nameserver-policy'] = clone(source.dns['proxy-server-nameserver-policy']);
-  }
   if (mode === 'tun') out.tun.stack = f50TunStack(options);
   if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
   if (!own(out,'proxies')) out.proxies = [];
@@ -2873,10 +2924,27 @@ function createPrivateRouteLogic() {
   }
   for (const name of ['cn_domain', 'private_domain', 'add_direct_domain']) {
     if (!preserveConfig && out['rule-providers']?.[name]?.behavior === 'domain') {
-      out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
+      out.dns['nameserver-policy'] = out.dns['nameserver-policy'] || {};
+      // 用户自建的同名策略优先，这里只补缺失项。
+      if (!own(out.dns['nameserver-policy'], 'rule-set:' + name)) {
+        out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
+      }
     }
   }
   out['x-f50-profile'] = '8.0.0-compat.2.3';
+  // 记录被强制纠正的用户设置，供界面提示；Mihomo 忽略 x- 前缀键。
+  const overridden = [];
+  for (const key of CONTROLLED_TOP_KEYS) {
+    if (own(source, key) && !equal(source[key], out[key])) overridden.push(key);
+  }
+  for (const key of CONTROLLED_DNS_KEYS) {
+    if (own(source.dns || {}, key) && !equal(source.dns[key], out.dns[key])) overridden.push('dns.' + key);
+  }
+  for (const key of CONTROLLED_TUN_KEYS) {
+    if (own(source.tun || {}, key) && !equal(source.tun[key], (out.tun || {})[key])) overridden.push('tun.' + key);
+  }
+  if (overridden.length) out['x-f50-overridden'] = overridden;
+  else if (own(out, 'x-f50-overridden')) delete out['x-f50-overridden'];
   // Kernel routing belongs to clashctl; TUN still needs its matching route exclusions.
   if (!feature.enabled || mode === 'off') return out;
   return transform(out, feature, mode, connected);
@@ -5229,7 +5297,6 @@ exit "$kano_task_rc"`;
       return false;
     }
 
-    const tproxyPort = await detectF50TproxyPort();
     const existsRes = await runShellWithRoot(`[ -s ${shellQuote(templatePath)} ] && echo 1 || echo 0`, 10 * 1000);
     if (!existsRes.success) {
       createToast('模板状态探测失败；操作已中止，原模板未改写。', 'red', 9000);
@@ -5264,7 +5331,6 @@ exit "$kano_task_rc"`;
       normalized = normalizeManagedTemplateObject(baseObject, cleanSources, {
         generated,
         emptyProviderUrls: true,
-        tproxyPort,
       });
     } catch (e) {
       createToast(`模板结构不兼容；原文件未改写<br>${safeTextToHtml(e.message || e)}`, 'red', 10000);
@@ -5443,11 +5509,6 @@ exit "$kano_task_rc"`;
   };
 
 
-
-  const getPositivePort = (value, fallback = F50_PORTS.tproxy) => {
-    const port = Number(value);
-    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
-  };
 
   const utf8ByteLength = (text = '') => {
     const value = String(text || '');
@@ -5679,8 +5740,7 @@ ${buildF50YamlCommitBody(withBase)}
     return { ok: !!res.success, content: res.content || '', shell: res };
   };
 
-  const detectF50TproxyPort = async () => F50_PORTS.tproxy;
-
+  // TProxy 端口属于受控集合：iptables、DNS nat 与启动校验都按固定值下发，不从 options 读取。
   const buildManagedProxyProviders = (
     sources = [],
     { emptyUrls = false, ensureOne = false, localFiles = false } = {},
@@ -5759,10 +5819,11 @@ ${buildF50YamlCommitBody(withBase)}
     const changed = externalUi != ZASHBOARD_UI_DIR
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
       || externalUiUrl != ZASHBOARD_UI_URL
-      || (!preserveConfig && config['unified-delay'] !== true);
+      || (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay'));
     config['external-ui'] = ZASHBOARD_UI_DIR;
     config['external-ui-url'] = ZASHBOARD_UI_URL;
-    if (!preserveConfig) config['unified-delay'] = true;
+    // unified-delay 不参与接管、路由与面板校验，仅在用户未设置时补默认值。
+    if (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay')) config['unified-delay'] = true;
     delete config['external-ui-name'];
     return changed;
   };
@@ -5949,7 +6010,8 @@ ${buildF50YamlCommitBody(withBase)}
   } = {}) => {
     const config = cloneJsonValue(assertYamlRootMap(rawConfig, 'template.yaml'));
     const providerNames = providerNamesForTemplate(sources);
-    applyRequiredF50Fields(config, { managedDashboard: generated });
+    // 生成的模板统一补默认面板字段；用户已有模板则尊重其 unified-delay 设置。
+    applyRequiredF50Fields(config, { preserveConfig: !generated });
     delete config['Proxy-Providers'];
     delete config['proxy-Providers'];
     delete config['Proxy-providers'];
@@ -6492,14 +6554,12 @@ KANO_WRITE_CHECK_EOF
 
     const generated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
     if (generated === null) return fail('read_template_marker', 'template.yaml 生成标记无法读取');
-    const tproxyPort = await detectF50TproxyPort();
     let normalized;
     try {
       normalized = normalizeManagedTemplateObject(read.value, cleanSources, {
         generated,
         emptyProviderUrls: false,
         localProviderFiles,
-        tproxyPort,
       });
     } catch (e) {
       return fail('normalize_runtime_object', e.message || String(e));
@@ -8332,7 +8392,6 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     });
     const trafficMode = runtimeOptions.traffic_mode;
     const ipv6Enabled = runtimeOptions.ipv6 == 'on';
-    const tproxyPort = getPositivePort(runtimeOptions.tproxy_port, F50_PORTS.tproxy);
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
       if (errorToast) createToast(`配置自检失败<br>${safeTextToHtml(storage.content || '')}`, 'red', 9000);
@@ -8385,7 +8444,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     }
     if (showToast) {
       createToast(
-        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '已开启' : '已关闭'} · 端口 ${tproxyPort}`,
+        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '已开启' : '已关闭'} · 端口 ${F50_PORTS.tproxy}`,
         'green',
         6000,
       );

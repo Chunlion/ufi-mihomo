@@ -366,11 +366,12 @@ for (const mode of ['tproxy', 'tun', 'off']) {
   });
 }
 
-test('template mode retains node DNS policies alongside its fixed defaults', () => {
+test('template mode keeps user tunables while capture fields stay fixed', () => {
   const result = configApi.runtime(originalConfig, { traffic_mode: 'tproxy', ipv6: 'off' });
-  assert.equal(result['log-level'], 'info');
-  assert.equal(result.sniffer.enable, true);
-  assert.equal(result['unified-delay'], true);
+  // 日志级别、嗅探、延迟统计不影响接管与校验，保留用户显式值。
+  assert.equal(result['log-level'], 'debug');
+  assert.equal(result.sniffer.enable, false);
+  assert.equal(result['unified-delay'], false);
   assert.equal(result['rule-providers'].cn_domain.proxy, 'DIRECT');
   assert.deepEqual(plain(result.dns['proxy-server-nameserver-policy']), originalConfig.dns['proxy-server-nameserver-policy']);
   const updated = plain(originalConfig);

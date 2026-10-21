@@ -756,7 +756,7 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=17
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=18
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -784,8 +784,8 @@ f50_restore_original_config() {
     (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])}) |
       ((select($gist) | pick(${JSON.stringify([...CONTROLLED_TOP_KEYS, 'secret', 'x-f50-profile'])})), select($gist | not))) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
-    (if $gist then ${JSON.stringify(CONTROLLED_TUN_KEYS)} else ${JSON.stringify(F50_ORIGINAL_TUN_KEYS)} end) as $tun_keys |
-    .tun = ((($original.tun // {}) | omit($tun_keys)) * ($runtime.tun | pick($tun_keys))) |
+    ((select($gist) | .tun = ((($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(CONTROLLED_TUN_KEYS)})))),
+      (select($gist | not) | .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))))) |
     del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
     select(strenv(F50_CONFIG_SOURCE) == "subscription_original" or $gist)),
     (($original | omit(${JSON.stringify(F50_RESTORE_EXCLUDED_KEYS)})) as $user |
@@ -941,14 +941,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=17' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=18' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15|16)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15|16|17)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }

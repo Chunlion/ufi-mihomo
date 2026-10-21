@@ -523,8 +523,13 @@ test('service preserves original YAML after controller preparation and reloads i
     assert.equal(await installer(), true);
     const installed = fs.readFileSync(service, 'utf8');
     const stripHelpers = (text, block) => text.replace(block, '').replace(/\n{2,}/g, '\n');
+    // DNS 兼容段在安装时会被整体升级并改写 controller 调用，比较周边时两边都先归一化。
+    const stripDnsCompat = (text) => text
+      .replace(/^f50_disable_unsupported_ipv6_dns_hijack\(\) \{[\s\S]*?^# KANO_IPV6_DNS_SPLIT=\d+$/gm, '')
+      .replace(/f50_run_controller "\$@"/g, '"$binary" "$@"')
+      .replace(/\n{2,}/g, '\n');
     assert.ok(installed.includes(functions), 'installed preservation helpers match the source');
-    assert.equal(stripHelpers(installed, functions), stripHelpers(packaged, packageFunctions), 'all surrounding service functions and calls remain intact');
+    assert.equal(stripDnsCompat(stripHelpers(installed, functions)), stripDnsCompat(stripHelpers(packaged, packageFunctions)), 'all surrounding service functions and calls remain intact');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
     const currentVersion = (functions.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];

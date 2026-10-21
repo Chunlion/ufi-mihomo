@@ -1157,6 +1157,9 @@ const rotateClashLogCmd = () => `if [ -f '/data/clash/Proxy/Clash.log' ]; then
   case "$kano_log_size" in ''|*[!0-9]*) ;; *) [ "$kano_log_size" -gt 5242880 ] && mv -f '/data/clash/Proxy/Clash.log' '/data/clash/Proxy/Clash.log.1' 2>/dev/null || true ;; esac
 fi
 `;
+const dataSpaceGuardCmd = (onLow = 'exit 1') => `kano_data_avail_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
+case "$kano_data_avail_kb" in ''|*[!0-9]*) ;; *) [ "$kano_data_avail_kb" -ge 51200 ] || { ${onLow}; } ;; esac
+`;
 function buildF50StartScript(action) {
   if (!['start', 'restart'].includes(action)) throw new Error('invalid_start_action');
   return rotateClashLogCmd() + buildF50MaintenanceFunctions('start') + '\nf50_start_service ' + shellQuote(action) + ' 85\n';
@@ -2289,7 +2292,7 @@ LOCKED=1
 export F50_INSTALL_TRANSACTION="$F50_WORK"
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
-${rotateClashLogCmd()}
+${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
 command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
 # No fixed ZIP hash, resource list or template/UI fingerprints.
@@ -3604,66 +3607,66 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
-    manual_source_invalid:'手动订阅链接无效',
-    manual_source_limit:'手动订阅最多保存 100 条',
-    manual_sources_unreadable:'无法读取手动订阅；配置未更新',
-    manual_sources_changed:'手动订阅已变更；请重新同步',
-    manual_provider_update_failed:'手动订阅下载失败',
-    manual_provider_empty:'手动订阅未提供可用节点',
-    invalid_gist_url:'Gist 链接无效；请填写完整的 Raw 下载地址',
-    invalid_gist_path:'Gist Raw 链接路径不正确',
-    invalid_gist_revision:'Gist 版本号无效',
-    invalid_gist_filename:'Gist 链接必须指向 .age 加密文件',
-    invalid_age_identity:'age 私钥格式不正确',
-    age_identity_missing:'请先填写 age 私钥',
-    http_404:'Gist 文件不存在或无法访问',
-    http_403:'Gist 访问被拒绝',
-    download_timeout:'Gist 下载超时；请重试',
-    download_transport_failed:'Gist 下载失败；请检查设备网络',
-    yaml_runtime_not_ready:'操作失败：组件未就绪；请在组件管理中重新导入配套完整组件包。',
-    no_transaction_pending:'没有待恢复的同步事务',
-    components_missing:'当前组件版本不支持 Gist 同步；请在组件管理中更新',
-    base_components_missing:'原组件缺失；请在组件管理中更新完整组件包',
-    component_version_mismatch:'Gist 组件与页面版本不匹配；请更新配套 JS 与完整组件包',
-    component_not_executable:'Gist 程序无法执行；请在组件管理中重新导入完整组件包',
-    device_execution_failed:'设备端执行失败；请检查组件架构、权限与设备状态',
-    response_format_invalid:'设备返回数据格式不正确；请刷新状态，若持续出现请更新配套 JS 与组件',
-    operation_timeout:'操作失败：设备响应超时；请先恢复同步事务，再重试',
-    device_state_unknown:'操作失败：无法读取设备状态；请检查连接后重试',
-    secure_transport_unavailable:'当前宿主缺少加密能力，私钥未传输；请更新宿主',
-    request_encryption_failed:'同步请求加密失败；未发送明文私钥',
-    request_key_expired:'一次性请求密钥已过期；请刷新状态后重试',
-    sealed_request_invalid:'加密请求校验未通过；操作未执行',
-    root_required:'设备未授予 root 执行权限',
-    too_many_tasks:'同步任务正在运行；请等待完成，或在高级维护中取消任务',
-    timeout:'操作失败：设备响应超时；请先恢复同步事务，再重试',
+    manual_source_invalid:'手动订阅链接无效。',
+    manual_source_limit:'手动订阅最多保存 100 条。',
+    manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
+    manual_sources_changed:'手动订阅已变更，请重新同步。',
+    manual_provider_update_failed:'手动订阅下载失败。',
+    manual_provider_empty:'手动订阅没有可用节点。',
+    invalid_gist_url:'Gist 链接无效，请填写完整的 Raw 下载地址。',
+    invalid_gist_path:'Gist Raw 链接路径不正确。',
+    invalid_gist_revision:'Gist 版本号无效。',
+    invalid_gist_filename:'Gist 链接应指向 .age 加密文件。',
+    invalid_age_identity:'age 私钥格式不正确。',
+    age_identity_missing:'请先填写 age 私钥。',
+    http_404:'Gist 文件不存在或无法访问。',
+    http_403:'Gist 访问被拒绝。',
+    download_timeout:'Gist 下载超时，请重试。',
+    download_transport_failed:'Gist 下载失败，请检查网络。',
+    yaml_runtime_not_ready:'操作失败：组件未就绪，请在组件管理中重新导入配套完整组件包。',
+    no_transaction_pending:'没有待恢复的同步事务。',
+    components_missing:'当前完整组件版本不支持 Gist 同步，请在组件管理中更新。',
+    base_components_missing:'原组件缺失，请在组件管理中更新完整组件包。',
+    component_version_mismatch:'Gist 组件与页面版本不匹配，请更新配套 JS 和完整组件包。',
+    component_not_executable:'Gist 程序无法执行，请在组件管理中重新导入完整组件包。',
+    device_execution_failed:'设备端执行失败，请检查组件架构、权限和设备状态。',
+    response_format_invalid:'设备返回数据格式不正确，请刷新状态；持续出现时更新配套 JS 和组件。',
+    operation_timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
+    device_state_unknown:'操作失败：设备状态读取失败，请检查连接后重试。',
+    secure_transport_unavailable:'当前宿主缺少加密能力，未传输私钥；请更新宿主。',
+    request_encryption_failed:'同步请求加密失败，未发送明文私钥。',
+    request_key_expired:'一次性请求密钥已过期，请刷新状态后重试。',
+    sealed_request_invalid:'加密请求校验失败，未执行操作。',
+    root_required:'设备未授予 root 执行权限。',
+    too_many_tasks:'同步任务正在运行，请等待或在高级维护中取消任务。',
+    timeout:'操作失败：设备响应超时，请恢复同步事务后重试。',
     idle:'等待同步',
 
-    test_passed:'下载、解密与最终配置校验均通过；尚未应用',
-    settings_saved:'设置已保存；配置尚未应用',
+    test_passed:'\u4e0b\u8f7d\u3001\u89e3\u5bc6\u548c\u6700\u7ec8\u914d\u7f6e\u6821\u9a8c\u901a\u8fc7\uff1b\u672a\u5e94\u7528',
+    settings_saved:'\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff1b\u672a\u5e94\u7528\u914d\u7f6e',
     up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
-    saved_stopped:'配置已保存；核心保持停止，配置未加载',
+    saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
-    source_changed:'同步源已更换；旧任务未提交',
+    source_changed:'\u540c\u6b65\u6e90\u5df2\u66f4\u6362\uff0c\u65e7\u4efb\u52a1\u672a\u63d0\u4ea4',
     settings_changed:'\u8bbe\u7f6e\u5df2\u88ab\u5176\u4ed6\u9875\u9762\u66f4\u6539\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u8868\u5355',
-    operation_busy:'设备正在执行其他操作；本次未抢占设备租约',
-    blocked_dns_address:'DNS 返回内网或 Fake-IP 地址，已拒绝下载；请让 Gist 域名使用真实公网 DNS',
-    dns_failed:'Gist 域名解析失败；请检查设备 DNS 与网络',
-    age_unavailable:'age 无法执行；请在组件管理中更新组件包',
+    operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
+    blocked_dns_address:'DNS 返回了内网或 Fake-IP 地址，已拒绝下载。请让 Gist 域名使用真实公网 DNS。',
+    dns_failed:'Gist 域名解析失败，请检查设备 DNS 和网络。',
+    age_unavailable:'age 无法执行，请在组件管理中更新',
     age_decrypt_failed:'age \u89e3\u5bc6\u5931\u8d25\uff1b\u8bf7\u68c0\u67e5\u79c1\u94a5\u4e0e\u5bc6\u6587',
-    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”确认最终状态',
-    sync_settings_deleted:'同步设置与私钥已删除；运行配置未删除',
+    committed_pending_finalize:'配置已提交，但事务收尾失败；请执行“恢复同步事务”。',
+    sync_settings_deleted:'\u540c\u6b65\u8bbe\u7f6e\u548c\u79c1\u94a5\u5df2\u5220\u9664\uff1b\u8fd0\u884c\u914d\u7f6e\u672a\u5220\u9664',
     auto_disabled:'\u81ea\u52a8\u540c\u6b65\u5df2\u5173\u95ed',
-    task_receipt_missing:'操作失败：无法读取任务回执；请执行“恢复同步事务”后重试',
-    auto_paused_core_stopped:'核心已停止；自动应用已暂停'
+    task_receipt_missing:'操作失败：任务回执读取失败，请执行“恢复同步事务”。',
+    auto_paused_core_stopped:'\u6838\u5fc3\u5df2\u505c\u6b62\uff0c\u81ea\u52a8\u5e94\u7528\u6682\u505c'
   };
   const f50GistMessage = value => F50_GIST_MESSAGES[value] || (value ? '操作失败：' + String(value) : '操作失败：设备未返回结果');
 
   async function f50GistLeave() {
     const leave=async()=>{
       const read=await readYamlObject(CLASH_CONFIG,'config.yaml');
-      if (!read.ok) throw Error(read.message || '无法读取配置');
+      if (!read.ok) throw Error(read.message || '读取配置失败');
       const paused=await runShellWithRoot(`set -e
 settings=/data/clash/Tools/gist-sync/settings.conf
 if [ -f "$settings" ]; then
@@ -3686,9 +3689,9 @@ fi`,8000);
     const st = await f50GistExec(['status'], 15000);
     if (st.ok && st.manualSources === 1) return st.gistActive ? st : null;
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!read.ok) throw Error(read.message || '无法读取配置');
+    if (!read.ok) throw Error(read.message || '读取配置失败');
     if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
-      if (window.confirm('Gist 同步不可用。是否退出 Gist 管理并保留当前配置，继续使用普通订阅？')) {
+      if (window.confirm('Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？')) {
         if (await f50GistLeave()) return null;
       }
       throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
@@ -3713,7 +3716,7 @@ fi`,8000);
       if (job.status === 'finished') {
         invalidateStatusSnapshot();
         const ok = job.result?.ok === true;
-        const message = ok ? 'Gist 配置已更新；手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
+        const message = ok ? 'Gist 配置已更新，手动订阅已合并' : f50GistMessage(job.result?.code)+(job.result?.warning?'\n'+f50GistMessage(job.result.warning):'');
         operationFinish(ok,message);
         createToast(safeTextToHtml(message),ok?'green':'red');
         return ok;
@@ -3723,7 +3726,7 @@ fi`,8000);
       }
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
-    createToast('同步失败：等待任务完成超时；请在 Gist 设置中执行“恢复同步事务”','red');
+    createToast('同步失败：等待任务完成超时，请在 Gist 页面恢复同步事务。','red');
     return false;
   }
   // Accept pasted Raw links with invisible edge characters, without relaxing the host restriction.
@@ -4043,6 +4046,37 @@ exit "$kano_task_rc"`;
     }
   };
 
+  const isPrivateOrReservedIpv4 = (hostname = '') => {
+    let normalized = String(hostname || '').trim().toLowerCase();
+    if (/^(0x[0-9a-f]+|[0-9]+)$/.test(normalized)) {
+      const numeric = normalized.startsWith('0x') ? parseInt(normalized, 16) : Number(normalized);
+      if (!Number.isSafeInteger(numeric) || numeric < 0 || numeric > 4294967295) return false;
+      normalized = [(numeric >>> 24) & 255, (numeric >>> 16) & 255, (numeric >>> 8) & 255, numeric & 255].join('.');
+    }
+    const parts = normalized.split('.');
+    if (parts.length != 4 || parts.some((part) => !/^\d+$/.test(part) || Number(part) > 255)) return false;
+    const [a, b, c] = parts.map(Number);
+    return a == 0 || a == 10 || a == 127 || a >= 224
+      || (a == 100 && b >= 64 && b <= 127)
+      || (a == 169 && b == 254)
+      || (a == 172 && b >= 16 && b <= 31)
+      || (a == 192 && b == 0 && (c == 0 || c == 2))
+      || (a == 192 && b == 168)
+      || (a == 198 && (b == 18 || b == 19))
+      || (a == 198 && b == 51 && c == 100)
+      || (a == 203 && b == 0 && c == 113);
+  };
+
+  const isPrivateOrReservedIpv6 = (hostname = '') => {
+    const value = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+    if (!value || !/^[0-9a-f:.]+$/.test(value)) return true;
+    if (value.includes('.')) return true;
+    return value == '::' || value == '::1'
+      || value.startsWith('fc') || value.startsWith('fd')
+      || /^fe[89ab]/.test(value) || value.startsWith('ff')
+      || value.startsWith('2001:db8:');
+  };
+
   const validateLocalSubscriptionUrl = (value = '') => {
     let url;
     try {
@@ -4059,6 +4093,17 @@ exit "$kano_task_rc"`;
     const hostname = String(url.hostname || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
     if (!hostname) {
       return { ok: false, message: '订阅地址缺少主机名' };
+    }
+    if (
+      hostname == 'localhost'
+      || hostname.endsWith('.localhost')
+      || hostname.endsWith('.local')
+      || hostname.endsWith('.lan')
+      || hostname.endsWith('.home.arpa')
+      || isPrivateOrReservedIpv4(hostname)
+      || (hostname.includes(':') && isPrivateOrReservedIpv6(hostname))
+    ) {
+      return { ok: false, message: '本地转换拒绝回环、私网或保留地址' };
     }
     return {
       ok: true,
@@ -4427,6 +4472,7 @@ exit "$kano_task_rc"`;
         LOG=${shellQuote(DOWNLOAD_LOG)}
         ${getCurlBinCmd()}
         command -v unzip >/dev/null 2>&1 || { echo "ARCHIVE_VERIFY_FAILED=unzip_missing"; exit 1; }
+        ${dataSpaceGuardCmd('echo "ARCHIVE_SPACE_LOW=$kano_data_avail_kb"; exit 1')}
         printf 'TRY_PACKAGE_URL=%s\\n' ${shellQuote(packageUrl)} > "$LOG" || exit 1
         (
         NEW="$ZIP.new.$$"
@@ -12020,16 +12066,16 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           revision=saved.revision || 0; settingsLoaded=true;
           pendingKey='';q('key').value='';
         }
-        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '留空则保留已保存的私钥' : 'AGE-SECRET-KEY-1...';
-        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥；留空表示不更换':'';
+        q('key').placeholder=pendingKey ? '\u5df2\u8f93\u5165\u65b0\u79c1\u94a5\uff0c\u5f85\u4fdd\u5b58' : st.identitySet ? '\u7559\u7a7a\u4fdd\u7559\u5df2\u4fdd\u5b58\u7684\u79c1\u94a5' : 'AGE-SECRET-KEY-1...';
+        q('key_hint').textContent=pendingKey?'新私钥待保存':st.identitySet?'已保存私钥，留空表示不更换':'';
         currentFingerprint=st.currentFingerprint || null;
         const state=st.state?.generation===st.settings?.generation?st.state:null;
         const last=state?.last;
         const recent=(st.jobs||[])[0];
         if(!foreground && recent && ['queued','running'].includes(recent.status)) currentJob=recent.id;
         const syncMode=st.settings.auto
-          ? (st.schedulerRunning ? '自动同步已开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步已开启，设备调度未运行')
-          : '自动同步已关闭';
+          ? (st.schedulerRunning ? '自动同步开启 · 每 '+st.settings.intervalHours+' 小时' : '自动同步开启 · 设备调度未运行')
+          : '自动同步关闭';
         const lastTime=state?.lastSuccess ? '上次同步 '+fmt(state.lastSuccess) : '尚未同步';
         const errorCode=st.fingerprintError || st.stateError || (!st.ageReady ? 'age_unavailable' : '') || (last && !last.ok ? last.code : '');
         q('status').textContent=syncMode+' · '+lastTime+(st.activationPending?'\n存在待恢复的同步任务':'')+(errorCode?'\n'+f50GistMessage(errorCode):'');
@@ -12053,17 +12099,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               if(out?.settingsSaved || action==='delete')await refresh(true);else await refresh(false);
               break;
             }
-            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试');break;}
+            if(job.status==='completion_unknown' || job.ok===false){result(f50GistMessage(job.result?.code || job.code)+'\n请执行“恢复同步事务”后重试。');break;}
             await new Promise(resolve=>setTimeout(resolve,2000));
           }
-        }catch(_){result('操作失败：设备请求中断；请检查连接后重试');}
+        }catch(_){result('操作失败：设备请求中断，请检查连接后重试。');}
         finally{if(opened)busy(false);}
       };
       const formAction=async action=>{
-        if(!settingsLoaded){result('无法读取 Gist 设置；请稍后重试');return;}
+        if(!settingsLoaded){result('无法读取设置，请稍后重试。');return;}
         const url=f50GistCleanUrl(q('url').value);
         if(!f50GistValidUrl(url)){
-          result(url?'请填写完整的 Gist Raw .age 下载链接':'请先填写 Gist Raw 链接');
+          result(url?'请填写完整的 Gist Raw .age 下载链接。':'请先填写 Gist Raw 链接。');
           return;
         }
         q('url').value=url;
@@ -12073,18 +12119,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
       q('test').onclick=()=>formAction('test');
       q('save').onclick=()=>formAction('save');
-      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置');
-      q('refresh').onclick=()=>{if(window.confirm('重新读取已保存的设置？当前未保存的输入将丢失。'))return refresh(true);};
+      q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
+      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
       q('leave').onclick=async()=>{
-        if(!window.confirm('退出 Gist 管理并关闭自动同步？当前配置与已保存私钥将保留。'))return;
+        if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
         busy(true);
-        try {await f50GistLeave();result('已退出 Gist 管理；可继续使用普通订阅设置');await refresh(true);}
+        try {await f50GistLeave();result('已退出 Gist 管理，可使用普通订阅设置。');await refresh(true);}
         catch(error){result(error.message || '退出 Gist 管理失败');}
         finally{if(opened)busy(false);}
       };
-      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'已请求取消；最终结果以任务回执为准':f50GistMessage(r.code));await refresh(false);}};
+      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
-      q('delete').onclick=()=>{if(window.confirm('删除 Gist 链接、私钥与同步记录，并停止自动同步？当前 config.yaml 不会被删除。'))return launch('delete');};
+      q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
       const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
       observer.observe(document.body,{childList:true,subtree:true});

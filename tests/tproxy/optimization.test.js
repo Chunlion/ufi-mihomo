@@ -92,34 +92,8 @@ for (const [saved, types, expected] of [
   });
 }
 
-for (const when of ['before', 'during', 'wait']) {
-  test(`cancellation ${when} prevents further shell commands`, async () => {
-    const operation = { token: { cancelled: when === 'before' } };
-    let calls = 0;
-    const cancel = () => Object.assign(new Error('cancelled'), { name: 'OperationCancelled' });
-    const retry = run(slice('const runShellWithRootRetry', 'let binarySnapshotCache') + 'runShellWithRootRetry', {
-      activeCriticalOperation: operation, operationCancelled: cancel,
-      runShellWithRoot: async () => { calls++; if (when === 'during') throw cancel(); return { success: false, content: 'request timeout' }; },
-      wait: async () => { operation.token.cancelled = true; },
-    });
-    // The transport owns cancellation; this wrapper delegates without retrying.
-    if (when === 'during') await assert.rejects(retry('test'), { name: 'OperationCancelled' });
-    else assert.equal((await retry('test')).success, false);
-    assert.equal(calls, 1);
-  });
-}
-
-test('uncertain transport failures are never automatically retried', async () => {
-  let calls = 0; const waits = [];
-  const retry = run(slice('const runShellWithRootRetry', 'let binarySnapshotCache') + 'runShellWithRootRetry', {
-    activeCriticalOperation: null,
-    runShellWithRoot: async () => { calls++; throw new Error('request timeout'); },
-    wait: async ms => waits.push(ms),
-  });
-  await assert.rejects(retry('test'), /request timeout/);
-  assert.equal(calls, 1);
-  assert.deepEqual(waits, []);
-});
+// runShellWithRootRetry 已在重构中移除：取消与租约语义改由 runShellWithRoot 自身承担，
+// 等价覆盖见 tests/tproxy/reliability.test.js 的 lease / cancel 用例。
 
 const yq = process.env.F50_TEST_YQ;
 test('curl selection falls back when a bundled executable cannot run', () => {

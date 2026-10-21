@@ -59,9 +59,16 @@ const subContext = {
   safeTextToHtml: String, escapeHtml: String, sanitizeSubscriptionSecrets: String,
 };
 function subscriptionApi(extra = '', context = {}) {
+  const shell = context.runShellWithRoot || (async () => ({ success: true, content: '' }));
   return run(slice('const providerNameFor', 'const readConfigSource')
     + slice('const normalizeSubConvertModeValue', 'const fileSnapshotHelpersCmd')
-    + extra, { ...subContext, shellQuote: quote, ...context });
+    + extra, { ...subContext, shellQuote: quote,
+      // 读操作在 1c71f86 后改走 hostRunShellWithRoot，沙箱补等价入口与回执解析。
+      hostRunShellWithRoot: shell,
+      f50ShellReply: response => ({ ...(response && typeof response === 'object' ? response : {}),
+        success: response?.success !== false,
+        content: typeof response?.content === 'string' ? response.content : '' }),
+      ...context });
 }
 function temp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'f50-optimization-')); }
 function write(dir, relative, text) {

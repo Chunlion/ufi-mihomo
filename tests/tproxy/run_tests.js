@@ -75,7 +75,7 @@ console.log('--- Zashboard identity and routing ---');
 check(source.includes("const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip'"), '面板更新源固定为 Zashboard');
 check(source.includes("const ZASHBOARD_UI_DIR = 'WebUI/zashboard'"), '面板目录固定为 WebUI/zashboard');
 check(source.includes("profile['unified-delay'] = true"), '固定运行配置启用 unified-delay');
-check(source.includes("delete profile['external-ui-name']"), '固定运行配置删除 external-ui-name');
+check(source.includes("delete config['external-ui-name']"), '固定运行配置删除 external-ui-name');
 check(source.includes("/ui/?_f50=${Date.now()}#/"), '面板缓存参数位于 Hash 路由之前');
 check(!source.includes('/ui/#/?t='), '旧的无效缓存参数路径已移除');
 check(!source.includes('/settings?section=generalSettings'), '没有 MetaCubeXD settings 路由');

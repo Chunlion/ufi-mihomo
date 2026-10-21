@@ -7318,6 +7318,13 @@ KANO_WRITE_CHECK_EOF
   const results=await mapWithConcurrency(names,2,async name=>{
     if (!pid) return {type:'proxy-provider',name,ok:false,attempts:0,proxyCount:null,cacheAvailable:false,errorType:'not_run_core_stopped',message:'核心未运行',connectivity:'unverified'};
     const path='/providers/proxies/'+encodeURIComponent(name);
+    // 更新前先读一次：否则「下载成功但节点没变」和「真的换了节点」在结果里长得一样。
+    const before=await callMihomoApi(path,'GET',null,info,5,{corePid:pid});
+    let previousCount=null;
+    if (before.success) {
+      try { const value=JSON.parse(before.responseText || ''); if (Array.isArray(value.proxies)) previousCount=value.proxies.length; }
+      catch (_) {}
+    }
     const updated=await callMihomoApi(path,'PUT',null,info,5,{corePid:pid});
     // An update error says nothing about the still-loaded cache. Observe it independently.
     const snap=await callMihomoApi(path,'GET',null,info,5,{corePid:pid});
@@ -7333,7 +7340,9 @@ KANO_WRITE_CHECK_EOF
     const upstream390=http && (updated.statusCode===390 || /(?:HTTP|status(?: code)?)\s*[:=]?\s*390\b/i.test(rawMessage));
     const errorType=ok ? '' : upstream390 ? 'upstream_390' : !updated.success ? (updated.statusCode===404 ? 'provider_missing' : updated.errorType || 'provider_update_failed')
       : !snap.success ? snap.errorType || 'provider_snapshot_failed' : parseFailed ? 'provider_parse_failed' : 'provider_empty';
-    return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,cacheAvailable:count>0,
+    return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,previousProxyCount:previousCount,
+      unchanged:previousCount!==null && count===previousCount,
+      cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
       message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但未返回可用节点' : '无法读取节点加载状态')};
@@ -10646,7 +10655,11 @@ EOF_F50_RESTORE_MEMBERS
       const providerRows = providerResult.total > 0
         ? providerResult.providers.map((item) => {
           const cacheText = item.ok
-            ? (Number.isInteger(item.proxyCount) ? `当前节点：${item.proxyCount} 个` : '节点缓存：已更新')
+            ? (Number.isInteger(item.proxyCount)
+              ? (Number.isInteger(item.previousProxyCount)
+                ? `更新前 ${item.previousProxyCount} 个 → 当前 ${item.proxyCount} 个${item.unchanged ? '（节点内容与更新前一致）' : ''}`
+                : `当前节点：${item.proxyCount} 个`)
+              : '节点缓存：已更新')
             : item.cacheAvailable
               ? (Number.isInteger(item.proxyCount)
                 ? `本次更新失败；继续使用缓存的 ${item.proxyCount} 个节点`
@@ -10834,7 +10847,17 @@ EOF_F50_RESTORE_MEMBERS
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
     const definitions = read.value['proxy-providers'] || {};
-    const localSources = normalizeSubSourceList(cleanSources.length ? cleanSources : await readCurrentSubSources()).filter(source =>
+    const storedSources = cleanSources.length ? cleanSources : await readCurrentSubSources();
+    // 自定义配置的订阅地址以配置本身为准：订阅设置里另存的新地址此时不会生效。
+    // 不能默默按旧地址更新完还报成功——那就是「假更新」。
+    const addressDrift = normalizeSubSourceList(storedSources).filter((source) => {
+      const def = definitions[source.name];
+      return def && def.type === 'http' && String(def.url || '') !== source.url;
+    });
+    if (addressDrift.length) {
+      createToast(`订阅设置中的地址与当前自定义配置不一致（${safeTextToHtml(addressDrift.map((source) => source.name).join('、'))}）；本次仍按配置内的地址更新。<br>如需改用新地址，请在订阅设置中勾选“应用到自定义配置”后重新保存。`, 'yellow', 12000);
+    }
+    const localSources = normalizeSubSourceList(storedSources).filter(source =>
       definitions[source.name]?.type === 'file' && definitions[source.name]?.path === `./proxies/${source.name}.yaml`);
     const converted = localSources.length ? await convertSubscriptionsLocally(localSources, { preserveNames: true }) : null;
     if (converted && (converted.failed || !converted.ok)) {
@@ -10859,6 +10882,16 @@ EOF_F50_RESTORE_MEMBERS
   const modeReady = cleanSources.every(s => definitions[s.name]?.type === expectedType);
   if (!modeReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
   if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {
+    // 配置里的地址和订阅设置不一致时，直接更新只会重复下载旧地址并报成功。
+    // 与类型不一致同样处理：先按当前订阅设置重建配置，再真正更新。
+    const addressDrift = cleanSources.filter((source) => {
+      const def = definitions[source.name];
+      return def && def.type === 'http' && String(def.url || '') !== source.url;
+    });
+    if (addressDrift.length) {
+      createToast('订阅地址已变化；正在按新地址重建配置…', 'yellow', 6000);
+      return saveSubSources(await readCurrentSubSources({ includeDisabled: true }), cleanMode, cleanConvertMode, { applyToCustom: true });
+    }
     const updated = await forceUpdateProvidersFromConfig({ showToast: false, config: read.value });
     if (providerUpdateNeedsLocalFallback(updated)) {
       return (await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' })).ok;

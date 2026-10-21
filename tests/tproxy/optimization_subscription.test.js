@@ -40,7 +40,7 @@ for (const mode of ['provider', 'local']) {
       const calls = [];
       const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
         ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
-        readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(sources.map(s => [s.name, { type: ready ? (mode === 'local' ? 'file' : 'http') : (mode === 'local' ? 'http' : 'file') }])) } }),
+        readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(sources.map(s => [s.name, { type: ready ? (mode === 'local' ? 'file' : 'http') : (mode === 'local' ? 'http' : 'file'), ...(ready && mode === 'provider' ? { url: s.url } : {}) }])) } }),
         readCurrentSubSources: async () => sources,
         saveSubSources: async (...args) => { calls.push(['save', ...args]); return true; },
         forceUpdateProvidersFromConfig: async () => { calls.push(['http']); return result(); },
@@ -149,6 +149,61 @@ for (const configSource of ['uploaded_config', 'template.yaml']) {
   });
 }
 
+test('a changed subscription address rebuilds the config instead of re-downloading the old one', async () => {
+  // 配置里还是旧地址时直接更新，只会重复下载旧地址并报成功（假更新）。
+  const calls = [];
+  const config = { 'proxy-providers': { Provider1: { type: 'http', url: 'https://old.example/sub' } } };
+  const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
+    readYamlObject: async () => ({ ok: true, value: config }),
+    readCurrentSubSources: async () => sources,
+    saveSubSources: async (...args) => { calls.push(['save', args[1]]); return true; },
+    forceUpdateProvidersFromConfig: async () => { calls.push(['http']); return result(); },
+    convertSubscriptionsLocally: async () => { calls.push(['convert']); return result(); },
+    providerUpdateNeedsLocalFallback: () => false,
+    showSubscriptionUpdateSelfCheck: async () => true, getCorePid: async () => '123',
+    createToast: () => {},
+  });
+  assert.equal(await update(sources, 'template', 'provider'), true);
+  assert.deepEqual(calls, [['save', 'template']], 'address drift must rebuild before updating');
+});
+
+test('an unchanged address still updates the providers directly', async () => {
+  const calls = [];
+  const config = { 'proxy-providers': { Provider1: { type: 'http', url: sources[0].url } } };
+  const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
+    readYamlObject: async () => ({ ok: true, value: config }),
+    readCurrentSubSources: async () => sources.slice(0, 1),
+    saveSubSources: async () => { calls.push(['save']); return true; },
+    forceUpdateProvidersFromConfig: async () => { calls.push(['http']); return result(); },
+    convertSubscriptionsLocally: async () => { calls.push(['convert']); return result(); },
+    providerUpdateNeedsLocalFallback: () => false,
+    showSubscriptionUpdateSelfCheck: async () => true, getCorePid: async () => '123',
+    createToast: () => {},
+  });
+  assert.equal(await update(sources.slice(0, 1), 'template', 'provider'), true);
+  assert.deepEqual(calls, [['http']], 'matching address updates without a rebuild');
+});
+
+test('a custom configuration update says the saved address is not the one in use', async () => {
+  const toasts = [], calls = [];
+  const config = { 'proxy-providers': { Provider1: { type: 'http', url: 'https://old.example/sub' } } };
+  const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'uploaded_config',
+    readYamlObject: async () => ({ ok: true, value: config }),
+    readCurrentSubSources: async () => sources.slice(0, 1),
+    forceUpdateProvidersFromConfig: async () => { calls.push('load'); return result(); },
+    saveSubSources: async () => { calls.push('save'); return true; },
+    createToast: (message, color) => toasts.push({ message, color }),
+  });
+  assert.equal(await update(sources.slice(0, 1), 'template', 'provider'), true);
+  assert.deepEqual(calls, ['load'], 'the running configuration still decides which address is downloaded');
+  assert.equal(toasts[0].color, 'yellow');
+  assert.match(toasts[0].message, /不一致/);
+  assert.match(toasts[0].message, /应用到自定义配置/);
+});
+
 test('template local refresh reports the provider and both mismatched counts', async () => {
   const toasts = [];
   const config = { 'proxy-providers': { Provider1: { type: 'file' } }, rules: ['MATCH,DIRECT'], dns: { enable: false } };
@@ -212,8 +267,14 @@ for (const status of [200, 390, 500]) {
     const updated = await refresh({ config: { 'proxy-providers': { Provider1: { type: 'http' } } } });
     assert.equal(updated.failed, status === 200 ? 0 : 1);
     assert.equal(updated.via, 'http');
-    assert.equal(calls[0][1], 'PUT');
-    if (status === 200) assert.equal(calls[1][1], 'GET');
+    // 更新前先读一次快照，否则「下载成功但节点没变」在结果里看不出来。
+    assert.equal(calls[0][1], 'GET');
+    assert.equal(calls[1][1], 'PUT');
+    if (status === 200) {
+      assert.equal(calls[2][1], 'GET');
+      assert.equal(updated.providers[0].previousProxyCount, 1);
+      assert.equal(updated.providers[0].unchanged, true);
+    }
     if (status === 390) assert.equal(updated.providers[0].errorType, 'upstream_390');
   });
 }

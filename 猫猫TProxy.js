@@ -593,9 +593,9 @@ function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
   }
   return {core:pid?'进程存在':'未检测到核心进程',
     api:api.success?'可访问':'访问失败',
-    takeover:'未做数据面实测（进程与 API 状态不能替代）',
     panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'访问失败',providers,
-    connectivity:'未测试（已加载节点不代表可连通）'};
+    // 数据面接管与代理连通性无法从进程/API 状态推出，合并成一行说明，不再各占一行。
+    unverified:'数据面接管、代理连通性'};
 }
 
 const F50_TRUSTED_SERVICE_HASHES = ["5cff3c10fc2f556fa1ac7c5ba204ab2168b143da1ffcb6c82a444700c5a7dd25","08a32d4aed30e4dceb32cc8bc3d8df33d2ae70e0e9b203f816db7fdf71edf3ab","84bf02d2dc8f6e391415a4b0c2f59c462b2fa974711dd795eb6b69005405e1ec","8ac8749f149c3d5aae7e49ecd192ae8894e2a3a48af8ed56086fc16c0e473dfc"];
@@ -8364,38 +8364,66 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         runShellWithRoot(buildF50ShellBase()+buildF50PanelHelpers()+'\nf50_verify_zashboard_endpoint',12000)), { success: false, content: '' }),
     ]);
     const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
+    // 主表只给结论，逐字段明细收进折叠区：默认 9 行，不再平铺 23 行。
+    const runStateLabels = {
+      healthy: '运行正常', installed_stopped: '已安装未运行', running_api_unavailable: '运行中但 API 不可用',
+      not_installed: '未安装', damaged: '文件缺失或不可执行',
+    };
+    const bootLabels = { disabled: '未配置', direct: '原生自启', managed: '托管自启', manager_damaged: '自启配置损坏', incomplete: '自启不完整' };
+    const modeLabel = !policyState.options.traffic_mode
+      ? '模式未读取'
+      : (policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '接管已关闭' : 'TProxy'));
+    const ipv6Label = !policyState.options.ipv6 ? 'IPv6 未读取' : (policyState.options.ipv6 == 'on' ? 'IPv6 开' : 'IPv6 关');
+    const configLabel = configExists ? `config.yaml ${(Number(configSize) / 1024).toFixed(1)} KB` : 'config.yaml 缺失';
+    const coreLabel = !pid ? '未运行' : (proc.PROCESS_KIND == 'config_test' ? '仅配置测试进程' : '运行中');
+    const apiLabel = !pid ? '核心未运行' : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : (versionRes.message || '不可用'));
+    // 异常项集中到「总览」一行，正常时逐行比对没有意义。
+    const problems = [];
+    if (!pid) problems.push('核心未运行');
+    else {
+      if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
+      if (proc.PORT_7788 != '1') problems.push('7788 未监听');
+      if (!versionRes.success) problems.push('控制 API 不可用');
+      if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
+    }
+    if (proc.STALE_TEST_PIDS) problems.push(`遗留测试进程 ${proc.STALE_TEST_PIDS}`);
+    if (!configExists) problems.push('config.yaml 缺失');
+    if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
+    if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
+    if (!providerHealth.success) problems.push('节点来源读取失败');
+    if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
     const rows = [
-      ['核心层',health.core],['控制 API',health.api],['接管有效性',health.takeover],
-      ['Zashboard',health.panel],['节点来源加载',health.providers],['代理连通性',health.connectivity],
-      ['安装/运行状态', runtimeState.state],
-      ['预检信息', runtimeState.message || '无'],
-      ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
-      ['核心进程 PID', pid || '未运行'],
-      ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
-      ['核心命令行', proc.CMDLINE || '无'],
-      ['控制端口 7788', proc.PORT_7788 == '1' ? '已监听' : '未监听'],
-      ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
-      ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
-      ['接管模式（配置）', !policyState.options.traffic_mode ? '未读取' : (policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '已关闭' : 'TProxy'))],
-      ['IPv6', !policyState.options.ipv6 ? '未读取' : (policyState.options.ipv6 == 'on' ? '已开启' : '未开启')],
-      ['config.yaml', configExists ? `存在，${configSize || 0} bytes` : '不存在'],
-      ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
-      ['API 地址', controllerInfo.apiBase],
-      ['访问密钥', controllerInfo.secretSet ? '已读取配置' : '配置中未设置'],
-      ['API 连接', !pid
-        ? '核心未运行'
-        : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : versionRes.message || '控制 API 不可用')],
+      ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
+      ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
+      ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_7788 == '1' ? '7788 已监听' : '7788 未监听'}`],
+      ['控制 API', apiLabel],
+      ['运行配置', `${modeLabel} · ${ipv6Label} · ${configLabel}`],
+      ['Web 面板', health.panel],
+      ['节点来源', health.providers],
       ['活动连接', connectionStatus],
+      ['未实测', `${health.unverified || '数据面接管、代理连通性'}（进程与 API 状态不能替代）`],
       ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
     ];
-    const rowHtml = rows.map(([key, value]) =>
+    const detailRows = [
+      ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
+      ['API 地址', controllerInfo.apiBase],
+      ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
+      ['核心命令行', proc.CMDLINE || '无'],
+      ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
+      ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
+      ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
+      ['预检信息', runtimeState.message || '无'],
+      ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
+    ];
+    const renderRows = (list) => list.map(([key, value]) =>
       `<div style="display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12);">
         <strong>${escapeHtml(key)}</strong><span style="word-break:break-all;">${escapeHtml(value)}</span>
       </div>`).join('');
     showInfoDialog(
       'mm_status_diagnostic',
       '运行日志与诊断',
-      `${rowHtml}
+      `${renderRows(rows)}
+      <details style="margin-top:10px;"><summary>详细信息</summary>${renderRows(detailRows)}</details>
       ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
       <pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,

@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "df6c10e1c6da6eea89ee4ca992a2fb07de301082",
+  "sourceBaseCommit": "2f33e730b007d2dc19336fab4ee1621447c2168d",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,8 +9,8 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 644857,
-  "sha256": "1a66dce69fb44777db799c14faccf6afd94b457211033c01141ab4e3e2a1e6fe",
+  "final": 645734,
+  "sha256": "3359b78eb9b355723158441b9cafabff176cbc0d1d3fc53c1eb5181dc0b4cb6a",
   "functionsBefore": 732,
   "functionsAfter": 790,
   "modules": [
@@ -29,8 +29,8 @@
     {
       "module": "Service 兼容层与安装调用",
       "before": 53279,
-      "after": 56746,
-      "saved": -3467
+      "after": 57035,
+      "saved": -3756
     },
     {
       "module": "模板事务",
@@ -65,34 +65,34 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 489500,
-      "saved": -53796
+      "after": 490088,
+      "saved": -54384
     }
   ],
   "shell": [
     {
       "name": "install",
       "before": 120668,
-      "after": 95107,
-      "saved": 25561,
+      "after": 95531,
+      "saved": 25137,
       "beforeSHA256": "286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387",
-      "afterSHA256": "f5e212ac70101f3b5acc3f1972878f3435443ff2df4c3ea9a89b7ae2d9db895a"
+      "afterSHA256": "f43c3e91b696a7c402823948f050049d53cf36586ea07e770f6fdabacf31ae54"
     },
     {
       "name": "start",
       "before": 50809,
-      "after": 55448,
-      "saved": -4639,
+      "after": 55872,
+      "saved": -5063,
       "beforeSHA256": "e5c59b91de81cdf59dde3f1782d6aef52d36316a0d923edecbf1053bf3267c9b",
-      "afterSHA256": "9582b2388457514130bd3dc988a85eec51bd6623d82297a3caf7217882a7276f"
+      "afterSHA256": "afddaf12fe5346bdef51fe72d3389c1bad4b679f92e4dc021b91b64d84598f41"
     },
     {
       "name": "restart",
       "before": 50811,
-      "after": 55450,
-      "saved": -4639,
+      "after": 55874,
+      "saved": -5063,
       "beforeSHA256": "b63c1422c01ed7ec494b415221e7709a0fc435270b84463414e1a651ae7ba3b1",
-      "afterSHA256": "46cf87770fe8f66996e7f8fae5bb466837ad14cf612db21fe63974165f7de662"
+      "afterSHA256": "c7b14c2b4fde041aa4584e3e4fc47cdb6a8239a329f33953fed8bfdb4b02d222"
     },
     {
       "name": "emergency",
@@ -105,10 +105,10 @@
     {
       "name": "service",
       "before": 31265,
-      "after": 35965,
-      "saved": -4700,
+      "after": 36389,
+      "saved": -5124,
       "beforeSHA256": "85c44e130e0a527ef0ea6c0093032d75de7a09191218050245472c87482f8f69",
-      "afterSHA256": "bdd6f45b7511f32d99bed50346d5a79333f04c4199185747ec1e2ba69558267d"
+      "afterSHA256": "f1b55620117089c9cec69540259f0edfa02b408029da83a8270d941082d50ea9"
     },
     {
       "name": "http",

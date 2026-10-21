@@ -756,7 +756,12 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=18
+// 模板/生成模式以控制器重建后的配置为底，按与 JS 整形相同的受控边界恢复用户自定义项
+// （日志级别、嗅探、profile、本地代理端口与非受控 dns 子键），订阅生成的节点与规则不被反向覆盖。
+// 用户可能在设备上手改配置：非 map 的 dns/tun/sniffer/profile 一律丢弃，由控制器生成的值兜底，
+// 否则 yq 合并直接报错，会把整个启动拖成 F50_ERROR=original_config_merge_failed。
+// 注释放在 JS 侧而非生成的脚本里：设备脚本每多一行都是安装包体积。
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=19
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -774,13 +779,12 @@ f50_save_original_config() {
   export F50_ORIGINAL_CONFIG
   trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
 }
-# 模板/生成模式以控制器重建后的配置为底，按与 JS 整形相同的受控边界恢复用户自定义项
-# （日志级别、嗅探、profile、本地代理端口与非受控 dns 子键），订阅生成的节点与规则不被反向覆盖。
 f50_restore_original_config() {
   [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
   "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
     . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
     ($original."x-f50-gist-sync" == true and strenv(F50_CONFIG_SOURCE) == "uploaded_config") as $gist |
+    ($original | with_entries(select((.value | tag) == "!!map" or (.key | test("^(dns|tun|sniffer|profile)$") | not)))) as $original |
     (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])}) |
       ((select($gist) | pick(${JSON.stringify([...CONTROLLED_TOP_KEYS, 'secret', 'x-f50-profile'])})), select($gist | not))) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
@@ -941,14 +945,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=18' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=19' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15|16|17)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15|16|17|18)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }

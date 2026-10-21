@@ -238,11 +238,16 @@ for (const stage of ['tun', 'original', 'audit5', 'tun6', 'dns']) {
   test('Service candidate failure at ' + stage + ' preserves the complete original', () => {
     const dir = temp();
     try {
-      let before = service.replace('# KANO_TUN_RULE_CLEANUP=2', '# KANO_TUN_RULE_CLEANUP=1');
-      if (stage === 'original') before = before.replace(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=\d+$/m, '# KANO_ORIGINAL_CONFIG_PRESERVATION=0');
-      if (stage === 'audit5') before = before.replace('# KANO_CURL_ABSOLUTE=1', '# KANO_CURL_ABSOLUTE=0');
-      if (stage === 'tun6') before = before.replace('# KANO_TUN_IPV6_RETURN=2', '# KANO_TUN_IPV6_RETURN=1');
-      if (stage === 'dns') before = before.replace(/^# KANO_IPV6_DNS_SPLIT=\d+$/m, '# KANO_IPV6_DNS_SPLIT=0');
+      // 固件会随发布被刷新到最新标记，这里必须按固件实际值降一级，不能写死版本号。
+      const downgrade = (text, name) => text.replace(
+        new RegExp(`^# ${name}=(\\d+)$`, 'm'),
+        (_, current) => `# ${name}=${Number(current) - 1}`);
+      let before = service;
+      if (stage === 'tun') before = downgrade(before, 'KANO_TUN_RULE_CLEANUP');
+      if (stage === 'original') before = downgrade(before, 'KANO_ORIGINAL_CONFIG_PRESERVATION');
+      if (stage === 'audit5') before = downgrade(before, 'KANO_CURL_ABSOLUTE');
+      if (stage === 'tun6') before = downgrade(before, 'KANO_TUN_IPV6_RETURN');
+      if (stage === 'dns') before = downgrade(before, 'KANO_IPV6_DNS_SPLIT');
       const file = write(dir, 'Clash.Service', before);
       const fail = `awk() { for arg in "$@"; do case "$arg" in *candidate.${stage}.*.functions) echo INJECTED_STAGE=${stage} >&2; return 1;; esac; done; command awk "$@"; }\n`;
       const result = shell(fail + api.patch(quote(file)));

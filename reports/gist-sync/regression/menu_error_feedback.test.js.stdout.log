@@ -2,37 +2,37 @@ TAP version 13
 # Subtest: 状态与日志: 诊断抛错时给出提示而不是静默失败
 ok 1 - 状态与日志: 诊断抛错时给出提示而不是静默失败
   ---
-  duration_ms: 1.85908
+  duration_ms: 2.037358
   ...
 # Subtest: 订阅 User-Agent: 权限校验抛错时给出提示
 ok 2 - 订阅 User-Agent: 权限校验抛错时给出提示
   ---
-  duration_ms: 0.812899
+  duration_ms: 1.123888
   ...
 # Subtest: 订阅 User-Agent: 读取抛错时给出提示
 ok 3 - 订阅 User-Agent: 读取抛错时给出提示
   ---
-  duration_ms: 0.738961
+  duration_ms: 0.682771
   ...
 # Subtest: 配置与规则: 读取抛错时给出提示
 ok 4 - 配置与规则: 读取抛错时给出提示
   ---
-  duration_ms: 1.076204
+  duration_ms: 1.092711
   ...
 # Subtest: 网络设置: 权限校验抛错时给出提示
 ok 5 - 网络设置: 权限校验抛错时给出提示
   ---
-  duration_ms: 0.769138
+  duration_ms: 0.684901
   ...
 # Subtest: 配置文件: 权限校验抛错时给出提示
 ok 6 - 配置文件: 权限校验抛错时给出提示
   ---
-  duration_ms: 0.719001
+  duration_ms: 0.773559
   ...
 # Subtest: 权限校验失败时不弹错误提示, 保持原有静默返回
 ok 7 - 权限校验失败时不弹错误提示, 保持原有静默返回
   ---
-  duration_ms: 0.673457
+  duration_ms: 0.677776
   ...
 1..7
 # tests 7
@@ -42,4 +42,4 @@ ok 7 - 权限校验失败时不弹错误提示, 保持原有静默返回
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 108.126846
+# duration_ms 116.866544

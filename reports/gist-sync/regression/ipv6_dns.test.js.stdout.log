@@ -2,237 +2,237 @@ TAP version 13
 # Subtest: missing IPv6 NAT retains the saved flag and applies only owned IPv4 DNS rules
 ok 1 - missing IPv6 NAT retains the saved flag and applies only owned IPv4 DNS rules
   ---
-  duration_ms: 35.784164
+  duration_ms: 42.361381
   ...
 # Subtest: TUN keeps private-target DNS exemptions and pauses the device bypass list
 ok 2 - TUN keeps private-target DNS exemptions and pauses the device bypass list
   ---
-  duration_ms: 26.613118
+  duration_ms: 26.953721
   ...
 # Subtest: DNS rejects malformed tproxy address before restore / 192.168.0.1 -j ACCEPT
 ok 3 - DNS rejects malformed tproxy address before restore / 192.168.0.1 -j ACCEPT
   ---
-  duration_ms: 16.781541
+  duration_ms: 16.472386
   ...
 # Subtest: DNS rejects malformed tun address before restore / 192.168.0.1 -j ACCEPT
 ok 4 - DNS rejects malformed tun address before restore / 192.168.0.1 -j ACCEPT
   ---
-  duration_ms: 18.045134
+  duration_ms: 18.80554
   ...
 # Subtest: DNS rejects malformed tproxy address before restore / 256.1.2.3
 ok 5 - DNS rejects malformed tproxy address before restore / 256.1.2.3
   ---
-  duration_ms: 15.752504
+  duration_ms: 16.400173
   ...
 # Subtest: DNS rejects malformed tun address before restore / 256.1.2.3
 ok 6 - DNS rejects malformed tun address before restore / 256.1.2.3
   ---
-  duration_ms: 15.934127
+  duration_ms: 16.84999
   ...
 # Subtest: DNS rejects malformed tproxy address before restore / 1.2.3.4/33
 ok 7 - DNS rejects malformed tproxy address before restore / 1.2.3.4/33
   ---
-  duration_ms: 15.653305
+  duration_ms: 16.476559
   ...
 # Subtest: DNS rejects malformed tun address before restore / 1.2.3.4/33
 ok 8 - DNS rejects malformed tun address before restore / 1.2.3.4/33
   ---
-  duration_ms: 15.942827
+  duration_ms: 17.815075
   ...
 # Subtest: DNS rejects malformed tproxy address before restore / 1.2.3.4/24/0
 ok 9 - DNS rejects malformed tproxy address before restore / 1.2.3.4/24/0
   ---
-  duration_ms: 15.383451
+  duration_ms: 16.606864
   ...
 # Subtest: DNS rejects malformed tun address before restore / 1.2.3.4/24/0
 ok 10 - DNS rejects malformed tun address before restore / 1.2.3.4/24/0
   ---
-  duration_ms: 16.917872
+  duration_ms: 17.389492
   ...
 # Subtest: DNS rejects malformed tproxy address before restore / 1.2.3.4\\t-j\\tACCEPT
 ok 11 - DNS rejects malformed tproxy address before restore / 1.2.3.4\\t-j\\tACCEPT
   ---
-  duration_ms: 17.893269
+  duration_ms: 16.282574
   ...
 # Subtest: DNS rejects malformed tun address before restore / 1.2.3.4\\t-j\\tACCEPT
 ok 12 - DNS rejects malformed tun address before restore / 1.2.3.4\\t-j\\tACCEPT
   ---
-  duration_ms: 16.679982
+  duration_ms: 17.673022
   ...
 # Subtest: available IPv6 NAT follows the existing controller path
 ok 13 - available IPv6 NAT follows the existing controller path
   ---
-  duration_ms: 4.951079
+  duration_ms: 5.400197
   ...
 # Subtest: transient IPv6 NAT follows the existing controller path
 ok 14 - transient IPv6 NAT follows the existing controller path
   ---
-  duration_ms: 5.74249
+  duration_ms: 6.135431
   ...
 # Subtest: failure restores preferences and is reported: {"backendRc":23}
 ok 15 - failure restores preferences and is reported: {"backendRc":23}
   ---
-  duration_ms: 9.243048
+  duration_ms: 10.028307
   ...
 # Subtest: failure restores preferences and is reported: {"restoreRc":7}
 ok 16 - failure restores preferences and is reported: {"restoreRc":7}
   ---
-  duration_ms: 19.327019
+  duration_ms: 19.544238
   ...
 # Subtest: failure restores preferences and is reported: {"missingRule":true}
 ok 17 - failure restores preferences and is reported: {"missingRule":true}
   ---
-  duration_ms: 23.716173
+  duration_ms: 25.194707
   ...
 # Subtest: boot recovers an interrupted options transaction before invoking the controller
 ok 18 - boot recovers an interrupted options transaction before invoking the controller
   ---
-  duration_ms: 36.232832
+  duration_ms: 38.03738
   ...
 # Subtest: policy verification checks IPv4 rules without rebuilding them
 ok 19 - policy verification checks IPv4 rules without rebuilding them
   ---
-  duration_ms: 28.453371
+  duration_ms: 24.667348
   ...
 # Subtest: the settings probe preserves the requested DNS preference
 ok 20 - the settings probe preserves the requested DNS preference
   ---
-  duration_ms: 1.051122
+  duration_ms: 0.960101
   ...
 # Subtest: TUN6 validates the candidate and requests reload before rebuilding routing
 ok 21 - TUN6 validates the candidate and requests reload before rebuilding routing
   ---
-  duration_ms: 12.742006
+  duration_ms: 9.779
   ...
 # Subtest: TUN6 rejects an invalid candidate without replacing the configuration
 ok 22 - TUN6 rejects an invalid candidate without replacing the configuration
   ---
-  duration_ms: 8.274716
+  duration_ms: 8.673678
   ...
 # Subtest: TUN6 does not report readiness when rebuilt routing verification fails
 ok 23 - TUN6 does not report readiness when rebuilt routing verification fails
   ---
-  duration_ms: 7.627366
+  duration_ms: 5.535706
   ...
 # Subtest: system restores the IPv6 TUN return route after startup and policy apply
 ok 24 - system restores the IPv6 TUN return route after startup and policy apply
   ---
-  duration_ms: 18.43138
+  duration_ms: 11.305098
   ...
 # Subtest: mixed restores the IPv6 TUN return route after startup and policy apply
 ok 25 - mixed restores the IPv6 TUN return route after startup and policy apply
   ---
-  duration_ms: 17.697647
+  duration_ms: 11.441496
   ...
 # Subtest: IPv6 TUN route verification detects a missing route without repairing it
 ok 26 - IPv6 TUN route verification detects a missing route without repairing it
   ---
-  duration_ms: 6.050738
+  duration_ms: 6.140643
   ...
 # Subtest: IPv6 TUN route failures prevent readiness
 ok 27 - IPv6 TUN route failures prevent readiness
   ---
-  duration_ms: 6.012544
+  duration_ms: 9.086654
   ...
 # Subtest: IPv6 TUN route repair rejects an absent TUN address
 ok 28 - IPv6 TUN route repair rejects an absent TUN address
   ---
-  duration_ms: 4.675396
+  duration_ms: 11.894982
   ...
 # Subtest: IPv6 TUN return-route repair leaves other stacks and modes unchanged
 ok 29 - IPv6 TUN return-route repair leaves other stacks and modes unchanged
   ---
-  duration_ms: 11.467596
+  duration_ms: 10.426889
   ...
 # Subtest: mips version gate: v1.19.30
 ok 30 - mips version gate: v1.19.30
   ---
-  duration_ms: 5.340379
+  duration_ms: 5.482338
   ...
 # Subtest: mips version gate: v1.19.31
 ok 31 - mips version gate: v1.19.31
   ---
-  duration_ms: 7.890853
+  duration_ms: 8.926716
   ...
 # Subtest: mips version gate: v1.19.32
 ok 32 - mips version gate: v1.19.32
   ---
-  duration_ms: 8.295056
+  duration_ms: 8.975918
   ...
 # Subtest: mips version gate: v1.20.0
 ok 33 - mips version gate: v1.20.0
   ---
-  duration_ms: 8.389534
+  duration_ms: 9.063402
   ...
 # Subtest: mips version gate: v1.9.99
 ok 34 - mips version gate: v1.9.99
   ---
-  duration_ms: 5.053012
+  duration_ms: 5.21754
   ...
 # Subtest: mips version gate: Alpha-unknown
 ok 35 - mips version gate: Alpha-unknown
   ---
-  duration_ms: 5.425716
+  duration_ms: 5.327094
   ...
 # Subtest: explicit mixed survives the legacy controller profile
 ok 36 - explicit mixed survives the legacy controller profile
   ---
-  duration_ms: 6.970086
+  duration_ms: 6.284769
   ...
 # Subtest: explicit system survives the legacy controller profile
 ok 37 - explicit system survives the legacy controller profile
   ---
-  duration_ms: 6.341164
+  duration_ms: 6.302559
   ...
 # Subtest: explicit gvisor survives the legacy controller profile
 ok 38 - explicit gvisor survives the legacy controller profile
   ---
-  duration_ms: 6.233328
+  duration_ms: 5.97899
   ...
 # Subtest: settings reject unsupported mips before any saved-state operation
 ok 39 - settings reject unsupported mips before any saved-state operation
   ---
-  duration_ms: 1.375177
+  duration_ms: 1.410803
   ...
 # Subtest: automatic v1.19.32 IPv6=on selects mips
 ok 40 - automatic v1.19.32 IPv6=on selects mips
   ---
-  duration_ms: 9.143606
+  duration_ms: 9.352906
   ...
 # Subtest: automatic v1.19.32 IPv6=off selects mips
 ok 41 - automatic v1.19.32 IPv6=off selects mips
   ---
-  duration_ms: 9.062559
+  duration_ms: 9.348824
   ...
 # Subtest: automatic v1.19.30 IPv6=on selects gvisor
 ok 42 - automatic v1.19.30 IPv6=on selects gvisor
   ---
-  duration_ms: 9.246329
+  duration_ms: 9.369364
   ...
 # Subtest: automatic v1.19.30 IPv6=off selects mixed
 ok 43 - automatic v1.19.30 IPv6=off selects mixed
   ---
-  duration_ms: 9.094553
+  duration_ms: 8.877831
   ...
 # Subtest: automatic Alpha-unknown IPv6=on selects gvisor
 ok 44 - automatic Alpha-unknown IPv6=on selects gvisor
   ---
-  duration_ms: 9.801511
+  duration_ms: 9.182861
   ...
 # Subtest: automatic mode stops when executing the core version probe fails
 ok 45 - automatic mode stops when executing the core version probe fails
   ---
-  duration_ms: 3.938373
+  duration_ms: 3.764064
   ...
 # Subtest: automatic settings resolve mips without changing the saved preference
 ok 46 - automatic settings resolve mips without changing the saved preference
   ---
-  duration_ms: 0.713122
+  duration_ms: 0.709106
   ...
 # Subtest: settings do not treat a failed version read as an old kernel
 ok 47 - settings do not treat a failed version read as an old kernel
   ---
-  duration_ms: 0.553264
+  duration_ms: 0.563746
   ...
 1..47
 # tests 47
@@ -242,4 +242,4 @@ ok 47 - settings do not treat a failed version read as an old kernel
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 685.422871
+# duration_ms 690.934446

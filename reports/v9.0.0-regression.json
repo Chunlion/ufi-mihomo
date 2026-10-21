@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-21T11:41:19.667Z",
+  "date": "2026-10-21T12:08:46.782Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "1316d7a4668ac080ba7dec69329c5230d3139c7c",
-    "bytes": 637963,
-    "sha256": "ca2c167a94132656d87ef7a3784326dbddbd88f6b573b194785d35068b39f76c"
+    "baseCommit": "e6fa044fb7f62af6fe16512f9f93c7084b0960ec",
+    "bytes": 640517,
+    "sha256": "3b7bd97490cb8e6a8611c4809deb0b9f48d0366b2895d25573dde8aaf5b8bfe2"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 627,
+    "passed": 636,
     "failed": 0,
     "notRun": 0
   },
@@ -2705,6 +2705,55 @@
         },
         {
           "name": "service preserves original YAML after controller preparation and reloads it",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/tun_stack.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/tun_stack.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/tun_stack.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/tun_stack.test.js.stderr.log",
+      "passed": 9,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "check_tun_stack: auto + 新版内核 selected mips",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: auto + IPv4 旧内核回退 mixed",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: auto + IPv6 旧内核回退 gvisor",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: 显式 mixed 不探版本",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: 显式 mips 在旧内核上直接失败",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: 非法 stack 报错",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: 非 TUN 模式不选栈",
+          "status": "PASS"
+        },
+        {
+          "name": "prepare_tun_stack: 单独调用也能定位 CLASH_ROOT",
+          "status": "PASS"
+        },
+        {
+          "name": "finish_tun_stack: 失败阶段有独立错误码",
           "status": "PASS"
         }
       ]

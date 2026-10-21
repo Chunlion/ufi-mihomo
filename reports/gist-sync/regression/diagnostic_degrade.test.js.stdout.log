@@ -2,22 +2,22 @@ TAP version 13
 # Subtest: all probes healthy renders the diagnostic dialog
 ok 1 - all probes healthy renders the diagnostic dialog
   ---
-  duration_ms: 3.621452
+  duration_ms: 2.649664
   ...
 # Subtest: a failing probe degrades that row instead of aborting the dialog
 ok 2 - a failing probe degrades that row instead of aborting the dialog
   ---
-  duration_ms: 1.362264
+  duration_ms: 0.997907
   ...
 # Subtest: every probe failing still renders one dialog with all failures listed
 ok 3 - every probe failing still renders one dialog with all failures listed
   ---
-  duration_ms: 1.219965
+  duration_ms: 0.945106
   ...
 # Subtest: a synchronous helper throw inside the panel probe is degraded, not propagated
 ok 4 - a synchronous helper throw inside the panel probe is degraded, not propagated
   ---
-  duration_ms: 1.085257
+  duration_ms: 1.509124
   ...
 1..4
 # tests 4
@@ -27,4 +27,4 @@ ok 4 - a synchronous helper throw inside the panel probe is degraded, not propag
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 123.212129
+# duration_ms 111.191389

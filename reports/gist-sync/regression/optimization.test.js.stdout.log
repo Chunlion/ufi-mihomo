@@ -2,112 +2,112 @@ TAP version 13
 # Subtest: single-file JS and generated operation scripts are syntactically valid
 ok 1 - single-file JS and generated operation scripts are syntactically valid
   ---
-  duration_ms: 43.841829
+  duration_ms: 45.340514
   ...
 # Subtest: tproxy4: complete configuration equals original
 ok 2 - tproxy4: complete configuration equals original
   ---
-  duration_ms: 4.26198
+  duration_ms: 4.161808
   ...
 # Subtest: tproxy6: complete configuration equals original
 ok 3 - tproxy6: complete configuration equals original
   ---
-  duration_ms: 2.396755
+  duration_ms: 2.539972
   ...
 # Subtest: tun4: complete configuration equals original
 ok 4 - tun4: complete configuration equals original
   ---
-  duration_ms: 4.395308
+  duration_ms: 5.075352
   ...
 # Subtest: tun6: complete configuration equals original
 ok 5 - tun6: complete configuration equals original
   ---
-  duration_ms: 2.654877
+  duration_ms: 2.312348
   ...
 # Subtest: off4: complete configuration equals original
 ok 6 - off4: complete configuration equals original
   ---
-  duration_ms: 2.213014
+  duration_ms: 2.319157
   ...
 # Subtest: off6: complete configuration equals original
 ok 7 - off6: complete configuration equals original
   ---
-  duration_ms: 2.153666
+  duration_ms: 2.081415
   ...
 # Subtest: start timeout: outer markers survive command substitution
 ok 8 - start timeout: outer markers survive command substitution
   ---
-  duration_ms: 19.1066
+  duration_ms: 16.45318
   ...
 # Subtest: start invalid configuration: outer markers survive command substitution
 ok 9 - start invalid configuration: outer markers survive command substitution
   ---
-  duration_ms: 13.882539
+  duration_ms: 14.917457
   ...
 # Subtest: start panel verification warning: outer markers survive command substitution
 ok 10 - start panel verification warning: outer markers survive command substitution
   ---
-  duration_ms: 14.713156
+  duration_ms: 15.107207
   ...
 # Subtest: start network application: outer markers survive command substitution
 ok 11 - start network application: outer markers survive command substitution
   ---
-  duration_ms: 13.749545
+  duration_ms: 14.795972
   ...
 # Subtest: start success: outer markers survive command substitution
 ok 12 - start success: outer markers survive command substitution
   ---
-  duration_ms: 14.157232
+  duration_ms: 15.36292
   ...
 # Subtest: mode normalization, provider names, User-Agent and disabled sources retain their data
 ok 13 - mode normalization, provider names, User-Agent and disabled sources retain their data
   ---
-  duration_ms: 2.17662
+  duration_ms: 1.892772
   ...
 # Subtest: saved mode "\# KANO_SUB_CONVERT_MODE=provider\\r\\n" / file: provider
 ok 14 - saved mode "\# KANO_SUB_CONVERT_MODE=provider\\r\\n" / file: provider
   ---
-  duration_ms: 1.314005
+  duration_ms: 1.271693
   ...
 # Subtest: saved mode "\# KANO_SUB_CONVERT_MODE=local\\n" / http: local
 ok 15 - saved mode "\# KANO_SUB_CONVERT_MODE=local\\n" / http: local
   ---
-  duration_ms: 0.854022
+  duration_ms: 0.911217
   ...
 # Subtest: saved mode "" / file,file: local
 ok 16 - saved mode "" / file,file: local
   ---
-  duration_ms: 0.89399
+  duration_ms: 1.049027
   ...
 # Subtest: saved mode "" / http: provider
 ok 17 - saved mode "" / http: provider
   ---
-  duration_ms: 0.846626
+  duration_ms: 0.793467
   ...
 # Subtest: saved mode "" / : provider
 ok 18 - saved mode "" / : provider
   ---
-  duration_ms: 0.861242
+  duration_ms: 0.856613
   ...
 # Subtest: curl selection falls back when a bundled executable cannot run
 ok 19 - curl selection falls back when a bundled executable cannot run
   ---
-  duration_ms: 4.915179
+  duration_ms: 4.993043
   ...
 # Subtest: missing start marker uses a fallback; log text cannot spoof anchored markers
 ok 20 - missing start marker uses a fallback; log text cannot spoof anchored markers
   ---
-  duration_ms: 8.211792
+  duration_ms: 8.814949
   ...
 # Subtest: YAML reads check parsing and detect replaced, missing or invalid components
 ok 21 - YAML reads check parsing and detect replaced, missing or invalid components
   ---
-  duration_ms: 256.087762
+  duration_ms: 304.34628
   ...
 # Subtest: managed YAML: idempotent panel fields, nonempty secret and original unified-delay
 ok 22 - managed YAML: idempotent panel fields, nonempty secret and original unified-delay
   ---
-  duration_ms: 436.370632
+  duration_ms: 458.707115
   ...
 1..22
 # tests 22
@@ -117,4 +117,4 @@ ok 22 - managed YAML: idempotent panel fields, nonempty secret and original unif
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1025.321657
+# duration_ms 1100.045807

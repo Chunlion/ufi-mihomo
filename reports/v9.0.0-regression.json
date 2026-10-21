@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-21T12:08:46.782Z",
+  "date": "2026-10-21T12:21:45.743Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "e6fa044fb7f62af6fe16512f9f93c7084b0960ec",
-    "bytes": 640517,
-    "sha256": "3b7bd97490cb8e6a8611c4809deb0b9f48d0366b2895d25573dde8aaf5b8bfe2"
+    "baseCommit": "853eb45ffd38b33141f25cbd9fc15a98c4bbb771",
+    "bytes": 642631,
+    "sha256": "199720e488789de268bd63ae79b0ab08a1da6498074a2f5228e922a3affd5acc"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 636,
+    "passed": 638,
     "failed": 0,
     "notRun": 0
   },
@@ -642,7 +642,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
-      "passed": 4,
+      "passed": 6,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -656,6 +656,14 @@
         },
         {
           "name": "every probe failing still renders one dialog with all failures listed",
+          "status": "PASS"
+        },
+        {
+          "name": "the main list stays compact and field details are collapsed",
+          "status": "PASS"
+        },
+        {
+          "name": "a probe failure is reported once in the summary, not as extra rows",
           "status": "PASS"
         },
         {

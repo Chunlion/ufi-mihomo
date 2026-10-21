@@ -2,29 +2,39 @@ TAP version 13
 # Subtest: all probes healthy renders the diagnostic dialog
 ok 1 - all probes healthy renders the diagnostic dialog
   ---
-  duration_ms: 2.649664
+  duration_ms: 2.901054
   ...
 # Subtest: a failing probe degrades that row instead of aborting the dialog
 ok 2 - a failing probe degrades that row instead of aborting the dialog
   ---
-  duration_ms: 0.997907
+  duration_ms: 1.058478
   ...
 # Subtest: every probe failing still renders one dialog with all failures listed
 ok 3 - every probe failing still renders one dialog with all failures listed
   ---
-  duration_ms: 0.945106
+  duration_ms: 0.961715
+  ...
+# Subtest: the main list stays compact and field details are collapsed
+ok 4 - the main list stays compact and field details are collapsed
+  ---
+  duration_ms: 0.854796
+  ...
+# Subtest: a probe failure is reported once in the summary, not as extra rows
+ok 5 - a probe failure is reported once in the summary, not as extra rows
+  ---
+  duration_ms: 1.449291
   ...
 # Subtest: a synchronous helper throw inside the panel probe is degraded, not propagated
-ok 4 - a synchronous helper throw inside the panel probe is degraded, not propagated
+ok 6 - a synchronous helper throw inside the panel probe is degraded, not propagated
   ---
-  duration_ms: 1.509124
+  duration_ms: 0.755341
   ...
-1..4
-# tests 4
+1..6
+# tests 6
 # suites 0
-# pass 4
+# pass 6
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 111.191389
+# duration_ms 116.146821

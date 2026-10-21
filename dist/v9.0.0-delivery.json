@@ -1,20 +1,20 @@
 {
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "e6fa044fb7f62af6fe16512f9f93c7084b0960ec",
-    "bytes": 640517,
-    "sha256": "3b7bd97490cb8e6a8611c4809deb0b9f48d0366b2895d25573dde8aaf5b8bfe2"
+    "baseCommit": "853eb45ffd38b33141f25cbd9fc15a98c4bbb771",
+    "bytes": 642631,
+    "sha256": "199720e488789de268bd63ae79b0ab08a1da6498074a2f5228e922a3affd5acc"
   },
-  "regressionDate": "2026-10-21T12:08:46.782Z",
+  "regressionDate": "2026-10-21T12:21:45.743Z",
   "totals": {
-    "passed": 636,
+    "passed": 638,
     "failed": 0,
     "notRun": 0
   },
   "zip": {
     "path": "dist/猫猫TProxy-v9.0.0-精简交付.zip",
-    "bytes": 314722,
-    "sha256": "284c5cad8d6b59cf0e29af8047654658ead0b04500aa68d09bc6d2ee2df84f4e",
+    "bytes": 316052,
+    "sha256": "f587b6c618547a1f4be7b82d7211b154773a4b4026b9c63bb3007c1d8791b4fc",
     "files": 32
   }
 }

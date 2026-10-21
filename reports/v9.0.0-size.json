@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "2296ee279a332e85b328ff0f6e13da7a9b338354",
+  "sourceBaseCommit": "1316d7a4668ac080ba7dec69329c5230d3139c7c",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,10 +9,10 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 634363,
-  "sha256": "72e7d95dedd009aac5d5b78660b83476862fbf37519c69b6b7f944c6202fd9d9",
+  "final": 637963,
+  "sha256": "ca2c167a94132656d87ef7a3784326dbddbd88f6b573b194785d35068b39f76c",
   "functionsBefore": 732,
-  "functionsAfter": 785,
+  "functionsAfter": 789,
   "modules": [
     {
       "module": "旧模式与显式迁移",
@@ -35,8 +35,8 @@
     {
       "module": "模板事务",
       "before": 22184,
-      "after": 19157,
-      "saved": 3027
+      "after": 19085,
+      "saved": 3099
     },
     {
       "module": "任务回执与恢复",
@@ -65,8 +65,8 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 480600,
-      "saved": -44896
+      "after": 484272,
+      "saved": -48568
     }
   ],
   "shell": [

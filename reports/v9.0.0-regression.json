@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-21T11:21:09.965Z",
+  "date": "2026-10-21T11:41:19.667Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "2296ee279a332e85b328ff0f6e13da7a9b338354",
-    "bytes": 634363,
-    "sha256": "72e7d95dedd009aac5d5b78660b83476862fbf37519c69b6b7f944c6202fd9d9"
+    "baseCommit": "1316d7a4668ac080ba7dec69329c5230d3139c7c",
+    "bytes": 637963,
+    "sha256": "ca2c167a94132656d87ef7a3784326dbddbd88f6b573b194785d35068b39f76c"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 625,
+    "passed": 627,
     "failed": 0,
     "notRun": 0
   },
@@ -1446,7 +1446,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_network.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_network.test.js.stderr.log",
-      "passed": 22,
+      "passed": 24,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1496,6 +1496,14 @@
         },
         {
           "name": "private network off/off, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "user overrides survive shaping while controlled keys stay fixed",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid tun mtu and conflicting local ports are rejected",
           "status": "PASS"
         },
         {
@@ -2664,7 +2672,7 @@
           "status": "PASS"
         },
         {
-          "name": "template mode retains node DNS policies alongside its fixed defaults",
+          "name": "template mode keeps user tunables while capture fields stay fixed",
           "status": "PASS"
         },
         {

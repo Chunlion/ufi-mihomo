@@ -95,13 +95,13 @@ for (const traffic_mode of ['tproxy', 'tun', 'off']) {
 }
 
 test('operation composition includes every transitive helper and reduces shell payload', () => {
-  const known = new Set([...baseline.maintenance().matchAll(/^(f50_[a-z0-9_]+)\(\) \{/gm)].map(m => m[1]));
+  const known = new Set([...baseline.maintenance().matchAll(/^(f50_[a-z0-9_]+)\(\) [{(]/gm)].map(m => m[1]));
   for (const operation of ['start', 'inspect', 'install', 'cleanup', 'final', 'uninstall']) {
     const script = operation === 'start' ? api.start('start') : operation === 'install' ? api.install('/data/upload.zip')
       : operation === 'uninstall' ? api.uninstall().map(s => s.script).join('\n') : api[operation]();
     const originalScript = operation === 'start' ? baseline.start('start') : operation === 'install' ? baseline.install('/data/upload.zip')
       : operation === 'uninstall' ? baseline.uninstall().map(s => s.script).join('\n') : baseline[operation]();
-    const declared = new Set([...script.matchAll(/^(f50_[a-z0-9_]+)\(\) \{/gm)].map(m => m[1]));
+    const declared = new Set([...script.matchAll(/^(f50_[a-z0-9_]+)\(\) [{(]/gm)].map(m => m[1]));
     for (const match of script.matchAll(/\b(f50_[a-z0-9_]+)\b/g)) {
       if (known.has(match[1])) assert.ok(declared.has(match[1]), operation + ': missing ' + match[1]);
     }

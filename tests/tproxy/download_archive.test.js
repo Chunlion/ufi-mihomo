@@ -148,6 +148,7 @@ for (const valid of [true, false]) test('device background worker verifies ZIP b
     const download = vm.runInNewContext(constants + '\n' + source.slice(start, end) + '\ndownloadCoreArchive', {
       DOWNLOAD_ZIP: zip, DOWNLOAD_LOG: log, DOWNLOAD_SOURCE_FILE: path.join(dir, 'source'),
       shellQuote: quote, operationStage() {}, getCurlBinCmd: () => 'CURL_BIN=' + quote(curl),
+      dataSpaceGuardCmd: () => '',
       activeCriticalOperation: { token: {} }, f50ShellReply: value => value, setTimeout,
       f50UnknownCompletion: () => Error('worker completion unconfirmed'),
       runShellWithRoot: async (script, timeout) => { launches++; return execute(script, timeout); },

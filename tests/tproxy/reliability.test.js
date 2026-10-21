@@ -995,7 +995,7 @@ for (const outcome of ['precheck_lost', 'precheck_blocked', 'response_lost', 'pa
       handlers.unknown(op, 'late response'); assert.equal(handlers.state(), false);
     } else {
       assert.ok(!op.recovered);
-      assert.match(toasts[0], outcome === 'config_restore_failed' ? /网络已释放，但配置恢复失败/ : /恢复失败/);
+      assert.match(toasts[0], outcome === 'config_restore_failed' ? /网络接管已释放，但配置恢复失败/ : /恢复失败/);
       assert.ok(!toasts.join('\n').includes('待确认'));
       assert.ok(!toasts.join('\n').includes('仍有残留'));
       if (outcome === 'response_lost') assert.deepEqual(titles, ['恢复失败']);

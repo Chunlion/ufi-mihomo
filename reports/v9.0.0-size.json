@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "2f33e730b007d2dc19336fab4ee1621447c2168d",
+  "sourceBaseCommit": "b1594cc112c577c688f2a981582f789392b875ae",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,16 +9,16 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 645734,
-  "sha256": "3359b78eb9b355723158441b9cafabff176cbc0d1d3fc53c1eb5181dc0b4cb6a",
+  "final": 647989,
+  "sha256": "e0fc4ec8716c58d678690bd66f34a17335e63c6af4f1743d3f17a00f51e4627f",
   "functionsBefore": 732,
-  "functionsAfter": 790,
+  "functionsAfter": 793,
   "modules": [
     {
       "module": "旧模式与显式迁移",
       "before": 47933,
-      "after": 46983,
-      "saved": 950
+      "after": 48472,
+      "saved": -539
     },
     {
       "module": "UI / 覆写配置去重",
@@ -65,8 +65,8 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 490088,
-      "saved": -54384
+      "after": 490854,
+      "saved": -55150
     }
   ],
   "shell": [

@@ -13,12 +13,12 @@ TAP version 13
 # Subtest: pure compaction preserves all 11 generated shell groups byte for byte
 ok 1 - pure compaction preserves all 11 generated shell groups byte for byte
   ---
-  duration_ms: 54.549807
+  duration_ms: 53.613416
   ...
 # Subtest: compaction leaves tagged raw strings, escaped backslashes and regular expressions intact
 ok 2 - compaction leaves tagged raw strings, escaped backslashes and regular expressions intact
   ---
-  duration_ms: 0.907231
+  duration_ms: 0.801071
   ...
 1..2
 # tests 2
@@ -28,4 +28,4 @@ ok 2 - compaction leaves tagged raw strings, escaped backslashes and regular exp
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 634.549868
+# duration_ms 633.993973

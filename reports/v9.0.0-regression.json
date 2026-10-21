@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-21T15:08:12.289Z",
+  "date": "2026-10-21T15:56:50.214Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "2f33e730b007d2dc19336fab4ee1621447c2168d",
-    "bytes": 645734,
-    "sha256": "3359b78eb9b355723158441b9cafabff176cbc0d1d3fc53c1eb5181dc0b4cb6a"
+    "baseCommit": "b1594cc112c577c688f2a981582f789392b875ae",
+    "bytes": 647989,
+    "sha256": "e0fc4ec8716c58d678690bd66f34a17335e63c6af4f1743d3f17a00f51e4627f"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 640,
+    "passed": 643,
     "failed": 0,
     "notRun": 0
   },
@@ -1571,7 +1571,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 47,
+      "passed": 50,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1645,6 +1645,18 @@
         },
         {
           "name": "template.yaml does not promise cache preservation for an unconfirmed download",
+          "status": "PASS"
+        },
+        {
+          "name": "a changed subscription address rebuilds the config instead of re-downloading the old one",
+          "status": "PASS"
+        },
+        {
+          "name": "an unchanged address still updates the providers directly",
+          "status": "PASS"
+        },
+        {
+          "name": "a custom configuration update says the saved address is not the one in use",
           "status": "PASS"
         },
         {

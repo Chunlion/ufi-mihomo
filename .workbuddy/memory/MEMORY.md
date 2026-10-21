@@ -33,9 +33,26 @@ wsl -d Debian -- bash -c 'export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin
 
 同一提交还删了 `runShellWithRootRetry`（唯一调用点也没了，等价语义由 `runShellWithRoot` 承担，对应测试已删除并留注释）。
 
+## 组件包固件：改 installer 文本必须同步刷新
+
+`tproxy-yq.zip` 里的 `Scripts/Clash.Service` 是**已安装状态**的快照（`subscription_update.test.js` 拿它当基准，断言 installer 输出与它逐字节一致）。所以只要改了 installer 发出的文本——保留块、`KANO_ORIGINAL_CONFIG_PRESERVATION` 版本、面板修复行——就必须刷新，否则报 `all surrounding service functions and calls remain intact`。
+
+WSL 里一条命令搞定（`/tmp` 每次会被清，必须同一条命令内取+改+回写）：
+
+```
+mkdir -p /tmp/f50-shim; ln -sf /usr/bin/bsdtar /tmp/f50-shim/tar; export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin
+tar -xOf tproxy-yq.zip Scripts/Clash.Service > /tmp/f50-svc.service
+node scripts/refresh_package_service.js /tmp/f50-svc.service
+python3 scripts/refresh_package_service.py /tmp/f50-svc.service
+```
+
+`refresh_package_service.js` 只改两段（面板修复行 + 保留块，含块内的 lease 函数），其余字节不动；`refresh_package_service.py` 负责回写 zip 成员。两者幂等。
+
+注意：`tests/gist-sync/package-check.py` 拿 `adc9458` 的 zip 当基线，只许 `Tools/components.json` 变——**它在改 Service 之前就已经是红的**（2fefa5a/c57e4e8 都改过 Service），不要拿它当判据。日常判据只有 `verify_plugin.js`。
+
 ## 测试维护约定
 
-- `run_tests.js` 用字符串标记 slice 取片段：重命名/移动符号时必须同步改标记，否则报 `missing source markers`。
+- `run_tests.js` 用字符串标记 slice 取片段：重命名/移动符号时必须同步改标记，否则报 `missing source markers`。常量从闭包提到顶层后同样要补切片（KPR 切片在 `run_tests.js` 和 `optimization_network.test.js` 各有一处）；`run_tests.js` 那处只能用不依赖 `PROFILE_DELTA` 的窄区间（`const CONTROLLED_TOP_KEYS` → `function buildF50EmergencyScript`），用 `const F50_ORIGINAL_MANAGED_KEYS` 开头会把 `F50_ORIGINAL_TUN_KEYS` 也带进来而沙箱里没有 `PROFILE_DELTA`。
 - `tests/gist-sync/expected-contracts.json` 是维护脚本的 hash 快照。改了 maintenance 函数要么更新快照，要么让测试红着——不允许跳过断言。
 - 函数声明正则要同时接受 `() {` 和 `() (`（POSIX 子 shell 形式），只认前者会误报「未声明」。
 - 新增 sandbox 依赖时，注意同一个文件里可能有多个 sandbox，容易漏掉其中一个（`download_archive.test.js` 就漏过 `dataSpaceGuardCmd`）。

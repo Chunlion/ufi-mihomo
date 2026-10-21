@@ -12,6 +12,8 @@
 
 顺序错的典型报错：`AssertionError: Plugin changed: rebuild first` 或 `source.bytes` 不匹配。跑完第 1 步必须重跑 2~4，否则报告与新插件 sha 对不上。
 
+**漏第 4 步的后果**：`dist/` 里躺的是旧插件（`2f33e73` 就漏过，交付包与源码不一致）。这一条**不能**用测试兜底——测试红会让 `package_plugin.py` 的 `failed==0` 断言不通过，dist 永远重建不了，形成死锁。只能靠流程。
+
 ## 全量回归只能在 WSL 跑
 
 Windows 不可作为判据：`tests/tproxy/*` 大量用例用 `spawnSync('sh')` + fixture 脚本，Git Bash 不解析 `C:/...` 形式的 PATH 条目（`ip6tables` 直接 127 not found），15s 超时也会被打爆。
@@ -20,7 +22,7 @@ Windows 不可作为判据：`tests/tproxy/*` 大量用例用 `spawnSync('sh')` 
 wsl -d Debian -- bash -c 'export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin; cd /mnt/c/.../Tproxy-F50 && F50_TEST_YQ=$PWD/.cache/gist-sync/tools/yq-linux-amd64 F50_TEST_QEMU=$PWD/.cache/gist-sync/tools/qemu-aarch64 node scripts/verify_plugin.js'
 ```
 
-- `bash -c` 里**不要展开 `$PATH`**：Windows PATH 含 `Program Files (x86)`，括号会直接把 bash 语法打炸。
+- `bash -c` 里**不要展开 `$PATH`**：Windows PATH 含 `Program Files (x86)`，括号会直接把 bash 语法打炸。准确说是**外层 Git Bash 会展开命令串里所有 `$VAR`**（`$YQ` 会变空串）；要在 WSL 内用变量必须写 `\$VAR`，或多行逻辑写进脚本文件再 `sh script.sh`。
 - WSL 的 GNU tar 读不了 zip，但测试用 `tar -xOf *.zip`：先 `ln -sf /usr/bin/bsdtar /tmp/f50-shim/tar` 并前置 PATH。
 - 不要前置整个 `/c/Windows/System32`，会劫持 `find`/`timeout` 制造假失败。
 
@@ -49,6 +51,17 @@ python3 scripts/refresh_package_service.py /tmp/f50-svc.service
 `refresh_package_service.js` 只改两段（面板修复行 + 保留块，含块内的 lease 函数），其余字节不动；`refresh_package_service.py` 负责回写 zip 成员。两者幂等。
 
 注意：`tests/gist-sync/package-check.py` 拿 `adc9458` 的 zip 当基线，只许 `Tools/components.json` 变——**它在改 Service 之前就已经是红的**（2fefa5a/c57e4e8 都改过 Service），不要拿它当判据。日常判据只有 `verify_plugin.js`。
+
+## yq 合并的两个坑（设备端 v4.53.3，与 `.cache/gist-sync/tools/yq-linux-amd64` 同源）
+
+- `select(cond) | {}` 在条件为假时**仍会产出 1 个文档**（空流的右侧照样执行一次）→ 整个合并输出两份 YAML → `yaml: duplicate mapping key`。空值兜底必须写 `select(tag == "!!map") // {}`，只有 `//` 会吃掉空流。
+- `{} * "on"` / `{} * [1,2]` 直接报 `cannot multiply`；`omit()` 对非 map 是静默直通，`pick()` 才报错。合并用户手改值前先归一：`with_entries(select((.value | tag) == "!!map" or (.key | test("^(dns|tun|sniffer|profile)$") | not)))`。
+
+## 安装脚本体积预算只剩 15 字节
+
+`optimization_network.test.js` 要求 install 脚本比旧版基线小 25000 字节，`2f33e73` 时 saving=25015。新增 installer 文本必须先想好去哪省：
+- 解释性注释放 JS 侧（`function buildXxx()` 上方），生成的 shell 里每行都算字节，中文 1 字符=3 字节；
+- 能一行绑定别写五行（如上面那条 with_entries 归一，比 5 个 `as $x` 绑定省 240 字节）。
 
 ## 测试维护约定
 

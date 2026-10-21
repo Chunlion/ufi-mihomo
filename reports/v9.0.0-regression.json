@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-21T12:21:45.743Z",
+  "date": "2026-10-21T13:00:07.286Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "853eb45ffd38b33141f25cbd9fc15a98c4bbb771",
-    "bytes": 642631,
-    "sha256": "199720e488789de268bd63ae79b0ab08a1da6498074a2f5228e922a3affd5acc"
+    "baseCommit": "df6c10e1c6da6eea89ee4ca992a2fb07de301082",
+    "bytes": 644857,
+    "sha256": "1a66dce69fb44777db799c14faccf6afd94b457211033c01141ab4e3e2a1e6fe"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 638,
+    "passed": 640,
     "failed": 0,
     "notRun": 0
   },
@@ -642,7 +642,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
-      "passed": 6,
+      "passed": 8,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -668,6 +668,14 @@
         },
         {
           "name": "a synchronous helper throw inside the panel probe is degraded, not propagated",
+          "status": "PASS"
+        },
+        {
+          "name": "provider anomalies reach the summary even when the request succeeds",
+          "status": "PASS"
+        },
+        {
+          "name": "f50HealthLayers classifies provider snapshots into problems",
           "status": "PASS"
         }
       ]

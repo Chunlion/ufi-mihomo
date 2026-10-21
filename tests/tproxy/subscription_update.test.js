@@ -754,6 +754,21 @@ done
     assert.equal(userConfig.dns.listen, rebuilt.dns.listen, 'controlled dns keys stay managed by the profile');
     assert.deepEqual(userConfig['proxy-groups'], rebuilt['proxy-groups'], 'generated groups are not overwritten by the pre-rebuild copy');
     assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
+    // 手改出的非 map 值不能让合并直接把启动打死：按空表处理，用控制器生成的值兜底。
+    write('Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
+    write('Proxy/config.yaml', 'sniffer: on\nprofile:\n  - a\n  - b\ndns: not-a-map\nlog-level: warning\n');
+    const malformed = run([service, 'start'], env);
+    assert.equal(malformed.status, 0, malformed.stdout + malformed.stderr);
+    const malformedRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+    assert.equal(malformedRead.status, 0, malformedRead.stderr);
+    const malformedConfig = JSON.parse(malformedRead.stdout);
+    assert.equal(malformedConfig['log-level'], 'warning', 'scalar keys are still restored');
+    assert.equal(typeof malformedConfig.sniffer, 'object', 'a scalar sniffer falls back to the generated value');
+    assert.equal(malformedConfig.sniffer.enable, rebuilt.sniffer.enable);
+    assert.ok(!Array.isArray(malformedConfig.profile), 'a sequence profile falls back to the generated value');
+    assert.equal(malformedConfig.profile['store-selected'], rebuilt.profile['store-selected']);
+    assert.equal(malformedConfig.dns.listen, rebuilt.dns.listen, 'a scalar dns falls back to the generated value');
+    assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

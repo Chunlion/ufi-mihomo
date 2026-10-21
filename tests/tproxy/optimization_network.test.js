@@ -12,7 +12,7 @@ function privateApi(text) {
 }
 const current = privateApi(source), previous = privateApi(original);
 const base = { 'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],
-  rules: ['MATCH,Proxy'], dns: { 'nameserver-policy': { 'custom.example': '1.1.1.1' } } };
+  rules: ['MATCH,Proxy'] };
 
 test('firewall/process ownership functions are unchanged', () => {
   for (const name of ['stat', 'owned_exe', 'scan', 'same_process', 'stop_recorded', 'table_absent',
@@ -93,6 +93,61 @@ for (const traffic_mode of ['tproxy', 'tun', 'off']) {
     });
   }
 }
+
+test('user overrides survive shaping while controlled keys stay fixed', () => {
+  const userConfig = {
+    ...base,
+    'log-level': 'debug',
+    'find-process-mode': 'strict',
+    'tcp-concurrent': true,
+    'keep-alive-interval': 30,
+    'unified-delay': false,
+    port: 17890,
+    'socks-port': 17891,
+    'mixed-port': 17892,
+    sniffer: { enable: false, 'skip-domain': ['example.test'] },
+    dns: {
+      nameserver: ['https://dns.example/dns-query'],
+      'nameserver-policy': { 'custom.example': '1.1.1.1' },
+      listen: '0.0.0.0:5353',
+      ipv6: true,
+    },
+    tun: { enable: true, device: 'MyTun', mtu: 1400, 'route-address': ['0.0.0.0/1'] },
+    ipv6: true,
+    mode: 'global',
+    'external-ui': 'WebUI/other',
+  };
+  const out = current.runtime(userConfig, { traffic_mode: 'tproxy', ipv6: 'off' });
+  // 用户自由字段原样保留
+  assert.equal(out['log-level'], 'debug');
+  assert.equal(out['find-process-mode'], 'strict');
+  assert.equal(out['tcp-concurrent'], true);
+  assert.equal(out['keep-alive-interval'], 30);
+  assert.equal(out['unified-delay'], false);
+  assert.equal(out.port, 17890);
+  assert.equal(out['mixed-port'], 17892);
+  assert.equal(out.sniffer.enable, false);
+  assert.deepEqual(plain(out.sniffer['skip-domain']), ['example.test']);
+  assert.equal(out.dns.nameserver[0], 'https://dns.example/dns-query');
+  assert.equal(out.dns['nameserver-policy']['custom.example'], '1.1.1.1');
+  assert.equal(out.tun.mtu, 1400);
+  assert.deepEqual(plain(out.tun['route-address']), ['0.0.0.0/1']);
+  // 受控字段仍按固定 profile 下发
+  assert.equal(out.dns.listen, '0.0.0.0:1053');
+  assert.equal(out.dns.ipv6, false);
+  assert.equal(out.tun.enable, false);
+  assert.equal(out.mode, 'rule');
+  assert.equal(out.ipv6, false);
+  assert.equal(out['external-ui'], 'WebUI/zashboard');
+  assert.deepEqual(plain(out['x-f50-overridden']).sort(),
+    ['dns.ipv6', 'dns.listen', 'external-ui', 'ipv6', 'mode', 'tun.device', 'tun.enable'].sort());
+});
+
+test('invalid tun mtu and conflicting local ports are rejected', () => {
+  assert.throws(() => current.runtime({ ...base, tun: { mtu: 900 } }, { traffic_mode: 'tun' }), /tun\.mtu/);
+  assert.throws(() => current.runtime({ ...base, port: 7895 }, { traffic_mode: 'tproxy' }), /冲突/);
+  assert.throws(() => current.runtime({ ...base, port: 18000, 'mixed-port': 18000 }, { traffic_mode: 'tproxy' }), /不能重复/);
+});
 
 test('operation composition includes every transitive helper and reduces shell payload', () => {
   const known = new Set([...baseline.maintenance().matchAll(/^(f50_[a-z0-9_]+)\(\) [{(]/gm)].map(m => m[1]));

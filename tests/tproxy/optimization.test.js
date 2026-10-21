@@ -188,6 +188,18 @@ after=$(stat -c '%i:%Y' "$F50_ROOT/Proxy/config.yaml")
     assert.match(fs.readFileSync(config, 'utf8'), /secret: "?123456"?/);
     assert.match(fs.readFileSync(config, 'utf8'), /unified-delay: false/);
     assert.match(fs.readFileSync(config, 'utf8'), /custom: retained/);
+    // 非订阅原样配置：显式 false 不能被面板修复写回 true，缺失时才补默认值。
+    write(dir, 'Tools/config_source.conf', 'KANO_CONFIG_SOURCE=template.yaml\n');
+    write(dir, 'Proxy/config.yaml', 'secret: ""\nunified-delay: false\ncustom: retained\n');
+    const managed = shell(api.maintenance() + '\nf50_ensure_live_secret && f50_ensure_live_panel_config\n', { F50_ROOT: dir.replace(/\\/g, '/') });
+    assert.equal(managed.status, 0, managed.stderr);
+    assert.match(fs.readFileSync(config, 'utf8'), /unified-delay: false/, 'explicit unified-delay is not coerced back to true');
+    assert.match(fs.readFileSync(config, 'utf8'), /custom: retained/);
+    assert.match(fs.readFileSync(config, 'utf8'), /external-ui: WebUI\/zashboard/);
+    write(dir, 'Proxy/config.yaml', 'secret: ""\ncustom: retained\n');
+    const filled = shell(api.maintenance() + '\nf50_ensure_live_secret && f50_ensure_live_panel_config\n', { F50_ROOT: dir.replace(/\\/g, '/') });
+    assert.equal(filled.status, 0, filled.stderr);
+    assert.match(fs.readFileSync(config, 'utf8'), /unified-delay: true/, 'a missing unified-delay still gets the default');
     fs.writeFileSync(config, 'broken: [\n');
     const invalid = shell(api.maintenance() + '\nf50_ensure_live_panel_config\n', { F50_ROOT: dir.replace(/\\/g, '/') });
     assert.equal(invalid.status, 1);

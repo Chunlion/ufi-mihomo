@@ -25,7 +25,7 @@ function harness(overrides = {}) {
     runShellWithRoot: async () => ({ success: true, content: 'exists=1\nsize=2048' }),
     readPolicyState: async () => ({ options: { traffic_mode: 'tproxy', ipv6: 'on' } }),
     callMihomoApi: async () => ({ success: true, statusCode: 200, responseText: '{"connections":[]}' }),
-    f50HealthLayers: () => ({ core: '进程存在', api: '可访问', panel: '可访问', providers: '', unverified: '数据面接管、代理连通性' }),
+    f50HealthLayers: () => ({ core: '进程存在', api: '可访问', panel: '可访问', providers: '', providerProblems: [], unverified: '数据面接管、代理连通性' }),
     showInfoDialog: (id, title, html) => dialogs.push({ id, title, html }),
     escapeHtml: (value) => String(value),
     sanitizeSubscriptionSecrets: (value) => String(value),
@@ -107,4 +107,31 @@ test('a synchronous helper throw inside the panel probe is degraded, not propaga
   await h.api.run();
   assert.equal(h.dialogs.length, 1);
   assert.match(h.dialogs[0].html, /Zashboard：base build failed/);
+});
+
+test('provider anomalies reach the summary even when the request succeeds', async () => {
+  for (const problem of ['节点来源响应格式不正确', '2 个节点来源状态无法读取']) {
+    const h = harness({
+      callMihomoApi: async () => ({ success: true, statusCode: 200, responseText: '{"providers":{}}' }),
+      f50HealthLayers: () => ({ core: '进程存在', api: '可访问', panel: '可访问', providers: problem, providerProblems: [problem], unverified: '数据面接管、代理连通性' }),
+    });
+    await h.api.run();
+    // 请求成功不等于结果正常：解析结论必须进总览，否则健康设备会显示“正常”。
+    assert.match(h.dialogs[0].html, new RegExp(`需注意：[^<]*${problem}`));
+  }
+});
+
+test('f50HealthLayers classifies provider snapshots into problems', () => {
+  const { layers } = vm.runInNewContext(
+    slice('function f50HealthLayers(', 'const F50_TRUSTED_SERVICE_HASHES') + '\n({layers: f50HealthLayers})', {});
+  // 数组来自另一个 VM realm，比较前先复制到本 realm。
+  const problems = (input) => [...(layers(input).providerProblems || [])];
+  assert.deepEqual(problems({ provider: { success: false } }), ['节点来源读取失败']);
+  assert.deepEqual(problems({ provider: { success: true, responseText: 'null' } }), ['节点来源响应格式不正确']);
+  assert.equal(layers({ provider: { success: true, responseText: 'null' } }).providers, '响应格式不正确');
+  assert.deepEqual(problems({ provider: { success: true, responseText: '{"providers":{"a":{"proxies":[]},"b":{}}}' } }),
+    ['1 个节点来源状态无法读取']);
+  assert.deepEqual(problems({ provider: { success: true, responseText: '{"providers":{"a":{"proxies":[1,2]}}}' } }), []);
+  assert.equal(layers({ provider: { success: true, responseText: '{"providers":{"a":{"proxies":[1,2]}}}' } }).providers,
+    '1 个来源，2 个已加载节点');
 });

@@ -733,6 +733,26 @@ done
       if (action !== 'prepare') assert.equal(fs.readFileSync(path.join(root, 'reloaded.json'), 'utf8'),
         fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), 'core reload retains node DNS policies');
     }
+    // 控制器会整份重建配置；模板/生成模式也必须按与 JS 整形相同的受控边界保留用户自定义项。
+    const rebuilt = plain(configApi.profiles.tproxy4);
+    write('Proxy/config.yaml', JSON.stringify({ ...rebuilt,
+      'log-level': 'debug', sniffer: { enable: false }, profile: { 'store-selected': false },
+      'unified-delay': false, 'tcp-concurrent': true, 'mixed-port': 7899,
+      dns: { ...rebuilt.dns, nameserver: ['https://example.com/dns-query'] } }));
+    const userRun = run([service, 'start'], env);
+    assert.equal(userRun.status, 0, userRun.stdout + userRun.stderr);
+    const userRead = spawnSync(yq, ['-o=json', '.', path.join(root, 'Proxy/config.yaml')], { encoding: 'utf8' });
+    assert.equal(userRead.status, 0, userRead.stderr);
+    const userConfig = JSON.parse(userRead.stdout);
+    assert.equal(userConfig['log-level'], 'debug', 'custom log level survives controller rebuild');
+    assert.equal(userConfig.sniffer.enable, false, 'custom sniffer survives controller rebuild');
+    assert.equal(userConfig.profile['store-selected'], false);
+    assert.equal(userConfig['unified-delay'], false);
+    assert.equal(userConfig['tcp-concurrent'], true);
+    assert.equal(userConfig['mixed-port'], 7899, 'custom local proxy port survives controller rebuild');
+    assert.deepEqual(userConfig.dns.nameserver, ['https://example.com/dns-query']);
+    assert.equal(userConfig.dns.listen, rebuilt.dns.listen, 'controlled dns keys stay managed by the profile');
+    assert.deepEqual(userConfig['proxy-groups'], rebuilt['proxy-groups'], 'generated groups are not overwritten by the pre-rebuild copy');
     assert.ok(!fs.readdirSync(path.join(root, 'Proxy')).some((name) => name.includes('.original.')));
   } finally {
     fs.rmSync(work, { recursive: true, force: true });

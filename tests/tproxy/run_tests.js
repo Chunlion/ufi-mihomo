@@ -309,7 +309,9 @@ check(Object.values(profiles).every((profile) => profile['external-ui'] === 'Web
 check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== profiles.tun4.tun, '固定配置深合并后不共享可变对象');
 const templateSource = slice('const buildF50TemplateObject', 'const readRuleOverrideConfig');
 check(templateSource.includes("'redir-port': 0") && Object.values(profiles).every(profile => profile['redir-port'] === 0), '生成模板与全部运行配置关闭未使用的 Redir 端口');
-const kprSource = slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
+// 受控键常量已从闭包提到顶层，配置整形的切片必须带上它们（只取不依赖 PROFILE_DELTA 的那几个）。
+const kprSource = slice('const CONTROLLED_TOP_KEYS', 'function buildF50EmergencyScript')
+  + slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack }).KPR;
 const baseConfig = {
   proxies: [],

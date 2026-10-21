@@ -52,6 +52,19 @@ const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
+// 硬件与脚本依赖的键：用户写入任何值都以固定 profile 为准。JS 整形与 Service 恢复共用同一边界。
+const CONTROLLED_TOP_KEYS = ['mode', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'tproxy-port', 'allow-lan'];
+const CONTROLLED_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
+// Service 恢复用户配置时不能反向覆盖的部分：受控键、插件元信息、以及由订阅/模板生成的节点、规则与来源。
+const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
+  ...CONTROLLED_TOP_KEYS,
+  'external-ui-name', 'external-controller-tls', 'external-controller-unix', 'external-controller-pipe',
+  'interface-name', 'routing-mark', 'secret', 'x-f50-profile', 'x-f50-overridden', 'x-f50-gist-sync',
+  'x-f50-provider-sources', 'x-kano-private-route',
+  'proxies', 'proxy-groups', 'rules', 'proxy-providers', 'rule-providers',
+  'dns', 'tun', 'sniffer', 'profile',
+])];
 function buildF50EmergencyScript(resumeTag = '', requireIdle = false, releaseIdleOnly = false, forUninstall = releaseIdleOnly) {
   return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions(forUninstall) + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
 F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
@@ -582,18 +595,27 @@ function f50AssertSafeJsonNumbers(value) {
 
 function f50HealthLayers({pid='',api={},panel={},provider={}}={}) {
   let providers='无法读取节点来源状态';
+  // 总览不能只看请求是否成功：解析失败与部分来源读不到同样是异常，需要一并汇总。
+  let providerProblems=['节点来源读取失败'];
   if (provider.success) {
     try {
       const value=JSON.parse(provider.responseText || '');
       if (!value.providers || typeof value.providers!=='object') throw Error('invalid provider snapshot');
       const entries=Object.values(value.providers);
       const known=entries.filter(item=>Array.isArray(item?.proxies));
-      providers=known.length===entries.length ? `${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点` : '部分节点来源状态无法读取';
-    } catch (_) { providers='响应格式不正确'; }
+      if (known.length===entries.length) {
+        providers=`${entries.length} 个来源，${known.reduce((n,item)=>n+item.proxies.length,0)} 个已加载节点`;
+        providerProblems=[];
+      } else {
+        providers='部分节点来源状态无法读取';
+        providerProblems=[`${entries.length-known.length} 个节点来源状态无法读取`];
+      }
+    } catch (_) { providers='响应格式不正确'; providerProblems=['节点来源响应格式不正确']; }
   }
   return {core:pid?'进程存在':'未检测到核心进程',
     api:api.success?'可访问':'访问失败',
     panel:panel.success && /F50_PANEL_HTTP_STATUS=200/.test(panel.content || '')?'可访问':'访问失败',providers,
+    providerProblems,
     // 数据面接管与代理连通性无法从进程/API 状态推出，合并成一行说明，不再各占一行。
     unverified:'数据面接管、代理连通性'};
 }
@@ -609,7 +631,8 @@ function buildF50RedactFunction() { return `f50_redact() {
   }'
 }`; }
 function buildF50PanelConfigCheck() {
-  return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
+  // unified-delay 只要求“用户已明确设置”：未设置才走修复补默认值，显式 false 必须被尊重。
+  return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
 }
 // These byte ranges target the bundled ARM64 controller; unknown builds remain untouched.
 const F50_HTTP_CONTROLLER_PATCHES = {
@@ -733,7 +756,7 @@ EOF_F50_HTTP_SPEC
 done
 )`;
 }
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=15
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=16
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -751,6 +774,8 @@ f50_save_original_config() {
   export F50_ORIGINAL_CONFIG
   trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
 }
+# 模板/生成模式以控制器重建后的配置为底，按与 JS 整形相同的受控边界恢复用户自定义项
+# （日志级别、嗅探、profile、本地代理端口与非受控 dns 子键），订阅生成的节点与规则不被反向覆盖。
 f50_restore_original_config() {
   [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
   "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
@@ -762,7 +787,12 @@ f50_restore_original_config() {
     .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))) |
     del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
     select(strenv(F50_CONFIG_SOURCE) == "subscription_original" or $gist)),
-    (.dns = ((.dns // {}) + (($original.dns // {}) | pick(["proxy-server-nameserver-policy"]))) |
+    (($original | omit(${JSON.stringify(F50_RESTORE_EXCLUDED_KEYS)})) as $user |
+    ($runtime * $user) |
+    .dns = ((.dns // {}) * (($original.dns // {}) | omit(${JSON.stringify(CONTROLLED_DNS_KEYS)}))) |
+    .tun = ((.tun // {}) * (($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)}))) |
+    .sniffer = ((.sniffer // {}) * ($original.sniffer // {})) |
+    .profile = ((.profile // {}) * ($original.profile // {})) |
     (select(strenv(F50_PRESERVE_HTTP_PROVIDER) != "1"),
       (select(strenv(F50_PRESERVE_HTTP_PROVIDER) == "1") | ."proxy-providers" = $original."proxy-providers" | del(."x-f50-provider-sources"))) |
     select(strenv(F50_CONFIG_SOURCE) != "subscription_original" and ($gist | not)))) |
@@ -910,14 +940,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=15' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=16' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -944,7 +974,7 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
   $0 == "\\"$binary\\" \\"$@\\"" || $0 == "f50_run_controller \\"$@\\"" { print "f50_save_original_config \\"$action\\" || exit 1"; saved++ }
   $0 == "  \\"$yq\\" eval " sprintf("%c", 39) { sub(/eval /, "eval -P -o=yaml -I=2 ") }
   $0 == "  start|restart)" { $0 = "  start|restart|boot)" }
-  $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | .\\"unified-delay\\" = true)) |"; next }
+  $0 ~ /^[[:space:]]*\\."unified-delay" = true \\|$/ { print "    (select(strenv(F50_CONFIG_SOURCE) == \\"subscription_original\\"), (select(strenv(F50_CONFIG_SOURCE) != \\"subscription_original\\") | (select(has(\\"unified-delay\\")), (select(has(\\"unified-delay\\") | not) | .\\"unified-delay\\" = true)))) |"; next }
   $0 == "    validate_zashboard || restore_zashboard || exit 1" {
     print "    if ! validate_zashboard; then"
     print "      panel_restore_output=$(restore_zashboard 2>&1); panel_restore_rc=$?"
@@ -2100,7 +2130,7 @@ f50_update_panel_config() {
   if f50_limit 5 "$panel_yq" e -e "$panel_check" "$panel_cfg" >/dev/null 2>&1; then
     panel_rc=0
   else
-    f50_update_yaml "$panel_cfg" "$panel_yq" '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | ."unified-delay" = true))' 8
+    f50_update_yaml "$panel_cfg" "$panel_yq" '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | (select(has("unified-delay")), (select(has("unified-delay") | not) | ."unified-delay" = true))))' 8
     panel_rc=$?
   fi
   unset F50_PANEL_DIR F50_PANEL_URL
@@ -2856,10 +2886,6 @@ function createPrivateRouteLogic() {
     out[META] = meta;
     return out;
   }
-  // 硬件与脚本依赖的键：用户写入任何值都以固定 profile 为准。
-  const CONTROLLED_TOP_KEYS = ['mode', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'tproxy-port', 'allow-lan'];
-  const CONTROLLED_DNS_KEYS = ['enable', 'listen', 'ipv6'];
-  const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
   const mergePlain = (base, delta) => {
     const out = clone(base || {});
     for (const [key, value] of Object.entries(delta || {})) out[key] = clone(value);
@@ -7125,7 +7151,7 @@ KANO_WRITE_CHECK_EOF
       YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
       [ -s "$CFG" ] && [ -x "$YQ" ] || exit 1
       export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)
-      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (."unified-delay" == true or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
+      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
       f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
       echo F50_ZASHBOARD_GUARD_OK=1
       echo "F50_UNIFIED_DELAY=$(\"$YQ\" e -r '.\"unified-delay\" // false' \"$CFG\")"
@@ -8390,7 +8416,11 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     if (!configExists) problems.push('config.yaml 缺失');
     if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
     if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
-    if (!providerHealth.success) problems.push('节点来源读取失败');
+    // 复用 f50HealthLayers 的解析结论：请求成功但格式错误/部分来源读不到时，总览同样要报出来。
+    const providerProblems = Array.isArray(health.providerProblems)
+      ? health.providerProblems
+      : (providerHealth.success ? [] : ['节点来源读取失败']);
+    for (const item of providerProblems) problems.push(item);
     if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
     const rows = [
       ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],

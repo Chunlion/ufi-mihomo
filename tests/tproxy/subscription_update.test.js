@@ -529,8 +529,14 @@ test('service preserves original YAML after controller preparation and reloads i
       .replace(/^f50_disable_unsupported_ipv6_dns_hijack\(\) \{[\s\S]*?^# KANO_IPV6_DNS_SPLIT=\d+$/gm, '')
       .replace(/f50_run_controller "\$@"/g, '"$binary" "$@"')
       .replace(/\n{2,}/g, '\n');
+    // TUN 兼容段同理：安装时整段替换（含新增的状态读取函数与阶段错误码）。
+    const stripTunCompat = (text) => text
+      .replace(/^f50_(?:load_tun_state|check_mips_version)\(\) \{[\s\S]*?^# KANO_TUN_IPV6_RETURN=\d+$/gm, '')
+      .replace(/^# KANO_TUN_(?:STACK_COMPAT|AUTO_MIPS|IPV6_RETURN)=\d+$/gm, '')
+      .replace(/\n{2,}/g, '\n');
+    const normalize = (text, block) => stripTunCompat(stripDnsCompat(stripHelpers(text, block)));
     assert.ok(installed.includes(functions), 'installed preservation helpers match the source');
-    assert.equal(stripDnsCompat(stripHelpers(installed, functions)), stripDnsCompat(stripHelpers(packaged, packageFunctions)), 'all surrounding service functions and calls remain intact');
+    assert.equal(normalize(installed, functions), normalize(packaged, packageFunctions), 'all surrounding service functions and calls remain intact');
     assert.equal(await installer(), true);
     assert.equal(fs.readFileSync(service, 'utf8'), installed, 'installation is idempotent');
     const currentVersion = (functions.match(/KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];

@@ -95,7 +95,15 @@
     "process_table_unreadable": "无法读取进程表；后续操作已停止。",
     "journal_restore_incomplete": "网络参数或配置事务恢复失败；安装已停止。",
     "network_rules_remain": "猫猫网络规则仍有残留；安装已停止。",
-    "owned_route_table_still_used_by_foreign_rule": "猫猫路由表仍被其他规则引用；未删除共享路由。"
+    "owned_route_table_still_used_by_foreign_rule": "猫猫路由表仍被其他规则引用；未删除共享路由。",
+    "mips_core_version_unavailable": "无法读取 Mihomo 版本；请确认核心文件存在且可执行。",
+    "tun_policy_apply_failed": "TUN 已启动，但网络接管规则应用失败；请执行“恢复网络”后重试。",
+    "tun_policy_verify_failed": "TUN 已启动，但接管规则校验未通过；请执行“恢复网络”后重试。",
+    "tun_return_route_apply_failed": "TUN 已启动，但 IPv6 回程路由写入失败；IPv6 出站可能不可用。",
+    "tun_return_route_verify_failed": "TUN 已启动，但 IPv6 回程路由校验未通过；IPv6 出站可能不可用。",
+    "tun6_address_query_failed": "无法读取 KanoTun 的 IPv6 地址；请确认 TUN 接口已创建且 IPv6 已开启。",
+    "tun6_address_parse_failed": "KanoTun 的 IPv6 地址无法解析；请检查接口地址是否异常。",
+    "tun6_route_query_failed": "无法查询 IPv6 路由表；请检查设备 ip 命令与权限。"
   },
   "removedLabels": [
     "controller_http_patch_unknown_build"

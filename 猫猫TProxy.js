@@ -961,7 +961,7 @@ awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$
 ${patchFinish}
 fi
 ${buildF50ServiceCurlPatchScript('"$SERVICE"')} || exit 1
-if ! grep -qx '# KANO_TUN_IPV6_RETURN=2' "$SERVICE"; then
+if ! grep -qx '# KANO_TUN_IPV6_RETURN=3' "$SERVICE"; then
 TMP="$SERVICE.tun6.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(buildF50Tun6CompatFunctions())} > "$FUNCTIONS" || exit 1
@@ -969,7 +969,7 @@ awk -v functions="$FUNCTIONS" '
   /^f50_prepare_tun6_stack\\(\\) \\{/ { skipping=1 }
   /^f50_check_mips_version\\(\\) \\{/ { skipping=1 }
   skipping { if($0=="# KANO_TUN6_STACK_COMPAT=1" || $0=="# KANO_TUN_STACK_COMPAT=1") skipping=0; next }
-  $0 == "# KANO_TUN_AUTO_MIPS=1" || $0 == "# KANO_TUN_IPV6_RETURN=1" || $0 == "# KANO_TUN_IPV6_RETURN=2" { next }
+  $0 == "# KANO_TUN_AUTO_MIPS=1" || $0 == "# KANO_TUN_IPV6_RETURN=1" || $0 == "# KANO_TUN_IPV6_RETURN=2" || $0 == "# KANO_TUN_IPV6_RETURN=3" { next }
   $0 == "f50_prepare_tun6_stack \\"$action\\" || exit 1" || $0 == "    f50_finish_tun6_stack || exit 1" { next }
   $0 == "f50_check_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$action\\" || exit 1" || $0 == "f50_prepare_tun_stack \\"$@\\" || exit 1" || $0 == "    f50_finish_tun_stack || exit 1" { next }
   $0 == "action=$1" { while ((getline line < functions) > 0) print line; close(functions); helpers++ }
@@ -1048,6 +1048,14 @@ const F50_DIAGNOSTIC_LABELS = {
   config_transaction_pending: '操作失败：配置事务尚未收尾；请先执行“恢复网络”后重试。',
   install_transaction_pending: '启动失败：上次安装事务尚未结束；请先执行“恢复网络”后重试，事务日志已保留。',
   data_space_low: '安装未执行：设备 /data 可用空间不足 50 MB；请清理空间后重试。',
+  mips_core_version_unavailable: '无法读取 Mihomo 版本；请确认核心文件存在且可执行。',
+  tun_policy_apply_failed: 'TUN 已启动，但网络接管规则应用失败；请执行“恢复网络”后重试。',
+  tun_policy_verify_failed: 'TUN 已启动，但接管规则校验未通过；请执行“恢复网络”后重试。',
+  tun_return_route_apply_failed: 'TUN 已启动，但 IPv6 回程路由写入失败；IPv6 出站可能不可用。',
+  tun_return_route_verify_failed: 'TUN 已启动，但 IPv6 回程路由校验未通过；IPv6 出站可能不可用。',
+  tun6_address_query_failed: '无法读取 KanoTun 的 IPv6 地址；请确认 TUN 接口已创建且 IPv6 已开启。',
+  tun6_address_parse_failed: 'KanoTun 的 IPv6 地址无法解析；请检查接口地址是否异常。',
+  tun6_route_query_failed: '无法查询 IPv6 路由表；请检查设备 ip 命令与权限。',
   unzip_missing: '安装未执行：设备缺少解压程序。',
   archive_list_failed: '无法读取 ZIP 目录；请重新上传有效的组件包。',
   unsafe_archive_path: '组件包包含越界路径，已拒绝解压。',
@@ -1636,18 +1644,35 @@ function buildF50Tun6CompatFunctions() {
   }
   echo F50_MIPS_VERSION_OK=1
 }
+f50_load_tun_state() {
+  F50_TUN_ROOT=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  F50_TUN_FILE="$F50_TUN_ROOT/Policy/options.conf"
+  F50_TUN_MODE=''; F50_TUN_IPV6=''; F50_TUN_STACK=''
+  [ -r "$F50_TUN_FILE" ] || return 1
+  # 一次读完三个字段，后续函数复用这些变量，避免反复读 options.conf。
+  f50_tun_lines=$(awk '/^(traffic_mode|ipv6|tun_stack)=/' "$F50_TUN_FILE" 2>/dev/null)
+  while IFS='=' read -r f50_tun_key f50_tun_value; do
+    case "$f50_tun_key" in
+      traffic_mode) F50_TUN_MODE=$f50_tun_value;;
+      ipv6) F50_TUN_IPV6=$f50_tun_value;;
+      tun_stack) F50_TUN_STACK=$f50_tun_value;;
+    esac
+  done <<F50_TUN_STATE
+$f50_tun_lines
+F50_TUN_STATE
+  return 0
+}
 f50_check_tun_stack() {
   case "$1" in start|restart|boot) ;; *) return 0;; esac
-  tun6_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
-  [ -r "$tun6_root/Policy/options.conf" ] || return 0
-  grep -qx 'traffic_mode=tun' "$tun6_root/Policy/options.conf" || return 0
-  F50_SELECTED_TUN_STACK=$(sed -n 's/^tun_stack=//p' "$tun6_root/Policy/options.conf" | head -1)
+  f50_load_tun_state || return 0
+  [ "$F50_TUN_MODE" = tun ] || return 0
+  F50_SELECTED_TUN_STACK=$F50_TUN_STACK
   case "$F50_SELECTED_TUN_STACK" in
     auto|'')
       mips_probe=$(f50_check_mips_version); mips_rc=$?
       case "$mips_rc" in
         0) F50_SELECTED_TUN_STACK=mips;;
-        1) if grep -qx 'ipv6=on' "$tun6_root/Policy/options.conf"; then F50_SELECTED_TUN_STACK=gvisor; else F50_SELECTED_TUN_STACK=mixed; fi
+        1) if [ "$F50_TUN_IPV6" = on ]; then F50_SELECTED_TUN_STACK=gvisor; else F50_SELECTED_TUN_STACK=mixed; fi
            echo F50_TUN_AUTO_FALLBACK="$F50_SELECTED_TUN_STACK";;
         *) printf '%s\\n' "$mips_probe"; return "$mips_rc";;
       esac;;
@@ -1657,12 +1682,14 @@ f50_check_tun_stack() {
   esac
 }
 f50_prepare_tun_stack() {
+  # 不依赖 f50_check_tun_stack 留下的全局变量，单独调用时也能拿到正确根目录。
+  F50_TUN_ROOT=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
   case "$1:$2" in
     policy:apply|policy:boot-apply|policy:verify) f50_tun6_return_route "$2"; return $?;;
   esac
   [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
-  tun6_cfg="$tun6_root/Proxy/config.yaml"
-  tun6_yq="$tun6_root/Tools/yq_linux_arm64"
+  tun6_cfg="$F50_TUN_ROOT/Proxy/config.yaml"
+  tun6_yq="$F50_TUN_ROOT/Tools/yq_linux_arm64"
   "$tun6_yq" eval -e '.tun.enable == true' "$tun6_cfg" >/dev/null 2>&1 || {
     echo F50_ERROR=tun_config_mismatch; return 1
   }
@@ -1670,7 +1697,7 @@ f50_prepare_tun_stack() {
   tun6_candidate="$tun6_cfg.tun6.$$"
   # The legacy controller always writes mixed; restore the selected stack before reload.
   F50_TUN_STACK="$F50_SELECTED_TUN_STACK" "$tun6_yq" eval -P -o=yaml -I=2 '.tun.stack = strenv(F50_TUN_STACK)' "$tun6_cfg" > "$tun6_candidate" &&
-    "$tun6_root/Proxy/Clash.Core" -t -d "$tun6_root/Proxy" -f "$tun6_candidate" >/dev/null 2>&1 &&
+    "$F50_TUN_ROOT/Proxy/Clash.Core" -t -d "$F50_TUN_ROOT/Proxy" -f "$tun6_candidate" >/dev/null 2>&1 &&
     chmod 600 "$tun6_candidate" && mv -f "$tun6_candidate" "$tun6_cfg" || {
       rm -f "$tun6_candidate"; echo F50_ERROR=tun_stack_prepare_failed; return 1
     }
@@ -1679,23 +1706,24 @@ f50_prepare_tun_stack() {
 f50_finish_tun_stack() {
   [ -n "$F50_SELECTED_TUN_STACK" ] || return 0
   # Reloading a TUN recreates its interface and removes controller-owned routes.
-  f50_run_controller policy apply && f50_tun6_return_route apply &&
-    f50_run_controller policy verify && f50_tun6_return_route verify || return 1
+  f50_run_controller policy apply || { echo F50_ERROR=tun_policy_apply_failed; return 1; }
+  f50_tun6_return_route apply || { echo F50_ERROR=tun_return_route_apply_failed; return 1; }
+  f50_run_controller policy verify || { echo F50_ERROR=tun_policy_verify_failed; return 1; }
+  f50_tun6_return_route verify || { echo F50_ERROR=tun_return_route_verify_failed; return 1; }
   echo F50_TUN_STACK_READY="$F50_SELECTED_TUN_STACK"
 }
 f50_tun6_return_route() {
-  tun6_route_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
-  grep -qx 'traffic_mode=tun' "$tun6_route_root/Policy/options.conf" &&
-    grep -qx 'ipv6=on' "$tun6_route_root/Policy/options.conf" || return 0
-  tun6_route_stack=$(sed -n 's/^tun_stack=//p' "$tun6_route_root/Policy/options.conf" | head -1)
-  case "$tun6_route_stack" in mixed|system) ;; *) return 0;; esac
+  # 这里可能先于 f50_check_tun_stack 被调用，需要自行读取策略状态。
+  [ -n "$F50_TUN_FILE" ] || f50_load_tun_state || return 0
+  [ "$F50_TUN_MODE" = tun ] && [ "$F50_TUN_IPV6" = on ] || return 0
+  case "$F50_TUN_STACK" in mixed|system) ;; *) return 0;; esac
   # Android policy routing otherwise sends the system stack's SYN-ACK to the cellular interface.
-  tun6_addresses=$(ip -6 -o addr show dev KanoTun scope global) || return 1
-  tun6_prefixes=$(printf '%s\\n' "$tun6_addresses" | awk '$3=="inet6" && $4 ~ /^[0-9a-fA-F:]+\\/[0-9]+$/ && $4 !~ /^[fF][eE]80:/ && !seen[$4]++ {print $4}') || return 1
+  tun6_addresses=$(ip -6 -o addr show dev KanoTun scope global) || { echo F50_ERROR=tun6_address_query_failed; return 1; }
+  tun6_prefixes=$(printf '%s\\n' "$tun6_addresses" | awk '$3=="inet6" && $4 ~ /^[0-9a-fA-F:]+\\/[0-9]+$/ && $4 !~ /^[fF][eE]80:/ && !seen[$4]++ {print $4}') || { echo F50_ERROR=tun6_address_parse_failed; return 1; }
   [ -n "$tun6_prefixes" ] || { echo F50_ERROR=tun6_address_missing; return 1; }
   for tun6_prefix in $tun6_prefixes; do
     if [ "$1" = verify ]; then
-      tun6_return=$(ip -6 route show table 17667 exact "$tun6_prefix") || return 1
+      tun6_return=$(ip -6 route show table 17667 exact "$tun6_prefix") || { echo F50_ERROR=tun6_route_query_failed; return 1; }
       printf '%s\\n' "$tun6_return" | awk '
         $1 ~ /:/ {dev="";proto="";for(i=2;i<NF;i++){if($i=="dev")dev=$(i+1);if($i=="proto")proto=$(i+1)}
           if(dev=="KanoTun" && proto=="242")found=1}
@@ -1710,7 +1738,7 @@ f50_tun6_return_route() {
 }
 # KANO_TUN_STACK_COMPAT=1
 # KANO_TUN_AUTO_MIPS=1
-# KANO_TUN_IPV6_RETURN=2
+# KANO_TUN_IPV6_RETURN=3
 `; }
 function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6_dns_hijack() {
   compat_options="\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}/Policy/options.conf"
@@ -3045,12 +3073,17 @@ async function kprVerifySelection(options) {
   return KPR.resolveSelection(payload.proxies || {}, feature.policy);
 }
 
-function networkStateKey(state, runtimeOnly = false) {
-  const keys = ['traffic_mode', 'ipv6', 'tun_stack', 'dns_hijack', 'dns_port', 'private_route_enabled', 'private_route_cidrs', 'private_route_policy', 'tproxy_port'];
-  if (!runtimeOnly) keys.push('quic_block', 'proxy_group');
+// 影响 config.yaml 与接管规则的字段；新增 options 字段必须在这里登记，
+// 否则改了设置不会触发配置重建，表现为「设置不生效」。
+const NETWORK_RUNTIME_FIELDS = ['traffic_mode', 'transparent', 'ipv6', 'tun_stack', 'dns_hijack', 'dns_port', 'private_route_enabled', 'private_route_cidrs', 'private_route_policy', 'tproxy_port'];
+const NETWORK_EXTRA_FIELDS = ['quic_block', 'proxy_group'];
+const NETWORK_LIST_FIELDS = ['deviceBypass', 'directDomain', 'directIp', 'proxyDomain', 'rejectDomain'];
+
+function networkStateKey(state, { runtimeOnly = false } = {}) {
   const options = state.options || {};
+  const keys = runtimeOnly ? NETWORK_RUNTIME_FIELDS : [...NETWORK_RUNTIME_FIELDS, ...NETWORK_EXTRA_FIELDS];
   const values = keys.map((key) => String(options[key] == null ? (key === 'tun_stack' ? 'auto' : '') : options[key]).trim());
-  if (!runtimeOnly) for (const key of ['deviceBypass', 'directDomain', 'directIp', 'proxyDomain', 'rejectDomain']) values.push(String(state[key] || '').trim());
+  if (!runtimeOnly) for (const key of NETWORK_LIST_FIELDS) values.push(String(state[key] || '').trim());
   return JSON.stringify(values);
 }
 
@@ -3065,6 +3098,7 @@ async function verifyF50TunStack(options) {
   const stack = f50TunStack(options);
   const automatic = !options.tun_stack || options.tun_stack === 'auto';
   if (options.traffic_mode !== 'tun' || (!automatic && stack !== 'mips')) return stack;
+  // 探针结果与内核版本强相关，不做跨调用缓存：换了内核后旧结果会让 stack 判断失真。
   const result = await runShellWithRoot(buildF50Tun6CompatFunctions() + '\nf50_check_mips_version', 5000);
   if (!result?.success) throw new Error('无法检查 Mihomo 版本；配置未修改。');
   if (/^F50_MIPS_VERSION_OK=1$/m.test(String(result.content || ''))) return 'mips';
@@ -3107,7 +3141,7 @@ async function kprSaveNetworkState(previous, next) {
       else createToast('设置未变更，未写入任何配置', 'green');
       return true;
     }
-    configChanged = networkStateKey(previous, true) !== networkStateKey(next, true);
+    configChanged = networkStateKey(previous, { runtimeOnly: true }) !== networkStateKey(next, { runtimeOnly: true });
     const devices = normalizeDeviceBypassText(next.deviceBypass || '');
     if (devices.invalid.length) throw new Error('直连设备列表格式错误：' + devices.invalid.join('; '));
     // Preserve the list; PolicyTools disables its effect outside TProxy.
@@ -9267,7 +9301,8 @@ btn_disabled.onclick = async () => {
   if (!skipCheck && !(await ensureReady())) return f50StartResult({success:false,content:'F50_START_CODE=backend_not_ready'});
   operationStage('验证固定配置并启动核心');
   if (preparedConfig) {
-    const write = await writeYamlObjectAtomic(CLASH_CONFIG, preparedConfig, {label:'config.yaml',backup:false});
+    // preparedConfig 已由 kprShapeRuntimeConfig 整形，直接落盘，避免二次整形与重复 Core -t。
+    const write = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, preparedConfig, {label:'config.yaml',backup:false});
     if (!write.ok) return f50StartResult({success:false,content:'F50_START_CODE=config_write_failed\n' + (write.content || '')});
   }
   const result = await startClashServiceClean({stopFirst:true});

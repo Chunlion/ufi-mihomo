@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-15T12:44:33.496Z",
+  "date": "2026-10-21T11:21:09.965Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "66f933dc9836dcf61d107d0b6d570ddece5315ce",
-    "bytes": 622116,
-    "sha256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f"
+    "baseCommit": "2296ee279a332e85b328ff0f6e13da7a9b338354",
+    "bytes": 634363,
+    "sha256": "72e7d95dedd009aac5d5b78660b83476862fbf37519c69b6b7f944c6202fd9d9"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 416,
+    "passed": 625,
     "failed": 0,
     "notRun": 0
   },
@@ -152,7 +152,7 @@
           "status": "PASS"
         },
         {
-          "name": "面板校验覆盖入口、PWA 和主资源",
+          "name": "面板校验仅要求身份和实际入口资源",
           "status": "PASS"
         },
         {
@@ -448,160 +448,164 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/cleanup.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/cleanup.test.js.stderr.log",
-      "passed": 39,
+      "passed": 40,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
-          "name": "cleanup preserves generated output / buildF50EmergencyScript",
+          "name": "generated Shell parses / buildF50EmergencyScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50RecoveryEligibilityFunctions",
+          "name": "generated Shell parses / buildF50RecoveryEligibilityFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50LeaseFunctions",
+          "name": "generated Shell parses / buildF50LeaseFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ServiceLeaseGate",
+          "name": "generated Shell parses / buildF50ServiceLeaseGate",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ConfigTransactionFunctions",
+          "name": "generated Shell parses / buildF50ConfigTransactionFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50RedactFunction",
+          "name": "generated Shell parses / buildF50RedactFunction",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50PanelConfigCheck",
+          "name": "generated Shell parses / buildF50PanelConfigCheck",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50HttpSubscriptionPatchScript",
+          "name": "generated Shell parses / buildF50HttpSubscriptionPatchScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50OriginalConfigFunctions",
+          "name": "generated Shell parses / buildF50OriginalConfigFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50CurlLocator",
+          "name": "generated Shell parses / buildF50CurlLocator",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ServiceCurlPatchScript",
+          "name": "generated Shell parses / buildF50ServiceCurlPatchScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50OriginalServicePatchScript",
+          "name": "generated Shell parses / buildF50OriginalServicePatchScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50StartScript",
+          "name": "generated Shell parses / buildF50StartScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ZashboardValidationFunction",
+          "name": "generated Shell parses / buildF50ZashboardValidationFunction",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50MaintenanceFunctions",
+          "name": "generated Shell parses / buildF50MaintenanceFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ShellBase",
+          "name": "generated Shell parses / buildF50ShellBase",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ProcessHelpers",
+          "name": "generated Shell parses / buildF50ProcessHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50NetworkHelpers",
+          "name": "generated Shell parses / buildF50NetworkHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50NetworkCompatHelpers",
+          "name": "generated Shell parses / buildF50NetworkCompatHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50Tun6CompatFunctions",
+          "name": "generated Shell parses / buildF50Tun6CompatFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50Ipv6DnsCompatFunctions",
+          "name": "generated Shell parses / buildF50Ipv6DnsCompatFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50InspectHelpers",
+          "name": "generated Shell parses / buildF50InspectHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50CleanupHelpers",
+          "name": "generated Shell parses / buildF50CleanupHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50ArtifactHelpers",
+          "name": "generated Shell parses / buildF50ArtifactHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50InstallHelpers",
+          "name": "generated Shell parses / buildF50InstallHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50RemovalHelpers",
+          "name": "generated Shell parses / buildF50RemovalHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50FinalProbeHelpers",
+          "name": "generated Shell parses / buildF50FinalProbeHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50PanelHelpers",
+          "name": "generated Shell parses / buildF50PanelHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50StartHelpers",
+          "name": "generated Shell parses / buildF50StartHelpers",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50InspectScript",
+          "name": "generated Shell parses / buildF50InspectScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50InstallScript",
+          "name": "generated Shell parses / buildF50InstallScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildStatusSnapshotCommand",
+          "name": "generated Shell parses / buildStatusSnapshotCommand",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50CleanupScript",
+          "name": "generated Shell parses / buildF50CleanupScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildF50FinalCheckScript",
+          "name": "generated Shell parses / buildF50FinalCheckScript",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildUninstallStages",
+          "name": "generated Shell parses / buildUninstallStages",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildOwnedCoreFunctions",
+          "name": "generated Shell parses / buildOwnedCoreFunctions",
           "status": "PASS"
         },
         {
-          "name": "cleanup preserves generated output / buildApiCurl",
+          "name": "generated Shell parses / buildApiCurl",
           "status": "PASS"
         },
         {
-          "name": "cleanup baseline and reviewed Gist integration have the exact source contract",
+          "name": "configuration recovery restores both files",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration recovery keeps committed files",
           "status": "PASS"
         },
         {
@@ -632,30 +636,59 @@
       ]
     },
     {
+      "file": "tests/tproxy/diagnostic_degrade.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/diagnostic_degrade.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
+      "passed": 4,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "all probes healthy renders the diagnostic dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "a failing probe degrades that row instead of aborting the dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "every probe failing still renders one dialog with all failures listed",
+          "status": "PASS"
+        },
+        {
+          "name": "a synchronous helper throw inside the panel probe is degraded, not propagated",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
       "file": "tests/tproxy/download_archive.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/download_archive.test.js",
       "status": "PASS",
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/download_archive.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/download_archive.test.js.stderr.log",
-      "passed": 6,
+      "passed": 36,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
-          "name": "Gitee package succeeds without contacting the fallback",
+          "name": "GitCode package succeeds without contacting other mirrors",
           "status": "PASS"
         },
         {
-          "name": "Gitee failure (Load failed) falls back to GitCode",
+          "name": "GitCode failure (Load failed) falls back to Gitee",
           "status": "PASS"
         },
         {
-          "name": "Gitee failure (ARCHIVE_VERIFY_FAILED=zip) falls back to GitCode",
+          "name": "GitCode failure (ARCHIVE_VERIFY_FAILED=zip) falls back to Gitee",
           "status": "PASS"
         },
         {
-          "name": "Gitee and GitCode failures fall back to GitHub",
+          "name": "GitCode and Gitee failures fall back to GitHub",
           "status": "PASS"
         },
         {
@@ -663,7 +696,127 @@
           "status": "PASS"
         },
         {
-          "name": "unpublished complete component release never contacts old mirrors",
+          "name": "cached compatible packages do not require a pinned release hash",
+          "status": "PASS"
+        },
+        {
+          "name": "background downloads tolerate a failed log read without restarting the worker",
+          "status": "PASS"
+        },
+        {
+          "name": "unconfirmed background download retains the lease and never tries another source",
+          "status": "PASS"
+        },
+        {
+          "name": "device background worker verifies ZIP before replacement / true",
+          "status": "PASS"
+        },
+        {
+          "name": "device background worker verifies ZIP before replacement / false",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / cache=false / F50_OPERATION_BUSY",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / cache=false / F50_OPERATION_UNSAFE_PATH",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / cache=true / F50_OPERATION_BUSY",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / cache=true / F50_OPERATION_UNSAFE_PATH",
+          "status": "PASS"
+        },
+        {
+          "name": "online package failure replaces the previous installation diagnostic",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / active_task",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / unknown_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / active_task",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / unknown_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state still blocks ordinary critical operations",
+          "status": "PASS"
+        },
+        {
+          "name": "busy device prevents package upload and cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "package upload and cleanup run after the device lease is acquired",
+          "status": "PASS"
+        },
+        {
+          "name": "failed upload replaces the previous diagnostic without deleting an unrelated file",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup failure retains the original installation error",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / active",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / active",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / transport_lost",
           "status": "PASS"
         }
       ]
@@ -675,7 +828,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/gist_sources.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/gist_sources.test.js.stderr.log",
-      "passed": 4,
+      "passed": 5,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -694,6 +847,10 @@
         {
           "name": "Manual source update releases frontend lease, fences source revision and checks real receipt",
           "status": "PASS"
+        },
+        {
+          "name": "confirmed exit from broken Gist keeps the current config and permits ordinary subscriptions",
+          "status": "PASS"
         }
       ]
     },
@@ -704,7 +861,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/http_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/http_subscription.test.js.stderr.log",
-      "passed": 15,
+      "passed": 21,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -721,7 +878,15 @@
           "status": "PASS"
         },
         {
-          "name": "an unsupported controller remains untouched",
+          "name": "an unknown controller remains untouched for its normal executable probe",
+          "status": "PASS"
+        },
+        {
+          "name": "an unknown controller with the actual command interface needs no binary patch",
+          "status": "PASS"
+        },
+        {
+          "name": "a compatible unknown controller does not need a matching help command",
           "status": "PASS"
         },
         {
@@ -729,7 +894,7 @@
           "status": "PASS"
         },
         {
-          "name": "an incomplete patch is rejected without changing the controller",
+          "name": "an unknown partially patched controller is left untouched",
           "status": "PASS"
         },
         {
@@ -757,6 +922,22 @@
           "status": "PASS"
         },
         {
+          "name": "ARM64 download accepts https://8.8.8.8/geoip-subscription and pins port 443",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects HTML and retains the existing provider",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects rules without nodes and retains the existing provider",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects empty nodes and retains the existing provider",
+          "status": "PASS"
+        },
+        {
           "name": "ARM64 download retains URL validation for ftp://8.8.8.8/sub",
           "status": "PASS"
         },
@@ -777,7 +958,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/ipv6_dns.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/ipv6_dns.test.js.stderr.log",
-      "passed": 37,
+      "passed": 47,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -787,6 +968,46 @@
         },
         {
           "name": "TUN keeps private-target DNS exemptions and pauses the device bypass list",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 192.168.0.1 -j ACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 192.168.0.1 -j ACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 256.1.2.3",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 256.1.2.3",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4/33",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4/33",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4/24/0",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4/24/0",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4\\\\t-j\\\\tACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4\\\\t-j\\\\tACCEPT",
           "status": "PASS"
         },
         {
@@ -932,13 +1153,54 @@
       ]
     },
     {
+      "file": "tests/tproxy/menu_error_feedback.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/menu_error_feedback.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/menu_error_feedback.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/menu_error_feedback.test.js.stderr.log",
+      "passed": 7,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "状态与日志: 诊断抛错时给出提示而不是静默失败",
+          "status": "PASS"
+        },
+        {
+          "name": "订阅 User-Agent: 权限校验抛错时给出提示",
+          "status": "PASS"
+        },
+        {
+          "name": "订阅 User-Agent: 读取抛错时给出提示",
+          "status": "PASS"
+        },
+        {
+          "name": "配置与规则: 读取抛错时给出提示",
+          "status": "PASS"
+        },
+        {
+          "name": "网络设置: 权限校验抛错时给出提示",
+          "status": "PASS"
+        },
+        {
+          "name": "配置文件: 权限校验抛错时给出提示",
+          "status": "PASS"
+        },
+        {
+          "name": "权限校验失败时不弹错误提示, 保持原有静默返回",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
       "file": "tests/tproxy/optimization.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization.test.js",
       "status": "PASS",
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization.test.js.stderr.log",
-      "passed": 25,
+      "passed": 22,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1015,19 +1277,7 @@
           "status": "PASS"
         },
         {
-          "name": "cancellation before prevents further shell commands",
-          "status": "PASS"
-        },
-        {
-          "name": "cancellation during prevents further shell commands",
-          "status": "PASS"
-        },
-        {
-          "name": "cancellation wait prevents further shell commands",
-          "status": "PASS"
-        },
-        {
-          "name": "uncertain transport failures are never automatically retried",
+          "name": "curl selection falls back when a bundled executable cannot run",
           "status": "PASS"
         },
         {
@@ -1035,7 +1285,7 @@
           "status": "PASS"
         },
         {
-          "name": "YAML reads use one version process and detect replaced, missing or invalid components",
+          "name": "YAML reads check parsing and detect replaced, missing or invalid components",
           "status": "PASS"
         },
         {
@@ -1051,7 +1301,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_install.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_install.test.js.stderr.log",
-      "passed": 25,
+      "passed": 33,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1084,6 +1334,10 @@
           "status": "PASS"
         },
         {
+          "name": "first installation without subscriptions installs components and keeps the core stopped",
+          "status": "PASS"
+        },
+        {
           "name": "unsafe ZIP path preserves failure code and old installation",
           "status": "PASS"
         },
@@ -1092,19 +1346,11 @@
           "status": "PASS"
         },
         {
-          "name": "missing Gist manifest preserves failure code and old installation",
+          "name": "unexecutable controller preserves failure code and old installation",
           "status": "PASS"
         },
         {
-          "name": "missing age preserves failure code and old installation",
-          "status": "PASS"
-        },
-        {
-          "name": "missing sync worker preserves failure code and old installation",
-          "status": "PASS"
-        },
-        {
-          "name": "nonzero worker exit with success JSON preserves failure code and old installation",
+          "name": "controller without the protocol marker preserves failure code and old installation",
           "status": "PASS"
         },
         {
@@ -1154,6 +1400,42 @@
         {
           "name": "repeated full update preserves private identity and exact settings bytes",
           "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"futureVersion\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/gist-sync-component.json\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/age\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/kano-gist-sync\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"runtimeProbeFailure\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"legacy\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy online update retains installed GistSync and its settings",
+          "status": "PASS"
+        },
+        {
+          "name": "installation resumes only enabled automatic Gist false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation resumes only enabled automatic Gist true",
+          "status": "PASS"
         }
       ]
     },
@@ -1164,12 +1446,24 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_network.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_network.test.js.stderr.log",
-      "passed": 19,
+      "passed": 22,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
-          "name": "private routing implementation and firewall/process ownership functions are unchanged",
+          "name": "firewall/process ownership functions are unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "long private-route policy names retain their rules without mutating the input",
+          "status": "PASS"
+        },
+        {
+          "name": "deep proxy selections resolve and cycles still fail",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime entry rejects invalid modes and config list types",
           "status": "PASS"
         },
         {
@@ -1253,10 +1547,18 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 38,
+      "passed": 47,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "subscription URLs retain path names and trailing query characters",
+          "status": "PASS"
+        },
+        {
+          "name": "template source imports retain URLs regardless of path names",
+          "status": "PASS"
+        },
         {
           "name": "provider update, runtime matches=true",
           "status": "PASS"
@@ -1343,6 +1645,34 @@
         },
         {
           "name": "Mihomo HTTP Provider API status 500",
+          "status": "PASS"
+        },
+        {
+          "name": "saving an enabled subscription retains its URL and ignores a disabled source",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / success",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / write",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / prepare",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / success",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / write",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / prepare",
           "status": "PASS"
         },
         {
@@ -1528,10 +1858,118 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
-      "passed": 43,
+      "passed": 171,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "ordinary settings read does not acquire a device lease / loadProviderUserAgent",
+          "status": "PASS"
+        },
+        {
+          "name": "ordinary settings read does not acquire a device lease / readCurrentSubRuleMode",
+          "status": "PASS"
+        },
+        {
+          "name": "ordinary settings read does not acquire a device lease / readConfigSource",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / stat",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / busy",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_absent",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_cancelled",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "API curl keeps sensitive values off argv and preserves request bytes",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML omits undefined object values and rejects nonfinite numbers",
+          "status": "PASS"
+        },
+        {
+          "name": "cancelled upload removes the returned file before reporting cancellation",
+          "status": "PASS"
+        },
+        {
+          "name": "service command quotes each argument without executing path contents",
+          "status": "PASS"
+        },
+        {
+          "name": "editor failure removes an upload without changing the destination",
+          "status": "PASS"
+        },
+        {
+          "name": "backup pruning handles spaces and matching source sidecars",
+          "status": "PASS"
+        },
+        {
+          "name": "failed template validation removes the original upload",
+          "status": "PASS"
+        },
+        {
+          "name": "export cleanup runs on the device after the browser handler has returned",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ../escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ..",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / /absolute",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / dir/../escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / dir\\\\escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / name\\\\tbad",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ./config.yaml",
+          "status": "PASS"
+        },
         {
           "name": "all final operation shells parse in sh and BusyBox ash",
           "status": "PASS"
@@ -1561,27 +1999,23 @@
           "status": "PASS"
         },
         {
-          "name": "manifest JSON identity {\"name\":\"zashboard\",\"short_name\":\"zashboard\"}",
+          "name": "packaged Service migration installs executable DNS address validation",
           "status": "PASS"
         },
         {
-          "name": "manifest JSON identity {\"short_name\":\"zashboard\",\"extra\":1,\"name\":\"zashboard\"}",
+          "name": "panel identity and referenced resource <title>zashboard</title><script src=\"./assets/main.js\"></script>",
           "status": "PASS"
         },
         {
-          "name": "manifest JSON identity {\"name\":\"\\\\u007aashboard\",\"short_name\":\"zashboard\"}",
+          "name": "panel identity and referenced resource <title>Zashboard</title><script src='/app.mjs?v=2'></script>",
           "status": "PASS"
         },
         {
-          "name": "manifest JSON identity {\"name\":\"zash board\",\"short_name\":\"zashboard\"}",
+          "name": "panel identity and referenced resource <title>zashboard</title><script src=\"missing.js\"></script>",
           "status": "PASS"
         },
         {
-          "name": "manifest JSON identity {\"name\":\"metacubexd\",\"short_name\":\"zashboard\"}",
-          "status": "PASS"
-        },
-        {
-          "name": "manifest JSON identity {\"name\":\"zashboard\",\"short_name\":\"zashboard\"",
+          "name": "panel identity and referenced resource <title>metacubexd</title><script src=\"main.js\"></script>",
           "status": "PASS"
         },
         {
@@ -1645,6 +2079,22 @@
           "status": "PASS"
         },
         {
+          "name": "override blocks computed dynamic constructors / function() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / async function() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / function*() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / async function*() {}",
+          "status": "PASS"
+        },
+        {
           "name": "recovery registry / {}",
           "status": "PASS"
         },
@@ -1681,6 +2131,114 @@
           "status": "PASS"
         },
         {
+          "name": "recovery registry / {\"output\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"output\":true,\"receipt\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"complete\",\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"partial\",\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"partial\",\"receipt\":false,\"active\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"snapshot\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"snapshot\":true,\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"unrelated\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"background\":true,\"backgroundComm\":\"cp\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases the network and retains interrupted subscription backups",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / armeabi-v7a/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / other/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/failed",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/unrestored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / running",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / unknown_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery scan identifies orphaned file writers by task ownership / false",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery scan identifies orphaned file writers by task ownership / true",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / active",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / recovery_timeout",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / owned_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / normal",
+          "status": "PASS"
+        },
+        {
           "name": "browser task ownership and receipt / completed",
           "status": "PASS"
         },
@@ -1702,6 +2260,290 @@
         },
         {
           "name": "browser task ownership and receipt / other_page_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / unsafe_path",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / released_before_acquire",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / response_truncated",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / failed_response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / heartbeat_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / acquire_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / host_footer",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / nested_reply",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / string_reply",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / wrong_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / stop",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / stop_throw",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / boot",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall recovers a prior failed operation before running stages / false",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall recovers a prior failed operation before running stages / true",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_installer",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / unknown_install_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / foreign_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / pending_config_transaction",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / unfinished_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_installer",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / unknown_install_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / foreign_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / pending_config_transaction",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / unfinished_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall final probe detects an interrupted export without an installed core",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / clean",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / process",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / network",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / journal",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / installer",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall artifact cleanup preserves its own task registry",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / running",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / unknown_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup handles interrupted Gist and YAML transactions before native network recovery",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / normal",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / uninstall",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / malformed",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / released_response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / still_owned",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / release_unknown",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / recovered",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / recovered_during_release",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / false/0/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / false/7/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/7/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/nested",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/string",
+          "status": "PASS"
+        },
+        {
+          "name": "pending Gist activation blocks ordinary writes but permits explicit uninstall / false",
+          "status": "PASS"
+        },
+        {
+          "name": "pending Gist activation blocks ordinary writes but permits explicit uninstall / true",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / running",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / foreign_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / invalid_identity",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / old rescue owner false",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / old rescue owner true",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / precheck_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / precheck_blocked",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / partial",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / config_restore_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / backup_retained",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / recovered",
           "status": "PASS"
         }
       ]
@@ -1866,7 +2708,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/yaml_bridge.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/yaml_bridge.test.js.stderr.log",
-      "passed": 4,
+      "passed": 9,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1884,6 +2726,26 @@
         },
         {
           "name": "JSON bridge still rejects malformed JSON after a successful yq exit",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge accepts a compatible parser with a different version banner",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge works when the system timeout lacks kill-after support",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML parsing works when the controller is unavailable",
+          "status": "PASS"
+        },
+        {
+          "name": "timeout expiry and ordinary exit codes / fallback=false",
+          "status": "PASS"
+        },
+        {
+          "name": "timeout expiry and ordinary exit codes / fallback=true",
           "status": "PASS"
         }
       ]

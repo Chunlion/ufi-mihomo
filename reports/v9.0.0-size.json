@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "66f933dc9836dcf61d107d0b6d570ddece5315ce",
+  "sourceBaseCommit": "2296ee279a332e85b328ff0f6e13da7a9b338354",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,16 +9,16 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 622116,
-  "sha256": "47ea7737e5f05d13fec348cee6aee4b217e026347c17f760547fc3efe043c25f",
+  "final": 634363,
+  "sha256": "72e7d95dedd009aac5d5b78660b83476862fbf37519c69b6b7f944c6202fd9d9",
   "functionsBefore": 732,
-  "functionsAfter": 781,
+  "functionsAfter": 785,
   "modules": [
     {
       "module": "旧模式与显式迁移",
       "before": 47933,
-      "after": 47364,
-      "saved": 569
+      "after": 46983,
+      "saved": 950
     },
     {
       "module": "UI / 覆写配置去重",
@@ -29,32 +29,32 @@
     {
       "module": "Service 兼容层与安装调用",
       "before": 53279,
-      "after": 58458,
-      "saved": -5179
+      "after": 55080,
+      "saved": -1801
     },
     {
       "module": "模板事务",
       "before": 22184,
-      "after": 19332,
-      "saved": 2852
+      "after": 19157,
+      "saved": 3027
     },
     {
       "module": "任务回执与恢复",
       "before": 15836,
-      "after": 19613,
-      "saved": -3777
+      "after": 24874,
+      "saved": -9038
     },
     {
       "module": "JS 覆写能力校验",
       "before": 4992,
-      "after": 5301,
-      "saved": -309
+      "after": 5728,
+      "saved": -736
     },
     {
       "module": "面板 manifest",
       "before": 1487,
-      "after": 1576,
-      "saved": -89
+      "after": 787,
+      "saved": 700
     },
     {
       "module": "旧模式删除后的死代码",
@@ -65,58 +65,58 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 469318,
-      "saved": -33614
+      "after": 480600,
+      "saved": -44896
     }
   ],
   "shell": [
     {
       "name": "install",
       "before": 120668,
-      "after": 95568,
-      "saved": 25100,
+      "after": 92957,
+      "saved": 27711,
       "beforeSHA256": "286b19891eb697e58f89afe0b2d4681daf0c372f0d8e4034497a32739d13e387",
-      "afterSHA256": "14540080f32f243f723bd371faf0c43a7edd83a42e78b55c007c2b1a314bd0b8"
+      "afterSHA256": "66d364b80acbcb8311db92e5878b918ca1091c7bf7ce50202c2e19bcf93625b4"
     },
     {
       "name": "start",
       "before": 50809,
-      "after": 53444,
-      "saved": -2635,
+      "after": 53298,
+      "saved": -2489,
       "beforeSHA256": "e5c59b91de81cdf59dde3f1782d6aef52d36316a0d923edecbf1053bf3267c9b",
-      "afterSHA256": "7fa31dfb176bbad27dbeb30ad2991099423d9df073f6fb1f44d355ed40e6a1b7"
+      "afterSHA256": "a94decb8da4820e4a51c7c5ffbf2ade1c51468ad484cb7eee89715bfdc527107"
     },
     {
       "name": "restart",
       "before": 50811,
-      "after": 53446,
-      "saved": -2635,
+      "after": 53300,
+      "saved": -2489,
       "beforeSHA256": "b63c1422c01ed7ec494b415221e7709a0fc435270b84463414e1a651ae7ba3b1",
-      "afterSHA256": "4962066b4954c2881ca859b5fb50e21ca8491b851c6d019ce35057f33191103d"
+      "afterSHA256": "4c49fabc3833bbc8b50949a179e550cbf2d1f9124e5a3529d269c0b5e9205db4"
     },
     {
       "name": "emergency",
       "before": 28007,
-      "after": 31178,
-      "saved": -3171,
+      "after": 34461,
+      "saved": -6454,
       "beforeSHA256": "f2a643e7ce83e8649a7205de6327d02a43adcf362b3e57f5286e3a63f23202b1",
-      "afterSHA256": "dbffdf2f03a2ab5980c151c93a87f8cd32d2e60d79368ccc7069c2d2d91f6ab5"
+      "afterSHA256": "9d25329aefa16fc78c269deb028e2ae91d1a16ca8d0ed9f371d878039770d0cf"
     },
     {
       "name": "service",
       "before": 31265,
-      "after": 33760,
-      "saved": -2495,
+      "after": 33882,
+      "saved": -2617,
       "beforeSHA256": "85c44e130e0a527ef0ea6c0093032d75de7a09191218050245472c87482f8f69",
-      "afterSHA256": "5765dc1a0a30b6d5ca5c2d71df7c247724534081467a67bb888284415543c721"
+      "afterSHA256": "416021022b5eb53af617dcdb8b7a4b93bae2c214623c2f9d608f4c7c88e74cea"
     },
     {
       "name": "http",
       "before": 4608,
-      "after": 4608,
-      "saved": 0,
+      "after": 4468,
+      "saved": 140,
       "beforeSHA256": "a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3",
-      "afterSHA256": "a70cc23767c59ee95f752d638957d72f44c3725fb8649358fc469ff7c1a8a7c3"
+      "afterSHA256": "33fd98bafa5ee704f6a1112969f7885b702bfbc8cf3131a404cd66376683746a"
     },
     {
       "name": "tun6",
@@ -129,18 +129,18 @@
     {
       "name": "dns",
       "before": 6226,
-      "after": 6226,
-      "saved": 0,
+      "after": 6697,
+      "saved": -471,
       "beforeSHA256": "fae3fd5044c86fc4689b581ff85432c974ac0f71c1e4e5c2f71b66aa8e41fc78",
-      "afterSHA256": "fae3fd5044c86fc4689b581ff85432c974ac0f71c1e4e5c2f71b66aa8e41fc78"
+      "afterSHA256": "37cdd248c31974a05ff955ae8a38bee29ff5c664a41e577037f72574de65499f"
     },
     {
       "name": "lease",
       "before": 3628,
-      "after": 3628,
-      "saved": 0,
+      "after": 5886,
+      "saved": -2258,
       "beforeSHA256": "5790034969278be1aa6dcb8333e2abedc1d19a401029bf6f6332e09c1c328b3d",
-      "afterSHA256": "5790034969278be1aa6dcb8333e2abedc1d19a401029bf6f6332e09c1c328b3d"
+      "afterSHA256": "529d4e5d8f4be576e279f11c4d45006a1338270a6ddfacb3a46b674b663361fe"
     },
     {
       "name": "transaction",
@@ -153,10 +153,10 @@
     {
       "name": "cleanup",
       "before": 16548,
-      "after": 16622,
-      "saved": -74,
+      "after": 17481,
+      "saved": -933,
       "beforeSHA256": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
-      "afterSHA256": "74b2ff0c056ad250846feea0656c4dcd5ff6d1a5fddccf43dd43d091836962b1"
+      "afterSHA256": "6e5434e5da18c37bc1cbba14b2b2adcde69b813fb08be93b80d936a7b47821c0"
     }
   ]
 }

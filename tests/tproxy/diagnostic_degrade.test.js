@@ -25,11 +25,14 @@ function harness(overrides = {}) {
     runShellWithRoot: async () => ({ success: true, content: 'exists=1\nsize=2048' }),
     readPolicyState: async () => ({ options: { traffic_mode: 'tproxy', ipv6: 'on' } }),
     callMihomoApi: async () => ({ success: true, statusCode: 200, responseText: '{"connections":[]}' }),
-    f50HealthLayers: () => ({ core: '进程存在', api: '可访问', takeover: '', panel: '可访问', providers: '', connectivity: '' }),
+    f50HealthLayers: () => ({ core: '进程存在', api: '可访问', panel: '可访问', providers: '', unverified: '数据面接管、代理连通性' }),
     showInfoDialog: (id, title, html) => dialogs.push({ id, title, html }),
     escapeHtml: (value) => String(value),
     sanitizeSubscriptionSecrets: (value) => String(value),
-    parseKeyValueOutput: () => ({}),
+    parseKeyValueOutput: () => ({
+      PROCESS_KIND: 'runtime', PORT_7788: '1', CORE_ELF: '1', CORE_SIZE: '1024',
+      CMDLINE: '/data/clash/Proxy/Clash.Core -d /data/clash/Proxy',
+    }),
     shellQuote: (value) => `'${value}'`,
     buildF50ShellBase: () => '',
     buildF50PanelHelpers: () => '',
@@ -74,6 +77,29 @@ test('every probe failing still renders one dialog with all failures listed', as
   for (const label of ['运行状态', '开机自启', '核心进程', '控制地址', '网络设置', '运行日志', '控制 API', '活动连接']) {
     assert.match(h.dialogs[0].html, new RegExp(label));
   }
+});
+
+test('the main list stays compact and field details are collapsed', async () => {
+  const h = harness();
+  await h.api.run();
+  const html = h.dialogs[0].html;
+  const main = html.slice(0, html.indexOf('<details'));
+  const rowCount = (main.match(/display:grid;grid-template-columns:minmax\(96px/g) || []).length;
+  assert.ok(rowCount <= 10, `main list should stay short, got ${rowCount} rows`);
+  assert.match(main, /总览/);
+  assert.match(main, /核心进程/);
+  assert.match(main, /运行配置/);
+  assert.match(main, /未实测/);
+  assert.doesNotMatch(main, /接管有效性/, 'two always-untested rows are merged into 未实测');
+  assert.match(html, /<details[^>]*><summary>详细信息<\/summary>/);
+  assert.match(html, /核心命令行/, 'raw fields remain available in the details block');
+});
+
+test('a probe failure is reported once in the summary, not as extra rows', async () => {
+  const h = harness({ readPolicyState: async () => { throw new Error('policy read failed'); } });
+  await h.api.run();
+  const html = h.dialogs[0].html;
+  assert.match(html, /需注意：[^<]*1 项读取失败/);
 });
 
 test('a synchronous helper throw inside the panel probe is degraded, not propagated', async () => {

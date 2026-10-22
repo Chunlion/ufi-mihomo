@@ -2,122 +2,122 @@ TAP version 13
 # Subtest: firewall/process ownership functions are unchanged
 ok 1 - firewall/process ownership functions are unchanged
   ---
-  duration_ms: 11.630555
+  duration_ms: 11.385617
   ...
 # Subtest: long private-route policy names retain their rules without mutating the input
 ok 2 - long private-route policy names retain their rules without mutating the input
   ---
-  duration_ms: 1.554738
+  duration_ms: 1.532789
   ...
 # Subtest: deep proxy selections resolve and cycles still fail
 ok 3 - deep proxy selections resolve and cycles still fail
   ---
-  duration_ms: 0.512691
+  duration_ms: 0.417974
   ...
 # Subtest: runtime entry rejects invalid modes and config list types
 ok 4 - runtime entry rejects invalid modes and config list types
   ---
-  duration_ms: 0.424912
+  duration_ms: 0.41599
   ...
 # Subtest: IPv4 / IPv6 CIDR normalization and overlap detection retain their results
 ok 5 - IPv4 / IPv6 CIDR normalization and overlap detection retain their results
   ---
-  duration_ms: 1.532041
+  duration_ms: 1.468074
   ...
 # Subtest: IPv6 private CIDR is rejected when IPv6 capture is disabled
 ok 6 - IPv6 private CIDR is rejected when IPv6 capture is disabled
   ---
-  duration_ms: 1.434087
+  duration_ms: 1.351158
   ...
 # Subtest: private network tproxy/on, repeated apply and disable restore
 ok 7 - private network tproxy/on, repeated apply and disable restore
   ---
-  duration_ms: 2.916121
+  duration_ms: 2.747027
   ...
 # Subtest: private network tproxy/off, repeated apply and disable restore
 ok 8 - private network tproxy/off, repeated apply and disable restore
   ---
-  duration_ms: 2.027622
+  duration_ms: 1.578659
   ...
 # Subtest: private network tun/on, repeated apply and disable restore
 ok 9 - private network tun/on, repeated apply and disable restore
   ---
-  duration_ms: 20.434685
+  duration_ms: 20.155839
   ...
 # Subtest: private network tun/off, repeated apply and disable restore
 ok 10 - private network tun/off, repeated apply and disable restore
   ---
-  duration_ms: 2.347166
+  duration_ms: 2.447608
   ...
 # Subtest: private network off/on, repeated apply and disable restore
 ok 11 - private network off/on, repeated apply and disable restore
   ---
-  duration_ms: 1.329304
+  duration_ms: 1.118903
   ...
 # Subtest: private network off/off, repeated apply and disable restore
 ok 12 - private network off/off, repeated apply and disable restore
   ---
-  duration_ms: 0.892493
+  duration_ms: 0.787066
   ...
 # Subtest: user overrides survive shaping while controlled keys stay fixed
 ok 13 - user overrides survive shaping while controlled keys stay fixed
   ---
-  duration_ms: 0.351464
+  duration_ms: 0.321853
   ...
 # Subtest: invalid tun mtu and conflicting local ports are rejected
 ok 14 - invalid tun mtu and conflicting local ports are rejected
   ---
-  duration_ms: 0.464007
+  duration_ms: 0.433203
   ...
 # Subtest: operation composition includes every transitive helper and reduces shell payload
 ok 15 - operation composition includes every transitive helper and reduces shell payload
   ---
-  duration_ms: 2.584086
+  duration_ms: 2.661129
   ...
 # Subtest: cleanup plans refuse foreign route-table users
 ok 16 - cleanup plans refuse foreign route-table users
   ---
-  duration_ms: 9.283553
+  duration_ms: 8.369782
   ...
 # Subtest: firewall cleanup ignores foreign rules and fake jumps inside comments
 ok 17 - firewall cleanup ignores foreign rules and fake jumps inside comments
   ---
-  duration_ms: 7.516373
+  duration_ms: 7.792017
   ...
 # Subtest: uninstall final probe reports clean
 ok 18 - uninstall final probe reports clean
   ---
-  duration_ms: 6.233289
+  duration_ms: 6.665947
   ...
 # Subtest: uninstall final probe reports residual
 ok 19 - uninstall final probe reports residual
   ---
-  duration_ms: 5.25984
+  duration_ms: 5.780486
   ...
 # Subtest: uninstall final probe reports unknown
 ok 20 - uninstall final probe reports unknown
   ---
-  duration_ms: 5.408142
+  duration_ms: 5.814375
   ...
 # Subtest: UI controls and event entry points retain their IDs and handler counts
 ok 21 - UI controls and event entry points retain their IDs and handler counts
   ---
-  duration_ms: 3.512313
+  duration_ms: 3.345419
   ...
 # Subtest: shared button action releases lock and restores button on success
 ok 22 - shared button action releases lock and restores button on success
   ---
-  duration_ms: 1.035091
+  duration_ms: 1.236243
   ...
 # Subtest: shared button action releases lock and restores button on error
 ok 23 - shared button action releases lock and restores button on error
   ---
-  duration_ms: 0.937857
+  duration_ms: 1.003585
   ...
 # Subtest: shared button action releases lock and restores button on cancel
 ok 24 - shared button action releases lock and restores button on cancel
   ---
-  duration_ms: 0.830498
+  duration_ms: 0.740164
   ...
 1..24
 # tests 24
@@ -127,4 +127,4 @@ ok 24 - shared button action releases lock and restores button on cancel
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 325.120479
+# duration_ms 303.282274

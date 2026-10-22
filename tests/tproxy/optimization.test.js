@@ -144,7 +144,7 @@ test('YAML reads check parsing and detect replaced, missing or invalid component
     let calls = 0;
     const read = run(slice('const yqExecutableCheckCmd', 'const yamlHasGeneratedMarker') + 'readYamlObject', {
       CLASH_DIR: dir.replace(/\\/g, '/'), YAML_BRIDGE_MAX_BYTES: 32, shellQuote: quote,
-      ensureCompatBackend: async () => true, prepareYqRuntimeCmd: () => ':',
+      ensureCompatBackend: async () => true, prepareYqRuntimeCmd: () => `KANO_YQ_TMP=${quote(dir)}`,
       buildF50ShellBase: api.base,
       assertYamlRootMap: v => { if (!v || Array.isArray(v) || typeof v !== 'object') throw new Error('not mapping'); },
       f50AssertSafeJsonNumbers() {},

@@ -29,7 +29,7 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools busybox
+          sudo apt-get install -y libarchive-tools busybox iproute2
       - name: Prepare genuine test tools
         run: |
           python3 scripts/gist_test_tools.py
@@ -40,7 +40,11 @@ jobs:
       - name: Build components
         run: python3 scripts/build_gist_sync.py
       - name: Run regression tests
-        run: node scripts/verify_plugin.js
+        # Device shell fixtures use root; mocked public URLs must stay off the Internet.
+        run: |
+          sudo env PATH="$PATH" F50_TEST_YQ="$F50_TEST_YQ" F50_TEST_QEMU="$F50_TEST_QEMU" \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD" \
+            unshare --net sh -c 'ip link set lo up; exec node scripts/verify_plugin.js'
       - name: Verify delivery packages
         run: |
           node scripts/report_plugin.js

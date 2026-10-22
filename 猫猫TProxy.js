@@ -10816,6 +10816,8 @@ EOF_F50_RESTORE_MEMBERS
     refreshSubscriptionAfterRestore = async () => {
       const configSource = await readConfigSource();
       if (configSource == 'uploaded_config') {
+        // 自定义配置只按配置本身刷新：规则模式与转换模式都不参与，也不应被旧订阅标记挡住，
+        // 所以这里刻意不传 mode/convertMode，沿用 updateSubProviders 的默认值。
         await updateSubProviders([]);
         return;
       }
@@ -10881,7 +10883,8 @@ EOF_F50_RESTORE_MEMBERS
   const addressChanged = modeReady && expectedType === 'http' && cleanSources.some(source =>
     String(definitions[source.name].url || '') !== source.url);
   if (!modeReady || addressChanged) {
-    if (addressChanged) createToast('订阅地址已变化；正在按新地址重建配置…', 'yellow', 6000);
+    // 数量/类型/路径不就绪时同样会重建：不提示的话，用户不知道自己手改的节点来源被覆盖了。
+    createToast(addressChanged ? '订阅地址已变化；正在按新地址重建配置…' : '当前配置的节点来源与订阅设置不一致；正在按订阅设置重建配置…', 'yellow', 6000);
     return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
   }
   if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {

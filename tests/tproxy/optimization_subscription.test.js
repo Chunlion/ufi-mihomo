@@ -248,6 +248,27 @@ for (const [mode, definitions] of [
   assert.deepEqual(calls, [[sources.slice(0, 1), 'template', mode, { applyToCustom: true }]]);
 });
 
+for (const [mode, definitions] of [
+  ['provider', { Provider1: { type: 'http', url: sources[0].url }, Provider2: { type: 'http', url: sources[1].url } }],
+  ['local', { Provider1: { type: 'file', path: './old.yaml' } }],
+]) test(`template ${mode} rebuild is announced instead of replacing the config silently`, async () => {
+  // 重建会覆盖配置里的节点来源定义；没有提示的话用户不知道自己手改的内容被换掉了。
+  const toasts = [];
+  const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
+    readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': definitions } }),
+    readCurrentSubSources: async () => sources.slice(0, 1),
+    saveSubSources: async () => true,
+    createToast: (message) => toasts.push(String(message)),
+    forceUpdateProvidersFromConfig: async () => { throw new Error('stale definitions must be rebuilt'); },
+    convertSubscriptionsLocally: async () => { throw new Error('stale file path must be rebuilt'); },
+  });
+  assert.equal(await update(sources.slice(0, 1), 'template', mode), true);
+  assert.equal(toasts.length, 1, 'the rebuild tells the user what is happening');
+  assert.match(toasts[0], /重建配置/);
+  assert.doesNotMatch(toasts[0], /地址已变化/, 'an unchanged address must not be reported as an address change');
+});
+
 for (const configSource of ['uploaded_config', 'template.yaml', 'subscription_original']) {
   for (const mode of ['template', 'original']) test(`restored ${configSource} / ${mode} uses the subscription update path`, async () => {
     const calls = [];
@@ -278,6 +299,20 @@ test('equal node counts do not claim identical node contents', () => {
     providers: [{ name: 'Provider1', ok: true, previousProxyCount: 1, proxyCount: 1, countUnchanged: true }] } });
   assert.match(html, /数量与更新前一致/);
   assert.doesNotMatch(html, /节点内容与更新前一致/);
+});
+
+test('a missing pre-update snapshot falls back to the current node count', () => {
+  let html;
+  const show = run(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const deriveSubscriptionUpdateOutcome', 'const forceUpdateProvidersFromConfig')
+    + slice('const showSubscriptionUpdateResultDialog', 'const showSubscriptionUpdateSelfCheck') + 'showSubscriptionUpdateResultDialog', {
+    ...subContext, createRandomString: () => 'fixture', textToHtml: String,
+    createFixedToast: (id, content) => { html = content; return { el: { querySelector: () => null }, close() {} }; },
+  });
+  show({ configValidationResult: { ok: true }, providerUpdateResult: { total: 1, success: 1, failed: 0,
+    providers: [{ name: 'Provider1', ok: true, previousProxyCount: null, proxyCount: 3, countUnchanged: false }] } });
+  assert.match(html, /当前节点：3 个/);
+  assert.doesNotMatch(html, /数量与更新前一致/);
 });
 
 test('a custom configuration update says the saved address is not the one in use', async () => {

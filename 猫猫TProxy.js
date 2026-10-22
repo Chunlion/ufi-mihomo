@@ -10843,21 +10843,22 @@ EOF_F50_RESTORE_MEMBERS
     createToast('旧订阅原配置已保留；请先在订阅设置中迁移到本地模板，再更新', 'yellow', 8000);
     return false;
   }
-  if (configSource === 'uploaded_config') {
-    const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-    if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
-    const definitions = read.value['proxy-providers'] || {};
-    const storedSources = cleanSources.length ? cleanSources : await readCurrentSubSources();
-    // 自定义配置的订阅地址以配置本身为准：订阅设置里另存的新地址此时不会生效。
-    // 不能默默按旧地址更新完还报成功——那就是「假更新」。
-    const addressDrift = normalizeSubSourceList(storedSources).filter((source) => {
+  const customConfig = configSource === 'uploaded_config';
+  if (!customConfig && !cleanSources.length) { createToast('没有已启用的订阅', 'red'); return false; }
+  const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+  if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
+  const definitions = read.value['proxy-providers'] || {};
+  if (customConfig) {
+    const storedSources = cleanSources.length ? cleanSources : normalizeSubSourceList(await readCurrentSubSources());
+    // 自定义配置仍以配置内的地址为准；更换地址需要显式应用订阅设置。
+    const addressDrift = storedSources.filter((source) => {
       const def = definitions[source.name];
       return def && def.type === 'http' && String(def.url || '') !== source.url;
     });
     if (addressDrift.length) {
       createToast(`订阅设置中的地址与当前自定义配置不一致（${safeTextToHtml(addressDrift.map((source) => source.name).join('、'))}）；本次仍按配置内的地址更新。<br>如需改用新地址，请在订阅设置中勾选“应用到自定义配置”后重新保存。`, 'yellow', 12000);
     }
-    const localSources = normalizeSubSourceList(storedSources).filter(source =>
+    const localSources = storedSources.filter(source =>
       definitions[source.name]?.type === 'file' && definitions[source.name]?.path === `./proxies/${source.name}.yaml`);
     const converted = localSources.length ? await convertSubscriptionsLocally(localSources, { preserveNames: true }) : null;
     if (converted && (converted.failed || !converted.ok)) {
@@ -10874,25 +10875,16 @@ EOF_F50_RESTORE_MEMBERS
     createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
     return ok;
   }
-  if (!cleanSources.length) { createToast('没有已启用的订阅', 'red'); return false; }
-  const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-  if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
-  const definitions = read.value['proxy-providers'] || {};
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
   const modeReady = Object.keys(definitions).length === cleanSources.length && cleanSources.every(s =>
     definitions[s.name]?.type === expectedType && (expectedType !== 'file' || definitions[s.name].path === `./proxies/${s.name}.yaml`));
-  if (!modeReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
+  const addressChanged = modeReady && expectedType === 'http' && cleanSources.some(source =>
+    String(definitions[source.name].url || '') !== source.url);
+  if (!modeReady || addressChanged) {
+    if (addressChanged) createToast('订阅地址已变化；正在按新地址重建配置…', 'yellow', 6000);
+    return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
+  }
   if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {
-    // 配置里的地址和订阅设置不一致时，直接更新只会重复下载旧地址并报成功。
-    // 与类型不一致同样处理：先按当前订阅设置重建配置，再真正更新。
-    const addressDrift = cleanSources.filter((source) => {
-      const def = definitions[source.name];
-      return def && def.type === 'http' && String(def.url || '') !== source.url;
-    });
-    if (addressDrift.length) {
-      createToast('订阅地址已变化；正在按新地址重建配置…', 'yellow', 6000);
-      return saveSubSources(await readCurrentSubSources({ includeDisabled: true }), cleanMode, cleanConvertMode, { applyToCustom: true });
-    }
     const updated = await forceUpdateProvidersFromConfig({ showToast: false, config: read.value });
     if (providerUpdateNeedsLocalFallback(updated)) {
       return (await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' })).ok;

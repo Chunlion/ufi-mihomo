@@ -20,7 +20,7 @@ assert size['final'] == len(source)
 assert size['sha256'] == source_hash, 'Size report does not match plugin'
 files = [plugin, root / 'LICENSE', root / '.gitattributes']
 files += sorted((root / 'reports').glob('v9.0.0-*'))
-files += [root / 'scripts' / name for name in ('compact_plugin.js', 'verify_plugin.js', 'report_plugin.js', 'package_plugin.py', 'patch_controller_http.js')]
+files += [root / 'scripts' / name for name in ('compact_plugin.js', 'verify_plugin.js', 'report_plugin.js', 'package_plugin.py', 'patch_controller_http.js', 'update_package_core.py')]
 files += sorted((root / 'tests/tproxy').glob('*.js'))
 output = root / 'dist/猫猫TProxy-v9.0.0-精简交付.zip'
 output.parent.mkdir(exist_ok=True)

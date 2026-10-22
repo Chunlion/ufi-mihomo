@@ -25,7 +25,6 @@ PACKAGE = ROOT / 'tproxy-yq.zip'
 CORE = 'Proxy/Clash.Core'
 VERSION_FILE = 'Tools/mihomo.version'
 COMPONENTS = 'Tools/components.json'
-STAMP = (2026, 10, 15, 0, 0, 0)
 
 if len(sys.argv) != 3:
     raise SystemExit('usage: python3 scripts/update_package_core.py <core-file> <version>')
@@ -35,16 +34,17 @@ if not re.fullmatch(r'v\d+\.\d+\.\d+', version):
     raise SystemExit(f'version must look like v1.19.33, got {version!r}')
 data = source.read_bytes()
 
-# Same asset family check: AArch64, PIE, Android linker, version string present.
+# Same asset family check: AArch64, Android linker, exact version string.
 if data[:4] != b'\x7fELF' or int.from_bytes(data[18:20], 'little') != 0xb7:
     raise SystemExit('replacement is not an AArch64 ELF binary')
 if not re.search(rb'/system/bin/linker64', data):
     raise SystemExit('replacement is not the Android arm64-v8 build (no /system/bin/linker64)')
-if version.encode() not in data:
+if not re.search(rb'(?<![A-Za-z0-9_.+-])' + re.escape(version.encode()) + rb'(?![A-Za-z0-9_.+-])', data):
     raise SystemExit(f'replacement does not contain the version string {version}')
 
 with zipfile.ZipFile(PACKAGE) as z:
     entries = [(i.filename, i, z.read(i.filename)) for i in z.infolist()]
+    archive_comment = z.comment
 names = [name for name, _, _ in entries]
 for required in (CORE, VERSION_FILE, COMPONENTS):
     if required not in names:
@@ -64,6 +64,7 @@ with tempfile.NamedTemporaryFile(dir=PACKAGE.parent, prefix='.gist-package-', su
     temporary = Path(tmp.name)
 try:
     with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        z.comment = archive_comment
         for name, info, content in entries:
             if name == CORE:
                 content = data
@@ -71,11 +72,7 @@ try:
                 content = (version + '\n').encode()
             elif name == COMPONENTS:
                 content = (json.dumps(components, indent=2, ensure_ascii=False) + '\n').encode()
-            item = zipfile.ZipInfo(name, STAMP)
-            item.create_system = 3
-            item.compress_type = zipfile.ZIP_DEFLATED
-            item.external_attr = info.external_attr
-            z.writestr(item, content)
+            z.writestr(info, content)
     os.replace(temporary, PACKAGE)
 finally:
     temporary.unlink(missing_ok=True)

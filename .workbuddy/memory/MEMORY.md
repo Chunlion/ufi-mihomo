@@ -14,6 +14,14 @@
 
 **漏第 4 步的后果**：`dist/` 里躺的是旧插件（`2f33e73` 就漏过，交付包与源码不一致）。这一条**不能**用测试兜底——测试红会让 `package_plugin.py` 的 `failed==0` 断言不通过，dist 永远重建不了，形成死锁。只能靠流程。
 
+## Gist 托管：更新订阅 = 机场链接 + Gist 各刷一次
+
+`updateSubProviders` 的自定义配置分支（`configSource === 'uploaded_config'`，Gist 托管也走这里）顺序固定：先 `convertSubscriptionsLocally` + `forceUpdateProvidersFromConfig({refreshRemote:true})` 更新机场链接，再 `f50GistUpdateSources(gist)` 同步 Gist 内容。**不要**在函数开头短路成 Gist 同步，否则机场链接永远不刷新。
+
+- `f50GistUpdateSources(st, sources)` 的第二个参数只有 `saveSubSources`「保存并更新」才传（合并手动链接）；更新订阅保持 `undefined`。
+- `f50GistManaged()` 会抛异常，调用点必须 try/catch，否则前面成功的机场更新会一起作废。
+- Gist 函数维护源是 `gist-sync/plugin-gist.js`：`build_gist_sync.py` 会用 `  const F50_GIST_HELPER` → `  // ===== Basic helpers =====` 之间的内容覆盖主插件。改 gist 逻辑必须改这个源文件。
+
 ## 无法按 git 作者区分「谁写的提交」
 
 226 个提交的 author/committer 全是 `Chunlion <w1074754192@gmail.com>`（只有 `dda40ff` 来自 GitHub 网页端 noreply），提交 body 也筛不出来（200+ 个都是空 body）。要区分「我生成的 / 别人或别的工具生成的」，只能用**本会话已知的提交哈希 + 时间戳**在 `git log --date=iso` 里夹逼。仓库里的 `.codex/` 说明有另一个 AI 工具在并行产出，遇到夹在会话提交之间的陌生哈希先按「非本会话」处理。

@@ -40,7 +40,7 @@ for (const mode of ['provider', 'local']) {
       const calls = [];
       const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
         ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
-        readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(sources.map(s => [s.name, { type: ready ? (mode === 'local' ? 'file' : 'http') : (mode === 'local' ? 'http' : 'file'), ...(ready && mode === 'provider' ? { url: s.url } : {}) }])) } }),
+        readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(sources.map(s => [s.name, { type: ready ? (mode === 'local' ? 'file' : 'http') : (mode === 'local' ? 'http' : 'file'), ...(ready ? (mode === 'provider' ? { url: s.url } : { path: `./proxies/${s.name}.yaml` }) : {}) }])) } }),
         readCurrentSubSources: async () => sources,
         saveSubSources: async (...args) => { calls.push(['save', ...args]); return true; },
         forceUpdateProvidersFromConfig: async () => { calls.push(['http']); return result(); },
@@ -186,6 +186,54 @@ test('an unchanged address still updates the providers directly', async () => {
   assert.deepEqual(calls, [['http']], 'matching address updates without a rebuild');
 });
 
+for (const [mode, definitions] of [
+  ['provider', { Provider1: { type: 'http', url: sources[0].url }, Provider2: { type: 'http', url: sources[1].url } }],
+  ['local', { Provider1: { type: 'file', path: './old.yaml' } }],
+]) test(`template ${mode} update rebuilds stale provider definitions`, async () => {
+  const calls = [];
+  const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
+    readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': definitions } }),
+    readCurrentSubSources: async () => sources.slice(0, 1),
+    saveSubSources: async (...args) => { calls.push(plain(args)); return true; },
+    forceUpdateProvidersFromConfig: async () => { throw new Error('stale definitions must be rebuilt'); },
+    convertSubscriptionsLocally: async () => { throw new Error('stale file path must be rebuilt'); },
+  });
+  assert.equal(await update(sources.slice(0, 1), 'template', mode), true);
+  assert.deepEqual(calls, [[sources.slice(0, 1), 'template', mode, { applyToCustom: true }]]);
+});
+
+for (const configSource of ['uploaded_config', 'template.yaml', 'subscription_original']) {
+  test(`restored ${configSource} uses the subscription update path`, async () => {
+    const calls = [];
+    const refresh = run('let refreshSubscriptionAfterRestore;'
+      + slice('refreshSubscriptionAfterRestore = async', 'const updateSubProviders = async') + 'refreshSubscriptionAfterRestore', {
+      ...subContext,
+      readCurrentSubSources: async () => sources,
+      readCurrentSubRuleMode: async () => 'template', readSavedSubConvertMode: async () => 'local',
+      readConfigSource: async () => configSource,
+      updateSubProviders: async (...args) => { calls.push(plain(args)); return true; },
+      forceUpdateProvidersFromConfig: async () => { throw new Error('restore must not bypass subscription downloads'); },
+    });
+    await refresh();
+    assert.deepEqual(calls, configSource === 'subscription_original' ? [] : [[sources, 'template', 'local']]);
+  });
+}
+
+test('equal node counts do not claim identical node contents', () => {
+  let html;
+  const show = run(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const deriveSubscriptionUpdateOutcome', 'const forceUpdateProvidersFromConfig')
+    + slice('const showSubscriptionUpdateResultDialog', 'const showSubscriptionUpdateSelfCheck') + 'showSubscriptionUpdateResultDialog', {
+    ...subContext, createRandomString: () => 'fixture', textToHtml: String,
+    createFixedToast: (id, content) => { html = content; return { el: { querySelector: () => null }, close() {} }; },
+  });
+  show({ configValidationResult: { ok: true }, providerUpdateResult: { total: 1, success: 1, failed: 0,
+    providers: [{ name: 'Provider1', ok: true, previousProxyCount: 1, proxyCount: 1, countUnchanged: true }] } });
+  assert.match(html, /数量与更新前一致/);
+  assert.doesNotMatch(html, /节点内容与更新前一致/);
+});
+
 test('a custom configuration update says the saved address is not the one in use', async () => {
   const toasts = [], calls = [];
   const config = { 'proxy-providers': { Provider1: { type: 'http', url: 'https://old.example/sub' } } };
@@ -206,7 +254,7 @@ test('a custom configuration update says the saved address is not the one in use
 
 test('template local refresh reports the provider and both mismatched counts', async () => {
   const toasts = [];
-  const config = { 'proxy-providers': { Provider1: { type: 'file' } }, rules: ['MATCH,DIRECT'], dns: { enable: false } };
+  const config = { 'proxy-providers': { Provider1: { type: 'file', path: './proxies/Provider1.yaml' } }, rules: ['MATCH,DIRECT'], dns: { enable: false } };
   const before = plain(config);
   const api = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
     + slice('const mergeLocalConversionReloadResult', 'const reloadLocalSubscriptionProviders')
@@ -267,13 +315,13 @@ for (const status of [200, 390, 500]) {
     const updated = await refresh({ config: { 'proxy-providers': { Provider1: { type: 'http' } } } });
     assert.equal(updated.failed, status === 200 ? 0 : 1);
     assert.equal(updated.via, 'http');
-    // 更新前先读一次快照，否则「下载成功但节点没变」在结果里看不出来。
+    // 更新前后的节点数量分别来自两次快照。
     assert.equal(calls[0][1], 'GET');
     assert.equal(calls[1][1], 'PUT');
     if (status === 200) {
       assert.equal(calls[2][1], 'GET');
       assert.equal(updated.providers[0].previousProxyCount, 1);
-      assert.equal(updated.providers[0].unchanged, true);
+      assert.equal(updated.providers[0].countUnchanged, true);
     }
     if (status === 390) assert.equal(updated.providers[0].errorType, 'upstream_390');
   });

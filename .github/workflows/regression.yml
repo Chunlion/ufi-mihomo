@@ -1,0 +1,47 @@
+name: Regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    env:
+      F50_TEST_YQ: ${{ github.workspace }}/.cache/gist-sync/tools/yq-linux-amd64
+      F50_TEST_QEMU: ${{ github.workspace }}/.cache/gist-sync/tools/qemu-aarch64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: gist-sync/native/go.sum
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools busybox
+      - name: Prepare genuine test tools
+        run: |
+          python3 scripts/gist_test_tools.py
+          chmod +x .cache/gist-sync/tools/yq-linux-amd64 .cache/gist-sync/tools/age-amd64/age .cache/gist-sync/tools/age-amd64/age-keygen
+          mkdir -p .cache/gist-sync/bin
+          ln -s /usr/bin/bsdtar .cache/gist-sync/bin/tar
+          echo "$PWD/.cache/gist-sync/bin" >> "$GITHUB_PATH"
+      - name: Build components
+        run: python3 scripts/build_gist_sync.py
+      - name: Run regression tests
+        run: node scripts/verify_plugin.js
+      - name: Verify delivery packages
+        run: |
+          node scripts/report_plugin.js
+          python3 scripts/package_plugin.py

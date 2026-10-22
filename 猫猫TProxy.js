@@ -10861,15 +10861,16 @@ EOF_F50_RESTORE_MEMBERS
     const localSources = storedSources.filter(source =>
       definitions[source.name]?.type === 'file' && definitions[source.name]?.path === `./proxies/${source.name}.yaml`);
     const converted = localSources.length ? await convertSubscriptionsLocally(localSources, { preserveNames: true }) : null;
-    if (converted && (converted.failed || !converted.ok)) {
+    const conversionFailed = converted && (converted.failed || !converted.ok);
+    if (conversionFailed) {
       const message = (converted.providers || []).find(provider => !provider.ok)?.message || '订阅下载失败';
       createToast(safeTextToHtml(message), 'red', 10000);
-      return false;
     }
-    const refreshed = await forceUpdateProvidersFromConfig({showToast:!converted,config:read.value,refreshRemote:true});
-    const loaded = converted ? mergeLocalConversionReloadResult(converted, refreshed) : null;
-    const ok = refreshed.failed === 0 && (!loaded || loaded.failed === 0);
-    if (converted) {
+    const hasProviders = Object.keys(definitions).length > 0;
+    const refreshed = !conversionFailed && hasProviders ? await forceUpdateProvidersFromConfig({showToast:!converted,config:read.value,refreshRemote:true}) : null;
+    const loaded = converted && !conversionFailed ? mergeLocalConversionReloadResult(converted, refreshed) : null;
+    const ok = !conversionFailed && (!refreshed || refreshed.failed === 0) && (!loaded || loaded.failed === 0);
+    if (converted && !conversionFailed) {
       const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
       const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点已下载，但核心节点加载检查失败';
       createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
@@ -10878,9 +10879,15 @@ EOF_F50_RESTORE_MEMBERS
     // 机场链接先做完，Gist 不可达时也不会白跑一趟。
     let gist = null;
     try { gist = await f50GistManaged(); }
-    catch (error) { createToast(safeTextToHtml(error.message || String(error)), 'yellow', 10000); return ok; }
-    if (!gist) return ok;
-    return (await f50GistUpdateSources(gist)) && ok;
+    catch (error) { createToast(safeTextToHtml(error.message || String(error)), 'red', 10000); return false; }
+    if (!gist) return hasProviders && ok;
+    const synced = await f50GistUpdateSources(gist);
+    if (synced && !ok) {
+      const message = 'Gist 配置已更新，但节点来源更新失败';
+      operationFinish(false, message);
+      createToast(message, 'yellow', 8000);
+    }
+    return synced && ok;
   }
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
   const modeReady = Object.keys(definitions).length === cleanSources.length && cleanSources.every(s =>

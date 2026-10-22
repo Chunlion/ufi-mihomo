@@ -7318,7 +7318,7 @@ KANO_WRITE_CHECK_EOF
   const results=await mapWithConcurrency(names,2,async name=>{
     if (!pid) return {type:'proxy-provider',name,ok:false,attempts:0,proxyCount:null,cacheAvailable:false,errorType:'not_run_core_stopped',message:'核心未运行',connectivity:'unverified'};
     const path='/providers/proxies/'+encodeURIComponent(name);
-    // 更新前先读一次：否则「下载成功但节点没变」和「真的换了节点」在结果里长得一样。
+    // 前后快照仅比较节点数量，不能据此判断节点内容是否变化。
     const before=await callMihomoApi(path,'GET',null,info,5,{corePid:pid});
     let previousCount=null;
     if (before.success) {
@@ -7341,7 +7341,7 @@ KANO_WRITE_CHECK_EOF
     const errorType=ok ? '' : upstream390 ? 'upstream_390' : !updated.success ? (updated.statusCode===404 ? 'provider_missing' : updated.errorType || 'provider_update_failed')
       : !snap.success ? snap.errorType || 'provider_snapshot_failed' : parseFailed ? 'provider_parse_failed' : 'provider_empty';
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,previousProxyCount:previousCount,
-      unchanged:previousCount!==null && count===previousCount,
+      countUnchanged:previousCount!==null && count===previousCount,
       cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
@@ -10657,7 +10657,7 @@ EOF_F50_RESTORE_MEMBERS
           const cacheText = item.ok
             ? (Number.isInteger(item.proxyCount)
               ? (Number.isInteger(item.previousProxyCount)
-                ? `更新前 ${item.previousProxyCount} 个 → 当前 ${item.proxyCount} 个${item.unchanged ? '（节点内容与更新前一致）' : ''}`
+                ? `更新前 ${item.previousProxyCount} 个 → 当前 ${item.proxyCount} 个${item.countUnchanged ? '（数量与更新前一致）' : ''}`
                 : `当前节点：${item.proxyCount} 个`)
               : '节点缓存：已更新')
             : item.cacheAvailable
@@ -10822,10 +10822,6 @@ EOF_F50_RESTORE_MEMBERS
         createToast('旧订阅原配置已保留；请先在订阅设置中迁移到本地模板，再更新', 'yellow', 8000);
         return;
       }
-      if (configSource == 'uploaded_config') {
-        await forceUpdateProvidersFromConfig({ showToast: false });
-        return;
-      }
       await updateSubProviders(sources, mode, convertMode);
     };
 
@@ -10879,7 +10875,8 @@ EOF_F50_RESTORE_MEMBERS
   if (!read.ok) { createToast(safeTextToHtml(read.message || '无法读取配置'), 'red'); return false; }
   const definitions = read.value['proxy-providers'] || {};
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
-  const modeReady = cleanSources.every(s => definitions[s.name]?.type === expectedType);
+  const modeReady = Object.keys(definitions).length === cleanSources.length && cleanSources.every(s =>
+    definitions[s.name]?.type === expectedType && (expectedType !== 'file' || definitions[s.name].path === `./proxies/${s.name}.yaml`));
   if (!modeReady) return saveSubSources(await readCurrentSubSources({includeDisabled:true}), cleanMode, cleanConvertMode, {applyToCustom:true});
   if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {
     // 配置里的地址和订阅设置不一致时，直接更新只会重复下载旧地址并报成功。

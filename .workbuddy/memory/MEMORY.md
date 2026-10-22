@@ -37,6 +37,14 @@ wsl -d Debian -- bash -c 'export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin
 
 同一提交还删了 `runShellWithRootRetry`（唯一调用点也没了，等价语义由 `runShellWithRoot` 承担，对应测试已删除并留注释）。
 
+## 组件包内核升级
+
+`python3 scripts/update_package_core.py <core文件> <v1.19.x>`，core 文件要先 gunzip（脚本不收 .gz）。
+
+必须下 **Android arm64-v8** 资产（`mihomo-android-arm64-v8-vX.gz`，AArch64 ELF、链 `/system/bin/linker64`）——包里一直是这个构建，脚本也强制校验这两点。换内核后按发布四步重建 dist。
+
+Android 二进制在 qemu 下跑不了（缺 linker64），要验行为就下 amd64 版到 WSL，用 `.cache/mihomo/verify_provider_api.py` 驱动（断言 PUT 触发重下载、`use:` 组刷新、provider 文件重写）。
+
 ## 组件包固件：改 installer 文本必须同步刷新
 
 `tproxy-yq.zip` 里的 `Scripts/Clash.Service` 是**已安装状态**的快照（`subscription_update.test.js` 拿它当基准，断言 installer 输出与它逐字节一致）。所以只要改了 installer 发出的文本——保留块、`KANO_ORIGINAL_CONFIG_PRESERVATION` 版本、面板修复行——就必须刷新，否则报 `all surrounding service functions and calls remain intact`。

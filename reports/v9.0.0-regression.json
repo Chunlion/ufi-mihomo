@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-22T05:14:16.721Z",
+  "date": "2026-10-22T05:58:11.012Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "1376319175fdbbae1df6b407f3c79da957282dac",
-    "bytes": 647989,
-    "sha256": "e0fc4ec8716c58d678690bd66f34a17335e63c6af4f1743d3f17a00f51e4627f"
+    "baseCommit": "d120d893e326afc156c6da4092c777d94a48b2a0",
+    "bytes": 648078,
+    "sha256": "99bee83520091dced79253cccee5b8571ee74c27da9065a541393c545a22bc14"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 644,
+    "passed": 653,
     "failed": 0,
     "notRun": 0
   },
@@ -1575,7 +1575,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 50,
+      "passed": 59,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1657,6 +1657,42 @@
         },
         {
           "name": "an unchanged address still updates the providers directly",
+          "status": "PASS"
+        },
+        {
+          "name": "template provider update rebuilds stale provider definitions",
+          "status": "PASS"
+        },
+        {
+          "name": "template local update rebuilds stale provider definitions",
+          "status": "PASS"
+        },
+        {
+          "name": "restored uploaded_config / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored uploaded_config / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored template.yaml / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored template.yaml / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored subscription_original / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored subscription_original / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "equal node counts do not claim identical node contents",
           "status": "PASS"
         },
         {

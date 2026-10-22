@@ -2,167 +2,167 @@ TAP version 13
 # Subtest: failed rollback retains the old backup and reports blocked cleanup
 ok 1 - failed rollback retains the old backup and reports blocked cleanup
   ---
-  duration_ms: 488.564242
+  duration_ms: 879.232404
   ...
 # Subtest: installation interruption preserves the old configuration and permits a complete retry
 ok 2 - installation interruption preserves the old configuration and permits a complete retry
   ---
-  duration_ms: 1204.913412
+  duration_ms: 1824.440502
   ...
 # Subtest: new installation
 ok 3 - new installation
   ---
-  duration_ms: 763.716076
+  duration_ms: 821.071509
   ...
 # Subtest: running upgrade
 ok 4 - running upgrade
   ---
-  duration_ms: 1079.334195
+  duration_ms: 1205.798918
   ...
 # Subtest: explicitly stopped upgrade
 ok 5 - explicitly stopped upgrade
   ---
-  duration_ms: 881.553359
+  duration_ms: 770.986678
   ...
 # Subtest: running upgrade with stale stop latch
 ok 6 - running upgrade with stale stop latch
   ---
-  duration_ms: 874.885753
+  duration_ms: 756.617521
   ...
 # Subtest: old installation without explicit stop latch
 ok 7 - old installation without explicit stop latch
   ---
-  duration_ms: 591.303461
+  duration_ms: 1171.512554
   ...
 # Subtest: first installation without subscriptions installs components and keeps the core stopped
 ok 8 - first installation without subscriptions installs components and keeps the core stopped
   ---
-  duration_ms: 440.618367
+  duration_ms: 811.773711
   ...
 # Subtest: unsafe ZIP path preserves failure code and old installation
 ok 9 - unsafe ZIP path preserves failure code and old installation
   ---
-  duration_ms: 74.02543
+  duration_ms: 75.817676
   ...
 # Subtest: missing controller preserves failure code and old installation
 ok 10 - missing controller preserves failure code and old installation
   ---
-  duration_ms: 114.985818
+  duration_ms: 94.309668
   ...
 # Subtest: unexecutable controller preserves failure code and old installation
 ok 11 - unexecutable controller preserves failure code and old installation
   ---
-  duration_ms: 82.912961
+  duration_ms: 97.376016
   ...
 # Subtest: controller without the protocol marker preserves failure code and old installation
 ok 12 - controller without the protocol marker preserves failure code and old installation
   ---
-  duration_ms: 98.782916
+  duration_ms: 106.232165
   ...
 # Subtest: missing fresh core preserves failure code and old installation
 ok 13 - missing fresh core preserves failure code and old installation
   ---
-  duration_ms: 80.669657
+  duration_ms: 95.186699
   ...
 # Subtest: missing YAML component preserves failure code and old installation
 ok 14 - missing YAML component preserves failure code and old installation
   ---
-  duration_ms: 78.646439
+  duration_ms: 112.494084
   ...
 # Subtest: invalid YAML preserves failure code and old installation
 ok 15 - invalid YAML preserves failure code and old installation
   ---
-  duration_ms: 180.728564
+  duration_ms: 207.155837
   ...
 # Subtest: start timeout preserves failure code and old installation
 ok 16 - start timeout preserves failure code and old installation
   ---
-  duration_ms: 983.335179
+  duration_ms: 857.446516
   ...
 # Subtest: invalid core config preserves failure code and old installation
 ok 17 - invalid core config preserves failure code and old installation
   ---
-  duration_ms: 861.439326
+  duration_ms: 1194.350276
   ...
 # Subtest: network application failure preserves failure code and old installation
 ok 18 - network application failure preserves failure code and old installation
   ---
-  duration_ms: 1386.588606
+  duration_ms: 976.757729
   ...
 # Subtest: service patch failure preserves failure code and old installation
 ok 19 - service patch failure preserves failure code and old installation
   ---
-  duration_ms: 94.009085
+  duration_ms: 114.311833
   ...
 # Subtest: panel HTTP failure reports a warning and retains successfully started components
 ok 20 - panel HTTP failure reports a warning and retains successfully started components
   ---
-  duration_ms: 1178.059944
+  duration_ms: 894.360355
   ...
 # Subtest: successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
 ok 21 - successful installation with lockCleanupFailure reports finalization failure and permits only safe retry
   ---
-  duration_ms: 714.981657
+  duration_ms: 617.677955
   ...
 # Subtest: successful installation with unknownLockEntry reports finalization failure and permits only safe retry
 ok 22 - successful installation with unknownLockEntry reports finalization failure and permits only safe retry
   ---
-  duration_ms: 777.34066
+  duration_ms: 865.721928
   ...
 # Subtest: successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
 ok 23 - successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry
   ---
-  duration_ms: 1124.779288
+  duration_ms: 1055.696763
   ...
 # Subtest: repeated full update preserves private identity and exact settings bytes
 ok 24 - repeated full update preserves private identity and exact settings bytes
   ---
-  duration_ms: 2445.359752
+  duration_ms: 2769.554898
   ...
 # Subtest: compatible package installs without release pins {"futureVersion":true}
 ok 25 - compatible package installs without release pins {"futureVersion":true}
   ---
-  duration_ms: 618.709376
+  duration_ms: 822.046477
   ...
 # Subtest: compatible package installs without release pins {"missing":"Tools/gist-sync-component.json"}
 ok 26 - compatible package installs without release pins {"missing":"Tools/gist-sync-component.json"}
   ---
-  duration_ms: 786.463858
+  duration_ms: 835.913703
   ...
 # Subtest: compatible package installs without release pins {"missing":"Tools/age"}
 ok 27 - compatible package installs without release pins {"missing":"Tools/age"}
   ---
-  duration_ms: 730.437255
+  duration_ms: 656.089961
   ...
 # Subtest: compatible package installs without release pins {"missing":"Tools/kano-gist-sync"}
 ok 28 - compatible package installs without release pins {"missing":"Tools/kano-gist-sync"}
   ---
-  duration_ms: 373.566691
+  duration_ms: 490.101661
   ...
 # Subtest: compatible package installs without release pins {"runtimeProbeFailure":true}
 ok 29 - compatible package installs without release pins {"runtimeProbeFailure":true}
   ---
-  duration_ms: 789.116985
+  duration_ms: 818.185734
   ...
 # Subtest: compatible package installs without release pins {"legacy":true}
 ok 30 - compatible package installs without release pins {"legacy":true}
   ---
-  duration_ms: 886.8591
+  duration_ms: 427.399014
   ...
 # Subtest: legacy online update retains installed GistSync and its settings
 ok 31 - legacy online update retains installed GistSync and its settings
   ---
-  duration_ms: 1881.177181
+  duration_ms: 1824.782203
   ...
 # Subtest: installation resumes only enabled automatic Gist false
 ok 32 - installation resumes only enabled automatic Gist false
   ---
-  duration_ms: 1564.66154
+  duration_ms: 920.001445
   ...
 # Subtest: installation resumes only enabled automatic Gist true
 ok 33 - installation resumes only enabled automatic Gist true
   ---
-  duration_ms: 1385.443395
+  duration_ms: 1841.460688
   ...
 1..33
 # tests 33
@@ -172,4 +172,4 @@ ok 33 - installation resumes only enabled automatic Gist true
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 25779.197265
+# duration_ms 27198.548387

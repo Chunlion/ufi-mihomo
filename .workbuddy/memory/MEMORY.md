@@ -16,7 +16,9 @@
 
 ## 全量回归只能在 WSL 跑
 
-Windows 不可作为判据：`tests/tproxy/*` 大量用例用 `spawnSync('sh')` + fixture 脚本，Git Bash 不解析 `C:/...` 形式的 PATH 条目（`ip6tables` 直接 127 not found），15s 超时也会被打爆。
+Windows 不可作为判据：`tests/tproxy/*` 大量用例用 `spawnSync('sh')` + fixture 脚本，Git Bash 不解析 `C:/...` 形式的 PATH 条目（`ip6tables` 直接 127 not found），15s 超时也会被打爆。qemu 用例（`http_subscription`）同样如此：Windows 侧会撞 `native()` 的 30s 超时（stdout 全空）。
+
+Windows 侧若必须单跑：`export PATH="/tmp/f50-bintar:$PATH"`（先 `cp /c/Windows/System32/tar.exe /tmp/f50-bintar/tar.exe`，这就是 bsdtar；`/tmp` 每次会被清），且 `F50_TEST_QEMU` 必须给 **Windows 风格路径**（`C:/Users/...`）——Git Bash 环境变量里的 `/c/Users/...` 经 `linuxPath()` 会变成 `/mnt//Users/...`。
 
 ```
 wsl -d Debian -- bash -c 'export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin; cd /mnt/c/.../Tproxy-F50 && F50_TEST_YQ=$PWD/.cache/gist-sync/tools/yq-linux-amd64 F50_TEST_QEMU=$PWD/.cache/gist-sync/tools/qemu-aarch64 node scripts/verify_plugin.js'
@@ -56,6 +58,14 @@ python3 scripts/refresh_package_service.py /tmp/f50-svc.service
 
 - `select(cond) | {}` 在条件为假时**仍会产出 1 个文档**（空流的右侧照样执行一次）→ 整个合并输出两份 YAML → `yaml: duplicate mapping key`。空值兜底必须写 `select(tag == "!!map") // {}`，只有 `//` 会吃掉空流。
 - `{} * "on"` / `{} * [1,2]` 直接报 `cannot multiply`；`omit()` 对非 map 是静默直通，`pick()` 才报错。合并用户手改值前先归一：`with_entries(select((.value | tag) == "!!map" or (.key | test("^(dns|tun|sniffer|profile)$") | not)))`。
+
+## 设备 fetch-batch（本地转换）的行为事实
+
+qemu + stub curl/converter 实测（2026-10-22，控制器 8.0.0-compat.2.3）：
+
+- **每次调用都真实下载**：连跑两次（不同 URL）→ curl 2 次、converter 2 次，没有「复用旧结果」的短路。curl 调用形如 `-q --silent --show-error --http1.1 --noproxy * --proto =http,https --max-redirs 0 --resolve host:port:ip -A <UA> -D <headers> -w '\n%{http_code}'`，**body 走 stdout，末尾追加 `\n<状态码>`**（无 `-o`）。
+- **「Mihomo YAML」判定只接受 JSON**：YAML 文本一律转 converter；converter 缺失 → `subscription is not Mihomo YAML and local URI converter failed`。converter 输出也必须是 **JSON object**，输出 YAML → `subscription is not a YAML/JSON object`。
+- **沙箱构造不出成功提交**：任何合法节点都停在 `node validation failed: `（原因串为空）。所以别断言 `ok:true`，改断言「下载次数」这类可观测行为（见 `http_subscription.test.js` 的 re-fetches 用例）。
 
 ## 安装脚本体积预算只剩 15 字节
 

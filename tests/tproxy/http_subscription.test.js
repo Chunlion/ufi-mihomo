@@ -253,6 +253,46 @@ printf '%s' ${quote(body + '\n200')}
   });
 }
 
+test('ARM64 download re-fetches on every call instead of reusing the previous result', { skip: !qemu }, () => {
+  const { dir, binary } = fixture();
+  try {
+    fs.mkdirSync(path.join(dir, 'Proxy/proxies'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bin/curl'), `#!/bin/sh
+last=
+for a in "$@"; do last=$a; done
+printf '%s\\n' "$last" >> "$CLASH_ROOT/curl.log"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -D ]; then shift; printf 'HTTP/1.1 200 OK\\r\\nContent-Type: text/yaml\\r\\n\\r\\n' > "$1"; fi
+  shift
+done
+printf 'proxies:\\n  - {name: Node, type: socks5, server: example.com, port: 1080}\\n200'
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(dir, 'Tools/kano-f50-helper-converter'), `#!/bin/sh
+input=""; output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in --input) shift; input=$1 ;; --output) shift; output=$1 ;; esac
+  shift
+done
+printf 'call\\n' >> "$CLASH_ROOT/converter.log"
+cp "$input" "$output"
+printf '{"ok":true,"proxyCount":1,"format":"clash"}\\n'
+`, { mode: 0o755 });
+    assert.equal(patch(dir).status, 0);
+    const request = path.join(dir, 'request.json');
+    const run = url => {
+      fs.writeFileSync(request, JSON.stringify({ sources: [{ name: 'Provider1', url }], userAgent: 'clash.meta' }));
+      const result = native(dir, binary, request);
+      assert.ifError(result.error);
+      return result.stdout;
+    };
+    run('https://8.8.8.8/first-subscription');
+    run('https://8.8.8.8/second-subscription');
+    const downloads = fs.readFileSync(path.join(dir, 'curl.log'), 'utf8').trim().split(/\r?\n/);
+    assert.deepEqual(downloads, ['https://8.8.8.8/first-subscription', 'https://8.8.8.8/second-subscription']);
+    assert.equal(fs.readFileSync(path.join(dir, 'converter.log'), 'utf8').trim().split(/\r?\n/).length, 2);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const url of ['ftp://8.8.8.8/sub', 'http://user:pass@8.8.8.8/sub', 'http://127.0.0.1/sub']) {
   test(`ARM64 download retains URL validation for ${url}`, { skip: !qemu }, () => {
     const { dir, binary } = fixture();

@@ -2,182 +2,182 @@ TAP version 13
 # Subtest: GitCode package succeeds without contacting other mirrors
 ok 1 - GitCode package succeeds without contacting other mirrors
   ---
-  duration_ms: 2.105815
+  duration_ms: 2.052325
   ...
 # Subtest: GitCode failure (Load failed) falls back to Gitee
 ok 2 - GitCode failure (Load failed) falls back to Gitee
   ---
-  duration_ms: 0.719565
+  duration_ms: 0.691994
   ...
 # Subtest: GitCode failure (ARCHIVE_VERIFY_FAILED=zip) falls back to Gitee
 ok 3 - GitCode failure (ARCHIVE_VERIFY_FAILED=zip) falls back to Gitee
   ---
-  duration_ms: 0.583147
+  duration_ms: 0.554043
   ...
 # Subtest: GitCode and Gitee failures fall back to GitHub
 ok 4 - GitCode and Gitee failures fall back to GitHub
   ---
-  duration_ms: 0.679546
+  duration_ms: 0.690614
   ...
 # Subtest: all download failures retain diagnostics and report failure
 ok 5 - all download failures retain diagnostics and report failure
   ---
-  duration_ms: 0.632144
+  duration_ms: 0.61278
   ...
 # Subtest: cached compatible packages do not require a pinned release hash
 ok 6 - cached compatible packages do not require a pinned release hash
   ---
-  duration_ms: 1.28426
+  duration_ms: 1.140685
   ...
 # Subtest: background downloads tolerate a failed log read without restarting the worker
 ok 7 - background downloads tolerate a failed log read without restarting the worker
   ---
-  duration_ms: 0.588631
+  duration_ms: 0.589132
   ...
 # Subtest: unconfirmed background download retains the lease and never tries another source
 ok 8 - unconfirmed background download retains the lease and never tries another source
   ---
-  duration_ms: 9.502255
+  duration_ms: 9.679033
   ...
 # Subtest: device background worker verifies ZIP before replacement / true
 ok 9 - device background worker verifies ZIP before replacement / true
   ---
-  duration_ms: 1025.198323
+  duration_ms: 1022.413625
   ...
 # Subtest: device background worker verifies ZIP before replacement / false
 ok 10 - device background worker verifies ZIP before replacement / false
   ---
-  duration_ms: 3025.732081
+  duration_ms: 3023.194192
   ...
 # Subtest: lease failure stops package requests / cache=false / F50_OPERATION_BUSY
 ok 11 - lease failure stops package requests / cache=false / F50_OPERATION_BUSY
   ---
-  duration_ms: 0.740136
+  duration_ms: 0.674874
   ...
 # Subtest: lease failure stops package requests / cache=false / F50_OPERATION_UNSAFE_PATH
 ok 12 - lease failure stops package requests / cache=false / F50_OPERATION_UNSAFE_PATH
   ---
-  duration_ms: 0.409507
+  duration_ms: 0.406361
   ...
 # Subtest: lease failure stops package requests / cache=true / F50_OPERATION_BUSY
 ok 13 - lease failure stops package requests / cache=true / F50_OPERATION_BUSY
   ---
-  duration_ms: 0.341616
+  duration_ms: 0.328084
   ...
 # Subtest: lease failure stops package requests / cache=true / F50_OPERATION_UNSAFE_PATH
 ok 14 - lease failure stops package requests / cache=true / F50_OPERATION_UNSAFE_PATH
   ---
-  duration_ms: 0.388365
+  duration_ms: 0.46758
   ...
 # Subtest: online package failure replaces the previous installation diagnostic
 ok 15 - online package failure replaces the previous installation diagnostic
   ---
-  duration_ms: 1.012778
+  duration_ms: 0.986972
   ...
 # Subtest: uncertain device state through real installation entry / online / idle
 ok 16 - uncertain device state through real installation entry / online / idle
   ---
-  duration_ms: 1.257451
+  duration_ms: 1.231294
   ...
 # Subtest: uncertain device state through real installation entry / online / active_task
 ok 17 - uncertain device state through real installation entry / online / active_task
   ---
-  duration_ms: 0.662268
+  duration_ms: 0.636016
   ...
 # Subtest: uncertain device state through real installation entry / online / unknown_owner
 ok 18 - uncertain device state through real installation entry / online / unknown_owner
   ---
-  duration_ms: 0.645095
+  duration_ms: 0.837993
   ...
 # Subtest: uncertain device state through real installation entry / online / transport_lost
 ok 19 - uncertain device state through real installation entry / online / transport_lost
   ---
-  duration_ms: 0.701935
+  duration_ms: 0.824353
   ...
 # Subtest: uncertain device state through real installation entry / upload / idle
 ok 20 - uncertain device state through real installation entry / upload / idle
   ---
-  duration_ms: 0.982065
+  duration_ms: 0.944542
   ...
 # Subtest: uncertain device state through real installation entry / upload / active_task
 ok 21 - uncertain device state through real installation entry / upload / active_task
   ---
-  duration_ms: 0.659806
+  duration_ms: 0.651656
   ...
 # Subtest: uncertain device state through real installation entry / upload / unknown_owner
 ok 22 - uncertain device state through real installation entry / upload / unknown_owner
   ---
-  duration_ms: 0.669601
+  duration_ms: 0.609764
   ...
 # Subtest: uncertain device state through real installation entry / upload / transport_lost
 ok 23 - uncertain device state through real installation entry / upload / transport_lost
   ---
-  duration_ms: 0.634865
+  duration_ms: 0.794567
   ...
 # Subtest: uncertain device state still blocks ordinary critical operations
 ok 24 - uncertain device state still blocks ordinary critical operations
   ---
-  duration_ms: 0.698395
+  duration_ms: 0.712416
   ...
 # Subtest: busy device prevents package upload and cleanup
 ok 25 - busy device prevents package upload and cleanup
   ---
-  duration_ms: 0.735183
+  duration_ms: 0.818768
   ...
 # Subtest: package upload and cleanup run after the device lease is acquired
 ok 26 - package upload and cleanup run after the device lease is acquired
   ---
-  duration_ms: 0.647569
+  duration_ms: 0.596586
   ...
 # Subtest: failed upload replaces the previous diagnostic without deleting an unrelated file
 ok 27 - failed upload replaces the previous diagnostic without deleting an unrelated file
   ---
-  duration_ms: 0.526401
+  duration_ms: 0.638543
   ...
 # Subtest: cleanup failure retains the original installation error
 ok 28 - cleanup failure retains the original installation error
   ---
-  duration_ms: 0.870013
+  duration_ms: 0.619046
   ...
 # Subtest: installation lease recovery / online / idle
 ok 29 - installation lease recovery / online / idle
   ---
-  duration_ms: 0.719543
+  duration_ms: 0.748288
   ...
 # Subtest: installation lease recovery / online / active
 ok 30 - installation lease recovery / online / active
   ---
-  duration_ms: 0.525748
+  duration_ms: 0.548502
   ...
 # Subtest: installation lease recovery / online / retry_busy
 ok 31 - installation lease recovery / online / retry_busy
   ---
-  duration_ms: 0.514635
+  duration_ms: 0.446549
   ...
 # Subtest: installation lease recovery / online / transport_lost
 ok 32 - installation lease recovery / online / transport_lost
   ---
-  duration_ms: 0.541089
+  duration_ms: 0.617254
   ...
 # Subtest: installation lease recovery / upload / idle
 ok 33 - installation lease recovery / upload / idle
   ---
-  duration_ms: 0.665648
+  duration_ms: 0.539178
   ...
 # Subtest: installation lease recovery / upload / active
 ok 34 - installation lease recovery / upload / active
   ---
-  duration_ms: 0.492698
+  duration_ms: 0.530279
   ...
 # Subtest: installation lease recovery / upload / retry_busy
 ok 35 - installation lease recovery / upload / retry_busy
   ---
-  duration_ms: 0.572149
+  duration_ms: 0.48273
   ...
 # Subtest: installation lease recovery / upload / transport_lost
 ok 36 - installation lease recovery / upload / transport_lost
   ---
-  duration_ms: 0.484602
+  duration_ms: 0.552279
   ...
 1..36
 # tests 36
@@ -187,4 +187,4 @@ ok 36 - installation lease recovery / upload / transport_lost
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 4196.428961
+# duration_ms 4193.630236

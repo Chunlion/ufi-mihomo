@@ -2,857 +2,857 @@ TAP version 13
 # Subtest: ordinary settings read does not acquire a device lease / loadProviderUserAgent
 ok 1 - ordinary settings read does not acquire a device lease / loadProviderUserAgent
   ---
-  duration_ms: 2.32591
+  duration_ms: 2.269021
   ...
 # Subtest: ordinary settings read does not acquire a device lease / readCurrentSubRuleMode
 ok 2 - ordinary settings read does not acquire a device lease / readCurrentSubRuleMode
   ---
-  duration_ms: 0.953736
+  duration_ms: 0.91834
   ...
 # Subtest: ordinary settings read does not acquire a device lease / readConfigSource
 ok 3 - ordinary settings read does not acquire a device lease / readConfigSource
   ---
-  duration_ms: 0.892382
+  duration_ms: 0.849215
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / stat
 ok 4 - writer failure releases its lock and preserves the caller trap / stat
   ---
-  duration_ms: 4.103096
+  duration_ms: 4.589319
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / busy
 ok 5 - writer failure releases its lock and preserves the caller trap / busy
   ---
-  duration_ms: 6.861894
+  duration_ms: 7.237288
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / frontend
 ok 6 - writer failure releases its lock and preserves the caller trap / frontend
   ---
-  duration_ms: 6.210152
+  duration_ms: 6.437451
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / release_absent
 ok 7 - writer failure releases its lock and preserves the caller trap / release_absent
   ---
-  duration_ms: 4.987939
+  duration_ms: 5.642663
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / release_owner
 ok 8 - writer failure releases its lock and preserves the caller trap / release_owner
   ---
-  duration_ms: 5.75662
+  duration_ms: 6.241626
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / release_cancelled
 ok 9 - writer failure releases its lock and preserves the caller trap / release_cancelled
   ---
-  duration_ms: 5.682625
+  duration_ms: 6.787864
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / release_worker
 ok 10 - writer failure releases its lock and preserves the caller trap / release_worker
   ---
-  duration_ms: 5.950888
+  duration_ms: 6.097019
   ...
 # Subtest: writer failure releases its lock and preserves the caller trap / receipt
 ok 11 - writer failure releases its lock and preserves the caller trap / receipt
   ---
-  duration_ms: 5.072109
+  duration_ms: 6.121852
   ...
 # Subtest: API curl keeps sensitive values off argv and preserves request bytes
 ok 12 - API curl keeps sensitive values off argv and preserves request bytes
   ---
-  duration_ms: 35.175925
+  duration_ms: 30.710577
   ...
 # Subtest: YAML omits undefined object values and rejects nonfinite numbers
 ok 13 - YAML omits undefined object values and rejects nonfinite numbers
   ---
-  duration_ms: 1.59599
+  duration_ms: 1.758207
   ...
 # Subtest: cancelled upload removes the returned file before reporting cancellation
 ok 14 - cancelled upload removes the returned file before reporting cancellation
   ---
-  duration_ms: 3.233105
+  duration_ms: 3.983867
   ...
 # Subtest: service command quotes each argument without executing path contents
 ok 15 - service command quotes each argument without executing path contents
   ---
-  duration_ms: 3.421575
+  duration_ms: 3.490407
   ...
 # Subtest: editor failure removes an upload without changing the destination
 ok 16 - editor failure removes an upload without changing the destination
   ---
-  duration_ms: 3.328778
+  duration_ms: 3.52451
   ...
 # Subtest: backup pruning handles spaces and matching source sidecars
 ok 17 - backup pruning handles spaces and matching source sidecars
   ---
-  duration_ms: 5.525057
+  duration_ms: 7.153753
   ...
 # Subtest: failed template validation removes the original upload
 ok 18 - failed template validation removes the original upload
   ---
-  duration_ms: 3.300154
+  duration_ms: 4.005399
   ...
 # Subtest: export cleanup runs on the device after the browser handler has returned
 ok 19 - export cleanup runs on the device after the browser handler has returned
   ---
-  duration_ms: 34.243009
+  duration_ms: 35.536962
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / ../escape
 ok 20 - configuration restore validates fallback ZIP listings before extraction / ../escape
   ---
-  duration_ms: 7.702945
+  duration_ms: 8.342218
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / ..
 ok 21 - configuration restore validates fallback ZIP listings before extraction / ..
   ---
-  duration_ms: 6.889004
+  duration_ms: 6.921189
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / /absolute
 ok 22 - configuration restore validates fallback ZIP listings before extraction / /absolute
   ---
-  duration_ms: 6.735611
+  duration_ms: 6.539882
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / dir/../escape
 ok 23 - configuration restore validates fallback ZIP listings before extraction / dir/../escape
   ---
-  duration_ms: 6.14289
+  duration_ms: 6.47033
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / dir\\escape
 ok 24 - configuration restore validates fallback ZIP listings before extraction / dir\\escape
   ---
-  duration_ms: 5.943509
+  duration_ms: 6.783783
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / name\\tbad
 ok 25 - configuration restore validates fallback ZIP listings before extraction / name\\tbad
   ---
-  duration_ms: 6.337815
+  duration_ms: 6.943842
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / config.yaml
 ok 26 - configuration restore validates fallback ZIP listings before extraction / config.yaml
   ---
-  duration_ms: 6.535773
+  duration_ms: 7.174535
   ...
 # Subtest: configuration restore validates fallback ZIP listings before extraction / ./config.yaml
 ok 27 - configuration restore validates fallback ZIP listings before extraction / ./config.yaml
   ---
-  duration_ms: 6.769965
+  duration_ms: 7.135587
   ...
 # Subtest: all final operation shells parse in sh and BusyBox ash
 ok 28 - all final operation shells parse in sh and BusyBox ash
   ---
-  duration_ms: 42.368771
+  duration_ms: 50.329761
   ...
 # Subtest: Service candidate failure at tun preserves the complete original
 ok 29 - Service candidate failure at tun preserves the complete original
   ---
-  duration_ms: 8.89573
+  duration_ms: 8.904953
   ...
 # Subtest: Service candidate failure at original preserves the complete original
 ok 30 - Service candidate failure at original preserves the complete original
   ---
-  duration_ms: 10.057787
+  duration_ms: 11.664681
   ...
 # Subtest: Service candidate failure at audit5 preserves the complete original
 ok 31 - Service candidate failure at audit5 preserves the complete original
   ---
-  duration_ms: 9.493989
+  duration_ms: 10.34089
   ...
 # Subtest: Service candidate failure at tun6 preserves the complete original
 ok 32 - Service candidate failure at tun6 preserves the complete original
   ---
-  duration_ms: 14.151653
+  duration_ms: 15.136637
   ...
 # Subtest: Service candidate failure at dns preserves the complete original
 ok 33 - Service candidate failure at dns preserves the complete original
   ---
-  duration_ms: 14.128905
+  duration_ms: 16.396534
   ...
 # Subtest: Service patch is idempotent and preserves file permissions
 ok 34 - Service patch is idempotent and preserves file permissions
   ---
-  duration_ms: 41.896845
+  duration_ms: 48.563651
   ...
 # Subtest: packaged Service migration installs executable DNS address validation
 ok 35 - packaged Service migration installs executable DNS address validation
   ---
-  duration_ms: 23.001598
+  duration_ms: 23.909941
   ...
 # Subtest: panel identity and referenced resource <title>zashboard</title><script src="./assets/main.js"></script>
 ok 36 - panel identity and referenced resource <title>zashboard</title><script src="./assets/main.js"></script>
   ---
-  duration_ms: 3.824016
+  duration_ms: 3.456587
   ...
 # Subtest: panel identity and referenced resource <title>Zashboard</title><script src='/app.mjs?v=2'></script>
 ok 37 - panel identity and referenced resource <title>Zashboard</title><script src='/app.mjs?v=2'></script>
   ---
-  duration_ms: 3.570616
+  duration_ms: 3.37088
   ...
 # Subtest: panel identity and referenced resource <title>zashboard</title><script src="missing.js"></script>
 ok 38 - panel identity and referenced resource <title>zashboard</title><script src="missing.js"></script>
   ---
-  duration_ms: 3.445566
+  duration_ms: 3.23075
   ...
 # Subtest: panel identity and referenced resource <title>metacubexd</title><script src="main.js"></script>
 ok 39 - panel identity and referenced resource <title>metacubexd</title><script src="main.js"></script>
   ---
-  duration_ms: 2.330288
+  duration_ms: 2.142392
   ...
 # Subtest: template/base pair commit commits both files
 ok 40 - template/base pair commit commits both files
   ---
-  duration_ms: 114.998564
+  duration_ms: 128.527877
   ...
 # Subtest: template/base pair commit rolls back both files
 ok 41 - template/base pair commit rolls back both files
   ---
-  duration_ms: 138.772357
+  duration_ms: 134.796754
   ...
 # Subtest: template regeneration candidate / success
 ok 42 - template regeneration candidate / success
   ---
-  duration_ms: 6.196113
+  duration_ms: 6.630159
   ...
 # Subtest: template regeneration candidate / normalize
 ok 43 - template regeneration candidate / normalize
   ---
-  duration_ms: 5.5188
+  duration_ms: 5.58175
   ...
 # Subtest: template regeneration candidate / override
 ok 44 - template regeneration candidate / override
   ---
-  duration_ms: 5.117131
+  duration_ms: 5.879482
   ...
 # Subtest: template regeneration candidate / commit
 ok 45 - template regeneration candidate / commit
   ---
-  duration_ms: 5.572259
+  duration_ms: 5.808924
   ...
 # Subtest: override Worker entry point function main(config) { config.rules 
 ok 46 - override Worker entry point function main(config) { config.rules 
   ---
-  duration_ms: 24.915764
+  duration_ms: 25.165797
   ...
 # Subtest: override Worker entry point module.exports 
 ok 47 - override Worker entry point module.exports 
   ---
-  duration_ms: 21.54015
+  duration_ms: 22.090344
   ...
 # Subtest: override Worker entry point module.exports.default 
 ok 48 - override Worker entry point module.exports.default 
   ---
-  duration_ms: 21.203101
+  duration_ms: 22.091774
   ...
 # Subtest: override Worker entry point exports.default 
 ok 49 - override Worker entry point exports.default 
   ---
-  duration_ms: 22.109504
+  duration_ms: 21.258288
   ...
 # Subtest: override Worker entry point export default function main(config) { config.rules 
 ok 50 - override Worker entry point export default function main(config) { config.rules 
   ---
-  duration_ms: 23.062253
+  duration_ms: 21.538478
   ...
 # Subtest: override validation blocks import, self and escaped spellings while accepting UTF-8 strings
 ok 51 - override validation blocks import, self and escaped spellings while accepting UTF-8 strings
   ---
-  duration_ms: 1.544384
+  duration_ms: 1.480204
   ...
 # Subtest: override rejects invalid result / function main() { throw new Error("override failure"); }
 ok 52 - override rejects invalid result / function main() { throw new Error("override failure"); }
   ---
-  duration_ms: 21.702267
+  duration_ms: 22.117998
   ...
 # Subtest: override rejects invalid result / function main() { return []; }
 ok 53 - override rejects invalid result / function main() { return []; }
   ---
-  duration_ms: 21.937125
+  duration_ms: 21.688169
   ...
 # Subtest: override rejects invalid result / function main() { return {rules:"bad"}; }
 ok 54 - override rejects invalid result / function main() { return {rules:"bad"}; }
   ---
-  duration_ms: 21.529436
+  duration_ms: 23.624999
   ...
 # Subtest: override blocks computed dynamic constructors / function() {}
 ok 55 - override blocks computed dynamic constructors / function() {}
   ---
-  duration_ms: 22.913917
+  duration_ms: 22.067516
   ...
 # Subtest: override blocks computed dynamic constructors / async function() {}
 ok 56 - override blocks computed dynamic constructors / async function() {}
   ---
-  duration_ms: 22.68561
+  duration_ms: 22.35281
   ...
 # Subtest: override blocks computed dynamic constructors / function*() {}
 ok 57 - override blocks computed dynamic constructors / function*() {}
   ---
-  duration_ms: 26.829177
+  duration_ms: 22.165051
   ...
 # Subtest: override blocks computed dynamic constructors / async function*() {}
 ok 58 - override blocks computed dynamic constructors / async function*() {}
   ---
-  duration_ms: 21.759973
+  duration_ms: 21.742731
   ...
 # Subtest: recovery registry / {}
 ok 59 - recovery registry / {}
   ---
-  duration_ms: 5.195327
+  duration_ms: 5.45202
   ...
 # Subtest: recovery registry / {"reclaim":true}
 ok 60 - recovery registry / {"reclaim":true}
   ---
-  duration_ms: 6.187394
+  duration_ms: 7.25027
   ...
 # Subtest: recovery registry / {"active":true}
 ok 61 - recovery registry / {"active":true}
   ---
-  duration_ms: 2.889152
+  duration_ms: 3.20585
   ...
 # Subtest: recovery registry / {"reused":true}
 ok 62 - recovery registry / {"reused":true}
   ---
-  duration_ms: 5.77432
+  duration_ms: 5.814428
   ...
 # Subtest: recovery registry / {"receipt":false}
 ok 63 - recovery registry / {"receipt":false}
   ---
-  duration_ms: 2.917509
+  duration_ms: 2.897363
   ...
 # Subtest: recovery registry / {"foreign":true}
 ok 64 - recovery registry / {"foreign":true}
   ---
-  duration_ms: 2.792331
+  duration_ms: 2.782754
   ...
 # Subtest: recovery registry / {"transaction":true}
 ok 65 - recovery registry / {"transaction":true}
   ---
-  duration_ms: 4.349075
+  duration_ms: 4.992035
   ...
 # Subtest: recovery registry / {"legacy":true}
 ok 66 - recovery registry / {"legacy":true}
   ---
-  duration_ms: 2.599895
+  duration_ms: 3.178053
   ...
 # Subtest: recovery registry / {"background":true}
 ok 67 - recovery registry / {"background":true}
   ---
-  duration_ms: 4.912733
+  duration_ms: 5.975284
   ...
 # Subtest: recovery registry / {"output":true,"reclaim":true}
 ok 68 - recovery registry / {"output":true,"reclaim":true}
   ---
-  duration_ms: 6.153175
+  duration_ms: 7.125415
   ...
 # Subtest: recovery registry / {"output":true,"receipt":false}
 ok 69 - recovery registry / {"output":true,"receipt":false}
   ---
-  duration_ms: 3.273531
+  duration_ms: 3.265611
   ...
 # Subtest: recovery registry / {"pendingReceipt":"complete","receipt":false,"preempt":true,"reclaim":true}
 ok 70 - recovery registry / {"pendingReceipt":"complete","receipt":false,"preempt":true,"reclaim":true}
   ---
-  duration_ms: 5.939208
+  duration_ms: 6.417098
   ...
 # Subtest: recovery registry / {"pendingReceipt":"partial","receipt":false,"preempt":true,"reclaim":true}
 ok 71 - recovery registry / {"pendingReceipt":"partial","receipt":false,"preempt":true,"reclaim":true}
   ---
-  duration_ms: 6.107985
+  duration_ms: 6.750809
   ...
 # Subtest: recovery registry / {"pendingReceipt":"partial","receipt":false,"active":true,"reclaim":true}
 ok 72 - recovery registry / {"pendingReceipt":"partial","receipt":false,"active":true,"reclaim":true}
   ---
-  duration_ms: 3.055893
+  duration_ms: 3.145237
   ...
 # Subtest: recovery registry / {"snapshot":true}
 ok 73 - recovery registry / {"snapshot":true}
   ---
-  duration_ms: 4.401121
+  duration_ms: 4.68461
   ...
 # Subtest: recovery registry / {"snapshot":true,"receipt":false,"preempt":true,"reclaim":true}
 ok 74 - recovery registry / {"snapshot":true,"receipt":false,"preempt":true,"reclaim":true}
   ---
-  duration_ms: 6.392496
+  duration_ms: 6.343789
   ...
 # Subtest: recovery registry / {"unrelated":true}
 ok 75 - recovery registry / {"unrelated":true}
   ---
-  duration_ms: 4.175322
+  duration_ms: 4.361108
   ...
 # Subtest: recovery registry / {"background":true,"backgroundComm":"cp"}
 ok 76 - recovery registry / {"background":true,"backgroundComm":"cp"}
   ---
-  duration_ms: 5.821267
+  duration_ms: 5.205453
   ...
 # Subtest: manual recovery releases the network and retains interrupted subscription backups
 ok 77 - manual recovery releases the network and retains interrupted subscription backups
   ---
-  duration_ms: 12.160393
+  duration_ms: 12.584255
   ...
 # Subtest: manual recovery restores native network journals / arm64-v8a/restored
 ok 78 - manual recovery restores native network journals / arm64-v8a/restored
   ---
-  duration_ms: 16.810295
+  duration_ms: 17.755176
   ...
 # Subtest: manual recovery restores native network journals / armeabi-v7a/restored
 ok 79 - manual recovery restores native network journals / armeabi-v7a/restored
   ---
-  duration_ms: 15.547594
+  duration_ms: 16.837143
   ...
 # Subtest: manual recovery restores native network journals / other/restored
 ok 80 - manual recovery restores native network journals / other/restored
   ---
-  duration_ms: 19.136839
+  duration_ms: 17.264735
   ...
 # Subtest: manual recovery restores native network journals / arm64-v8a/failed
 ok 81 - manual recovery restores native network journals / arm64-v8a/failed
   ---
-  duration_ms: 16.90245
+  duration_ms: 15.463872
   ...
 # Subtest: manual recovery restores native network journals / arm64-v8a/unrestored
 ok 82 - manual recovery restores native network journals / arm64-v8a/unrestored
   ---
-  duration_ms: 14.185829
+  duration_ms: 16.251556
   ...
 # Subtest: manual recovery restores native network journals / arm64-v8a/missing
 ok 83 - manual recovery restores native network journals / arm64-v8a/missing
   ---
-  duration_ms: 13.320877
+  duration_ms: 15.78296
   ...
 # Subtest: manual recovery releases only an exited installer lock / exited
 ok 84 - manual recovery releases only an exited installer lock / exited
   ---
-  duration_ms: 12.03353
+  duration_ms: 11.759776
   ...
 # Subtest: manual recovery releases only an exited installer lock / running
 ok 85 - manual recovery releases only an exited installer lock / running
   ---
-  duration_ms: 7.451545
+  duration_ms: 8.560419
   ...
 # Subtest: manual recovery releases only an exited installer lock / unknown_entry
 ok 86 - manual recovery releases only an exited installer lock / unknown_entry
   ---
-  duration_ms: 7.455619
+  duration_ms: 7.939356
   ...
 # Subtest: recovery scan identifies orphaned file writers by task ownership / false
 ok 87 - recovery scan identifies orphaned file writers by task ownership / false
   ---
-  duration_ms: 4.904924
+  duration_ms: 5.386052
   ...
 # Subtest: recovery scan identifies orphaned file writers by task ownership / true
 ok 88 - recovery scan identifies orphaned file writers by task ownership / true
   ---
-  duration_ms: 4.911762
+  duration_ms: 5.738033
   ...
 # Subtest: uninstall busy lease recovery / idle
 ok 89 - uninstall busy lease recovery / idle
   ---
-  duration_ms: 2.201743
+  duration_ms: 1.92225
   ...
 # Subtest: uninstall busy lease recovery / active
 ok 90 - uninstall busy lease recovery / active
   ---
-  duration_ms: 1.257151
+  duration_ms: 1.062433
   ...
 # Subtest: uninstall busy lease recovery / retry_busy
 ok 91 - uninstall busy lease recovery / retry_busy
   ---
-  duration_ms: 1.060511
+  duration_ms: 0.962925
   ...
 # Subtest: uninstall busy lease recovery / recovery_timeout
 ok 92 - uninstall busy lease recovery / recovery_timeout
   ---
-  duration_ms: 0.803723
+  duration_ms: 0.99468
   ...
 # Subtest: uninstall busy lease recovery / owned_busy
 ok 93 - uninstall busy lease recovery / owned_busy
   ---
-  duration_ms: 0.710944
+  duration_ms: 0.818601
   ...
 # Subtest: uninstall busy lease recovery / normal
 ok 94 - uninstall busy lease recovery / normal
   ---
-  duration_ms: 0.68538
+  duration_ms: 0.703122
   ...
 # Subtest: browser task ownership and receipt / completed
 ok 95 - browser task ownership and receipt / completed
   ---
-  duration_ms: 1.936287
+  duration_ms: 1.916962
   ...
 # Subtest: browser task ownership and receipt / cancelled_before
 ok 96 - browser task ownership and receipt / cancelled_before
   ---
-  duration_ms: 1.137572
+  duration_ms: 0.916813
   ...
 # Subtest: browser task ownership and receipt / cancelled_during
 ok 97 - browser task ownership and receipt / cancelled_during
   ---
-  duration_ms: 0.901733
+  duration_ms: 0.90124
   ...
 # Subtest: browser task ownership and receipt / missing_receipt
 ok 98 - browser task ownership and receipt / missing_receipt
   ---
-  duration_ms: 0.926507
+  duration_ms: 1.184245
   ...
 # Subtest: browser task ownership and receipt / timeout
 ok 99 - browser task ownership and receipt / timeout
   ---
-  duration_ms: 1.043636
+  duration_ms: 0.867839
   ...
 # Subtest: browser task ownership and receipt / other_page_busy
 ok 100 - browser task ownership and receipt / other_page_busy
   ---
-  duration_ms: 0.930963
+  duration_ms: 1.24608
   ...
 # Subtest: browser task ownership and receipt / unsafe_path
 ok 101 - browser task ownership and receipt / unsafe_path
   ---
-  duration_ms: 0.815189
+  duration_ms: 0.773012
   ...
 # Subtest: browser task ownership and receipt / released_before_acquire
 ok 102 - browser task ownership and receipt / released_before_acquire
   ---
-  duration_ms: 0.863858
+  duration_ms: 2.323191
   ...
 # Subtest: browser task ownership and receipt / response_lost
 ok 103 - browser task ownership and receipt / response_lost
   ---
-  duration_ms: 0.851595
+  duration_ms: 0.902882
   ...
 # Subtest: browser task ownership and receipt / response_truncated
 ok 104 - browser task ownership and receipt / response_truncated
   ---
-  duration_ms: 0.778994
+  duration_ms: 0.895576
   ...
 # Subtest: browser task ownership and receipt / failed_response_lost
 ok 105 - browser task ownership and receipt / failed_response_lost
   ---
-  duration_ms: 0.961761
+  duration_ms: 0.889015
   ...
 # Subtest: browser task ownership and receipt / heartbeat_lost
 ok 106 - browser task ownership and receipt / heartbeat_lost
   ---
-  duration_ms: 2.189551
+  duration_ms: 0.934018
   ...
 # Subtest: browser task ownership and receipt / acquire_lost
 ok 107 - browser task ownership and receipt / acquire_lost
   ---
-  duration_ms: 1.031517
+  duration_ms: 0.926461
   ...
 # Subtest: browser task ownership and receipt / host_footer
 ok 108 - browser task ownership and receipt / host_footer
   ---
-  duration_ms: 0.945011
+  duration_ms: 0.947883
   ...
 # Subtest: browser task ownership and receipt / nested_reply
 ok 109 - browser task ownership and receipt / nested_reply
   ---
-  duration_ms: 0.753683
+  duration_ms: 0.770036
   ...
 # Subtest: browser task ownership and receipt / string_reply
 ok 110 - browser task ownership and receipt / string_reply
   ---
-  duration_ms: 0.766353
+  duration_ms: 0.862379
   ...
 # Subtest: browser task ownership and receipt / wrong_receipt
 ok 111 - browser task ownership and receipt / wrong_receipt
   ---
-  duration_ms: 1.139988
+  duration_ms: 0.860796
   ...
 # Subtest: uninstall stops after a failed stage / stop
 ok 112 - uninstall stops after a failed stage / stop
   ---
-  duration_ms: 1.093255
+  duration_ms: 0.878048
   ...
 # Subtest: uninstall stops after a failed stage / stop_throw
 ok 113 - uninstall stops after a failed stage / stop_throw
   ---
-  duration_ms: 0.724355
+  duration_ms: 0.766013
   ...
 # Subtest: uninstall stops after a failed stage / boot
 ok 114 - uninstall stops after a failed stage / boot
   ---
-  duration_ms: 0.720348
+  duration_ms: 0.864367
   ...
 # Subtest: uninstall recovers a prior failed operation before running stages / false
 ok 115 - uninstall recovers a prior failed operation before running stages / false
   ---
-  duration_ms: 1.157947
+  duration_ms: 1.142226
   ...
 # Subtest: uninstall recovers a prior failed operation before running stages / true
 ok 116 - uninstall recovers a prior failed operation before running stages / true
   ---
-  duration_ms: 0.837261
+  duration_ms: 0.842657
   ...
 # Subtest: installation reclaims only idle abandoned leases / idle
 ok 117 - installation reclaims only idle abandoned leases / idle
   ---
-  duration_ms: 11.41354
+  duration_ms: 12.408713
   ...
 # Subtest: installation reclaims only idle abandoned leases / active_worker
 ok 118 - installation reclaims only idle abandoned leases / active_worker
   ---
-  duration_ms: 6.983351
+  duration_ms: 7.873855
   ...
 # Subtest: installation reclaims only idle abandoned leases / active_frontend
 ok 119 - installation reclaims only idle abandoned leases / active_frontend
   ---
-  duration_ms: 8.059348
+  duration_ms: 8.541795
   ...
 # Subtest: installation reclaims only idle abandoned leases / active_installer
 ok 120 - installation reclaims only idle abandoned leases / active_installer
   ---
-  duration_ms: 5.546587
+  duration_ms: 6.522068
   ...
 # Subtest: installation reclaims only idle abandoned leases / unknown_install_entry
 ok 121 - installation reclaims only idle abandoned leases / unknown_install_entry
   ---
-  duration_ms: 6.111032
+  duration_ms: 6.555003
   ...
 # Subtest: installation reclaims only idle abandoned leases / foreign_receipt
 ok 122 - installation reclaims only idle abandoned leases / foreign_receipt
   ---
-  duration_ms: 6.317891
+  duration_ms: 6.887576
   ...
 # Subtest: installation reclaims only idle abandoned leases / pending_config_transaction
 ok 123 - installation reclaims only idle abandoned leases / pending_config_transaction
   ---
-  duration_ms: 8.430954
+  duration_ms: 8.370031
   ...
 # Subtest: installation reclaims only idle abandoned leases / unfinished_receipt
 ok 124 - installation reclaims only idle abandoned leases / unfinished_receipt
   ---
-  duration_ms: 6.251168
+  duration_ms: 6.791815
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / idle
 ok 125 - uninstall reclaims only idle abandoned leases / idle
   ---
-  duration_ms: 10.406626
+  duration_ms: 11.270262
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / active_worker
 ok 126 - uninstall reclaims only idle abandoned leases / active_worker
   ---
-  duration_ms: 6.231374
+  duration_ms: 7.923345
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / active_frontend
 ok 127 - uninstall reclaims only idle abandoned leases / active_frontend
   ---
-  duration_ms: 7.620265
+  duration_ms: 8.930633
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / active_installer
 ok 128 - uninstall reclaims only idle abandoned leases / active_installer
   ---
-  duration_ms: 5.593483
+  duration_ms: 7.292179
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / unknown_install_entry
 ok 129 - uninstall reclaims only idle abandoned leases / unknown_install_entry
   ---
-  duration_ms: 5.917318
+  duration_ms: 6.058572
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / foreign_receipt
 ok 130 - uninstall reclaims only idle abandoned leases / foreign_receipt
   ---
-  duration_ms: 6.860386
+  duration_ms: 6.981955
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / pending_config_transaction
 ok 131 - uninstall reclaims only idle abandoned leases / pending_config_transaction
   ---
-  duration_ms: 11.093849
+  duration_ms: 11.650607
   ...
 # Subtest: uninstall reclaims only idle abandoned leases / unfinished_receipt
 ok 132 - uninstall reclaims only idle abandoned leases / unfinished_receipt
   ---
-  duration_ms: 10.394025
+  duration_ms: 11.878593
   ...
 # Subtest: uninstall final probe detects an interrupted export without an installed core
 ok 133 - uninstall final probe detects an interrupted export without an installed core
   ---
-  duration_ms: 4.470803
+  duration_ms: 5.170247
   ...
 # Subtest: uninstall removes abandoned backups only after runtime cleanup / clean
 ok 134 - uninstall removes abandoned backups only after runtime cleanup / clean
   ---
-  duration_ms: 6.430186
+  duration_ms: 7.838691
   ...
 # Subtest: uninstall removes abandoned backups only after runtime cleanup / process
 ok 135 - uninstall removes abandoned backups only after runtime cleanup / process
   ---
-  duration_ms: 3.08596
+  duration_ms: 3.440229
   ...
 # Subtest: uninstall removes abandoned backups only after runtime cleanup / network
 ok 136 - uninstall removes abandoned backups only after runtime cleanup / network
   ---
-  duration_ms: 3.1582
+  duration_ms: 3.785416
   ...
 # Subtest: uninstall removes abandoned backups only after runtime cleanup / journal
 ok 137 - uninstall removes abandoned backups only after runtime cleanup / journal
   ---
-  duration_ms: 2.380596
+  duration_ms: 2.909419
   ...
 # Subtest: uninstall removes abandoned backups only after runtime cleanup / installer
 ok 138 - uninstall removes abandoned backups only after runtime cleanup / installer
   ---
-  duration_ms: 2.552222
+  duration_ms: 3.286328
   ...
 # Subtest: uninstall artifact cleanup preserves its own task registry
 ok 139 - uninstall artifact cleanup preserves its own task registry
   ---
-  duration_ms: 4.42209
+  duration_ms: 5.54967
   ...
 # Subtest: uninstall cleanup releases only an exited installer lock / exited
 ok 140 - uninstall cleanup releases only an exited installer lock / exited
   ---
-  duration_ms: 4.247616
+  duration_ms: 5.960433
   ...
 # Subtest: uninstall cleanup releases only an exited installer lock / running
 ok 141 - uninstall cleanup releases only an exited installer lock / running
   ---
-  duration_ms: 3.166529
+  duration_ms: 3.404846
   ...
 # Subtest: uninstall cleanup releases only an exited installer lock / unknown_entry
 ok 142 - uninstall cleanup releases only an exited installer lock / unknown_entry
   ---
-  duration_ms: 2.633704
+  duration_ms: 3.307889
   ...
 # Subtest: uninstall cleanup handles interrupted Gist and YAML transactions before native network recovery
 ok 143 - uninstall cleanup handles interrupted Gist and YAML transactions before native network recovery
   ---
-  duration_ms: 11.96547
+  duration_ms: 14.645083
   ...
 # Subtest: boot cleanup preserves other plugins without requiring a working Gist binary / normal
 ok 144 - boot cleanup preserves other plugins without requiring a working Gist binary / normal
   ---
-  duration_ms: 6.774172
+  duration_ms: 7.483696
   ...
 # Subtest: boot cleanup preserves other plugins without requiring a working Gist binary / uninstall
 ok 145 - boot cleanup preserves other plugins without requiring a working Gist binary / uninstall
   ---
-  duration_ms: 8.532756
+  duration_ms: 12.563505
   ...
 # Subtest: boot cleanup preserves other plugins without requiring a working Gist binary / malformed
 ok 146 - boot cleanup preserves other plugins without requiring a working Gist binary / malformed
   ---
-  duration_ms: 6.475215
+  duration_ms: 15.726525
   ...
 # Subtest: browser lease release reconciliation / released_response_lost
 ok 147 - browser lease release reconciliation / released_response_lost
   ---
-  duration_ms: 1.667869
+  duration_ms: 2.2995
   ...
 # Subtest: browser lease release reconciliation / still_owned
 ok 148 - browser lease release reconciliation / still_owned
   ---
-  duration_ms: 0.899712
+  duration_ms: 0.970205
   ...
 # Subtest: browser lease release reconciliation / release_unknown
 ok 149 - browser lease release reconciliation / release_unknown
   ---
-  duration_ms: 0.864214
+  duration_ms: 1.066843
   ...
 # Subtest: browser lease release reconciliation / recovered
 ok 150 - browser lease release reconciliation / recovered
   ---
-  duration_ms: 0.664442
+  duration_ms: 0.836447
   ...
 # Subtest: browser lease release reconciliation / recovered_during_release
 ok 151 - browser lease release reconciliation / recovered_during_release
   ---
-  duration_ms: 0.712709
+  duration_ms: 1.142832
   ...
 # Subtest: device task receipt retains output until lease release / false/0/direct
 ok 152 - device task receipt retains output until lease release / false/0/direct
   ---
-  duration_ms: 33.421555
+  duration_ms: 39.721103
   ...
 # Subtest: device task receipt retains output until lease release / true/0/direct
 ok 153 - device task receipt retains output until lease release / true/0/direct
   ---
-  duration_ms: 37.273041
+  duration_ms: 40.302994
   ...
 # Subtest: device task receipt retains output until lease release / false/7/direct
 ok 154 - device task receipt retains output until lease release / false/7/direct
   ---
-  duration_ms: 33.449786
+  duration_ms: 35.574414
   ...
 # Subtest: device task receipt retains output until lease release / true/7/direct
 ok 155 - device task receipt retains output until lease release / true/7/direct
   ---
-  duration_ms: 38.043687
+  duration_ms: 40.169058
   ...
 # Subtest: device task receipt retains output until lease release / true/0/nested
 ok 156 - device task receipt retains output until lease release / true/0/nested
   ---
-  duration_ms: 70.809686
+  duration_ms: 41.766901
   ...
 # Subtest: device task receipt retains output until lease release / true/0/string
 ok 157 - device task receipt retains output until lease release / true/0/string
   ---
-  duration_ms: 39.641964
+  duration_ms: 40.530775
   ...
 # Subtest: pending Gist activation blocks ordinary writes but permits explicit uninstall / false
 ok 158 - pending Gist activation blocks ordinary writes but permits explicit uninstall / false
   ---
-  duration_ms: 33.334561
+  duration_ms: 47.23224
   ...
 # Subtest: pending Gist activation blocks ordinary writes but permits explicit uninstall / true
 ok 159 - pending Gist activation blocks ordinary writes but permits explicit uninstall / true
   ---
-  duration_ms: 31.731839
+  duration_ms: 38.074038
   ...
 # Subtest: browser lease preserves unfinished or invalid receipts / running
 ok 160 - browser lease preserves unfinished or invalid receipts / running
   ---
-  duration_ms: 6.227383
+  duration_ms: 6.937613
   ...
 # Subtest: browser lease preserves unfinished or invalid receipts / foreign_owner
 ok 161 - browser lease preserves unfinished or invalid receipts / foreign_owner
   ---
-  duration_ms: 6.066415
+  duration_ms: 6.502737
   ...
 # Subtest: browser lease preserves unfinished or invalid receipts / invalid_identity
 ok 162 - browser lease preserves unfinished or invalid receipts / invalid_identity
   ---
-  duration_ms: 5.983548
+  duration_ms: 7.006369
   ...
 # Subtest: recovery registry / old rescue owner false
 ok 163 - recovery registry / old rescue owner false
   ---
-  duration_ms: 2.883626
+  duration_ms: 3.401092
   ...
 # Subtest: recovery registry / old rescue owner true
 ok 164 - recovery registry / old rescue owner true
   ---
-  duration_ms: 2.675023
+  duration_ms: 2.70344
   ...
 # Subtest: network recovery reports confirmed state / precheck_lost
 ok 165 - network recovery reports confirmed state / precheck_lost
   ---
-  duration_ms: 1.727647
+  duration_ms: 1.913661
   ...
 # Subtest: network recovery reports confirmed state / precheck_blocked
 ok 166 - network recovery reports confirmed state / precheck_blocked
   ---
-  duration_ms: 0.869113
+  duration_ms: 0.992495
   ...
 # Subtest: network recovery reports confirmed state / response_lost
 ok 167 - network recovery reports confirmed state / response_lost
   ---
-  duration_ms: 1.172713
+  duration_ms: 1.010819
   ...
 # Subtest: network recovery reports confirmed state / partial
 ok 168 - network recovery reports confirmed state / partial
   ---
-  duration_ms: 1.241707
+  duration_ms: 1.046785
   ...
 # Subtest: network recovery reports confirmed state / config_restore_failed
 ok 169 - network recovery reports confirmed state / config_restore_failed
   ---
-  duration_ms: 0.986432
+  duration_ms: 0.961982
   ...
 # Subtest: network recovery reports confirmed state / backup_retained
 ok 170 - network recovery reports confirmed state / backup_retained
   ---
-  duration_ms: 0.948727
+  duration_ms: 1.040642
   ...
 # Subtest: network recovery reports confirmed state / recovered
 ok 171 - network recovery reports confirmed state / recovered
   ---
-  duration_ms: 0.795609
+  duration_ms: 0.95407
   ...
 1..171
 # tests 171
@@ -862,4 +862,4 @@ ok 171 - network recovery reports confirmed state / recovered
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1939.320269
+# duration_ms 2045.977062

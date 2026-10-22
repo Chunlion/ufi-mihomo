@@ -2,47 +2,47 @@ TAP version 13
 # Subtest: check_tun_stack: auto + 新版内核 selected mips
 ok 1 - check_tun_stack: auto + 新版内核 selected mips
   ---
-  duration_ms: 73.695669
+  duration_ms: 88.281805
   ...
 # Subtest: check_tun_stack: auto + IPv4 旧内核回退 mixed
 ok 2 - check_tun_stack: auto + IPv4 旧内核回退 mixed
   ---
-  duration_ms: 66.989392
+  duration_ms: 79.660214
   ...
 # Subtest: check_tun_stack: auto + IPv6 旧内核回退 gvisor
 ok 3 - check_tun_stack: auto + IPv6 旧内核回退 gvisor
   ---
-  duration_ms: 69.811182
+  duration_ms: 79.887746
   ...
 # Subtest: check_tun_stack: 显式 mixed 不探版本
 ok 4 - check_tun_stack: 显式 mixed 不探版本
   ---
-  duration_ms: 66.334868
+  duration_ms: 67.5483
   ...
 # Subtest: check_tun_stack: 显式 mips 在旧内核上直接失败
 ok 5 - check_tun_stack: 显式 mips 在旧内核上直接失败
   ---
-  duration_ms: 69.299608
+  duration_ms: 70.341103
   ...
 # Subtest: check_tun_stack: 非法 stack 报错
 ok 6 - check_tun_stack: 非法 stack 报错
   ---
-  duration_ms: 67.481225
+  duration_ms: 78.765006
   ...
 # Subtest: check_tun_stack: 非 TUN 模式不选栈
 ok 7 - check_tun_stack: 非 TUN 模式不选栈
   ---
-  duration_ms: 65.728374
+  duration_ms: 93.81334
   ...
 # Subtest: prepare_tun_stack: 单独调用也能定位 CLASH_ROOT
 ok 8 - prepare_tun_stack: 单独调用也能定位 CLASH_ROOT
   ---
-  duration_ms: 71.867487
+  duration_ms: 80.202557
   ...
 # Subtest: finish_tun_stack: 失败阶段有独立错误码
 ok 9 - finish_tun_stack: 失败阶段有独立错误码
   ---
-  duration_ms: 83.234103
+  duration_ms: 83.371678
   ...
 1..9
 # tests 9
@@ -52,4 +52,4 @@ ok 9 - finish_tun_stack: 失败阶段有独立错误码
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 737.977724
+# duration_ms 824.707564

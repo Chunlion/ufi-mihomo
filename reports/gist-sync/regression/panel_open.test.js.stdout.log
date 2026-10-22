@@ -2,82 +2,82 @@ TAP version 13
 # Subtest: repeated new windows open the validated URL synchronously without new checks
 ok 1 - repeated new windows open the validated URL synchronously without new checks
   ---
-  duration_ms: 2.953526
+  duration_ms: 2.827363
   ...
 # Subtest: cold opening reserves the popup and shares an in-flight panel check
 ok 2 - cold opening reserves the popup and shares an in-flight panel check
   ---
-  duration_ms: 1.993715
+  duration_ms: 1.846931
   ...
 # Subtest: explicit panel refresh rechecks readiness and renews the URL
 ok 3 - explicit panel refresh rechecks readiness and renews the URL
   ---
-  duration_ms: 1.215417
+  duration_ms: 1.296915
   ...
 # Subtest: statusChanged prevents stale popup navigation, newer URL cached=false
 ok 4 - statusChanged prevents stale popup navigation, newer URL cached=false
   ---
-  duration_ms: 1.276332
+  duration_ms: 1.320789
   ...
 # Subtest: statusChanged prevents stale popup navigation, newer URL cached=true
 ok 5 - statusChanged prevents stale popup navigation, newer URL cached=true
   ---
-  duration_ms: 1.102221
+  duration_ms: 1.115978
   ...
 # Subtest: statusChanged makes the next new window revalidate
 ok 6 - statusChanged makes the next new window revalidate
   ---
-  duration_ms: 1.012178
+  duration_ms: 1.279736
   ...
 # Subtest: statusChanged prevents an older in-flight result from restoring the cache
 ok 7 - statusChanged prevents an older in-flight result from restoring the cache
   ---
-  duration_ms: 1.018769
+  duration_ms: 1.112676
   ...
 # Subtest: controllerChanged prevents stale popup navigation, newer URL cached=false
 ok 8 - controllerChanged prevents stale popup navigation, newer URL cached=false
   ---
-  duration_ms: 1.694723
+  duration_ms: 1.986155
   ...
 # Subtest: controllerChanged prevents stale popup navigation, newer URL cached=true
 ok 9 - controllerChanged prevents stale popup navigation, newer URL cached=true
   ---
-  duration_ms: 1.222947
+  duration_ms: 1.127113
   ...
 # Subtest: controllerChanged makes the next new window revalidate
 ok 10 - controllerChanged makes the next new window revalidate
   ---
-  duration_ms: 1.192834
+  duration_ms: 1.216916
   ...
 # Subtest: controllerChanged prevents an older in-flight result from restoring the cache
 ok 11 - controllerChanged prevents an older in-flight result from restoring the cache
   ---
-  duration_ms: 1.034114
+  duration_ms: 1.076268
   ...
 # Subtest: a failed readiness check closes the reserved popup and retains the error
 ok 12 - a failed readiness check closes the reserved popup and retains the error
   ---
-  duration_ms: 1.237382
+  duration_ms: 1.182972
   ...
 # Subtest: unavailable controller is not cached as a verified address
 ok 13 - unavailable controller is not cached as a verified address
   ---
-  duration_ms: 1.365506
+  duration_ms: 1.310348
   ...
 # Subtest: fallback controller is not cached as a verified address
 ok 14 - fallback controller is not cached as a verified address
   ---
-  duration_ms: 1.301001
+  duration_ms: 1.126491
   ...
 # Subtest: a blocked popup does not start panel checks
 ok 15 - a blocked popup does not start panel checks
   ---
-  duration_ms: 1.120093
+  duration_ms: 1.107082
   ...
 # Subtest: read-only panel checks remain available after a mutation was cancelled
 ok 16 - read-only panel checks remain available after a mutation was cancelled
   ---
-  duration_ms: 2.234927
+  duration_ms: 1.87038
   ...
 1..16
 # tests 16
@@ -87,4 +87,4 @@ ok 16 - read-only panel checks remain available after a mutation was cancelled
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 157.084045
+# duration_ms 146.841006

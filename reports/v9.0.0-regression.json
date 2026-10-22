@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-22T09:49:22.170Z",
+  "date": "2026-10-22T10:46:02.454Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "63babbcff1842338711b390acedb38681615568f",
-    "bytes": 648412,
-    "sha256": "b572e38d1ea5963e4d34eb75a18a08475eeaac748f1fec13ba6fbda8e1022a6a"
+    "baseCommit": "86ba8fda74072b002f685d1b85e6f594b2cd89c9",
+    "bytes": 648854,
+    "sha256": "9b66646348c2f7b49fd14a61a6ff8ac7668870a1d88a8206fd03ac1ffefaf3e2"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 662,
+    "passed": 667,
     "failed": 0,
     "notRun": 0
   },
@@ -844,12 +844,32 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/gist_sources.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/gist_sources.test.js.stderr.log",
-      "passed": 5,
+      "passed": 10,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
           "name": "Gist refresh updates the airport links before the Gist link content",
+          "status": "PASS"
+        },
+        {
+          "name": "inline-only config requires only a managed Gist refresh / true",
+          "status": "PASS"
+        },
+        {
+          "name": "inline-only config requires only a managed Gist refresh / false",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed local download still attempts Gist without reporting full success / true",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed local download still attempts Gist without reporting full success / false",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist detection failure cannot turn a provider-only success into full success",
           "status": "PASS"
         },
         {

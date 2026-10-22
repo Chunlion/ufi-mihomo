@@ -19,6 +19,52 @@ test('Gist refresh updates the airport links before the Gist link content',async
  assert.deepEqual(calls,['load','gist'],'airport links first, then the Gist link content, each exactly once');
 });
 
+for(const managed of [true,false]) test('inline-only config requires only a managed Gist refresh / '+managed,async()=>{
+ const calls=[],config={proxies:[{name:'Inline'}],'x-f50-gist-sync':managed};
+ const fn=subscriptionApi(slice('const updateSubProviders = async','const readCurrentSubSources = async')+'updateSubProviders',{
+  ensureCompatBackend:async()=>true,readConfigSource:async()=> 'uploaded_config',
+  readYamlObject:async()=>({ok:true,value:config}),readCurrentSubSources:async()=>[],
+  forceUpdateProvidersFromConfig:async()=>{calls.push('load');return {failed:1};},
+  f50GistManaged:async()=>managed?{settings:{revision:7}}:null,
+  f50GistUpdateSources:async(st,sources)=>{calls.push('gist');assert.equal(sources,undefined);return true;},
+ });
+ assert.equal(await fn([]),managed);
+ assert.deepEqual(calls,managed?['gist']:[]);
+});
+
+for(const synced of [true,false]) test('a failed local download still attempts Gist without reporting full success / '+synced,async()=>{
+ const calls=[],toasts=[],finished=[];
+ const fn=subscriptionApi(slice('const updateSubProviders = async','const readCurrentSubSources = async')+'updateSubProviders',{
+  ensureCompatBackend:async()=>true,readConfigSource:async()=> 'uploaded_config',
+  readYamlObject:async()=>({ok:true,value:{'proxy-providers':{Provider1:{type:'file',path:'./proxies/Provider1.yaml'}}}}),
+  readCurrentSubSources:async()=>[{name:'Provider1',url:'https://fixture.example/sub'}],
+  convertSubscriptionsLocally:async()=>{calls.push('download');return {ok:false,failed:1,providers:[{ok:false,message:'download failed'}]};},
+  forceUpdateProvidersFromConfig:async()=>{throw Error('failed downloads must not reload old provider files');},
+  f50GistManaged:async()=>({settings:{revision:7}}),
+  f50GistUpdateSources:async(st,sources)=>{calls.push('gist');assert.equal(sources,undefined);return synced;},
+  createToast:(message,color)=>toasts.push([message,color]),operationFinish:(...args)=>finished.push(args),
+ });
+ assert.equal(await fn([]),false);
+ assert.deepEqual(calls,['download','gist']);
+ if(synced){assert.match(toasts.at(-1)[0],/Gist.*节点来源更新失败/);assert.equal(finished.at(-1)[0],false);}
+});
+
+test('Gist detection failure cannot turn a provider-only success into full success',async()=>{
+ const calls=[],toasts=[];
+ const fn=subscriptionApi(slice('const updateSubProviders = async','const readCurrentSubSources = async')+'updateSubProviders',{
+  ensureCompatBackend:async()=>true,readConfigSource:async()=> 'uploaded_config',
+  readYamlObject:async()=>({ok:true,value:{'x-f50-gist-sync':true,'proxy-providers':{Remote:{type:'http'}}}}),
+  readCurrentSubSources:async()=>[],
+  forceUpdateProvidersFromConfig:async()=>{calls.push('load');return {failed:0};},
+  f50GistManaged:async()=>{calls.push('gist-status');throw Error('components_missing');},
+  f50GistUpdateSources:async()=>{throw Error('unavailable Gist must not sync');},
+  createToast:(message,color)=>toasts.push([message,color]),
+ });
+ assert.equal(await fn([]),false);
+ assert.deepEqual(calls,['load','gist-status']);
+ assert.deepEqual(toasts.at(-1),['components_missing','red']);
+});
+
 test('Gist source saves, disabled-only and empty removal all use native merge',async()=>{
  for(const input of [[],[{url:'https://example.test/sub',enabled:false}],[{url:'https://example.test/sub',enabled:true}]]) {
   let merged;const gist={settings:{revision:7}};

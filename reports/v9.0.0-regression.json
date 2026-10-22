@@ -1,10 +1,10 @@
 {
-  "date": "2026-10-22T07:18:32.103Z",
+  "date": "2026-10-22T08:07:03.663Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "5bbb616c10e25dbe7a86a84f85b2900ae198fa08",
+    "baseCommit": "8798c41d34c949d9ae359d04fc45c7084bfd0f51",
     "bytes": 647395,
     "sha256": "4561e839a04f8c8041845175f5919077a9463905e7ed093fa993a1517debae84"
   },

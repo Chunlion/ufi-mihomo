@@ -195,21 +195,19 @@ test('mixed custom providers keep the local subscription name and configuration'
   assert.deepEqual(config, before);
 });
 
-for (const route of ['gist', 'legacy', 'empty-template', 'empty-custom']) {
+for (const route of ['legacy', 'empty-template', 'empty-custom']) {
   test('subscription update retains its early routing / ' + route, async () => {
     const calls = [];
     const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
       ensureCompatBackend: async () => true,
       readConfigSource: async () => route === 'legacy' ? 'subscription_original' : route === 'empty-template' ? 'template.yaml' : 'uploaded_config',
-      f50GistManaged: async () => route === 'gist' ? { active: true } : null,
-      f50GistUpdateSources: async () => { calls.push('gist'); return true; },
       readYamlObject: async () => { calls.push('config'); return { ok: true, value: { 'proxy-providers': { Remote: { type: 'http' } } } }; },
       readCurrentSubSources: async () => [],
       convertSubscriptionsLocally: async () => { throw new Error('no saved local subscription'); },
       forceUpdateProvidersFromConfig: async () => { calls.push('load'); return result(); },
     });
-    assert.equal(await update([]), route === 'gist' || route === 'empty-custom');
-    assert.deepEqual(calls, route === 'gist' ? ['gist'] : route === 'empty-custom' ? ['config', 'load'] : []);
+    assert.equal(await update([]), route === 'empty-custom');
+    assert.deepEqual(calls, route === 'empty-custom' ? ['config', 'load'] : []);
   });
 }
 

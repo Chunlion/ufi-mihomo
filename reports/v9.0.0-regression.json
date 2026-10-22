@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-22T08:07:03.663Z",
+  "date": "2026-10-22T08:53:51.565Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "8798c41d34c949d9ae359d04fc45c7084bfd0f51",
-    "bytes": 647395,
-    "sha256": "4561e839a04f8c8041845175f5919077a9463905e7ed093fa993a1517debae84"
+    "baseCommit": "0b08216c7ac14ee4084adc74af8175bc7b3ade69",
+    "bytes": 647849,
+    "sha256": "0a9f79a534ab9e117ecf9b7d96d15b79bbfb4d2396bc32d1042ca68b3f560e93"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 658,
+    "passed": 661,
     "failed": 0,
     "notRun": 0
   },
@@ -1575,7 +1575,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 64,
+      "passed": 67,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1688,6 +1688,14 @@
           "status": "PASS"
         },
         {
+          "name": "template provider rebuild is announced instead of replacing the config silently",
+          "status": "PASS"
+        },
+        {
+          "name": "template local rebuild is announced instead of replacing the config silently",
+          "status": "PASS"
+        },
+        {
           "name": "restored uploaded_config / template uses the subscription update path",
           "status": "PASS"
         },
@@ -1713,6 +1721,10 @@
         },
         {
           "name": "equal node counts do not claim identical node contents",
+          "status": "PASS"
+        },
+        {
+          "name": "a missing pre-update snapshot falls back to the current node count",
           "status": "PASS"
         },
         {

@@ -14,6 +14,14 @@
 
 **漏第 4 步的后果**：`dist/` 里躺的是旧插件（`2f33e73` 就漏过，交付包与源码不一致）。这一条**不能**用测试兜底——测试红会让 `package_plugin.py` 的 `failed==0` 断言不通过，dist 永远重建不了，形成死锁。只能靠流程。
 
+## 无法按 git 作者区分「谁写的提交」
+
+226 个提交的 author/committer 全是 `Chunlion <w1074754192@gmail.com>`（只有 `dda40ff` 来自 GitHub 网页端 noreply），提交 body 也筛不出来（200+ 个都是空 body）。要区分「我生成的 / 别人或别的工具生成的」，只能用**本会话已知的提交哈希 + 时间戳**在 `git log --date=iso` 里夹逼。仓库里的 `.codex/` 说明有另一个 AI 工具在并行产出，遇到夹在会话提交之间的陌生哈希先按「非本会话」处理。
+
+## 更新订阅时的「重建配置」必须有提示
+
+`updateSubProviders` 里 `!modeReady`（provider 数量/类型/路径与订阅设置不符）会走 `saveSubSources(..., {applyToCustom:true})` 整份重建 config.yaml 并重启核心。这条分支**必须 toast**——否则用户手改的 provider 定义会被无声覆盖。地址变化另有文案，两者不能混用。（2026-10-22 修，见 `7e41d67`）
+
 ## 全量回归只能在 WSL 跑
 
 Windows 不可作为判据：`tests/tproxy/*` 大量用例用 `spawnSync('sh')` + fixture 脚本，Git Bash 不解析 `C:/...` 形式的 PATH 条目（`ip6tables` 直接 127 not found），15s 超时也会被打爆。qemu 用例（`http_subscription`）同样如此：Windows 侧会撞 `native()` 的 30s 超时（stdout 全空）。

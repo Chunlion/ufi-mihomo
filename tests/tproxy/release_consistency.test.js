@@ -24,6 +24,65 @@ function unpack(name) {
 }
 const service = unpack('Scripts/Clash.Service');
 
+for (const scenario of ['version', 'metadata']) {
+  test('core package update / ' + scenario, () => {
+    const result = spawnSync('python3', ['-c', `
+import hashlib, json, pathlib, shutil, subprocess, sys, tempfile, zipfile
+with tempfile.TemporaryDirectory(prefix='f50-core-update-') as temporary:
+    root = pathlib.Path(temporary)
+    (root / 'scripts').mkdir()
+    script = root / 'scripts/update_package_core.py'
+    shutil.copyfile(pathlib.Path(sys.argv[1]) / 'scripts/update_package_core.py', script)
+    core = root / 'core'
+    header = bytearray(64)
+    header[:6] = b'\\x7fELF\\x02\\x01'
+    header[16:20] = b'\\x03\\x00\\xb7\\x00'
+    data = bytes(header) + b'/system/bin/linker64\\x00v1.19.33\\x00'
+    core.write_bytes(data)
+    package = root / 'tproxy-yq.zip'
+    contents = {'Proxy/Clash.Core': b'old core', 'Tools/mihomo.version': b'v1.19.31\\n',
+                'Tools/components.json': json.dumps({'core': {'core_bytes': 8}, 'retained': True}).encode(),
+                'Scripts/retained': b'#!/bin/sh\\necho retained\\n'}
+    with zipfile.ZipFile(package, 'w') as z:
+        z.comment = b'archive comment'
+        for index, (name, content) in enumerate(contents.items()):
+            info = zipfile.ZipInfo(name, (2024, 1, 2, 3, 4, index * 2))
+            info.create_system = 0
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o100755 << 16
+            info.comment = b'member comment'
+            info.extra = b'\\xfe\\xca\\x02\\x00ok'
+            z.writestr(info, content)
+    before = package.read_bytes()
+    if sys.argv[2] == 'version':
+        updated = subprocess.run([sys.executable, str(script), str(core), 'v1.19.3'], capture_output=True, text=True)
+        assert updated.returncode != 0, 'a version prefix must not label a different core version'
+        assert package.read_bytes() == before, 'a rejected core must leave the package untouched'
+    else:
+        with zipfile.ZipFile(package) as z:
+            attributes = lambda i: (i.filename, i.date_time, i.create_system, i.compress_type, i.external_attr, i.comment, i.extra)
+            metadata = [attributes(i) for i in z.infolist()]
+        command = [sys.executable, str(script), str(core), 'v1.19.33']
+        updated = subprocess.run(command, capture_output=True, text=True)
+        assert updated.returncode == 0, updated.stderr
+        with zipfile.ZipFile(package) as z:
+            assert [attributes(i) for i in z.infolist()] == metadata, 'member order and attributes must be preserved'
+            assert z.comment == b'archive comment'
+            assert z.read('Scripts/retained') == contents['Scripts/retained']
+            assert z.read('Proxy/Clash.Core') == data
+            assert z.read('Tools/mihomo.version') == b'v1.19.33\\n'
+            manifest = json.loads(z.read('Tools/components.json'))
+            assert manifest['retained'] is True
+            assert manifest['core']['core_sha256'] == hashlib.sha256(data).hexdigest()
+        once = package.read_bytes()
+        subprocess.run(command, check=True, capture_output=True)
+        assert package.read_bytes() == once, 'repeating an update must be idempotent'
+`, root, scenario], { encoding: 'utf8', timeout: 10000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+}
+
 test('9.0.0 retains the bundled controller and wrapper protocol', async () => {
   assert.match(source, /猫猫TProxy v9\.0\.0/);
   assert.equal(unpack('Tools/f50-controller.version').trim(), '8.0.0-compat.2.3');

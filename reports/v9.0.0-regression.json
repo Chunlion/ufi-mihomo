@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-22T08:53:51.565Z",
+  "date": "2026-10-22T09:36:11.915Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "0b08216c7ac14ee4084adc74af8175bc7b3ade69",
+    "baseCommit": "eeffdef074cc44deb174e9d762c40133f46e25a9",
     "bytes": 647849,
     "sha256": "0a9f79a534ab9e117ecf9b7d96d15b79bbfb4d2396bc32d1042ca68b3f560e93"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 661,
+    "passed": 663,
     "failed": 0,
     "notRun": 0
   },
@@ -1933,10 +1933,18 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/release_consistency.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/release_consistency.test.js.stderr.log",
-      "passed": 5,
+      "passed": 7,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "core package update / version",
+          "status": "PASS"
+        },
+        {
+          "name": "core package update / metadata",
+          "status": "PASS"
+        },
         {
           "name": "9.0.0 retains the bundled controller and wrapper protocol",
           "status": "PASS"

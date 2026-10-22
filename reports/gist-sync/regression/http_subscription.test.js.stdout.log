@@ -2,112 +2,112 @@ TAP version 13
 # Subtest: retained ARM64 patch source reproduces the embedded byte ranges
 ok 1 - retained ARM64 patch source reproduces the embedded byte ranges
   ---
-  duration_ms: 2.188086
+  duration_ms: 2.314202
   ...
 # Subtest: retained patch source rejects an unsupported controller
 ok 2 - retained patch source rejects an unsupported controller
   ---
-  duration_ms: 2.28884
+  duration_ms: 3.177521
   ...
 # Subtest: controller patch changes only the declared ranges and is idempotent
 ok 3 - controller patch changes only the declared ranges and is idempotent
   ---
-  duration_ms: 74.423531
+  duration_ms: 132.105503
   ...
 # Subtest: an unknown controller remains untouched for its normal executable probe
 ok 4 - an unknown controller remains untouched for its normal executable probe
   ---
-  duration_ms: 18.522904
+  duration_ms: 22.005334
   ...
 # Subtest: an unknown controller with the actual command interface needs no binary patch
 ok 5 - an unknown controller with the actual command interface needs no binary patch
   ---
-  duration_ms: 8.139563
+  duration_ms: 12.206111
   ...
 # Subtest: a compatible unknown controller does not need a matching help command
 ok 6 - a compatible unknown controller does not need a matching help command
   ---
-  duration_ms: 7.54906
+  duration_ms: 14.996909
   ...
 # Subtest: the bundled ARMv7 payload does not block the ARM64 patch
 ok 7 - the bundled ARMv7 payload does not block the ARM64 patch
   ---
-  duration_ms: 141.15221
+  duration_ms: 202.628799
   ...
 # Subtest: an unknown partially patched controller is left untouched
 ok 8 - an unknown partially patched controller is left untouched
   ---
-  duration_ms: 17.091925
+  duration_ms: 20.752176
   ...
 # Subtest: a failed decoder cannot replace the original controller
 ok 9 - a failed decoder cannot replace the original controller
   ---
-  duration_ms: 31.127105
+  duration_ms: 53.518017
   ...
 # Subtest: simultaneous patch processes use separate temporary files
 ok 10 - simultaneous patch processes use separate temporary files
   ---
-  duration_ms: 77.347432
+  duration_ms: 115.330548
   ...
 # Subtest: ARM64 download accepts http://8.8.8.8/sub and pins port 80
 ok 11 - ARM64 download accepts http://8.8.8.8/sub and pins port 80
   ---
-  duration_ms: 5687.616495
+  duration_ms: 5719.628075
   ...
 # Subtest: ARM64 download accepts https://8.8.8.8/sub and pins port 443
 ok 12 - ARM64 download accepts https://8.8.8.8/sub and pins port 443
   ---
-  duration_ms: 696.209917
+  duration_ms: 1743.605364
   ...
 # Subtest: ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080
 ok 13 - ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080
   ---
-  duration_ms: 5627.14506
+  duration_ms: 8443.98552
   ...
 # Subtest: ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443
 ok 14 - ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443
   ---
-  duration_ms: 5484.234466
+  duration_ms: 5660.881005
   ...
 # Subtest: ARM64 download accepts https://8.8.8.8/geoip-subscription and pins port 443
 ok 15 - ARM64 download accepts https://8.8.8.8/geoip-subscription and pins port 443
   ---
-  duration_ms: 604.739803
+  duration_ms: 704.045513
   ...
 # Subtest: ARM64 download rejects HTML and retains the existing provider
 ok 16 - ARM64 download rejects HTML and retains the existing provider
   ---
-  duration_ms: 711.21236
+  duration_ms: 840.573679
   ...
 # Subtest: ARM64 download rejects rules without nodes and retains the existing provider
 ok 17 - ARM64 download rejects rules without nodes and retains the existing provider
   ---
-  duration_ms: 605.454981
+  duration_ms: 3194.700095
   ...
 # Subtest: ARM64 download rejects empty nodes and retains the existing provider
 ok 18 - ARM64 download rejects empty nodes and retains the existing provider
   ---
-  duration_ms: 681.993121
+  duration_ms: 624.089025
   ...
 # Subtest: ARM64 download re-fetches on every call instead of reusing the previous result
 ok 19 - ARM64 download re-fetches on every call instead of reusing the previous result
   ---
-  duration_ms: 1332.468191
+  duration_ms: 1285.033622
   ...
 # Subtest: ARM64 download retains URL validation for ftp://8.8.8.8/sub
 ok 20 - ARM64 download retains URL validation for ftp://8.8.8.8/sub
   ---
-  duration_ms: 184.457105
+  duration_ms: 259.210174
   ...
 # Subtest: ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub
 ok 21 - ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub
   ---
-  duration_ms: 189.372671
+  duration_ms: 229.160851
   ...
 # Subtest: ARM64 download retains URL validation for http://127.0.0.1/sub
 ok 22 - ARM64 download retains URL validation for http://127.0.0.1/sub
   ---
-  duration_ms: 190.845118
+  duration_ms: 231.896182
   ...
 1..22
 # tests 22
@@ -117,4 +117,4 @@ ok 22 - ARM64 download retains URL validation for http://127.0.0.1/sub
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 22630.540818
+# duration_ms 29756.816341

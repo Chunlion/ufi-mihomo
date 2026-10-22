@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "d120d893e326afc156c6da4092c777d94a48b2a0",
+  "sourceBaseCommit": "5bbb616c10e25dbe7a86a84f85b2900ae198fa08",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,16 +9,16 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 648078,
-  "sha256": "99bee83520091dced79253cccee5b8571ee74c27da9065a541393c545a22bc14",
+  "final": 647395,
+  "sha256": "4561e839a04f8c8041845175f5919077a9463905e7ed093fa993a1517debae84",
   "functionsBefore": 732,
   "functionsAfter": 793,
   "modules": [
     {
       "module": "旧模式与显式迁移",
       "before": 47933,
-      "after": 48593,
-      "saved": -660
+      "after": 47910,
+      "saved": 23
     },
     {
       "module": "UI / 覆写配置去重",

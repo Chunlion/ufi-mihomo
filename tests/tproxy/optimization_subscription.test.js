@@ -150,23 +150,68 @@ for (const configSource of ['uploaded_config', 'template.yaml']) {
 }
 
 test('a changed subscription address rebuilds the config instead of re-downloading the old one', async () => {
-  // 配置里还是旧地址时直接更新，只会重复下载旧地址并报成功（假更新）。
   const calls = [];
+  const stored = [sources[0], { ...sources[1], enabled: false }];
   const config = { 'proxy-providers': { Provider1: { type: 'http', url: 'https://old.example/sub' } } };
   const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
     ensureCompatBackend: async () => true, readConfigSource: async () => 'template.yaml',
     readYamlObject: async () => ({ ok: true, value: config }),
-    readCurrentSubSources: async () => sources,
-    saveSubSources: async (...args) => { calls.push(['save', args[1]]); return true; },
+    readCurrentSubSources: async options => { assert.equal(options.includeDisabled, true); return stored; },
+    saveSubSources: async (...args) => { calls.push(['save', ...plain(args)]); return true; },
     forceUpdateProvidersFromConfig: async () => { calls.push(['http']); return result(); },
     convertSubscriptionsLocally: async () => { calls.push(['convert']); return result(); },
     providerUpdateNeedsLocalFallback: () => false,
     showSubscriptionUpdateSelfCheck: async () => true, getCorePid: async () => '123',
     createToast: () => {},
   });
-  assert.equal(await update(sources, 'template', 'provider'), true);
-  assert.deepEqual(calls, [['save', 'template']], 'address drift must rebuild before updating');
+  assert.equal(await update(sources.slice(0, 1), 'template', 'provider'), true);
+  assert.deepEqual(calls, [['save', stored, 'template', 'provider', { applyToCustom: true }]], 'address changes preserve disabled subscriptions when rebuilding');
 });
+
+test('mixed custom providers keep the local subscription name and configuration', async () => {
+  const config = { 'proxy-providers': {
+    Provider1: { type: 'http', url: sources[0].url },
+    Provider2: { type: 'file', path: './proxies/Provider2.yaml' },
+  } };
+  const before = plain(config), calls = [];
+  const update = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+    + slice('const mergeLocalConversionReloadResult', 'const reloadLocalSubscriptionProviders')
+    + slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+    ensureCompatBackend: async () => true, readConfigSource: async () => 'uploaded_config',
+    readYamlObject: async () => ({ ok: true, value: config }), readCurrentSubSources: async () => sources,
+    convertSubscriptionsLocally: async (items, options) => {
+      calls.push('download');
+      assert.deepEqual(plain(items), sources.slice(1));
+      assert.equal(options.preserveNames, true);
+      return { ok: true, failed: 0, providers: result().providers.slice(1) };
+    },
+    forceUpdateProvidersFromConfig: async options => {
+      calls.push('load'); assert.equal(options.config, config); assert.equal(options.refreshRemote, true); return result();
+    },
+    saveSubSources: async () => { throw new Error('custom configuration must stay intact'); },
+  });
+  assert.equal(await update([]), true);
+  assert.deepEqual(calls, ['download', 'load']);
+  assert.deepEqual(config, before);
+});
+
+for (const route of ['gist', 'legacy', 'empty-template', 'empty-custom']) {
+  test('subscription update retains its early routing / ' + route, async () => {
+    const calls = [];
+    const update = subscriptionApi(slice('const updateSubProviders = async', 'const readCurrentSubSources = async') + 'updateSubProviders', {
+      ensureCompatBackend: async () => true,
+      readConfigSource: async () => route === 'legacy' ? 'subscription_original' : route === 'empty-template' ? 'template.yaml' : 'uploaded_config',
+      f50GistManaged: async () => route === 'gist' ? { active: true } : null,
+      f50GistUpdateSources: async () => { calls.push('gist'); return true; },
+      readYamlObject: async () => { calls.push('config'); return { ok: true, value: { 'proxy-providers': { Remote: { type: 'http' } } } }; },
+      readCurrentSubSources: async () => [],
+      convertSubscriptionsLocally: async () => { throw new Error('no saved local subscription'); },
+      forceUpdateProvidersFromConfig: async () => { calls.push('load'); return result(); },
+    });
+    assert.equal(await update([]), route === 'gist' || route === 'empty-custom');
+    assert.deepEqual(calls, route === 'gist' ? ['gist'] : route === 'empty-custom' ? ['config', 'load'] : []);
+  });
+}
 
 test('an unchanged address still updates the providers directly', async () => {
   const calls = [];

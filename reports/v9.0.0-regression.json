@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-22T05:58:11.012Z",
+  "date": "2026-10-22T07:18:32.103Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "d120d893e326afc156c6da4092c777d94a48b2a0",
-    "bytes": 648078,
-    "sha256": "99bee83520091dced79253cccee5b8571ee74c27da9065a541393c545a22bc14"
+    "baseCommit": "5bbb616c10e25dbe7a86a84f85b2900ae198fa08",
+    "bytes": 647395,
+    "sha256": "4561e839a04f8c8041845175f5919077a9463905e7ed093fa993a1517debae84"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 653,
+    "passed": 658,
     "failed": 0,
     "notRun": 0
   },
@@ -1575,7 +1575,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 59,
+      "passed": 64,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1653,6 +1653,26 @@
         },
         {
           "name": "a changed subscription address rebuilds the config instead of re-downloading the old one",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed custom providers keep the local subscription name and configuration",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / gist",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / legacy",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / empty-template",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / empty-custom",
           "status": "PASS"
         },
         {

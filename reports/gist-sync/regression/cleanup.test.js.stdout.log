@@ -3,202 +3,202 @@ TAP version 13
 # Subtest: generated Shell parses / buildF50EmergencyScript
 ok 1 - generated Shell parses / buildF50EmergencyScript
   ---
-  duration_ms: 29.933069
+  duration_ms: 16.910183
   ...
 # Subtest: generated Shell parses / buildF50RecoveryEligibilityFunctions
 ok 2 - generated Shell parses / buildF50RecoveryEligibilityFunctions
   ---
-  duration_ms: 5.521501
+  duration_ms: 3.358961
   ...
 # Subtest: generated Shell parses / buildF50LeaseFunctions
 ok 3 - generated Shell parses / buildF50LeaseFunctions
   ---
-  duration_ms: 11.140022
+  duration_ms: 6.44809
   ...
 # Subtest: generated Shell parses / buildF50ServiceLeaseGate
 ok 4 - generated Shell parses / buildF50ServiceLeaseGate
   ---
-  duration_ms: 6.012624
+  duration_ms: 3.292345
   ...
 # Subtest: generated Shell parses / buildF50ConfigTransactionFunctions
 ok 5 - generated Shell parses / buildF50ConfigTransactionFunctions
   ---
-  duration_ms: 6.375329
+  duration_ms: 3.218453
   ...
 # Subtest: generated Shell parses / buildF50RedactFunction
 ok 6 - generated Shell parses / buildF50RedactFunction
   ---
-  duration_ms: 5.458908
+  duration_ms: 3.007775
   ...
 # Subtest: generated Shell parses / buildF50PanelConfigCheck
 ok 7 - generated Shell parses / buildF50PanelConfigCheck
   ---
-  duration_ms: 0.267149
+  duration_ms: 0.209872
   ...
 # Subtest: generated Shell parses / buildF50HttpSubscriptionPatchScript
 ok 8 - generated Shell parses / buildF50HttpSubscriptionPatchScript
   ---
-  duration_ms: 6.138204
+  duration_ms: 3.266116
   ...
 # Subtest: generated Shell parses / buildF50OriginalConfigFunctions
 ok 9 - generated Shell parses / buildF50OriginalConfigFunctions
   ---
-  duration_ms: 6.068804
+  duration_ms: 3.586265
   ...
 # Subtest: generated Shell parses / buildF50CurlLocator
 ok 10 - generated Shell parses / buildF50CurlLocator
   ---
-  duration_ms: 5.270949
+  duration_ms: 3.481556
   ...
 # Subtest: generated Shell parses / buildF50ServiceCurlPatchScript
 ok 11 - generated Shell parses / buildF50ServiceCurlPatchScript
   ---
-  duration_ms: 5.292787
+  duration_ms: 2.984008
   ...
 # Subtest: generated Shell parses / buildF50OriginalServicePatchScript
 ok 12 - generated Shell parses / buildF50OriginalServicePatchScript
   ---
-  duration_ms: 6.518938
+  duration_ms: 4.429858
   ...
 # Subtest: generated Shell parses / buildF50StartScript
 ok 13 - generated Shell parses / buildF50StartScript
   ---
-  duration_ms: 12.116416
+  duration_ms: 9.239843
   ...
 # Subtest: generated Shell parses / buildF50ZashboardValidationFunction
 ok 14 - generated Shell parses / buildF50ZashboardValidationFunction
   ---
-  duration_ms: 4.529791
+  duration_ms: 3.440796
   ...
 # Subtest: generated Shell parses / buildF50MaintenanceFunctions
 ok 15 - generated Shell parses / buildF50MaintenanceFunctions
   ---
-  duration_ms: 40.732564
+  duration_ms: 27.376763
   ...
 # Subtest: generated Shell parses / buildF50ShellBase
 ok 16 - generated Shell parses / buildF50ShellBase
   ---
-  duration_ms: 4.03198
+  duration_ms: 2.981861
   ...
 # Subtest: generated Shell parses / buildF50ProcessHelpers
 ok 17 - generated Shell parses / buildF50ProcessHelpers
   ---
-  duration_ms: 4.184827
+  duration_ms: 5.948082
   ...
 # Subtest: generated Shell parses / buildF50NetworkHelpers
 ok 18 - generated Shell parses / buildF50NetworkHelpers
   ---
-  duration_ms: 4.256396
+  duration_ms: 3.763947
   ...
 # Subtest: generated Shell parses / buildF50NetworkCompatHelpers
 ok 19 - generated Shell parses / buildF50NetworkCompatHelpers
   ---
-  duration_ms: 4.30549
+  duration_ms: 3.637188
   ...
 # Subtest: generated Shell parses / buildF50Tun6CompatFunctions
 ok 20 - generated Shell parses / buildF50Tun6CompatFunctions
   ---
-  duration_ms: 4.731098
+  duration_ms: 3.212781
   ...
 # Subtest: generated Shell parses / buildF50Ipv6DnsCompatFunctions
 ok 21 - generated Shell parses / buildF50Ipv6DnsCompatFunctions
   ---
-  duration_ms: 5.25307
+  duration_ms: 3.244744
   ...
 # Subtest: generated Shell parses / buildF50InspectHelpers
 ok 22 - generated Shell parses / buildF50InspectHelpers
   ---
-  duration_ms: 5.719124
+  duration_ms: 2.932283
   ...
 # Subtest: generated Shell parses / buildF50CleanupHelpers
 ok 23 - generated Shell parses / buildF50CleanupHelpers
   ---
-  duration_ms: 5.206896
+  duration_ms: 3.026368
   ...
 # Subtest: generated Shell parses / buildF50ArtifactHelpers
 ok 24 - generated Shell parses / buildF50ArtifactHelpers
   ---
-  duration_ms: 4.781563
+  duration_ms: 2.988667
   ...
 # Subtest: generated Shell parses / buildF50InstallHelpers
 ok 25 - generated Shell parses / buildF50InstallHelpers
   ---
-  duration_ms: 4.646896
+  duration_ms: 3.355267
   ...
 # Subtest: generated Shell parses / buildF50RemovalHelpers
 ok 26 - generated Shell parses / buildF50RemovalHelpers
   ---
-  duration_ms: 4.747685
+  duration_ms: 2.998996
   ...
 # Subtest: generated Shell parses / buildF50FinalProbeHelpers
 ok 27 - generated Shell parses / buildF50FinalProbeHelpers
   ---
-  duration_ms: 5.236465
+  duration_ms: 3.203976
   ...
 # Subtest: generated Shell parses / buildF50PanelHelpers
 ok 28 - generated Shell parses / buildF50PanelHelpers
   ---
-  duration_ms: 4.900566
+  duration_ms: 3.124479
   ...
 # Subtest: generated Shell parses / buildF50StartHelpers
 ok 29 - generated Shell parses / buildF50StartHelpers
   ---
-  duration_ms: 5.429248
+  duration_ms: 4.178407
   ...
 # Subtest: generated Shell parses / buildF50InspectScript
 ok 30 - generated Shell parses / buildF50InspectScript
   ---
-  duration_ms: 5.534692
+  duration_ms: 4.014682
   ...
 # Subtest: generated Shell parses / buildF50InstallScript
 ok 31 - generated Shell parses / buildF50InstallScript
   ---
-  duration_ms: 6.825312
+  duration_ms: 6.175175
   ...
 # Subtest: generated Shell parses / buildStatusSnapshotCommand
 ok 32 - generated Shell parses / buildStatusSnapshotCommand
   ---
-  duration_ms: 4.193036
+  duration_ms: 3.649308
   ...
 # Subtest: generated Shell parses / buildF50CleanupScript
 ok 33 - generated Shell parses / buildF50CleanupScript
   ---
-  duration_ms: 5.577754
+  duration_ms: 4.13673
   ...
 # Subtest: generated Shell parses / buildF50FinalCheckScript
 ok 34 - generated Shell parses / buildF50FinalCheckScript
   ---
-  duration_ms: 5.38043
+  duration_ms: 4.620687
   ...
 # Subtest: generated Shell parses / buildUninstallStages
 ok 35 - generated Shell parses / buildUninstallStages
   ---
-  duration_ms: 15.574144
+  duration_ms: 11.196982
   ...
 # Subtest: generated Shell parses / buildOwnedCoreFunctions
 ok 36 - generated Shell parses / buildOwnedCoreFunctions
   ---
-  duration_ms: 5.318705
+  duration_ms: 3.072267
   ...
 # Subtest: generated Shell parses / buildApiCurl
 ok 37 - generated Shell parses / buildApiCurl
   ---
-  duration_ms: 11.119251
+  duration_ms: 6.37385
   ...
 # Subtest: configuration recovery restores both files
 ok 38 - configuration recovery restores both files
   ---
-  duration_ms: 17.965671
+  duration_ms: 8.619962
   ...
 # Subtest: configuration recovery keeps committed files
 ok 39 - configuration recovery keeps committed files
   ---
-  duration_ms: 14.485047
+  duration_ms: 3.197071
   ...
 # Subtest: cleanup preserves all diagnostic labels and result fields
 ok 40 - cleanup preserves all diagnostic labels and result fields
   ---
-  duration_ms: 29.114155
+  duration_ms: 24.664438
   ...
 1..40
 # tests 40
@@ -208,4 +208,4 @@ ok 40 - cleanup preserves all diagnostic labels and result fields
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 709.977778
+# duration_ms 581.638485

@@ -10814,10 +10814,14 @@ EOF_F50_RESTORE_MEMBERS
     };
 
     refreshSubscriptionAfterRestore = async () => {
+      const configSource = await readConfigSource();
+      if (configSource == 'uploaded_config') {
+        await updateSubProviders([]);
+        return;
+      }
       const sources = await readCurrentSubSources();
       const mode = await readCurrentSubRuleMode();
       const convertMode = await readSavedSubConvertMode();
-      const configSource = await readConfigSource();
       if (configSource == 'subscription_original' || mode == 'original') {
         createToast('旧订阅原配置已保留；请先在订阅设置中迁移到本地模板，再更新', 'yellow', 8000);
         return;

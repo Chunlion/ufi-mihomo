@@ -204,19 +204,20 @@ for (const [mode, definitions] of [
 });
 
 for (const configSource of ['uploaded_config', 'template.yaml', 'subscription_original']) {
-  test(`restored ${configSource} uses the subscription update path`, async () => {
+  for (const mode of ['template', 'original']) test(`restored ${configSource} / ${mode} uses the subscription update path`, async () => {
     const calls = [];
     const refresh = run('let refreshSubscriptionAfterRestore;'
       + slice('refreshSubscriptionAfterRestore = async', 'const updateSubProviders = async') + 'refreshSubscriptionAfterRestore', {
       ...subContext,
       readCurrentSubSources: async () => sources,
-      readCurrentSubRuleMode: async () => 'template', readSavedSubConvertMode: async () => 'local',
+      readCurrentSubRuleMode: async () => mode, readSavedSubConvertMode: async () => 'local',
       readConfigSource: async () => configSource,
       updateSubProviders: async (...args) => { calls.push(plain(args)); return true; },
       forceUpdateProvidersFromConfig: async () => { throw new Error('restore must not bypass subscription downloads'); },
     });
     await refresh();
-    assert.deepEqual(calls, configSource === 'subscription_original' ? [] : [[sources, 'template', 'local']]);
+    assert.deepEqual(calls, configSource === 'uploaded_config' ? [[[]]]
+      : configSource === 'subscription_original' || mode === 'original' ? [] : [[sources, mode, 'local']]);
   });
 }
 

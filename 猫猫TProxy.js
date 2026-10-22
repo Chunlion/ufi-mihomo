@@ -10834,10 +10834,8 @@ EOF_F50_RESTORE_MEMBERS
     const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
   if (!(await ensureCompatBackend())) return false;
   const configSource = await readConfigSource();
-  if (configSource === 'uploaded_config') {
-    const gist = await f50GistManaged();
-    if (gist) return await f50GistUpdateSources(gist);
-  }
+  // 自定义配置（含 Gist 托管）先更新机场链接，再同步 Gist 链接内容，两类来源在同一次更新里刷新；
+  // Gist 同步只在这个分支触发一次，不会与「Gist 加密同步」菜单的“同步”按钮叠加成重复下载。
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const cleanSources = normalizeSubSourceList(sources);
@@ -10869,13 +10867,20 @@ EOF_F50_RESTORE_MEMBERS
       return false;
     }
     const refreshed = await forceUpdateProvidersFromConfig({showToast:!converted,config:read.value,refreshRemote:true});
-    if (!converted) return refreshed.failed === 0;
-    const loaded = mergeLocalConversionReloadResult(converted, refreshed);
-    const ok = refreshed.failed === 0 && loaded.failed === 0;
-    const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
-    const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点已下载，但核心节点加载检查失败';
-    createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
-    return ok;
+    const loaded = converted ? mergeLocalConversionReloadResult(converted, refreshed) : null;
+    const ok = refreshed.failed === 0 && (!loaded || loaded.failed === 0);
+    if (converted) {
+      const failedProvider = (loaded.providers || []).find(provider => !provider.ok) || (refreshed.providers || []).find(provider => !provider.ok);
+      const message = failedProvider ? `${failedProvider.name}：${failedProvider.message || '节点来源更新失败'}` : '节点已下载，但核心节点加载检查失败';
+      createToast(ok ? '节点已更新' : safeTextToHtml(message), ok ? 'green' : 'red', 8000);
+    }
+    // 机场链接先刷新，再同步 Gist 链接内容：两类来源在同一次更新里一起刷新；
+    // 机场链接先做完，Gist 不可达时也不会白跑一趟。
+    let gist = null;
+    try { gist = await f50GistManaged(); }
+    catch (error) { createToast(safeTextToHtml(error.message || String(error)), 'yellow', 10000); return ok; }
+    if (!gist) return ok;
+    return (await f50GistUpdateSources(gist)) && ok;
   }
   const expectedType = cleanConvertMode === SUB_CONVERT_MODE_LOCAL ? 'file' : 'http';
   const modeReady = Object.keys(definitions).length === cleanSources.length && cleanSources.every(s =>

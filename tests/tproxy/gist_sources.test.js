@@ -2,14 +2,21 @@
 const test=require('node:test');
 const {fs,assert,vm,slice,run,subscriptionApi,plain}=require('./optimization_harness');
 
-test('Gist refresh bypasses template replacement and ProviderN assumptions',async()=>{
+test('Gist refresh updates the airport links before the Gist link content',async()=>{
  const gist={settings:{revision:7}},calls=[];
  const fn=subscriptionApi(slice('const updateSubProviders = async','const readCurrentSubSources = async')+'updateSubProviders',{
   ensureCompatBackend:async()=>true,readConfigSource:async()=> 'uploaded_config',
-  f50GistManaged:async()=>gist,f50GistUpdateSources:async(...args)=>{calls.push(args);return true;},
-  readYamlObject:()=>{throw Error('legacy provider-only path');},writeSubConfigByMode:()=>{throw Error('template overwrite');}
+  f50GistManaged:async()=>gist,
+  f50GistUpdateSources:async(st,sources)=>{calls.push('gist');assert.equal(st,gist);
+   assert.equal(sources,undefined,'the manual-source merge belongs to the Gist menu, not to this update');return true;},
+  readYamlObject:async()=>({ok:true,value:{'proxy-providers':{Provider1:{type:'http',url:'https://one.example/sub'}}}}),
+  readCurrentSubSources:async()=>[{url:'https://one.example/sub',name:'Provider1'}],
+  convertSubscriptionsLocally:async()=>{throw Error('http providers must not be converted locally');},
+  forceUpdateProvidersFromConfig:async()=>{calls.push('load');return {ok:true,failed:0,providers:[{name:'Provider1',ok:true}]};},
+  writeSubConfigByMode:()=>{throw Error('template overwrite');}
  });
- assert.equal(await fn([]),true);assert.deepEqual(calls,[[gist]]);
+ assert.equal(await fn([]),true);
+ assert.deepEqual(calls,['load','gist'],'airport links first, then the Gist link content, each exactly once');
 });
 
 test('Gist source saves, disabled-only and empty removal all use native merge',async()=>{

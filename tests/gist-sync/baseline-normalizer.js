@@ -46,8 +46,8 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
 }
 // Controller protocol and wrapper contract; independent of the plugin release version.
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
-const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
-const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+const F50_ORIGINAL_MANAGED_KEYS = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
+const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
 
 function createPrivateRouteLogic() {
@@ -233,8 +233,20 @@ function createPrivateRouteLogic() {
     }
     for (const key of ['external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'external-ui-name', 'interface-name', 'routing-mark']) delete out[key];
   }
-  if (!preserveConfig && own(source.dns || {}, 'proxy-server-nameserver-policy')) {
-    out.dns['proxy-server-nameserver-policy'] = clone(source.dns['proxy-server-nameserver-policy']);
+  if (!preserveConfig) {
+    // 网络层跟随来源配置，仅回填断链键；与 gist-sync/native/normalize.go 的 applySourceNetwork 对应。
+    for (const key of ['dns', 'tun', 'sniffer', 'profile']) {
+      if (!f50IsPlainObject(source[key])) continue;
+      const base = f50IsPlainObject(out[key]) ? clone(out[key]) : {};
+      out[key] = f50DeepMerge(base, source[key]);
+      const controlled = key === 'dns' ? ['enable', 'listen']
+        : key === 'tun' ? ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack', 'stack'] : [];
+      for (const k of controlled) {
+        if (own(base, k)) out[key][k] = clone(base[k]);
+        else delete out[key][k];
+      }
+    }
+    if (!f50IsPlainObject(out.dns)) throw new Error('dns must be a mapping');
   }
   if (mode === 'tun') out.tun.stack = f50TunStack(options);
   if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');

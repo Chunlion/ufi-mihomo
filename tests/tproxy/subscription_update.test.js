@@ -351,11 +351,11 @@ for (const mode of ['tproxy', 'tun', 'off']) {
     assert.deepEqual(result.dns['nameserver-policy'], original.dns['nameserver-policy']);
     assert.deepEqual(result.dns['proxy-server-nameserver-policy'], original.dns['proxy-server-nameserver-policy']);
     assert.equal(result.dns['enhanced-mode'], 'fake-ip');
-    assert.deepEqual([result.dns.enable, result.dns.listen, result.dns.ipv6], [true, '0.0.0.0:1053', false]);
+    assert.deepEqual([result.dns.enable, result.dns.listen, result.dns.ipv6], [true, '0.0.0.0:1053', true]);
     assert.equal(result.tun.enable, mode === 'tun');
     assert.equal(result['tproxy-port'], mode === 'tproxy' ? 7895 : 0);
     assert.equal(result['external-controller'], '0.0.0.0:7788');
-    assert.equal(result.mode, 'rule');
+    assert.equal(result.mode, original.mode);
     assert.equal(result['external-controller-tls'], undefined);
     assert.equal(result['interface-name'], undefined);
     assert.equal(result['routing-mark'], undefined);
@@ -381,10 +381,10 @@ test('template mode keeps user tunables while capture fields stay fixed', () => 
   assert.equal(configApi.runtime(updated).dns['proxy-server-nameserver-policy'], undefined);
 });
 
-test('original config uses rule mode regardless of its source mode', () => {
+test('original config keeps its own mode instead of forcing rule', () => {
   for (const mode of ['global', 'direct', 'Rule', undefined]) {
     const original = { ...originalConfig, mode };
-    assert.equal(configApi.runtime(original, {}, [], true).mode, 'rule');
+    assert.equal(configApi.runtime(original, {}, [], true).mode, mode);
     assert.equal(original.mode, mode);
   }
 });
@@ -594,7 +594,7 @@ done
       assert.match(text, /^\s+- https:\/\/example.com\/dns-query$/m);
       assert.deepEqual(config['x-format-test'], originalConfig['x-format-test'], 'formatting preserves scalar types');
       assert.equal(config['log-level'], 'debug');
-      assert.equal(config.mode, 'rule');
+      assert.equal(config.mode, originalConfig.mode, 'user mode survives Service restore');
       assert.equal(config.sniffer.enable, false);
       assert.equal(config['unified-delay'], false);
       assert.equal(config['interface-name'], undefined);

@@ -86,6 +86,55 @@ func parseOptions(text string) map[string]string {
 	o["tproxy_port"] = "7895"
 	return o
 }
+
+// 网络层里改了会直接断链的键：iptables 的 TPROXY 端口、DNS 劫持端口，以及 TUN 路由参数。
+// 其余键（enhanced-mode、nameserver、fake-ip-*、sniffer、profile、端口等）一律跟随来源配置。
+var controlledNetworkKeys = map[string][]string{
+	"dns": {"enable", "listen"},
+	"tun": {"enable", "device", "auto-route", "auto-redirect", "strict-route", "dns-hijack", "stack"},
+}
+
+func deepMerge(base, over map[string]any) map[string]any {
+	for k, v := range over {
+		if nested := obj(v); nested != nil {
+			current := obj(base[k])
+			if current == nil {
+				current = map[string]any{}
+			}
+			base[k] = deepMerge(current, nested)
+			continue
+		}
+		base[k] = clone(v)
+	}
+	return base
+}
+
+// applySourceNetwork 用来源配置覆盖网络层，再把断链键从内置 profile 回填。
+// 除 controlledNetworkKeys 之外的字段全部尊重用户配置，不再由插件强制还原。
+func applySourceNetwork(out, source map[string]any) map[string]any {
+	for _, k := range []string{"dns", "tun", "sniffer", "profile"} {
+		user := obj(source[k])
+		if user == nil {
+			continue
+		}
+		base := obj(out[k])
+		merged := map[string]any{}
+		if base != nil {
+			merged = deepMerge(clone(base).(map[string]any), user)
+		} else {
+			merged = deepMerge(merged, user)
+		}
+		for _, key := range controlledNetworkKeys[k] {
+			if base != nil && has(base, key) {
+				merged[key] = clone(base[key])
+			} else {
+				delete(merged, key)
+			}
+		}
+		out[k] = merged
+	}
+	return out
+}
 func stripPrivate(config map[string]any) map[string]any {
 	out := clone(config).(map[string]any)
 	m := obj(out[privateMeta])
@@ -169,6 +218,7 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 			out[k] = clone(source[k])
 		}
 	}
+	applySourceNetwork(out, source)
 	if dns := obj(source["dns"]); has(dns, "proxy-server-nameserver-policy") {
 		obj(out["dns"])["proxy-server-nameserver-policy"] = clone(dns["proxy-server-nameserver-policy"])
 	}

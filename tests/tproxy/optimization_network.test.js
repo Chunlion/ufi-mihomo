@@ -135,14 +135,16 @@ test('user overrides survive shaping while controlled keys stay fixed', () => {
   assert.equal(out.tun.mtu, 1400);
   assert.deepEqual(plain(out.tun['route-address']), ['0.0.0.0/1']);
   // 受控字段仍按固定 profile 下发
+  // 断链键仍按固定 profile 下发
   assert.equal(out.dns.listen, '0.0.0.0:1053');
-  assert.equal(out.dns.ipv6, false);
   assert.equal(out.tun.enable, false);
-  assert.equal(out.mode, 'rule');
-  assert.equal(out.ipv6, false);
-  assert.equal(out['external-ui'], 'WebUI/zashboard');
+  // 其余键已开放自定义，保留用户值
+  assert.equal(out.dns.ipv6, true);
+  assert.equal(out.ipv6, true);
+  assert.equal(out.mode, 'global');
+  assert.equal(out['external-ui'], 'WebUI/other');
   assert.deepEqual(plain(out['x-f50-overridden']).sort(),
-    ['dns.ipv6', 'dns.listen', 'external-ui', 'ipv6', 'mode', 'tun.device', 'tun.enable'].sort());
+    ['dns.listen', 'tun.device', 'tun.enable'].sort());
 });
 
 test('invalid tun mtu and conflicting local ports are rejected', () => {

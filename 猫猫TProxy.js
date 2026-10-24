@@ -49,12 +49,13 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
 }
 // Controller protocol and wrapper contract; independent of the plugin release version.
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
-const F50_ORIGINAL_MANAGED_KEYS = ['mode', 'port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port', 'allow-lan', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url'];
-const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+const F50_ORIGINAL_MANAGED_KEYS = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
+const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
-// 硬件与脚本依赖的键：用户写入任何值都以固定 profile 为准。JS 整形与 Service 恢复共用同一边界。
-const CONTROLLED_TOP_KEYS = ['mode', 'bind-address', 'ipv6', 'external-controller', 'external-ui', 'external-ui-url', 'tproxy-port', 'allow-lan'];
-const CONTROLLED_DNS_KEYS = ['enable', 'listen', 'ipv6'];
+// 只保留删掉就断链的键：iptables 的 TPROXY/DNS 劫持端口、面板 API 端口、LAN 可达性。
+// 其余（mode/ipv6/端口/external-ui/dns 解析参数/sniffer/profile）全部可由用户自定义。
+const CONTROLLED_TOP_KEYS = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
+const CONTROLLED_DNS_KEYS = ['enable', 'listen'];
 const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
 // Service 恢复用户配置时不能反向覆盖的部分：受控键、插件元信息、以及由订阅/模板生成的节点、规则与来源。
 const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
@@ -632,7 +633,8 @@ function buildF50RedactFunction() { return `f50_redact() {
 }`; }
 function buildF50PanelConfigCheck() {
   // unified-delay 只要求“用户已明确设置”：未设置才走修复补默认值，显式 false 必须被尊重。
-  return `tag == "!!map" and ."external-ui" == "WebUI/zashboard" and ."external-ui-url" == ${JSON.stringify(F50_ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
+  // 面板字段同理：只在缺失时补，用户显式写入的值不再被覆盖。
+  return `tag == "!!map" and has("external-ui") and has("external-ui-url") and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")`;
 }
 // These byte ranges target the bundled ARM64 controller; unknown builds remain untouched.
 const F50_HTTP_CONTROLLER_PATCHES = {
@@ -761,7 +763,7 @@ done
 // 用户可能在设备上手改配置：非 map 的 dns/tun/sniffer/profile 一律丢弃，由控制器生成的值兜底，
 // 否则 yq 合并直接报错，会把整个启动拖成 F50_ERROR=original_config_merge_failed。
 // 注释放在 JS 侧而非生成的脚本里：设备脚本每多一行都是安装包体积。
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=19
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=20
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -945,14 +947,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=19' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=20' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|10|11|12|13|14|15|16|17|18)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9])$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -2139,7 +2141,7 @@ f50_update_panel_config() {
   if f50_limit 5 "$panel_yq" e -e "$panel_check" "$panel_cfg" >/dev/null 2>&1; then
     panel_rc=0
   else
-    f50_update_yaml "$panel_cfg" "$panel_yq" '."external-ui" = strenv(F50_PANEL_DIR) | ."external-ui-url" = strenv(F50_PANEL_URL) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | (select(has("unified-delay")), (select(has("unified-delay") | not) | ."unified-delay" = true))))' 8
+    f50_update_yaml "$panel_cfg" "$panel_yq" '."external-ui" = (."external-ui" // strenv(F50_PANEL_DIR)) | ."external-ui-url" = (."external-ui-url" // strenv(F50_PANEL_URL)) | del(."external-ui-name") | (select(strenv(F50_CONFIG_SOURCE) == "subscription_original"), (select(strenv(F50_CONFIG_SOURCE) != "subscription_original") | (select(has("unified-delay")), (select(has("unified-delay") | not) | ."unified-delay" = true))))' 8
     panel_rc=$?
   fi
   unset F50_PANEL_DIR F50_PANEL_URL

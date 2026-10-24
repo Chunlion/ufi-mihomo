@@ -2,42 +2,42 @@ TAP version 13
 # Subtest: all probes healthy renders the diagnostic dialog
 ok 1 - all probes healthy renders the diagnostic dialog
   ---
-  duration_ms: 3.328545
+  duration_ms: 2.803465
   ...
 # Subtest: a failing probe degrades that row instead of aborting the dialog
 ok 2 - a failing probe degrades that row instead of aborting the dialog
   ---
-  duration_ms: 1.10809
+  duration_ms: 1.203212
   ...
 # Subtest: every probe failing still renders one dialog with all failures listed
 ok 3 - every probe failing still renders one dialog with all failures listed
   ---
-  duration_ms: 0.925189
+  duration_ms: 0.911145
   ...
 # Subtest: the main list stays compact and field details are collapsed
 ok 4 - the main list stays compact and field details are collapsed
   ---
-  duration_ms: 0.924876
+  duration_ms: 0.885698
   ...
 # Subtest: a probe failure is reported once in the summary, not as extra rows
 ok 5 - a probe failure is reported once in the summary, not as extra rows
   ---
-  duration_ms: 1.563842
+  duration_ms: 1.489112
   ...
 # Subtest: a synchronous helper throw inside the panel probe is degraded, not propagated
 ok 6 - a synchronous helper throw inside the panel probe is degraded, not propagated
   ---
-  duration_ms: 0.905357
+  duration_ms: 0.824079
   ...
 # Subtest: provider anomalies reach the summary even when the request succeeds
 ok 7 - provider anomalies reach the summary even when the request succeeds
   ---
-  duration_ms: 1.887701
+  duration_ms: 1.557887
   ...
 # Subtest: f50HealthLayers classifies provider snapshots into problems
 ok 8 - f50HealthLayers classifies provider snapshots into problems
   ---
-  duration_ms: 1.717336
+  duration_ms: 1.50542
   ...
 1..8
 # tests 8
@@ -47,4 +47,4 @@ ok 8 - f50HealthLayers classifies provider snapshots into problems
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 133.270049
+# duration_ms 124.565258

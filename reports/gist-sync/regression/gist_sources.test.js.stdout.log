@@ -2,52 +2,52 @@ TAP version 13
 # Subtest: Gist refresh updates the airport links before the Gist link content
 ok 1 - Gist refresh updates the airport links before the Gist link content
   ---
-  duration_ms: 3.329866
+  duration_ms: 3.602241
   ...
 # Subtest: inline-only config requires only a managed Gist refresh / true
 ok 2 - inline-only config requires only a managed Gist refresh / true
   ---
-  duration_ms: 1.247222
+  duration_ms: 1.284522
   ...
 # Subtest: inline-only config requires only a managed Gist refresh / false
 ok 3 - inline-only config requires only a managed Gist refresh / false
   ---
-  duration_ms: 1.083635
+  duration_ms: 1.161401
   ...
 # Subtest: a failed local download still attempts Gist without reporting full success / true
 ok 4 - a failed local download still attempts Gist without reporting full success / true
   ---
-  duration_ms: 1.151496
+  duration_ms: 1.374331
   ...
 # Subtest: a failed local download still attempts Gist without reporting full success / false
 ok 5 - a failed local download still attempts Gist without reporting full success / false
   ---
-  duration_ms: 0.920414
+  duration_ms: 1.069057
   ...
 # Subtest: Gist detection failure cannot turn a provider-only success into full success
 ok 6 - Gist detection failure cannot turn a provider-only success into full success
   ---
-  duration_ms: 1.083531
+  duration_ms: 1.334624
   ...
 # Subtest: Gist source saves, disabled-only and empty removal all use native merge
 ok 7 - Gist source saves, disabled-only and empty removal all use native merge
   ---
-  duration_ms: 3.376824
+  duration_ms: 3.996282
   ...
 # Subtest: Gist detection protects local edits and detects unsupported components
 ok 8 - Gist detection protects local edits and detects unsupported components
   ---
-  duration_ms: 3.273855
+  duration_ms: 6.087604
   ...
 # Subtest: Manual source update releases frontend lease, fences source revision and checks real receipt
 ok 9 - Manual source update releases frontend lease, fences source revision and checks real receipt
   ---
-  duration_ms: 3.191475
+  duration_ms: 5.750068
   ...
 # Subtest: confirmed exit from broken Gist keeps the current config and permits ordinary subscriptions
 ok 10 - confirmed exit from broken Gist keeps the current config and permits ordinary subscriptions
   ---
-  duration_ms: 3.555464
+  duration_ms: 5.740174
   ...
 1..10
 # tests 10
@@ -57,4 +57,4 @@ ok 10 - confirmed exit from broken Gist keeps the current config and permits ord
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 196.361997
+# duration_ms 225.730247

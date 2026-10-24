@@ -2,47 +2,47 @@ TAP version 13
 # Subtest: JSON bridge isolates yq warnings and enables supported merge semantics
 ok 1 - JSON bridge isolates yq warnings and enables supported merge semantics
   ---
-  duration_ms: 20.276126
+  duration_ms: 15.800546
   ...
 # Subtest: JSON bridge accepts warnings from yq without the newer merge flag
 ok 2 - JSON bridge accepts warnings from yq without the newer merge flag
   ---
-  duration_ms: 14.938249
+  duration_ms: 11.595288
   ...
 # Subtest: JSON bridge preserves yq parse errors and exit status
 ok 3 - JSON bridge preserves yq parse errors and exit status
   ---
-  duration_ms: 15.059355
+  duration_ms: 10.800436
   ...
 # Subtest: JSON bridge still rejects malformed JSON after a successful yq exit
 ok 4 - JSON bridge still rejects malformed JSON after a successful yq exit
   ---
-  duration_ms: 15.806918
+  duration_ms: 11.62613
   ...
 # Subtest: JSON bridge accepts a compatible parser with a different version banner
 ok 5 - JSON bridge accepts a compatible parser with a different version banner
   ---
-  duration_ms: 15.049317
+  duration_ms: 10.443215
   ...
 # Subtest: JSON bridge works when the system timeout lacks kill-after support
 ok 6 - JSON bridge works when the system timeout lacks kill-after support
   ---
-  duration_ms: 13.093894
+  duration_ms: 15113.898236
   ...
 # Subtest: YAML parsing works when the controller is unavailable
 ok 7 - YAML parsing works when the controller is unavailable
   ---
-  duration_ms: 15.912006
+  duration_ms: 13.025912
   ...
 # Subtest: timeout expiry and ordinary exit codes / fallback=false
 ok 8 - timeout expiry and ordinary exit codes / fallback=false
   ---
-  duration_ms: 1019.479658
+  duration_ms: 1015.399229
   ...
 # Subtest: timeout expiry and ordinary exit codes / fallback=true
 ok 9 - timeout expiry and ordinary exit codes / fallback=true
   ---
-  duration_ms: 3009.812312
+  duration_ms: 3062.785081
   ...
 1..9
 # tests 9
@@ -52,4 +52,4 @@ ok 9 - timeout expiry and ordinary exit codes / fallback=true
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 4305.96048
+# duration_ms 19468.920992

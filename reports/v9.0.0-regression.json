@@ -1,12 +1,12 @@
 {
-  "date": "2026-10-22T10:59:50.166Z",
+  "date": "2026-10-24T15:11:37.199Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "1724c544313879ce63e53d862724818842a88982",
-    "bytes": 648854,
-    "sha256": "9b66646348c2f7b49fd14a61a6ff8ac7668870a1d88a8206fd03ac1ffefaf3e2"
+    "baseCommit": "cd66303b64bddfcd7924f16db820dbe2314af6c5",
+    "bytes": 648832,
+    "sha256": "ca3c03160dd4ec8e06f11fe48899515febeda70022b6de8e62acdeba9d68d7f1"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
@@ -2800,7 +2800,7 @@
           "status": "PASS"
         },
         {
-          "name": "original config uses rule mode regardless of its source mode",
+          "name": "original config keeps its own mode instead of forcing rule",
           "status": "PASS"
         },
         {

@@ -59,6 +59,42 @@ func TestNormalizationDifferential(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizationUserOverrides(t *testing.T) {
+	for _, mode := range []string{"tproxy", "tun", "off"} {
+		t.Run(mode, func(t *testing.T) {
+			config := map[string]any{
+				"mode": "global", "ipv6": true, "port": 18080, "log-level": "debug", "unified-delay": false,
+				"external-ui": "WebUI/custom", "external-ui-url": "https://example.test/ui.zip",
+				"dns":            map[string]any{"listen": "127.0.0.1:5353", "nameserver-policy": map[string]any{"rule-set:cn_domain": []any{"1.1.1.1"}}},
+				"sniffer":        map[string]any{"sniff": map[string]any{"TLS": map[string]any{"ports": []any{8443}}}},
+				"rule-providers": map[string]any{"cn_domain": map[string]any{"type": "http", "behavior": "domain"}},
+			}
+			before := canonical(config)
+			out, err := normalizeConfig(config, map[string]string{"traffic_mode": mode, "ipv6": "off"}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"mode", "ipv6", "port", "log-level", "unified-delay", "external-ui", "external-ui-url"} {
+				if !same(out[key], config[key]) {
+					t.Errorf("user field %s was changed: %v", key, out[key])
+				}
+			}
+			if obj(out["dns"])["listen"] != "0.0.0.0:1053" || obj(out["tun"])["enable"] != (mode == "tun") {
+				t.Fatal("capture fields must remain controlled")
+			}
+			if !same(obj(out["dns"])["nameserver-policy"], obj(config["dns"])["nameserver-policy"]) {
+				t.Fatal("custom DNS policy was changed")
+			}
+			if !same(obj(out["sniffer"])["sniff"], obj(config["sniffer"])["sniff"]) {
+				t.Fatal("nested sniffer config was changed")
+			}
+			if canonical(config) != before {
+				t.Fatal("source config was mutated")
+			}
+		})
+	}
+}
 func TestJSONGuards(t *testing.T) {
 	for _, s := range []string{`{"a":1,"a":2}`, `{} {}`, `{"n":9007199254740992}`, `{"n":NaN}`} {
 		if _, e := parseJSON([]byte(s)); e == nil {

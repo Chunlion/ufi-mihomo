@@ -390,10 +390,13 @@ test('original config keeps its own mode instead of forcing rule', () => {
 });
 
 test('policy reapplication synchronizes core mode and stops on API failure', async () => {
+  for (const configuredMode of ['global', 'direct', 'Rule', undefined])
   for (const success of [true, false]) {
     const calls = [];
     const sandbox = {
       ensurePolicyToolsScript: async () => true,
+      CLASH_CONFIG: 'config.yaml',
+      readYamlObject: async () => ({ ok: true, value: { mode: configuredMode } }),
       callMihomoApi: async (...args) => { calls.push(plain(args)); return { success, message: 'API failed' }; },
       runShellWithRoot: async () => { calls.push('policy'); return { success: true, content: 'POLICY_APPLY_OK' }; },
       shellQuote: (value) => value, CLASH_POLICY_SCRIPT: 'policy', activeCriticalOperation: {},
@@ -402,8 +405,51 @@ test('policy reapplication synchronizes core mode and stops on API failure', asy
     };
     const apply = vm.runInNewContext(`${slice('const reapplyPolicyRulesSilent = async', 'const readClientListText = async')} reapplyPolicyRulesSilent`, sandbox);
     assert.equal(await apply(), success);
-    assert.deepEqual(calls, success ? [['/configs', 'PATCH', { mode: 'rule' }], 'policy'] : [['/configs', 'PATCH', { mode: 'rule' }]]);
+    const patch = ['/configs', 'PATCH', { mode: String(configuredMode || 'rule').toLowerCase() }];
+    assert.deepEqual(calls, success ? [patch, 'policy'] : [patch]);
     if (!success) assert.match(sandbox.activeCriticalOperation.failure, /API failed/);
+  }
+});
+
+test('policy reapplication stops when the saved mode cannot be read', async () => {
+  const operation = {};
+  const apply = vm.runInNewContext(`${slice('const reapplyPolicyRulesSilent = async', 'const readClientListText = async')} reapplyPolicyRulesSilent`, {
+    ensurePolicyToolsScript: async () => true, CLASH_CONFIG: 'config.yaml',
+    readYamlObject: async () => ({ ok: false, message: 'config unreadable' }),
+    callMihomoApi: async () => assert.fail('must not change mode without config'),
+    runShellWithRoot: async () => assert.fail('must not apply policy after read failure'),
+    activeCriticalOperation: operation, sanitizeSubscriptionSecrets: String, safeTextToHtml: String,
+    createToast() {},
+  });
+  assert.equal(await apply(), false);
+  assert.match(operation.failure, /config unreadable/);
+});
+
+test('config save reports corrected capture keys only after a successful write', async () => {
+  for (const writeOK of [true, false]) {
+    const toasts = [];
+    const config = { dns: { listen: '127.0.0.1:5353' }, mode: 'global' };
+    const sanitize = vm.runInNewContext(`${slice('  const sanitizeConfigForTProxy = async', '  const btn_enabled =')} sanitizeConfigForTProxy`, {
+      kprReadOptions: async () => ({ traffic_mode: 'tproxy', ipv6: 'off' }),
+      runShellWithRoot: async () => ({ success: true, content: 'config_source=uploaded_config' }),
+      CLASH_CONFIG_SOURCE_FILE: 'source.conf', CLASH_CONFIG: 'config.yaml', F50_PORTS: { tproxy: 7895 },
+      shellQuote: String, ensurePolicyStorage: async () => ({ ok: true }),
+      readYamlObject: async () => ({ ok: true, value: config }),
+      cloneJsonValue: plain, applyRequiredF50Fields() {},
+      kprShapeRuntimeConfig: async (value, options) => configApi.runtime(value, options),
+      kprBaseWriteYamlObjectAtomic: async () => ({ ok: writeOK, content: 'write failed' }),
+      escapeHtml: String, safeTextToHtml: String,
+      createToast: (...args) => toasts.push(args),
+    });
+    assert.equal(await sanitize({ showToast: false }), writeOK);
+    assert.equal(toasts.length, 1);
+    if (writeOK) {
+      assert.match(toasts[0][0], /已按接管要求纠正：dns.listen/);
+      assert.equal(toasts[0][1], 'yellow');
+    } else {
+      assert.doesNotMatch(toasts[0][0], /已按接管要求纠正/);
+      assert.equal(toasts[0][1], 'red');
+    }
   }
 });
 

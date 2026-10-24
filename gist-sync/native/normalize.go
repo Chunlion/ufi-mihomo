@@ -91,22 +91,7 @@ func parseOptions(text string) map[string]string {
 // 其余键（enhanced-mode、nameserver、fake-ip-*、sniffer、profile、端口等）一律跟随来源配置。
 var controlledNetworkKeys = map[string][]string{
 	"dns": {"enable", "listen"},
-	"tun": {"enable", "device", "auto-route", "auto-redirect", "strict-route", "dns-hijack", "stack"},
-}
-
-func deepMerge(base, over map[string]any) map[string]any {
-	for k, v := range over {
-		if nested := obj(v); nested != nil {
-			current := obj(base[k])
-			if current == nil {
-				current = map[string]any{}
-			}
-			base[k] = deepMerge(current, nested)
-			continue
-		}
-		base[k] = clone(v)
-	}
-	return base
+	"tun": {"enable", "device", "auto-route", "auto-redirect", "strict-route", "dns-hijack"},
 }
 
 // applySourceNetwork 用来源配置覆盖网络层，再把断链键从内置 profile 回填。
@@ -120,9 +105,10 @@ func applySourceNetwork(out, source map[string]any) map[string]any {
 		base := obj(out[k])
 		merged := map[string]any{}
 		if base != nil {
-			merged = deepMerge(clone(base).(map[string]any), user)
-		} else {
-			merged = deepMerge(merged, user)
+			merged = clone(base).(map[string]any)
+		}
+		for key, value := range user {
+			merged[key] = clone(value)
 		}
 		for _, key := range controlledNetworkKeys[k] {
 			if base != nil && has(base, key) {
@@ -209,19 +195,13 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 	}
 	out := clone(profiles[key]).(map[string]any)
 	for k, v := range source {
-		if strings.HasPrefix(k, "x-") && !has(out, k) {
-			out[k] = clone(v)
+		switch k {
+		case "bind-address", "allow-lan", "external-controller", "tproxy-port", "external-ui-name", "dns", "tun", "sniffer", "profile":
+			continue
 		}
-	}
-	for _, k := range []string{"proxies", "proxy-providers", "proxy-groups", "rules", "rule-providers", "sub-rules", "hosts", "secret", "x-f50-provider-sources"} {
-		if has(source, k) {
-			out[k] = clone(source[k])
-		}
+		out[k] = clone(v)
 	}
 	applySourceNetwork(out, source)
-	if dns := obj(source["dns"]); has(dns, "proxy-server-nameserver-policy") {
-		obj(out["dns"])["proxy-server-nameserver-policy"] = clone(dns["proxy-server-nameserver-policy"])
-	}
 	if mode == "tun" {
 		stack := options["tun_stack"]
 		if stack == "" || stack == "auto" {
@@ -277,7 +257,15 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 	}
 	for _, name := range []string{"cn_domain", "private_domain", "add_direct_domain"} {
 		if p := obj(obj(out["rule-providers"])[name]); p != nil && p["behavior"] == "domain" {
-			obj(obj(out["dns"])["nameserver-policy"])["rule-set:"+name] = []any{"https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"}
+			dns := obj(out["dns"])
+			policy := obj(dns["nameserver-policy"])
+			if policy == nil {
+				policy = map[string]any{}
+				dns["nameserver-policy"] = policy
+			}
+			if !has(policy, "rule-set:"+name) {
+				policy["rule-set:"+name] = []any{"https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"}
+			}
 		}
 	}
 	out["x-f50-profile"] = "8.0.0-compat.2.3"

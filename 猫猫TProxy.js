@@ -54,8 +54,8 @@ const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen'];
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
 // 只保留删掉就断链的键：iptables 的 TPROXY/DNS 劫持端口、面板 API 端口、LAN 可达性。
 // 其余（mode/ipv6/端口/external-ui/dns 解析参数/sniffer/profile）全部可由用户自定义。
-const CONTROLLED_TOP_KEYS = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
-const CONTROLLED_DNS_KEYS = ['enable', 'listen'];
+const CONTROLLED_TOP_KEYS = F50_ORIGINAL_MANAGED_KEYS;
+const CONTROLLED_DNS_KEYS = F50_ORIGINAL_DNS_KEYS;
 const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
 // Service 恢复用户配置时不能反向覆盖的部分：受控键、插件元信息、以及由订阅/模板生成的节点、规则与来源。
 const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
@@ -2945,9 +2945,6 @@ function createPrivateRouteLogic() {
   const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
     const out = clone(preserveConfig ? source : profile);
     if (preserveConfig) {
-      for (const key of Object.keys(source)) {
-        if (key.startsWith('x-') && !own(out, key)) out[key] = clone(source[key]);
-      }
       for (const key of F50_ORIGINAL_MANAGED_KEYS) out[key] = clone(profile[key]);
       out.dns = clone(source.dns || profile.dns);
       out.tun = clone(source.tun || {});
@@ -3185,7 +3182,6 @@ async function kprSaveNetworkState(previous, next) {
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!source.ok) throw new Error(source.message || '无法读取运行配置（config.yaml）');
-    configChanged = configChanged || source.value.mode !== 'rule';
     const prepared = await kprShapeRuntimeConfig(source.value, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
@@ -5885,14 +5881,12 @@ ${buildF50YamlCommitBody(withBase)}
 
   const applyManagedDashboardFields = (config, { preserveConfig = false } = {}) => {
     assertYamlRootMap(config, '配置');
-    const externalUi = String(config['external-ui'] || '').trim().replace(/\\/g, '/');
-    const externalUiUrl = String(config['external-ui-url'] || '').trim();
-    const changed = externalUi != ZASHBOARD_UI_DIR
+    const changed = config['external-ui'] == null
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
-      || externalUiUrl != ZASHBOARD_UI_URL
+      || config['external-ui-url'] == null
       || (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay'));
-    config['external-ui'] = ZASHBOARD_UI_DIR;
-    config['external-ui-url'] = ZASHBOARD_UI_URL;
+    config['external-ui'] ??= ZASHBOARD_UI_DIR;
+    config['external-ui-url'] ??= ZASHBOARD_UI_URL;
     // unified-delay 不参与接管、路由与面板校验，仅在用户未设置时补默认值。
     if (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay')) config['unified-delay'] = true;
     delete config['external-ui-name'];
@@ -7162,8 +7156,10 @@ KANO_WRITE_CHECK_EOF
       YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
       [ -s "$CFG" ] && [ -x "$YQ" ] || exit 1
       export F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} 2>/dev/null | head -n 1)
-      "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)} and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
-      f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
+      "$YQ" e -e 'has("external-ui") and has("external-ui-url") and (has("external-ui-name") | not) and (has("unified-delay") or strenv(F50_CONFIG_SOURCE) == "subscription_original")' "$CFG" >/dev/null 2>&1 || exit 1
+      if "$YQ" e -e '."external-ui" == ${JSON.stringify(ZASHBOARD_UI_DIR)} and ."external-ui-url" == ${JSON.stringify(ZASHBOARD_UI_URL)}' "$CFG" >/dev/null 2>&1; then
+        f50_validate_zashboard ${shellQuote(`${CLASH_PROXY_DIR}/WebUI/zashboard`)} >/dev/null 2>&1 || exit 1
+      fi
       echo F50_ZASHBOARD_GUARD_OK=1
       echo "F50_UNIFIED_DELAY=$(\"$YQ\" e -r '.\"unified-delay\" // false' \"$CFG\")"
     `, 8 * 1000);
@@ -7204,6 +7200,9 @@ KANO_WRITE_CHECK_EOF
         if (!reload.success) return { ok: false, message: reload.message || reload.responseText || 'Zashboard 配置热加载失败' };
       }
 
+      if (config['external-ui'] !== ZASHBOARD_UI_DIR || config['external-ui-url'] !== ZASHBOARD_UI_URL) {
+        return { ok: true, repaired: configChanged };
+      }
       let disk = await inspectZashboardDisk();
       if (disk.ok) return { ok: true, repaired: configChanged || !!corePid };
       if (!corePid) return { ok: false, message: 'Zashboard 文件身份异常，核心未运行，无法在线修复' };
@@ -7514,7 +7513,7 @@ KANO_WRITE_CHECK_EOF
     const loadPromise = (async () => {
       const guard = await ensureZashboardPanelReady();
       if (!guard.ok) throw new Error(guard.message || 'Zashboard 校验失败');
-      if (guard.repaired) createToast('Zashboard 配置或文件已自动修复', 'yellow', 7000);
+      if (guard.repaired) createToast('面板配置或文件已自动修复', 'yellow', 7000);
       const hostPromise = waitForLanHost();
       try {
         const [host, info] = await Promise.all([hostPromise, buildControllerInfo()]);
@@ -8554,10 +8553,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       if (errorToast) createToast(`配置自检与修复失败；原 config.yaml 未改写<br>${safeTextToHtml(write.content || '')}`, 'red', 12000);
       return false;
     }
-    if (showToast) {
+    const overridden = shaped['x-f50-overridden'] || [];
+    if (showToast || overridden.length) {
       createToast(
-        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '已开启' : '已关闭'} · 端口 ${F50_PORTS.tproxy}`,
-        'green',
+        `配置已整理<br>${escapeHtml(trafficMode.toUpperCase())} · IPv6 ${ipv6Enabled ? '已开启' : '已关闭'} · 端口 ${F50_PORTS.tproxy}`
+          + (overridden.length ? `<br>已按接管要求纠正：${escapeHtml(overridden.join('、'))}` : ''),
+        overridden.length ? 'yellow' : 'green',
         6000,
       );
     }
@@ -8975,7 +8976,10 @@ btn_disabled.onclick = async () => {
 
   const reapplyPolicyRulesSilent = async ({ ensureScript = true } = {}) => {
     if (ensureScript && !(await ensurePolicyToolsScript())) return false;
-    const mode = await callMihomoApi('/configs', 'PATCH', { mode: 'rule' });
+    const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    const mode = config.ok
+      ? await callMihomoApi('/configs', 'PATCH', { mode: String(config.value.mode || 'rule').toLowerCase() })
+      : { success: false, message: config.message };
     const res = mode.success
       ? await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} apply 2>&1`)
       : { success: false, content: mode.message || mode.responseText };

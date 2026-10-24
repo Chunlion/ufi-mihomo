@@ -153,6 +153,20 @@ test('invalid tun mtu and conflicting local ports are rejected', () => {
   assert.throws(() => current.runtime({ ...base, port: 18000, 'mixed-port': 18000 }, { traffic_mode: 'tproxy' }), /不能重复/);
 });
 
+test('Gist normalization reference matches the plugin for custom config fields', () => {
+  const reference = require('../gist-sync/baseline-normalizer').KPR;
+  const config = { ...base, mode: 'global', ipv6: true, port: 18080, 'log-level': 'debug',
+    'unified-delay': false, 'external-ui': 'WebUI/custom', 'external-ui-url': 'https://example.test/ui.zip',
+    dns: { 'nameserver-policy': { 'rule-set:cn_domain': ['1.1.1.1'] } },
+    sniffer: { sniff: { TLS: { ports: [8443] } } },
+    'rule-providers': { cn_domain: { type: 'http', behavior: 'domain', url: 'https://example.test/rules' } },
+  };
+  for (const traffic_mode of ['tproxy', 'tun', 'off']) {
+    const options = { traffic_mode, ipv6: 'off' };
+    assert.deepEqual(plain(reference.runtime(config, options)), plain(current.runtime(config, options)));
+  }
+});
+
 test('operation composition includes every transitive helper and reduces shell payload', () => {
   const known = new Set([...baseline.maintenance().matchAll(/^(f50_[a-z0-9_]+)\(\) [{(]/gm)].map(m => m[1]));
   for (const operation of ['start', 'inspect', 'install', 'cleanup', 'final', 'uninstall']) {

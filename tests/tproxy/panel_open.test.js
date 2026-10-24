@@ -16,6 +16,42 @@ function deferred() {
   const promise = new Promise(done => { resolve = done; });
   return { promise, resolve };
 }
+
+test('dashboard defaults preserve custom fields and explicit false values', () => {
+  const apply = vm.runInNewContext(slice('  const applyManagedDashboardFields =', '  const applyRequiredF50Fields =') + 'applyManagedDashboardFields', {
+    assertYamlRootMap() {}, ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.test/default.zip',
+  });
+  const custom = { 'external-ui': 'WebUI/custom', 'external-ui-url': 'https://example.test/custom.zip', 'unified-delay': false };
+  assert.equal(apply(custom), false);
+  assert.deepEqual(custom, { 'external-ui': 'WebUI/custom', 'external-ui-url': 'https://example.test/custom.zip', 'unified-delay': false });
+  const partial = { 'external-ui': 'WebUI/custom' };
+  assert.equal(apply(partial), true);
+  assert.equal(partial['external-ui'], 'WebUI/custom');
+  assert.equal(partial['external-ui-url'], 'https://example.test/default.zip');
+  assert.equal(partial['unified-delay'], true);
+});
+
+test('opening a custom dashboard skips Zashboard file repair', async () => {
+  for (const config of [
+    { 'external-ui': 'WebUI/custom', 'external-ui-url': 'https://example.test/custom.zip' },
+    { 'external-ui': 'WebUI/zashboard', 'external-ui-url': 'https://example.test/custom.zip' },
+  ]) {
+    const ready = vm.runInNewContext(slice('  let zashboardGuardPromise =', '  const buildProviderUpdateResult =') + 'ensureZashboardPanelReady', {
+      probeZashboardGuard: async () => false,
+      readYamlObject: async () => ({ ok: true, value: config }),
+      cloneJsonValue: value => JSON.parse(JSON.stringify(value)),
+      readConfigSource: async () => 'uploaded_config', applyManagedDashboardFields: () => false,
+      buildControllerInfo: async () => ({}), getCorePid: async () => '123',
+      reloadConfigHot: async () => ({ success: true }),
+      CLASH_CONFIG: 'config.yaml', ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.test/default.zip',
+      inspectZashboardDisk: async () => assert.fail('custom panel must not require Zashboard files'),
+      callMihomoApi: async () => assert.fail('custom panel must not be replaced'),
+    });
+    const result = await ready();
+    assert.equal(result.ok, true);
+    assert.equal(result.repaired, false);
+  }
+});
 function harness({ guard = async () => ({ ok: true }), info = async () => ({ port: 7788 }), blocked = false } = {}) {
   const windows = [], toasts = [];
   let checks = 0, clock = 0;

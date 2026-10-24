@@ -93,14 +93,14 @@ const dashboard = runBlock(`${dashboardCode}; this.apply = applyManagedDashboard
 const managedPanel = { 'external-ui': 'ui', 'external-ui-name': 'zashboard', 'external-ui-url': 'https://example.invalid/ui.zip' };
 check(dashboard.apply(managedPanel), '旧托管面板配置会被修正');
 equal([managedPanel['external-ui'], managedPanel['external-ui-url'], managedPanel['unified-delay']], [
-  'WebUI/zashboard', 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip', true,
-], '托管面板字段统一');
+  'ui', 'https://example.invalid/ui.zip', true,
+], '面板自定义字段保留，缺失项补默认值');
 check(!Object.hasOwn(managedPanel, 'external-ui-name'), '托管面板不再生成嵌套目录');
 const customPanel = { 'external-ui': '/custom/panel', 'external-ui-url': 'https://example.test/custom.zip' };
-check(dashboard.apply(customPanel), '自定义面板配置也会被强制修正');
+check(dashboard.apply(customPanel), '自定义面板补充缺失的 unified-delay');
 equal([customPanel['external-ui'], customPanel['external-ui-url']], [
-  'WebUI/zashboard', 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-], '所有配置只允许使用 Zashboard');
+  '/custom/panel', 'https://example.test/custom.zip',
+], '自定义面板目录与地址保持不变');
 
 console.log('--- generated maintenance shell ---');
 const originalServiceSource = slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS')
@@ -310,7 +310,8 @@ check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== 
 const templateSource = slice('const buildF50TemplateObject', 'const readRuleOverrideConfig');
 check(templateSource.includes("'redir-port': 0") && Object.values(profiles).every(profile => profile['redir-port'] === 0), '生成模板与全部运行配置关闭未使用的 Redir 端口');
 // 受控键常量已从闭包提到顶层，配置整形的切片必须带上它们（只取不依赖 PROFILE_DELTA 的那几个）。
-const kprSource = slice('const CONTROLLED_TOP_KEYS', 'function buildF50EmergencyScript')
+const kprSource = slice('const F50_ORIGINAL_MANAGED_KEYS', 'const F50_ORIGINAL_TUN_KEYS')
+  + slice('const CONTROLLED_TOP_KEYS', 'function buildF50EmergencyScript')
   + slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack }).KPR;
 const baseConfig = {

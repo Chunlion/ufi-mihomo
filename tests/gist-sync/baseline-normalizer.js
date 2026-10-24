@@ -215,12 +215,13 @@ function createPrivateRouteLogic() {
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
   const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
   const out = clone(preserveConfig ? source : profile);
-  for (const key of Object.keys(source)) {
-    if (key.startsWith('x-') && !own(out, key)) out[key] = clone(source[key]);
-  }
-  for (const key of preserveConfig ? F50_ORIGINAL_MANAGED_KEYS : ['proxies', 'proxy-providers', 'proxy-groups', 'rules', 'rule-providers', 'sub-rules', 'hosts', 'secret', 'x-f50-provider-sources']) {
-    if (preserveConfig) out[key] = clone(profile[key]);
-    else if (own(source, key)) out[key] = clone(source[key]);
+  if (preserveConfig) {
+    for (const key of F50_ORIGINAL_MANAGED_KEYS) out[key] = clone(profile[key]);
+  } else {
+    for (const key of Object.keys(source)) {
+      if (F50_ORIGINAL_MANAGED_KEYS.includes(key) || ['dns', 'tun', 'sniffer', 'profile', 'external-ui-name'].includes(key)) continue;
+      out[key] = clone(source[key]);
+    }
   }
   if (preserveConfig) {
     out.dns = clone(source.dns || profile.dns);
@@ -238,9 +239,9 @@ function createPrivateRouteLogic() {
     for (const key of ['dns', 'tun', 'sniffer', 'profile']) {
       if (!f50IsPlainObject(source[key])) continue;
       const base = f50IsPlainObject(out[key]) ? clone(out[key]) : {};
-      out[key] = f50DeepMerge(base, source[key]);
+      out[key] = { ...base, ...clone(source[key]) };
       const controlled = key === 'dns' ? ['enable', 'listen']
-        : key === 'tun' ? ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack', 'stack'] : [];
+        : key === 'tun' ? ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'] : [];
       for (const k of controlled) {
         if (own(base, k)) out[key][k] = clone(base[k]);
         else delete out[key][k];
@@ -266,7 +267,10 @@ function createPrivateRouteLogic() {
   }
   for (const name of ['cn_domain', 'private_domain', 'add_direct_domain']) {
     if (!preserveConfig && out['rule-providers']?.[name]?.behavior === 'domain') {
-      out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
+      out.dns['nameserver-policy'] = out.dns['nameserver-policy'] || {};
+      if (!own(out.dns['nameserver-policy'], 'rule-set:' + name)) {
+        out.dns['nameserver-policy']['rule-set:' + name] = ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'];
+      }
     }
   }
   out['x-f50-profile'] = '8.0.0-compat.2.3';

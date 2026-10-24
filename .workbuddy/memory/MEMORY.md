@@ -61,6 +61,10 @@ wsl -d Debian -- bash -c 'export PATH=/tmp/f50-shim:/usr/local/bin:/usr/bin:/bin
 
 Android 二进制在 qemu 下跑不了（缺 linker64），要验行为就下 amd64 版到 WSL，用 `.cache/mihomo/verify_provider_api.py` 驱动（断言 PUT 触发重下载、`use:` 组刷新、provider 文件重写）。
 
+版本校验只在**构建期**：`update_package_core.py` 用词边界正则要求版本串独立出现（防 `v1.19.3` 吞进 `v1.19.33`）。设备端不读 `Tools/mihomo.version` 和 `components.json` 的 core 块，安装只探 `Clash.Core -v` 的 rc（`猫猫TProxy.js:2422`）——元数据写错没有运行时症状，只能靠这条校验拦。该正则**不接受带后缀构建**（`v1.19.33-dev` 会被拒），换非官方构建要先放宽为「候选集包含 或 前缀+后缀」写法。
+
+端上 `F50_MIPS_MIN_VERSION`（`猫猫TProxy.js:8`）是 awk 三元组数值比较，`v1.19.100`/`v2.0.0` 判得对，与构建期正则无关。
+
 ## 组件包固件：改 installer 文本必须同步刷新
 
 `tproxy-yq.zip` 里的 `Scripts/Clash.Service` 是**已安装状态**的快照（`subscription_update.test.js` 拿它当基准，断言 installer 输出与它逐字节一致）。所以只要改了 installer 发出的文本——保留块、`KANO_ORIGINAL_CONFIG_PRESERVATION` 版本、面板修复行——就必须刷新，否则报 `all surrounding service functions and calls remain intact`。

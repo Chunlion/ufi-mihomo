@@ -2,129 +2,134 @@ TAP version 13
 # Subtest: firewall/process ownership functions are unchanged
 ok 1 - firewall/process ownership functions are unchanged
   ---
-  duration_ms: 13.925687
+  duration_ms: 11.199804
   ...
 # Subtest: long private-route policy names retain their rules without mutating the input
 ok 2 - long private-route policy names retain their rules without mutating the input
   ---
-  duration_ms: 1.80194
+  duration_ms: 1.627362
   ...
 # Subtest: deep proxy selections resolve and cycles still fail
 ok 3 - deep proxy selections resolve and cycles still fail
   ---
-  duration_ms: 0.688417
+  duration_ms: 0.460605
   ...
 # Subtest: runtime entry rejects invalid modes and config list types
 ok 4 - runtime entry rejects invalid modes and config list types
   ---
-  duration_ms: 0.804012
+  duration_ms: 0.41189
   ...
 # Subtest: IPv4 / IPv6 CIDR normalization and overlap detection retain their results
 ok 5 - IPv4 / IPv6 CIDR normalization and overlap detection retain their results
   ---
-  duration_ms: 1.503421
+  duration_ms: 1.476502
   ...
 # Subtest: IPv6 private CIDR is rejected when IPv6 capture is disabled
 ok 6 - IPv6 private CIDR is rejected when IPv6 capture is disabled
   ---
-  duration_ms: 1.437478
+  duration_ms: 1.478156
   ...
 # Subtest: private network tproxy/on, repeated apply and disable restore
 ok 7 - private network tproxy/on, repeated apply and disable restore
   ---
-  duration_ms: 4.016857
+  duration_ms: 3.195325
   ...
 # Subtest: private network tproxy/off, repeated apply and disable restore
 ok 8 - private network tproxy/off, repeated apply and disable restore
   ---
-  duration_ms: 2.030664
+  duration_ms: 1.627029
   ...
 # Subtest: private network tun/on, repeated apply and disable restore
 ok 9 - private network tun/on, repeated apply and disable restore
   ---
-  duration_ms: 22.055363
+  duration_ms: 19.495861
   ...
 # Subtest: private network tun/off, repeated apply and disable restore
 ok 10 - private network tun/off, repeated apply and disable restore
   ---
-  duration_ms: 2.74597
+  duration_ms: 2.316638
   ...
 # Subtest: private network off/on, repeated apply and disable restore
 ok 11 - private network off/on, repeated apply and disable restore
   ---
-  duration_ms: 1.103414
+  duration_ms: 1.439344
   ...
 # Subtest: private network off/off, repeated apply and disable restore
 ok 12 - private network off/off, repeated apply and disable restore
   ---
-  duration_ms: 0.84225
+  duration_ms: 0.869344
   ...
 # Subtest: user overrides survive shaping while controlled keys stay fixed
 ok 13 - user overrides survive shaping while controlled keys stay fixed
   ---
-  duration_ms: 0.329426
+  duration_ms: 0.440873
   ...
 # Subtest: invalid tun mtu and conflicting local ports are rejected
 ok 14 - invalid tun mtu and conflicting local ports are rejected
   ---
-  duration_ms: 0.37249
+  duration_ms: 0.456756
+  ...
+# Subtest: Gist normalization reference matches the plugin for custom config fields
+ok 15 - Gist normalization reference matches the plugin for custom config fields
+  ---
+  duration_ms: 8.498633
   ...
 # Subtest: operation composition includes every transitive helper and reduces shell payload
-ok 15 - operation composition includes every transitive helper and reduces shell payload
+ok 16 - operation composition includes every transitive helper and reduces shell payload
   ---
-  duration_ms: 3.041065
+  duration_ms: 2.898855
   ...
 # Subtest: cleanup plans refuse foreign route-table users
-ok 16 - cleanup plans refuse foreign route-table users
+ok 17 - cleanup plans refuse foreign route-table users
   ---
-  duration_ms: 6.167119
+  duration_ms: 5.206909
   ...
 # Subtest: firewall cleanup ignores foreign rules and fake jumps inside comments
-ok 17 - firewall cleanup ignores foreign rules and fake jumps inside comments
+ok 18 - firewall cleanup ignores foreign rules and fake jumps inside comments
   ---
-  duration_ms: 5.198222
+  duration_ms: 4.828388
   ...
 # Subtest: uninstall final probe reports clean
-ok 18 - uninstall final probe reports clean
+ok 19 - uninstall final probe reports clean
   ---
-  duration_ms: 3.273195
+  duration_ms: 2.849883
   ...
 # Subtest: uninstall final probe reports residual
-ok 19 - uninstall final probe reports residual
+ok 20 - uninstall final probe reports residual
   ---
-  duration_ms: 3.546588
+  duration_ms: 2.947794
   ...
 # Subtest: uninstall final probe reports unknown
-ok 20 - uninstall final probe reports unknown
+ok 21 - uninstall final probe reports unknown
   ---
-  duration_ms: 3.583071
+  duration_ms: 2.64626
   ...
 # Subtest: UI controls and event entry points retain their IDs and handler counts
-ok 21 - UI controls and event entry points retain their IDs and handler counts
+ok 22 - UI controls and event entry points retain their IDs and handler counts
   ---
-  duration_ms: 5.444377
+  duration_ms: 3.707793
   ...
 # Subtest: shared button action releases lock and restores button on success
-ok 22 - shared button action releases lock and restores button on success
+ok 23 - shared button action releases lock and restores button on success
   ---
-  duration_ms: 1.289369
+  duration_ms: 1.184423
   ...
 # Subtest: shared button action releases lock and restores button on error
-ok 23 - shared button action releases lock and restores button on error
+ok 24 - shared button action releases lock and restores button on error
   ---
-  duration_ms: 1.147627
+  duration_ms: 1.023972
   ...
 # Subtest: shared button action releases lock and restores button on cancel
-ok 24 - shared button action releases lock and restores button on cancel
+ok 25 - shared button action releases lock and restores button on cancel
   ---
-  duration_ms: 0.750121
+  duration_ms: 0.726181
   ...
-1..24
-# tests 24
+1..25
+# tests 25
 # suites 0
-# pass 24
+# pass 25
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 298.290202
+# duration_ms 295.988117

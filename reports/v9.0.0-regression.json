@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-24T15:11:37.199Z",
+  "date": "2026-10-24T15:40:33.624Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "cd66303b64bddfcd7924f16db820dbe2314af6c5",
-    "bytes": 648832,
-    "sha256": "ca3c03160dd4ec8e06f11fe48899515febeda70022b6de8e62acdeba9d68d7f1"
+    "baseCommit": "ea1cf9b2dd57114b511dac9d31e525c56f0014b4",
+    "bytes": 649102,
+    "sha256": "c9d896735a49c2cd5d63c21d20c626de5d0ed80197588347bc3562d0c9a4cb08"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 667,
+    "passed": 672,
     "failed": 0,
     "notRun": 0
   },
@@ -160,7 +160,7 @@
           "status": "PASS"
         },
         {
-          "name": "托管面板字段统一",
+          "name": "面板自定义字段保留，缺失项补默认值",
           "status": "PASS"
         },
         {
@@ -168,11 +168,11 @@
           "status": "PASS"
         },
         {
-          "name": "自定义面板配置也会被强制修正",
+          "name": "自定义面板补充缺失的 unified-delay",
           "status": "PASS"
         },
         {
-          "name": "所有配置只允许使用 Zashboard",
+          "name": "自定义面板目录与地址保持不变",
           "status": "PASS"
         },
         {
@@ -1486,7 +1486,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_network.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_network.test.js.stderr.log",
-      "passed": 24,
+      "passed": 25,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1544,6 +1544,10 @@
         },
         {
           "name": "invalid tun mtu and conflicting local ports are rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist normalization reference matches the plugin for custom config fields",
           "status": "PASS"
         },
         {
@@ -1872,10 +1876,18 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/panel_open.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/panel_open.test.js.stderr.log",
-      "passed": 16,
+      "passed": 18,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "dashboard defaults preserve custom fields and explicit false values",
+          "status": "PASS"
+        },
+        {
+          "name": "opening a custom dashboard skips Zashboard file repair",
+          "status": "PASS"
+        },
         {
           "name": "repeated new windows open the validated URL synchronously without new checks",
           "status": "PASS"
@@ -2687,7 +2699,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/subscription_update.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/subscription_update.test.js.stderr.log",
-      "passed": 35,
+      "passed": 37,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -2805,6 +2817,14 @@
         },
         {
           "name": "policy reapplication synchronizes core mode and stops on API failure",
+          "status": "PASS"
+        },
+        {
+          "name": "policy reapplication stops when the saved mode cannot be read",
+          "status": "PASS"
+        },
+        {
+          "name": "config save reports corrected capture keys only after a successful write",
           "status": "PASS"
         },
         {

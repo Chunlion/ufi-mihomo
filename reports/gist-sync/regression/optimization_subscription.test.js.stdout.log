@@ -2,332 +2,332 @@ TAP version 13
 # Subtest: subscription URLs retain path names and trailing query characters
 ok 1 - subscription URLs retain path names and trailing query characters
   ---
-  duration_ms: 2.758369
+  duration_ms: 2.630978
   ...
 # Subtest: template source imports retain URLs regardless of path names
 ok 2 - template source imports retain URLs regardless of path names
   ---
-  duration_ms: 2.202576
+  duration_ms: 1.896737
   ...
 # Subtest: provider update, runtime matches=true
 ok 3 - provider update, runtime matches=true
   ---
-  duration_ms: 1.835149
+  duration_ms: 1.737043
   ...
 # Subtest: provider update, runtime matches=false
 ok 4 - provider update, runtime matches=false
   ---
-  duration_ms: 1.174488
+  duration_ms: 1.255799
   ...
 # Subtest: local update, runtime matches=true
 ok 5 - local update, runtime matches=true
   ---
-  duration_ms: 1.08542
+  duration_ms: 1.076168
   ...
 # Subtest: local update, runtime matches=false
 ok 6 - local update, runtime matches=false
   ---
-  duration_ms: 0.989809
+  duration_ms: 1.088642
   ...
 # Subtest: uploaded_config retains its dedicated update path
 ok 7 - uploaded_config retains its dedicated update path
   ---
-  duration_ms: 1.168687
+  duration_ms: 1.394833
   ...
 # Subtest: subscription_original retains its dedicated update path
 ok 8 - subscription_original retains its dedicated update path
   ---
-  duration_ms: 1.773435
+  duration_ms: 1.026376
   ...
 # Subtest: uploaded local provider downloads its saved subscription / success
 ok 9 - uploaded local provider downloads its saved subscription / success
   ---
-  duration_ms: 2.42947
+  duration_ms: 3.077168
   ...
 # Subtest: uploaded local provider downloads its saved subscription / download
 ok 10 - uploaded local provider downloads its saved subscription / download
   ---
-  duration_ms: 1.561002
+  duration_ms: 1.614139
   ...
 # Subtest: uploaded local provider downloads its saved subscription / stale
 ok 11 - uploaded local provider downloads its saved subscription / stale
   ---
-  duration_ms: 1.497979
+  duration_ms: 1.563355
   ...
 # Subtest: uploaded local provider downloads its saved subscription / other-provider
 ok 12 - uploaded local provider downloads its saved subscription / other-provider
   ---
-  duration_ms: 1.431047
+  duration_ms: 1.452689
   ...
 # Subtest: local refresh keeps observed cache state / provider_count_mismatch
 ok 13 - local refresh keeps observed cache state / provider_count_mismatch
   ---
-  duration_ms: 1.504589
+  duration_ms: 1.494035
   ...
 # Subtest: local refresh keeps observed cache state / provider_update_failed
 ok 14 - local refresh keeps observed cache state / provider_update_failed
   ---
-  duration_ms: 1.150116
+  duration_ms: 1.343948
   ...
 # Subtest: local refresh keeps observed cache state / provider_snapshot_failed
 ok 15 - local refresh keeps observed cache state / provider_snapshot_failed
   ---
-  duration_ms: 1.129094
+  duration_ms: 1.144057
   ...
 # Subtest: local refresh keeps observed cache state / provider_reload_missing
 ok 16 - local refresh keeps observed cache state / provider_reload_missing
   ---
-  duration_ms: 1.107682
+  duration_ms: 1.124702
   ...
 # Subtest: uploaded_config does not promise cache preservation for an unconfirmed download
 ok 17 - uploaded_config does not promise cache preservation for an unconfirmed download
   ---
-  duration_ms: 1.464575
+  duration_ms: 1.382271
   ...
 # Subtest: template.yaml does not promise cache preservation for an unconfirmed download
 ok 18 - template.yaml does not promise cache preservation for an unconfirmed download
   ---
-  duration_ms: 1.160082
+  duration_ms: 1.44939
   ...
 # Subtest: a changed subscription address rebuilds the config instead of re-downloading the old one
 ok 19 - a changed subscription address rebuilds the config instead of re-downloading the old one
   ---
-  duration_ms: 2.060364
+  duration_ms: 1.8117
   ...
 # Subtest: mixed custom providers keep the local subscription name and configuration
 ok 20 - mixed custom providers keep the local subscription name and configuration
   ---
-  duration_ms: 4.145109
+  duration_ms: 4.655381
   ...
 # Subtest: subscription update retains its early routing / legacy
 ok 21 - subscription update retains its early routing / legacy
   ---
-  duration_ms: 1.256017
+  duration_ms: 1.476386
   ...
 # Subtest: subscription update retains its early routing / empty-template
 ok 22 - subscription update retains its early routing / empty-template
   ---
-  duration_ms: 0.953413
+  duration_ms: 1.053615
   ...
 # Subtest: subscription update retains its early routing / empty-custom
 ok 23 - subscription update retains its early routing / empty-custom
   ---
-  duration_ms: 1.248914
+  duration_ms: 1.171882
   ...
 # Subtest: an unchanged address still updates the providers directly
 ok 24 - an unchanged address still updates the providers directly
   ---
-  duration_ms: 1.247044
+  duration_ms: 1.319018
   ...
 # Subtest: template provider update rebuilds stale provider definitions
 ok 25 - template provider update rebuilds stale provider definitions
   ---
-  duration_ms: 1.417398
+  duration_ms: 1.364782
   ...
 # Subtest: template local update rebuilds stale provider definitions
 ok 26 - template local update rebuilds stale provider definitions
   ---
-  duration_ms: 1.129578
+  duration_ms: 1.19647
   ...
 # Subtest: template provider rebuild is announced instead of replacing the config silently
 ok 27 - template provider rebuild is announced instead of replacing the config silently
   ---
-  duration_ms: 1.258859
+  duration_ms: 1.32858
   ...
 # Subtest: template local rebuild is announced instead of replacing the config silently
 ok 28 - template local rebuild is announced instead of replacing the config silently
   ---
-  duration_ms: 1.116395
+  duration_ms: 1.292337
   ...
 # Subtest: restored uploaded_config / template uses the subscription update path
 ok 29 - restored uploaded_config / template uses the subscription update path
   ---
-  duration_ms: 1.054761
+  duration_ms: 1.182825
   ...
 # Subtest: restored uploaded_config / original uses the subscription update path
 ok 30 - restored uploaded_config / original uses the subscription update path
   ---
-  duration_ms: 0.907493
+  duration_ms: 0.907155
   ...
 # Subtest: restored template.yaml / template uses the subscription update path
 ok 31 - restored template.yaml / template uses the subscription update path
   ---
-  duration_ms: 1.038276
+  duration_ms: 1.010396
   ...
 # Subtest: restored template.yaml / original uses the subscription update path
 ok 32 - restored template.yaml / original uses the subscription update path
   ---
-  duration_ms: 0.96681
+  duration_ms: 0.820332
   ...
 # Subtest: restored subscription_original / template uses the subscription update path
 ok 33 - restored subscription_original / template uses the subscription update path
   ---
-  duration_ms: 1.2093
+  duration_ms: 1.009785
   ...
 # Subtest: restored subscription_original / original uses the subscription update path
 ok 34 - restored subscription_original / original uses the subscription update path
   ---
-  duration_ms: 0.937604
+  duration_ms: 1.090575
   ...
 # Subtest: equal node counts do not claim identical node contents
 ok 35 - equal node counts do not claim identical node contents
   ---
-  duration_ms: 1.469701
+  duration_ms: 1.510951
   ...
 # Subtest: a missing pre-update snapshot falls back to the current node count
 ok 36 - a missing pre-update snapshot falls back to the current node count
   ---
-  duration_ms: 1.069766
+  duration_ms: 1.116468
   ...
 # Subtest: a custom configuration update says the saved address is not the one in use
 ok 37 - a custom configuration update says the saved address is not the one in use
   ---
-  duration_ms: 1.229154
+  duration_ms: 1.250258
   ...
 # Subtest: template local refresh reports the provider and both mismatched counts
 ok 38 - template local refresh reports the provider and both mismatched counts
   ---
-  duration_ms: 2.203555
+  duration_ms: 2.14106
   ...
 # Subtest: refreshing a subset keeps its existing provider filename
 ok 39 - refreshing a subset keeps its existing provider filename
   ---
-  duration_ms: 1.647771
+  duration_ms: 1.850706
   ...
 # Subtest: a configuration without providers cannot report a successful subscription refresh
 ok 40 - a configuration without providers cannot report a successful subscription refresh
   ---
-  duration_ms: 1.086193
+  duration_ms: 1.220619
   ...
 # Subtest: Mihomo HTTP Provider API status 200
 ok 41 - Mihomo HTTP Provider API status 200
   ---
-  duration_ms: 1.830978
+  duration_ms: 1.383053
   ...
 # Subtest: Mihomo HTTP Provider API status 390
 ok 42 - Mihomo HTTP Provider API status 390
   ---
-  duration_ms: 1.212696
+  duration_ms: 0.893168
   ...
 # Subtest: Mihomo HTTP Provider API status 500
 ok 43 - Mihomo HTTP Provider API status 500
   ---
-  duration_ms: 0.966617
+  duration_ms: 0.943435
   ...
 # Subtest: saving an enabled subscription retains its URL and ignores a disabled source
 ok 44 - saving an enabled subscription retains its URL and ignores a disabled source
   ---
-  duration_ms: 36.236064
+  duration_ms: 34.534712
   ...
 # Subtest: first subscription save / provider / success
 ok 45 - first subscription save / provider / success
   ---
-  duration_ms: 25.362239
+  duration_ms: 25.874597
   ...
 # Subtest: first subscription save / provider / write
 ok 46 - first subscription save / provider / write
   ---
-  duration_ms: 43.394842
+  duration_ms: 41.70944
   ...
 # Subtest: first subscription save / provider / prepare
 ok 47 - first subscription save / provider / prepare
   ---
-  duration_ms: 41.32483
+  duration_ms: 39.558714
   ...
 # Subtest: first subscription save / local / success
 ok 48 - first subscription save / local / success
   ---
-  duration_ms: 27.731898
+  duration_ms: 25.690776
   ...
 # Subtest: first subscription save / local / write
 ok 49 - first subscription save / local / write
   ---
-  duration_ms: 39.830788
+  duration_ms: 39.157932
   ...
 # Subtest: first subscription save / local / prepare
 ok 50 - first subscription save / local / prepare
   ---
-  duration_ms: 41.008839
+  duration_ms: 39.715748
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
 ok 51 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true}
   ---
-  duration_ms: 2.287804
+  duration_ms: 2.307799
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
 ok 52 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true}
   ---
-  duration_ms: 28.995486
+  duration_ms: 27.912744
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
 ok 53 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"write"}
   ---
-  duration_ms: 53.685627
+  duration_ms: 50.662608
   ...
 # Subtest: legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
 ok 54 - legacy original migration is explicit, backed up and rollback-safe {"legacy":true,"migrateLegacy":true,"failAt":"start"}
   ---
-  duration_ms: 52.112933
+  duration_ms: 52.649239
   ...
 # Subtest: an original header with no URLs prevents automatic legacy-source migration
 ok 55 - an original header with no URLs prevents automatic legacy-source migration
   ---
-  duration_ms: 1.712569
+  duration_ms: 1.659326
   ...
 # Subtest: HTTP 390 fallback transaction / success
 ok 56 - HTTP 390 fallback transaction / success
   ---
-  duration_ms: 31.576752
+  duration_ms: 31.074485
   ...
 # Subtest: HTTP 390 fallback transaction / download
 ok 57 - HTTP 390 fallback transaction / download
   ---
-  duration_ms: 52.657025
+  duration_ms: 53.2526
   ...
 # Subtest: HTTP 390 fallback transaction / write
 ok 58 - HTTP 390 fallback transaction / write
   ---
-  duration_ms: 52.488196
+  duration_ms: 53.977504
   ...
 # Subtest: HTTP 390 fallback transaction / start
 ok 59 - HTTP 390 fallback transaction / start
   ---
-  duration_ms: 55.234133
+  duration_ms: 53.354086
   ...
 # Subtest: HTTP 390 fallback transaction / reload
 ok 60 - HTTP 390 fallback transaction / reload
   ---
-  duration_ms: 52.045228
+  duration_ms: 55.526373
   ...
 # Subtest: subscription save protections {"disabled":true}
 ok 61 - subscription save protections {"disabled":true}
   ---
-  duration_ms: 15.877505
+  duration_ms: 15.787379
   ...
 # Subtest: subscription save protections {"custom":true}
 ok 62 - subscription save protections {"custom":true}
   ---
-  duration_ms: 15.50762
+  duration_ms: 15.554293
   ...
 # Subtest: subscription save protections {"running":false}
 ok 63 - subscription save protections {"running":false}
   ---
-  duration_ms: 29.647833
+  duration_ms: 30.646732
   ...
 # Subtest: subscription save protections {"ruleMode":"original"}
 ok 64 - subscription save protections {"ruleMode":"original"}
   ---
-  duration_ms: 2.086504
+  duration_ms: 1.944945
   ...
 # Subtest: subscription save protections {"convertMode":"provider"}
 ok 65 - subscription save protections {"convertMode":"provider"}
   ---
-  duration_ms: 29.447944
+  duration_ms: 29.309638
   ...
 # Subtest: subscription save protections {"ruleMode":"original","convertMode":"provider"}
 ok 66 - subscription save protections {"ruleMode":"original","convertMode":"provider"}
   ---
-  duration_ms: 1.833169
+  duration_ms: 1.990162
   ...
 1..66
 # tests 66
@@ -337,4 +337,4 @@ ok 66 - subscription save protections {"ruleMode":"original","convertMode":"prov
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1010.494488
+# duration_ms 991.729436

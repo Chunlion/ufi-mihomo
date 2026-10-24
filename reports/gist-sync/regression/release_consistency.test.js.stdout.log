@@ -2,37 +2,37 @@ TAP version 13
 # Subtest: core package update / version
 ok 1 - core package update / version
   ---
-  duration_ms: 85.70343
+  duration_ms: 84.409877
   ...
 # Subtest: core package update / metadata
 ok 2 - core package update / metadata
   ---
-  duration_ms: 81.393765
+  duration_ms: 80.826753
   ...
 # Subtest: 9.0.0 retains the bundled controller and wrapper protocol
 ok 3 - 9.0.0 retains the bundled controller and wrapper protocol
   ---
-  duration_ms: 52.482984
+  duration_ms: 37.508049
   ...
 # Subtest: legacy sources migrate once; saved and custom configurations bypass migration
 ok 4 - legacy sources migrate once; saved and custom configurations bypass migration
   ---
-  duration_ms: 2.657173
+  duration_ms: 2.801067
   ...
 # Subtest: stopped upgrade
 ok 5 - stopped upgrade
   ---
-  duration_ms: 751.861741
+  duration_ms: 763.312198
   ...
 # Subtest: invalid wrapper
 ok 6 - invalid wrapper
   ---
-  duration_ms: 87.490905
+  duration_ms: 109.226765
   ...
 # Subtest: lock cleanup failure
 ok 7 - lock cleanup failure
   ---
-  duration_ms: 916.831759
+  duration_ms: 1453.752805
   ...
 1..7
 # tests 7
@@ -42,4 +42,4 @@ ok 7 - lock cleanup failure
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2143.786288
+# duration_ms 2688.787409

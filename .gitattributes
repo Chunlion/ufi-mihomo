@@ -1,4 +1,5 @@
 猫猫TProxy.js text eol=lf
+.githooks/** text eol=lf
 gist-sync/** text eol=lf
 tests/gist-sync/** text eol=lf
 reports/gist-sync/** text eol=lf

@@ -30,7 +30,7 @@ test('retained patch source rejects an unsupported controller', () => {
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-http-'));
-  for (const name of ['Scripts', 'Tools', 'Proxy', 'bin']) fs.mkdirSync(path.join(dir, name));
+  for (const name of ['Scripts', 'Tools', 'Proxy', 'bin', 'certs']) fs.mkdirSync(path.join(dir, name));
   const binary = path.join(dir, 'Scripts/clashctl_arm64');
   fs.writeFileSync(binary, original, { mode: 0o755 });
   fs.writeFileSync(path.join(dir, 'Tools/f50-controller.version'), '8.0.0-compat.2.3\n');
@@ -178,7 +178,9 @@ test('simultaneous patch processes use separate temporary files', async () => {
 const qemu = process.env.F50_TEST_QEMU;
 const linuxPath = value => process.platform === 'win32' ? '/mnt/' + value[0].toLowerCase() + value.slice(2).replace(/\\/g, '/') : value;
 function native(dir, binary, request) {
-  const env = { CLASH_ROOT: linuxPath(dir), PATH: linuxPath(path.join(dir, 'bin')) + ':/usr/bin:/bin' };
+  // Empty trust roots force the HTTPS fallback through the curl fixture.
+  const env = { CLASH_ROOT: linuxPath(dir), PATH: linuxPath(path.join(dir, 'bin')) + ':/usr/bin:/bin',
+    SSL_CERT_FILE: linuxPath(path.join(dir, 'certs/missing')), SSL_CERT_DIR: linuxPath(path.join(dir, 'certs')) };
   const args = ['env', ...Object.entries(env).map(([key, value]) => `${key}=${value}`), qemu, linuxPath(binary), 'fetch-batch', linuxPath(request)];
   return process.platform === 'win32'
     ? spawnSync('wsl', ['-d', process.env.F50_TEST_WSL || 'Debian', '--', ...args], { encoding: 'utf8', timeout: 30000 })

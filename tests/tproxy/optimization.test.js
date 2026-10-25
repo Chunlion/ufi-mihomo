@@ -115,7 +115,7 @@ test('curl selection falls back when a bundled executable cannot run', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('missing start marker uses a fallback; log text cannot spoof anchored markers', () => {
+test('failed IPv6 DNS precheck stops service start; fallback markers and redaction survive', () => {
   const dir = temp();
   try {
     const stub = shellApi(source, 'buildF50OriginalServicePatchScript = () => "true";');
@@ -123,6 +123,7 @@ test('missing start marker uses a fallback; log text cannot spoof anchored marke
 f50_ensure_live_secret() { return 0; }
 f50_ensure_live_panel_config() { return 0; }
 f50_disable_unsupported_ipv6_dns_hijack() { echo 'log: F50_START_CODE=started'; echo 'F50_START_CODE=bad value'; echo 'secret=synthetic-secret'; return 1; }
+f50_drop_detached_tun_rules() { echo continued > ${quote(path.join(dir, 'continued'))}; }
 f50_start_service start 5 >/dev/null
 printf 'OUTER=%s:%s\\n' "$F50_START_CODE" "$F50_START_OK"
 printf '%s\\n' "$F50_START_DETAIL"
@@ -130,6 +131,7 @@ printf '%s\\n' "$F50_START_DETAIL"
     assert.match(response.stdout, /OUTER=service_failed:0/);
     assert.ok(!response.stdout.includes('synthetic-secret'));
     assert.match(response.stdout, /SENSITIVE_ERROR_REDACTED/);
+    assert.equal(fs.existsSync(path.join(dir, 'continued')), false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -151,7 +153,9 @@ test('YAML reads check parsing and detect replaced, missing or invalid component
       runShellWithRoot: async script => { calls++; const r = shell(script); return { success: r.status === 0, content: r.stdout + r.stderr }; },
     });
     assert.equal((await read(config)).ok, true);
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
+    assert.equal((await read(config)).ok, true);
+    assert.equal(calls, 3);
     assert.equal(fs.readFileSync(log, 'utf8'), '');
     fs.writeFileSync(bin, '#!/bin/sh\necho "yq version v3.4"\n');
     assert.match((await read(config)).message, /转换为单个 JSON 映射失败/);

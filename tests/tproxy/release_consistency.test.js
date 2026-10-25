@@ -86,8 +86,8 @@ with tempfile.TemporaryDirectory(prefix='f50-core-update-') as temporary:
   });
 }
 
-test('9.0.0 retains the bundled controller and wrapper protocol', async () => {
-  assert.match(source, /猫猫TProxy v9\.0\.0/);
+test('the plugin release retains the bundled controller and wrapper protocol', async () => {
+  assert.match(source, /^\/\/ 猫猫TProxy v\d+\.\d+\.\d+(?:-[\w.]+)? -/m);
   assert.equal(unpack('Tools/f50-controller.version').trim(), '8.0.0-compat.2.3');
   assert.match(service, /^# KANO_SERVICE_WRAPPER_VERSION=8\.0\.0-compat\.2\.3$/m);
   for (const [version, expected] of [['8.0.0-compat.2.3', true], ['9.0.0', true]]) {

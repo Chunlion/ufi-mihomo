@@ -22,7 +22,7 @@
     },
     "disable_unsupported_ipv6_dns_hijack": {
       "before": "f53d6ebc510a149aeab3b1e898040005c88e6b3db54bcd217a01e6280e159bfb",
-      "after": "7495279ffdea183f8227a0367f92453e5df013997c11a9ca3519e8c61cd1231b"
+      "after": "c4636cd934a68be57d8917c95d2c161084d10ee28f3dec1b09f3353021eb62f8"
     }
   },
   "operations": {
@@ -44,6 +44,7 @@
     }
   },
   "labels": {
+    "panel_postcheck_failed": "Zashboard 替换后校验未通过；已回滚本次安装。",
     "gist_components_missing": "当前组件包不含 Gist 同步组件；请导入随附的 RC4 完整组件包。原组件未替换。",
     "gist_manifest_mismatch": "Gist 组件清单版本不匹配；请重新获取配套完整组件包。",
     "gist_component_hash_mismatch": "Gist 组件缺失或校验失败；请重新获取完整组件包。",
@@ -113,7 +114,6 @@
     "tun6_route_query_failed": "无法查询 IPv6 路由表；请检查设备 ip 命令与权限。"
   },
   "removedLabels": [
-    "controller_http_patch_unknown_build",
-    "panel_postcheck_failed"
+    "controller_http_patch_unknown_build"
   ]
 }

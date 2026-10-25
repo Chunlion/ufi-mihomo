@@ -13,7 +13,7 @@ test('Gist refresh updates the airport links before the Gist link content',async
   readCurrentSubSources:async()=>[{url:'https://one.example/sub',name:'Provider1'}],
   convertSubscriptionsLocally:async()=>{throw Error('http providers must not be converted locally');},
   forceUpdateProvidersFromConfig:async()=>{calls.push('load');return {ok:true,failed:0,providers:[{name:'Provider1',ok:true}]};},
-  writeSubConfigByMode:()=>{throw Error('template overwrite');}
+  writeSubEntrypoint:()=>{throw Error('template overwrite');}
  });
  assert.equal(await fn([]),true);
  assert.deepEqual(calls,['load','gist'],'airport links first, then the Gist link content, each exactly once');
@@ -73,7 +73,7 @@ test('Gist source saves, disabled-only and empty removal all use native merge',a
    readConfigSource:async()=> 'uploaded_config',f50GistManaged:async()=>gist,
    f50GistUpdateSources:async(st,sources)=>{assert.equal(st,gist);merged=plain(sources);return true;},
    persistSubSourceState:()=>{throw Error('source policy changed outside native lease');},
-   writeSubConfigByMode:()=>{throw Error('Gist replaced by template');}
+   writeSubEntrypoint:()=>{throw Error('Gist replaced by template');}
   });
   assert.equal(await fn(input),true);assert.equal(merged.length,input.length);
   if(input.length)assert.equal(merged[0].enabled,input[0].enabled);

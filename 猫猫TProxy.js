@@ -747,6 +747,8 @@ $SPEC
 EOF_F50_HTTP_SPEC
   ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
   [ "$ACTUAL" != "$BEFORE" ] || printf '%s' "$AFTER" | base64 -d | dd of="$NEW" bs=1 seek="$OFFSET" conv=notrunc 2>/dev/null || exit 1
+  ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+  [ "$ACTUAL" = "$AFTER" ] || { echo F50_ERROR=controller_http_patch_verify_failed; exit 1; }
 done
 [ "$(sha256sum "$NEW" | awk '{print $1}')" = ${F50_HTTP_CONTROLLER_PATCHED_HASH} ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
 chmod 755 "$NEW" || exit 1
@@ -1118,6 +1120,7 @@ const F50_DIAGNOSTIC_LABELS = {
   controller_protocol_mismatch: '控制器与当前页面的接口版本不兼容；请使用配套的 JS 与组件包。',
   service_protocol_mismatch: '服务脚本与控制器版本不配套；请使用同一套组件包。',
   panel_candidate_rejected: '组件包中的面板不是有效的 Zashboard；已保留原面板。',
+  panel_postcheck_failed: 'Zashboard 替换后校验未通过；已回滚本次安装。',
   missing_service_wrapper: '组件包缺少启动包装器 Clash.Service；安装已停止。',
   service_patch_failed: '启动组件更新失败；请重新安装组件包。',
   invalid_subscription: '订阅地址未配置或无效；请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
@@ -1788,6 +1791,7 @@ function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6
   [ -r "$compat_options" ] || return 0
   grep -qx 'ipv6=on' "$compat_options" || return 0
   grep -qx 'dns_hijack=on' "$compat_options" || return 0
+  f50_ipv6_nat_unavailable || return 0
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 }
 f50_ipv6_nat_unavailable() {
@@ -2185,7 +2189,7 @@ f50_start_service() {
     return 1
   fi
   # The Service skips its own capture wrapper here; redaction and the start log are handled once below.
-  f50_disable_unsupported_ipv6_dns_hijack
+  f50_disable_unsupported_ipv6_dns_hijack || return 1
   f50_drop_detached_tun_rules "$start_action" || return 1
   start_raw=$(F50_SERVICE_CAPTURED=1 CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
   F50_START_RC=$?
@@ -2349,7 +2353,7 @@ LOCKED=1
 export F50_INSTALL_TRANSACTION="$F50_WORK"
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
-${rotateClashLogCmd()}
+${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
 command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
 # No fixed ZIP hash, resource list or template/UI fingerprints.
@@ -2561,7 +2565,9 @@ if ! mv "$PKG" "$F50_ROOT"; then
   f50_install_fail commit_failed; exit 1
 fi
 COMMITTED=1
-# The package was validated before activation; mv is a same-filesystem rename of that content.
+panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
+printf '%s\\n' "$panel_probe"
+[ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
 if [ "$HAD_OLD:$OLD_LATCH:$OLD_RUNNING" = 1:1:0 ]; then
   status=installed_stopped
 elif [ "$NEEDS_CONFIG" != ready ]; then
@@ -3086,11 +3092,12 @@ function networkStateKey(state, { runtimeOnly = false } = {}) {
   return JSON.stringify(values);
 }
 
-async function reportIpv6NatLimitation(state) {
-  if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return;
+async function normalizeIpv6DnsCapability(state) {
+  if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
   const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
-  if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return;
+  if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
   createToast('当前内核不支持 IPv6 NAT；已保留 IPv4 DNS 劫持，IPv6 接管仍保持开启。', 'yellow', 10000);
+  return true;
 }
 async function verifyF50TunStack(options) {
   const stack = f50TunStack(options);
@@ -3132,7 +3139,7 @@ async function kprSaveNetworkState(previous, next) {
     next.options.private_route_policy = feature.policy;
     next.options.transparent = next.options.traffic_mode === 'tproxy' ? 'on' : 'off';
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
-    await reportIpv6NatLimitation(next);
+    await normalizeIpv6DnsCapability(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
       operationFinish(true, '设置未变更，未写入任何配置');
       if (activeCriticalOperation) activeCriticalOperation.finalToast = ['设置未变更，未写入任何配置', 'green'];
@@ -3693,7 +3700,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
   async function f50GistDispatch(action, request = {}) {
     try {
-      if (!request.manualSources) {
+      if (!request.identity && !request.manualSources) {
         const direct=await f50GistExec(['dispatch',action],12000,JSON.stringify(request));
         if (direct.code !== 'invalid_command') return direct;
       }
@@ -3704,6 +3711,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
       const sealed=await f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
     } catch (error) { return {ok:false,code:['secure_transport_unavailable','component_version_mismatch'].includes(error?.message)?error.message:'request_encryption_failed'}; }
+    finally { request.identity=''; }
   }
 
   const F50_GIST_MESSAGES = {
@@ -3747,6 +3755,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
     saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
+    local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     source_changed:'\u540c\u6b65\u6e90\u5df2\u66f4\u6362\uff0c\u65e7\u4efb\u52a1\u672a\u63d0\u4ea4',
     settings_changed:'\u8bbe\u7f6e\u5df2\u88ab\u5176\u4ed6\u9875\u9762\u66f4\u6539\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u8868\u5355',
     operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
@@ -4203,7 +4212,7 @@ exit "$kano_task_rc"`;
     ) {
       return { ok: false, message: '本地转换拒绝回环、私网或保留地址' };
     }
-    return { ok: true, message: '' };
+    return { ok: true, message: '', port: url.port || (url.protocol === 'https:' ? '443' : '80') };
   };
 
   const getUploadedPath = (url) => {
@@ -12148,7 +12157,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           const started=await f50GistDispatch(action,request);
           if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
           currentJob=started.job;
-          while(opened && el.isConnected){
+          result(action==='sync'?'正在同步…':'正在处理…');
+          while(opened){
             const job=await f50GistExec(['job',currentJob],8000);
             if(!opened)break;
             if(job.status==='finished'){
@@ -12177,11 +12187,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       q('test').onclick=()=>formAction('test');
       q('save').onclick=()=>formAction('save');
       q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
-      q('refresh').onclick=async()=>{
-        if(!window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return;
-        busy(true);
-        try {await refresh(true);} finally {if(opened)busy(false);}
-      };
+      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
       q('leave').onclick=async()=>{
         if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
         busy(true);
@@ -12189,18 +12195,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         catch(error){result(error.message || '退出 Gist 管理失败');}
         finally{if(opened)busy(false);}
       };
-      q('cancel').onclick=async()=>{
-        if(!currentJob)return;
-        busy(true);
-        try{
-          const r=await f50GistExec(['cancel',currentJob],15000);
-          result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));
-          await refresh(false);
-        } finally {if(opened)busy(false);}
-      };
+      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
+      const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
+      observer.observe(document.body,{childList:true,subtree:true});
       await refresh(true);
     };
     const mmBox = document.querySelector('#mm_action_box');

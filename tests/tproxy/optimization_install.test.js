@@ -39,8 +39,10 @@ exit ${options.startRc || 0}
   const zip = write(dir, 'upload.zip', 'mock archive');
   const cleanupFault = options.stagingCleanupFailure ? write(dir, 'cleanup-fault', 'once') : '';
   const interruptFault = options.interruptDuringCleanup ? write(dir, 'interrupt-fault', 'once') : '';
-  const api = shellApi(source, `buildF50HttpSubscriptionPatchScript = () => 'true'; buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; dataSpaceGuardCmd = () => '';`);
+  const api = shellApi(source, `buildF50HttpSubscriptionPatchScript = () => 'true'; buildF50OriginalServicePatchScript = () => ${JSON.stringify(options.patchFailure ? 'false' : 'true')}; rotateClashLogCmd = () => ''; ${options.lowSpace ? '' : "dataSpaceGuardCmd = () => '';"}`);
   const mocks = `
+${options.lowSpace ? 'df() { printf "Filesystem 1K-blocks Used Available Use%% Mounted\\\\nfixture 100000 99000 1000 99%% /data\\\\n"; }' : ''}
+${options.panelPostcheckFailure ? 'f50_validate_zashboard() { case "$1" in "$F50_ROOT/"*) echo F50_ERROR=missing_main_asset; return 1;; *) return 0;; esac; }' : ''}
 f50_limit() {
  shift
  case "$1" in
@@ -138,6 +140,8 @@ test('first installation without subscriptions installs components and keeps the
 });
 
 for (const [name, options, code] of [
+  ['low data space', { old: true, lowSpace: true }, 'data_space_low'],
+  ['panel postcheck failure', { old: true, panelPostcheckFailure: true }, 'panel_postcheck_failed'],
   ['unsafe ZIP path', { unsafeZip: true }, 'unsafe_archive_path'],
   ['missing controller', { missing: 'Scripts/clashctl_arm64' }, 'missing_controller'],
   ['unexecutable controller', { controller: '#!/bin/sh\nexit 126\n' }, 'controller_not_executable'],
@@ -157,7 +161,7 @@ for (const [name, options, code] of [
       assert.match(result.stdout, new RegExp('^F50_INSTALL_CODE=' + code + '$', 'm'));
       assert.ok(!result.stdout.includes('KANO_INSTALL_OK=1'));
       if (options.old) {
-        if (options.patchFailure || options.missing?.startsWith('Tools/') || options.runtimeProbeFailure) assert.ok(!result.stdout.includes('F50_ROLLBACK='), 'candidate failure never enters activation');
+        if (options.lowSpace || options.patchFailure || options.missing?.startsWith('Tools/') || options.runtimeProbeFailure) assert.ok(!result.stdout.includes('F50_ROLLBACK='), 'candidate failure never enters activation');
         else assert.match(result.stdout, /^F50_ROLLBACK=restored$/m);
         assert.equal(fs.readFileSync(path.join(root, 'Proxy/Clash.Core'), 'utf8'), 'old core');
         assert.match(fs.readFileSync(path.join(root, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);

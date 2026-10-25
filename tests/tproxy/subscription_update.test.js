@@ -556,7 +556,8 @@ test('service preserves original YAML after controller preparation and reloads i
       .replace('  "$yq" eval -P -o=yaml -I=2 ', '  "$yq" eval ')
       .replace(/    \(select\(strenv\(F50_CONFIG_SOURCE\).*\n/, '    ."unified-delay" = true |\n');
     const service = write('Scripts/Clash.Service', originalWrapper);
-    const installer = vm.runInNewContext(`${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
+    const installer = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS')}
+      ${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
       ${slice('function buildF50NetworkCompatHelpers()', 'function buildF50InspectHelpers()')}
       ensureOriginalSubscriptionService`, {
       PROFILE_DELTA: configApi.delta,

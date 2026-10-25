@@ -50,7 +50,8 @@ try {
 } catch (error) {
   check(false, '插件 JavaScript 语法有效', error.message);
 }
-check(source.includes('猫猫TProxy v9.0.0'), '插件发布版本为 v9.0.0');
+const pluginVersion = source.match(/^\/\/ 猫猫TProxy v(\d+\.\d+\.\d+(?:-[\w.]+)?) -/m)?.[1];
+check(Boolean(pluginVersion), `插件发布版本为 v${pluginVersion}`);
 check(source.includes("const F50_COMPAT_VERSION = '8.0.0-compat.2.3'"), '前后端兼容版本固定');
 check(source.includes('[ -s "$CFG" ] || { f50_install_fail configuration_missing; exit 1; }'), '安装要求初始 config.yaml 存在');
 check(source.includes('sh -n "$PKG/Scripts/Clash.Service"'), '安装前校验 Clash.Service 语法');
@@ -73,7 +74,7 @@ check(packageService.status === 0 && packageService.stdout.includes('# KANO_IPV6
 
 console.log('--- Zashboard identity and routing ---');
 check(source.includes("const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip'"), '面板更新源固定为 Zashboard');
-check(source.includes("const ZASHBOARD_UI_DIR = 'WebUI/zashboard'"), '面板目录固定为 WebUI/zashboard');
+check(runBlock(slice('const F50_PANEL_DIR_REL', '// Proxy/') + slice('  const ZASHBOARD_UI_DIR', '  const ZASHBOARD_UI_URL') + '; this.panelDir = ZASHBOARD_UI_DIR;').panelDir === 'WebUI/zashboard', '面板目录固定为 WebUI/zashboard');
 check(source.includes("profile['unified-delay'] = true"), '固定运行配置启用 unified-delay');
 check(source.includes("delete config['external-ui-name']"), '固定运行配置删除 external-ui-name');
 check(source.includes("/ui/?_f50=${Date.now()}#/"), '面板缓存参数位于 Hash 路由之前');
@@ -310,7 +311,7 @@ check(profiles.tproxy4.dns !== profiles.tproxy6.dns && profiles.tproxy4.tun !== 
 const templateSource = slice('const buildF50TemplateObject', 'const readRuleOverrideConfig');
 check(templateSource.includes("'redir-port': 0") && Object.values(profiles).every(profile => profile['redir-port'] === 0), '生成模板与全部运行配置关闭未使用的 Redir 端口');
 // 受控键常量已从闭包提到顶层，配置整形的切片必须带上它们（只取不依赖 PROFILE_DELTA 的那几个）。
-const kprSource = slice('const F50_ORIGINAL_MANAGED_KEYS', 'const F50_ORIGINAL_TUN_KEYS')
+const kprSource = slice('const F50_COMPAT_VERSION', 'const F50_ORIGINAL_TUN_KEYS')
   + slice('const CONTROLLED_TOP_KEYS', 'function buildF50EmergencyScript')
   + slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
 const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack }).KPR;

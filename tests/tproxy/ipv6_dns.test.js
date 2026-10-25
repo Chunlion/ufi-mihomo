@@ -105,7 +105,7 @@ test('policy verification checks IPv4 rules without rebuilding them', () => {
 });
 test('the settings probe preserves the requested DNS preference', async () => {
   const toasts = [];
-  const normalize = vm.runInNewContext(source.slice(source.indexOf('async function reportIpv6NatLimitation('), source.indexOf('const policyTransactionFiles')) + '\nreportIpv6NatLimitation', { runShellWithRoot: async () => ({ success: true, content: 'F50_IPV6_NAT=0' }), createToast: (text, color) => toasts.push([text, color]) });
+  const normalize = vm.runInNewContext(source.slice(source.indexOf('async function normalizeIpv6DnsCapability('), source.indexOf('const policyTransactionFiles')) + '\nnormalizeIpv6DnsCapability', { runShellWithRoot: async () => ({ success: true, content: 'F50_IPV6_NAT=0' }), createToast: (text, color) => toasts.push([text, color]) });
   const state = { options: { ipv6: 'on', dns_hijack: 'on' } };
   await normalize(state);
   // 探测只提示不修改：DNS 偏好必须原样保留，并弹一次说明。

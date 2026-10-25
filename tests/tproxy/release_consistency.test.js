@@ -27,7 +27,7 @@ const service = unpack('Scripts/Clash.Service');
 for (const scenario of ['version', 'metadata']) {
   test('core package update / ' + scenario, () => {
     const result = spawnSync('python3', ['-c', `
-import hashlib, json, pathlib, shutil, subprocess, sys, tempfile, zipfile
+import hashlib, json, os, pathlib, shutil, subprocess, sys, tempfile, zipfile
 with tempfile.TemporaryDirectory(prefix='f50-core-update-') as temporary:
     root = pathlib.Path(temporary)
     (root / 'scripts').mkdir()
@@ -75,8 +75,11 @@ with tempfile.TemporaryDirectory(prefix='f50-core-update-') as temporary:
             assert manifest['retained'] is True
             assert manifest['core']['core_sha256'] == hashlib.sha256(data).hexdigest()
         once = package.read_bytes()
+        timestamp = 1700000000000000000
+        os.utime(package, ns=(timestamp, timestamp))
         subprocess.run(command, check=True, capture_output=True)
         assert package.read_bytes() == once, 'repeating an update must be idempotent'
+        assert package.stat().st_mtime_ns == timestamp, 'identical input must not rewrite the package'
 `, root, scenario], { encoding: 'utf8', timeout: 10000 });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stdout + result.stderr);

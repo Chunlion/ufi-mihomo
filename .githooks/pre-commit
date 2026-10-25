@@ -1,35 +1,38 @@
 #!/bin/sh
 # Private configurations and credentials are local-only: never stage, commit,
 # or push. The name of a file is the stable contract, so the primary rule is a
-# path blocklist. Content scanning is deliberately narrow: a real age secret key
-# has no fixture lookalike, and a token-bearing URL is checked only inside the
-# component package, where a private template could otherwise be smuggled in.
+# path blocklist. Content scanning checks age private keys; token-bearing URLs
+# are checked only inside component package templates.
 set -u
 
-paths=$(git diff --cached --name-only --diff-filter=ACMR)
-[ -n "$paths" ] || exit 0
+git diff --cached --quiet --diff-filter=ACMR && exit 0
 
 status=0
 
-private=$(printf '%s\n' "$paths" | grep -Ei \
-  '(^|/)(F50[^/]*|Tailscale|Sparkle|Bettbox|Egern[^/]*)\.ya?ml$|(^|/)private-download/|(^|/)identity\.txt$|(^|/)subscription_urls\.txt$|(^|/)Tools/template(\.base)?\.ya?ml$|^Proxy/config\.ya?ml$' || true)
+set --
+for extension in yaml yml; do
+  for name in 'F50*' Tailscale Sparkle Bettbox 'Egern*'; do
+    set -- "$@" ":(icase,glob)**/$name.$extension"
+  done
+  set -- "$@" ":(icase,glob)**/Tools/template.$extension" \
+    ":(icase,glob)**/Tools/template.base.$extension" ":(icase,glob)Proxy/config.$extension"
+done
+set -- "$@" ':(icase,glob)**/private-download/**' \
+  ':(icase,glob)**/identity.txt' ':(icase,glob)**/subscription_urls.txt'
+private=$(git diff --cached --name-only --diff-filter=ACMR -- "$@")
 if [ -n "$private" ]; then
   printf 'pre-commit: private configuration must stay local:\n%s\n' "$private" >&2
   status=1
 fi
 
-for path in $paths; do
-  case "$path" in
-    reports/*|*.zip|*.png|*.gz|*.bin) continue ;;
-  esac
-  if git show ":$path" 2>/dev/null | grep -Eq 'AGE-SECRET-KEY-1[0-9A-Z]{58}'; then
-    printf 'pre-commit: age private key in %s\n' "$path" >&2
-    status=1
-  fi
-done
+keys=$(git diff --cached --name-only -z --diff-filter=ACMR |
+  xargs -0 git --literal-pathspecs grep --cached -I -l -E 'AGE-SECRET-KEY-1[0-9A-Z]{58}' -- || true)
+if [ -n "$keys" ]; then
+  printf 'pre-commit: age private key in staged files:\n%s\n' "$keys" >&2
+  status=1
+fi
 
-case "$paths" in
-  *tproxy-yq.zip*)
+if ! git diff --cached --quiet --diff-filter=ACMR -- tproxy-yq.zip; then
     tmp=$(mktemp) || exit 1
     git show ":tproxy-yq.zip" >"$tmp" 2>/dev/null
     py=$(command -v python3 || command -v python || true)
@@ -54,11 +57,11 @@ PY
         status=1
       fi
     else
-      printf 'pre-commit: no python found, package members were not inspected\n' >&2
+      printf 'pre-commit: no python found; cannot inspect package members\n' >&2
+      status=1
     fi
     rm -f "$tmp"
-    ;;
-esac
+fi
 
 [ "$status" -eq 0 ] || printf 'pre-commit: commit refused (see above).\n' >&2
 exit "$status"

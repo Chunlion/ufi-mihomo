@@ -60,22 +60,22 @@ components['core'] = {
     'source': f'MetaCubeX/mihomo {version} official Android arm64-v8',
 }
 
-with tempfile.NamedTemporaryFile(dir=PACKAGE.parent, prefix='.gist-package-', suffix='.zip', delete=False) as tmp:
-    temporary = Path(tmp.name)
-try:
-    with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        z.comment = archive_comment
-        for name, info, content in entries:
-            if name == CORE:
-                content = data
-            elif name == VERSION_FILE:
-                content = (version + '\n').encode()
-            elif name == COMPONENTS:
-                content = (json.dumps(components, indent=2, ensure_ascii=False) + '\n').encode()
-            z.writestr(info, content)
-    os.replace(temporary, PACKAGE)
-finally:
-    temporary.unlink(missing_ok=True)
+updates = {
+    CORE: data,
+    VERSION_FILE: (version + '\n').encode(),
+    COMPONENTS: (json.dumps(components, indent=2, ensure_ascii=False) + '\n').encode(),
+}
+if any(member[name] != content for name, content in updates.items()):
+    with tempfile.NamedTemporaryFile(dir=PACKAGE.parent, prefix='.gist-package-', suffix='.zip', delete=False) as tmp:
+        temporary = Path(tmp.name)
+    try:
+        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            z.comment = archive_comment
+            for name, info, content in entries:
+                z.writestr(info, updates.get(name, content))
+        os.replace(temporary, PACKAGE)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 print(json.dumps({
     'version': version,

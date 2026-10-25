@@ -16,7 +16,7 @@ const quote = (value) => `'${String(value).replace(/'/g, `'"'"'`)}'`;
 const helpers = vm.runInNewContext(
   source.slice(source.indexOf('function buildF50Tun6CompatFunctions()'), source.indexOf('function buildF50Ipv6DnsCompatFunctions()'))
   + '\nbuildF50Tun6CompatFunctions()',
-  { F50_MIPS_MIN_VERSION: '1.19.31' },
+  { F50_MIPS_MIN_VERSION: '1.19.31', F50_ROOT_FALLBACK: source.match(/const F50_ROOT_FALLBACK = '([^']+)';/)[1] },
 );
 const yq = process.env.F50_TEST_YQ;
 

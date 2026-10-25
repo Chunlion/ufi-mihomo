@@ -30,9 +30,10 @@ function harness(overrides = {}) {
     escapeHtml: (value) => String(value),
     sanitizeSubscriptionSecrets: (value) => String(value),
     parseKeyValueOutput: () => ({
-      PROCESS_KIND: 'runtime', PORT_7788: '1', CORE_ELF: '1', CORE_SIZE: '1024',
+      PROCESS_KIND: 'runtime', PORT_CONTROLLER: '1', CORE_ELF: '1', CORE_SIZE: '1024',
       CMDLINE: '/data/clash/Proxy/Clash.Core -d /data/clash/Proxy',
     }),
+    F50_PORTS: { http: 7890, socks: 7891, mixed: 7892, tproxy: 7895, dns: 1053, controller: 7788 },
     shellQuote: (value) => `'${value}'`,
     buildF50ShellBase: () => '',
     buildF50PanelHelpers: () => '',

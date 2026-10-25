@@ -112,3 +112,39 @@
 | 本次修复后的真实设备重启 | NOT RUN | 本次实机复测为重启核心；开机路径由上述本地回归覆盖，不复用前轮设备重启结果冒充本次验证 |
 
 最终 JS 已保存到 F50，回读及页面实际载入内容均与本地一致；其他插件原文保留。设备已通过现有同步入口恢复 Gist 配置，最终 Service helper 为 15。最终完整 ZIP 为 67,024,933 字节。本问题无剩余阻塞；前述下载超时及 NOT RUN 边界仍保留。
+
+## v9.1.0-beta.1 优化清单实施
+
+日期：2026-10-25（Asia/Shanghai），基于 020c5e9。四区代码审查（Shell 生成器 / 安装与私网 / Gist 与模板 / 面板前端）产出 90 项清单，本轮全部处置。
+
+### 范围与处置
+
+- 88 项落实；2 项经 ttyd 实机探测后不改：`sleep 0.1`（FANCY_SLEEP 可用）与 `iptables -w`（v1.8.8 legacy 支持）；1 项评估放弃：启动路径 secret/panel 两次 yq 探针合并会改变“secret 静默跳过、panel 硬失败”的既有语义，收益仅一次 yq 启动。
+- 版本 9.0.0 → 9.1.0-beta.1；`F50_COMPAT_VERSION` 与 Service/控制器协议 8.0.0-compat.2.3 不变。净删约 340 行。
+
+### 主要修改
+
+- 真实缺陷：私网 textarea 空值注入示例网段；`allowDownload` 形参静默失效；`f50ReleaseLease` 成功后 `leasePromise` 残留导致同操作后续命令被设备端拒绝；Zashboard 守卫 `repaired` 误报；启动错误分类补小写 `*tun*`；本地转换失败结果补齐 type/errorType/proxyCount；`tun.stack` 纳入 CONTROLLED_TUN_KEYS；用户网段与 PRIVATE 同段时过滤后置 DIRECT 死规则；空间预估恒计 old_kb；install.journal 死文件与重复 unzip -l。
+- 性能：Service 补丁五标记 + sh -n 快路径（命中即 `F50_SERVICE_PATCH_COMMITTED=1` 直接返回）；插件侧启动以 `F50_SERVICE_CAPTURED=1` 单层捕获，去掉 Service 侧二次 re-exec/双写日志；组件包下载轮询 1s→2.5s；`readYamlObject` 增加 `generatedMarker` 输出合并 4 处“读 YAML + 查生成标记”双往返；yq `--yaml-fix-merge-anchor-to-spec` 探测整页一次；preflight yq 4→3 次；`timeout 5s awk '{print}'` → `cat`；扫描结果创建时直绑事件；Gist 弹窗 MutationObserver 改轮询内 `el.isConnected`。
+- 清理与统一：受保护日志清单、进程 comm 白名单、CLASH_ROOT 兜底链、开机检测 awk、zashboard 相对路径、诊断端口（含十六进制）、Service/控制器路径全部收敛为模块级 JS 常量单一来源；约 22 处防御冗余与 9 处死代码删除；`operationFinish` 改为首次写入为准，早退路径保留外层兜底收尾（新增用例锁定两种语义）。
+- 测试同步：测试沙箱补注入共享常量；`expected-contracts.json` 更新 scan/firewall_plan/remove_artifacts/disable_unsupported_ipv6_dns_hijack 的契约哈希与 operations 哈希；`panel_postcheck_failed` 标签随死代码移除并入 removedLabels；探测函数改名（normalizeIpv6DnsCapability → reportIpv6NatLimitation）用例同步。
+
+### 验证（真实 F50，Mihomo v1.19.33）
+
+| 验证项 | 结果 | 证据 |
+|---|---|---|
+| node --check 与全量 node --test | PASS | 与改动前基线逐文件一致（基线既有失败均为 Windows tar/spawnSync 环境问题，与本轮无关） |
+| 新版实际载入 | PASS（真实 F50） | 网络设置 DNS 端口输入框为 readonly-only（旧版 readonly+disabled 双属性）；由用户经插件功能上传后刷新页面 |
+| 诊断与状态 | PASS（真实 F50） | 总览“正常”；“7788 已监听”文案来自新版 PORT_CONTROLLER 代码路径，新诊断脚本端到端跑通 |
+| HTTP 7890 / SOCKS 7891 | PASS（真实 F50） | 重启前后各一次 204 |
+| DNS 1053 | PASS（真实 F50） | gstatic.com / example.com 正常解析 |
+| TProxy 接管 | PASS（真实 F50） | POLICY_VERIFIED=tproxy、POLICY_RULES_VERIFIED、POLICY_APPLY_OK；两台下游客机 TCP/UDP 按规则分流（内核日志） |
+| Service 补丁快路径 | PASS（真实 F50） | 启动输出首行 F50_SERVICE_PATCH_COMMITTED=1，不再跑完整补丁管线 |
+| 重启 / 停止 / 启动 | PASS（真实 F50） | 11.9s 完成重启；停止后无残留；再启动 16.4s 恢复，16 来源 183 节点 |
+| 操作锁残留 | PASS（真实 F50） | 任务回到“空闲”，无锁残留 |
+
+### 边界
+
+- NOT RUN：在线安装/更新、卸载、清空数据、Gist 同步（设备生产在线，下游有活跃业务流量，避免扰动）；网络设置保存路径由本地回归与重启路径覆盖。
+- ttyd 的 mount 命名空间不可见 UFI 应用私有目录，设备端文件哈希比对不可行；以页面行为特征与诊断输出作为新版载入证据。
+- 两个辅助插件（USB 网络模式 v2.4.6、开机自启修复）的审查清单尚未实施，待后续轮次。

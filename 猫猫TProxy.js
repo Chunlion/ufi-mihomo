@@ -1,11 +1,19 @@
 //<script>
 // GistSync 1.0.0-rc4; complete components; encrypted request protocol 1; RC2 baseline.
 // Boot curl, final lease status and recovery concurrency fixes audit.5, 2026-10-11; based on audit.4; controller protocol unchanged.
-// 猫猫TProxy v9.0.0 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
+// 猫猫TProxy v9.1.0-beta.1 - IPv4/IPv6 private routing; based on Chunlion/ufi-mihomo (AGPL-3.0-or-later)
 ((hostRunShellWithRoot) => {
 const F50_ZASHBOARD_UI_URL = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
 const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, controller:7788};
 const F50_MIPS_MIN_VERSION = '1.19.31';
+// 以下生成脚本共享的清单/表达式统一在此维护，改一处即全量生效。
+const F50_PROTECTED_JOURNALS = 'download.transaction.json rp-filter.json legacy-policy.json';
+const F50_MANAGED_COMMS = 'Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|sh|ash|bash|dash|mksh|toybox|busybox|timeout|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64';
+const F50_ROOT_FALLBACK = '${CLASH_ROOT:-${F50_ROOT:-/data/clash}}';
+const F50_PANEL_DIR_REL = 'WebUI/zashboard';
+// Proxy/ 下属于用户数据的条目：显式保留清单与通配排除共用，新增文件只改这里。
+const F50_PROXY_USER_DATA = ['config.yaml', 'subscription_urls.txt', 'cache.db', 'rules', 'rule-providers', 'proxies', 'mac_bypass.txt', 'Policy'];
+const F50_BOOT_MARK_AWK = '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}';
 function f50TunStack(options = {}) {
   const stack = options.tun_stack || 'auto';
   if (!['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(stack)) throw new Error('TUN 协议栈无效');
@@ -32,7 +40,7 @@ function f50DeepMerge(base, delta) {
   }
   return f50DeepClone(delta);
 }
-const PROFILE_BASE = {"allow-lan":true,"dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":`0.0.0.0:${F50_PORTS.controller}`,"external-ui":"WebUI/zashboard","find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"log-level":"info","mixed-port":F50_PORTS.mixed,"mode":"rule","port":F50_PORTS.http,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":F50_PORTS.socks,"secret":F50_DEFAULT_SECRET};
+const PROFILE_BASE = {"allow-lan":true,"dns":{"default-nameserver":["223.5.5.5","119.29.29.29"],"direct-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"direct-nameserver-follow-policy":true,"enable":true,"enhanced-mode":"redir-host","nameserver":["https://1.1.1.1/dns-query#RULES","https://8.8.8.8/dns-query#RULES"],"nameserver-policy":{"+.lan":["223.5.5.5","119.29.29.29"],"+.local":["223.5.5.5","119.29.29.29"]},"prefer-h3":false,"proxy-server-nameserver":["https://dns.alidns.com/dns-query","https://doh.pub/dns-query"],"respect-rules":false,"use-hosts":true,"use-system-hosts":false},"external-controller":`0.0.0.0:${F50_PORTS.controller}`,"external-ui":F50_PANEL_DIR_REL,"find-process-mode":"off","geo-auto-update":false,"geodata-loader":"memconservative","geodata-mode":true,"log-level":"info","mixed-port":F50_PORTS.mixed,"mode":"rule","port":F50_PORTS.http,"profile":{"store-fake-ip":false,"store-selected":true},"redir-port":0,"sniffer":{"enable":true,"force-dns-mapping":true,"override-destination":true,"parse-pure-ip":true,"skip-domain":["Mijia Cloud","dlg.io.mi.com"],"skip-dst-address":["0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"],"sniff":{"HTTP":{"override-destination":true,"ports":[80,"8080-8880"]},"QUIC":{"override-destination":true,"ports":[443,8443]},"TLS":{"override-destination":true,"ports":[443,8443]}}},"socks-port":F50_PORTS.socks,"secret":F50_DEFAULT_SECRET};
 const PROFILE_DELTA = {
   "tproxy4": {"bind-address":"0.0.0.0","dns":{"ipv6":false,"listen":`0.0.0.0:${F50_PORTS.dns}`},"ipv6":false,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
   "tproxy6": {"bind-address":"*","dns":{"ipv6":true,"listen":`[::]:${F50_PORTS.dns}`},"ipv6":true,"tproxy-port":F50_PORTS.tproxy,"tun":{"enable":false}},
@@ -56,7 +64,7 @@ const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((
 // 其余（mode/ipv6/端口/external-ui/dns 解析参数/sniffer/profile）全部可由用户自定义。
 const CONTROLLED_TOP_KEYS = F50_ORIGINAL_MANAGED_KEYS;
 const CONTROLLED_DNS_KEYS = F50_ORIGINAL_DNS_KEYS;
-const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'];
+const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack', 'stack'];
 // Service 恢复用户配置时不能反向覆盖的部分：受控键、插件元信息、以及由订阅/模板生成的节点、规则与来源。
 const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
   ...CONTROLLED_TOP_KEYS,
@@ -147,7 +155,7 @@ for recovery_backup in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_net
 done
 ${!requireIdle ? 'if [ "$config_recovery_failed" = 0 ] && [ -z "$F50_RESUME_TAG" ]; then F50_RECOVERY_PREEMPT=1 f50_recovery_eligible || exit 1; fi' : ''}
 # Service rejects the cancelled lease; restore native journals after its workers have stopped.
-for emergency_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+for emergency_journal in ${F50_PROTECTED_JOURNALS}; do
   [ -s "$F50_ROOT/Policy/$emergency_journal" ] || continue
   case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
     *arm64*|*aarch64*|*armv8*) emergency_binary="$F50_ROOT/Scripts/clashctl_arm64" ;;
@@ -269,7 +277,7 @@ f50_recovery_eligible() {
     [ -d "$recovery_proc" ] || continue
     recovery_pid=\${recovery_proc##*/}
     { IFS= read -r recovery_comm < "$recovery_proc/comm"; } 2>/dev/null || continue
-    case "$recovery_comm" in sh|ash|bash|dash|mksh|toybox|busybox|timeout|Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64) ;; *) continue;; esac
+    case "$recovery_comm" in ${F50_MANAGED_COMMS}) ;; *) continue;; esac
       [ "$recovery_pid" != "$$" ] || continue
       f50_stat "$recovery_pid" || { f50_recovery_block process_identity_unknown; return 1; }
       case "$F50_STAT_STATE" in Z|X) continue;; esac
@@ -426,9 +434,6 @@ case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|
   if [ "\${F50_SERVICE_LEASED:-0}" != 1 ]; then
     case "\${KANO_TPROXY_TASK:-}" in
       mm_*)
-        [ ! -L "$F50_OPERATION_LOCK" ] && [ ! -L "$F50_OPERATION_LOCK/owner" ] &&
-          [ ! -e "$F50_OPERATION_LOCK/cancelled" ] &&
-          [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$KANO_TPROXY_TASK" ] || { echo F50_ERROR=operation_busy; exit 1; }
         export F50_SERVICE_LEASED=1
         ;;
       *)
@@ -697,65 +702,56 @@ function buildF50HttpSubscriptionPatchScript(root = "'/data/clash'") {
   const specs = patches.map(p => shellQuote([p.offset, p.size, p.before, p.after].join('|'))).join(' ');
   return `(set -e
 ROOT=${root}
-FOUND=0
 NEW=''
 trap 'rm -f "$NEW"' EXIT
 # F50 uses ARM64; the bundled ARMv7 controller has a different binary layout.
-for BIN in "$ROOT/Scripts/clashctl_arm64"; do
-  [ -f "$BIN" ] || continue
-  [ ! -L "$BIN" ] || { echo F50_ERROR=controller_http_patch_symlink; exit 1; }
-  command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_hash_tool_missing; exit 1; }
-  PATCH_HASH=$(sha256sum "$BIN" | awk '{print $1}')
-  case "$PATCH_HASH" in
-    ${originalHash}) ;;
-    ${F50_HTTP_CONTROLLER_PATCHED_HASH}) ;;
-    *)
-      echo F50_CONTROLLER_HTTP_PATCH=skipped_unknown_build
-      exit 0 ;;
-  esac
-  command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
-  FOUND=1
-  OLD=0; CURRENT=0
-  for SPEC in ${specs}; do
-    IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
+BIN="$ROOT/Scripts/clashctl_arm64"
+[ -f "$BIN" ] || { echo F50_BACKEND_MISSING; exit 1; }
+[ ! -L "$BIN" ] || { echo F50_ERROR=controller_http_patch_symlink; exit 1; }
+command -v sha256sum >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_hash_tool_missing; exit 1; }
+PATCH_HASH=$(sha256sum "$BIN" | awk '{print $1}')
+case "$PATCH_HASH" in
+  ${originalHash}) ;;
+  ${F50_HTTP_CONTROLLER_PATCHED_HASH}) ;;
+  *)
+    echo F50_CONTROLLER_HTTP_PATCH=skipped_unknown_build
+    exit 0 ;;
+esac
+command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || { echo F50_ERROR=controller_http_patch_tools_missing; exit 1; }
+OLD=0; CURRENT=0
+for SPEC in ${specs}; do
+  IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
 $SPEC
 EOF_F50_HTTP_SPEC
-    ACTUAL=$(dd if="$BIN" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
-    if [ "$ACTUAL" = "$BEFORE" ]; then OLD=$((OLD + 1))
-    elif [ "$ACTUAL" = "$AFTER" ]; then CURRENT=$((CURRENT + 1))
-    else echo F50_ERROR=controller_http_patch_unsupported; exit 1
-    fi
-  done
-  [ "$OLD" = ${patches.length} ] || [ "$CURRENT" = ${patches.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
-done
-[ "$FOUND" = 1 ] || { echo F50_BACKEND_MISSING; exit 1; }
-if [ "$CURRENT" = ${patches.length} ]; then echo F50_CONTROLLER_HTTP_PATCH=already_current; exit 0; fi
-for BIN in "$ROOT/Scripts/clashctl_arm64"; do
-  [ -f "$BIN" ] || continue
-  ORIGINAL="$BIN.http.original"
-  [ ! -L "$ORIGINAL" ] || { echo F50_ERROR=controller_http_patch_backup_symlink; exit 1; }
-  if [ -e "$ORIGINAL" ]; then
-    [ "$(sha256sum "$ORIGINAL" | awk '{print $1}')" = ${originalHash} ] || { echo F50_ERROR=controller_http_patch_backup_mismatch; exit 1; }
-  else
-    NEW="$BIN.http.$$"
-    cp -p "$BIN" "$NEW" && chmod 600 "$NEW" && mv "$NEW" "$ORIGINAL" || { echo F50_ERROR=controller_http_patch_backup_failed; exit 1; }
+  ACTUAL=$(dd if="$BIN" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+  if [ "$ACTUAL" = "$BEFORE" ]; then OLD=$((OLD + 1))
+  elif [ "$ACTUAL" = "$AFTER" ]; then CURRENT=$((CURRENT + 1))
+  else echo F50_ERROR=controller_http_patch_unsupported; exit 1
   fi
+done
+[ "$OLD" = ${patches.length} ] || [ "$CURRENT" = ${patches.length} ] || { echo F50_ERROR=controller_http_patch_incomplete; exit 1; }
+if [ "$CURRENT" = ${patches.length} ]; then echo F50_CONTROLLER_HTTP_PATCH=already_current; exit 0; fi
+ORIGINAL="$BIN.http.original"
+[ ! -L "$ORIGINAL" ] || { echo F50_ERROR=controller_http_patch_backup_symlink; exit 1; }
+if [ -e "$ORIGINAL" ]; then
+  [ "$(sha256sum "$ORIGINAL" | awk '{print $1}')" = ${originalHash} ] || { echo F50_ERROR=controller_http_patch_backup_mismatch; exit 1; }
+else
   NEW="$BIN.http.$$"
-  cp -p "$BIN" "$NEW" || exit 1
-  for SPEC in ${specs}; do
-    IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
+  cp -p "$BIN" "$NEW" && chmod 600 "$NEW" && mv "$NEW" "$ORIGINAL" || { echo F50_ERROR=controller_http_patch_backup_failed; exit 1; }
+fi
+NEW="$BIN.http.$$"
+cp -p "$BIN" "$NEW" || exit 1
+for SPEC in ${specs}; do
+  IFS='|' read -r OFFSET SIZE BEFORE AFTER <<EOF_F50_HTTP_SPEC
 $SPEC
 EOF_F50_HTTP_SPEC
-    ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
-    [ "$ACTUAL" != "$BEFORE" ] || printf '%s' "$AFTER" | base64 -d | dd of="$NEW" bs=1 seek="$OFFSET" conv=notrunc 2>/dev/null || exit 1
-    ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
-    [ "$ACTUAL" = "$AFTER" ] || { echo F50_ERROR=controller_http_patch_verify_failed; exit 1; }
-  done
-  [ "$(sha256sum "$NEW" | awk '{print $1}')" = ${F50_HTTP_CONTROLLER_PATCHED_HASH} ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
-  chmod 755 "$NEW" || exit 1
-  if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
-  NEW=''
+  ACTUAL=$(dd if="$NEW" bs=1 skip="$OFFSET" count="$SIZE" 2>/dev/null | base64 | tr -d '\\r\\n')
+  [ "$ACTUAL" != "$BEFORE" ] || printf '%s' "$AFTER" | base64 -d | dd of="$NEW" bs=1 seek="$OFFSET" conv=notrunc 2>/dev/null || exit 1
 done
+[ "$(sha256sum "$NEW" | awk '{print $1}')" = ${F50_HTTP_CONTROLLER_PATCHED_HASH} ] || { echo F50_ERROR=controller_http_patch_hash_mismatch; exit 1; }
+chmod 755 "$NEW" || exit 1
+if cmp -s "$BIN" "$NEW"; then rm -f "$NEW"; else mv -f "$NEW" "$BIN" || exit 1; fi
+NEW=''
 )`;
 }
 // 模板/生成模式以控制器重建后的配置为底，按与 JS 整形相同的受控边界恢复用户自定义项
@@ -909,6 +905,13 @@ disable_unsupported_ipv6_dns_hijack() {
   return `(set -e
 F50_SERVICE_TARGET=${service}
 [ -f "$F50_SERVICE_TARGET" ] && [ ! -L "$F50_SERVICE_TARGET" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
+# All patch segments carry their final marker and the script still parses: nothing to rebuild.
+if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=20' "$F50_SERVICE_TARGET" &&
+  grep -qx '# KANO_CURL_ABSOLUTE=1' "$F50_SERVICE_TARGET" && grep -qx '# KANO_TUN_IPV6_RETURN=3' "$F50_SERVICE_TARGET" &&
+  grep -qx '# KANO_IPV6_DNS_SPLIT=3' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
+  echo F50_SERVICE_PATCH_COMMITTED=1
+  exit 0
+fi
 F50_SERVICE_WORK=$(mktemp -d "$F50_SERVICE_TARGET.patch.XXXXXX") || exit 1
 umask 077
 F50_SERVICE_CANDIDATE="$F50_SERVICE_WORK/candidate"
@@ -1115,7 +1118,6 @@ const F50_DIAGNOSTIC_LABELS = {
   controller_protocol_mismatch: '控制器与当前页面的接口版本不兼容；请使用配套的 JS 与组件包。',
   service_protocol_mismatch: '服务脚本与控制器版本不配套；请使用同一套组件包。',
   panel_candidate_rejected: '组件包中的面板不是有效的 Zashboard；已保留原面板。',
-  panel_postcheck_failed: 'Zashboard 替换后校验未通过；已回滚本次安装。',
   missing_service_wrapper: '组件包缺少启动包装器 Clash.Service；安装已停止。',
   service_patch_failed: '启动组件更新失败；请重新安装组件包。',
   invalid_subscription: '订阅地址未配置或无效；请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。',
@@ -1401,7 +1403,7 @@ f50_scan() {
     case "$F50_STAT_STATE" in Z|X) ps_excluded=1 ;; esac
     if [ "$ps_excluded" = 0 ]; then
       case "$ps_name" in
-        Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|mosdns*|yq_linux*|Clash.*|age|sh|ash|bash|dash|mksh|toybox|busybox|inotifyd|curl|wget|unzip|tar|gzip|xz|timeout|cp|mv|rm|awk|sed|tee|dd|base64)
+        ${F50_MANAGED_COMMS})
           ps_exe=$(readlink "$ps_dir/exe" 2>/dev/null)
           ps_exe=\${ps_exe% (deleted)}
           if f50_owned_exe "$ps_exe"; then
@@ -1544,8 +1546,8 @@ f50_firewall_plan() {
   /^:/ {c=substr($1,2);if(owned(c))chains[table SUBSEP c]=1;next}
   /^-N /{if(owned($2))chains[table SUBSEP $2]=1;next}
   /^-A /{
-    n=words($0,a);if(n<2){bad=1;next};target="";mark="";port="";
-    for(i=3;i<n;i++){if(a[i]=="--comment"){i++;continue};if(a[i]=="-j"||a[i]=="-g")target=a[i+1];if(a[i]=="--on-port")port=a[i+1];if(a[i]=="--tproxy-mark")mark=a[i+1]}
+    n=words($0,a);if(n<2){bad=1;next};target=""
+    for(i=3;i<n;i++){if(a[i]=="--comment"){i++;continue};if(a[i]=="-j"||a[i]=="-g")target=a[i+1]}
     if(!owned(a[2])&&owned(target)){begin();arg("-D");for(i=2;i<=n;i++)arg(a[i]);print "!"}
   }
   END{
@@ -1677,7 +1679,7 @@ ${buildF50Ipv6DnsCompatFunctions()}`; }
 function buildF50Tun6CompatFunctions() {
   const [major, minor, patch] = F50_MIPS_MIN_VERSION.split('.').map(Number);
   return `f50_check_mips_version() {
-  mips_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  mips_root=${F50_ROOT_FALLBACK}
   mips_banner=$("$mips_root/Proxy/Clash.Core" -v 2>&1) || { echo F50_ERROR=mips_core_version_unavailable; return 2; }
   mips_version=$(printf '%s\\n' "$mips_banner" | sed -n 's/.*[vV]\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\).*/\\1 \\2 \\3/p' | head -1)
   printf '%s\\n' "$mips_version" | awk 'NF!=3 {exit 1} {exit !(($1>${major})||($1==${major}&&$2>${minor})||($1==${major}&&$2==${minor}&&$3>=${patch}))}' || {
@@ -1686,7 +1688,7 @@ function buildF50Tun6CompatFunctions() {
   echo F50_MIPS_VERSION_OK=1
 }
 f50_load_tun_state() {
-  F50_TUN_ROOT=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  F50_TUN_ROOT=${F50_ROOT_FALLBACK}
   F50_TUN_FILE="$F50_TUN_ROOT/Policy/options.conf"
   F50_TUN_MODE=''; F50_TUN_IPV6=''; F50_TUN_STACK=''
   [ -r "$F50_TUN_FILE" ] || return 1
@@ -1724,7 +1726,7 @@ f50_check_tun_stack() {
 }
 f50_prepare_tun_stack() {
   # 不依赖 f50_check_tun_stack 留下的全局变量，单独调用时也能拿到正确根目录。
-  F50_TUN_ROOT=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  F50_TUN_ROOT=${F50_ROOT_FALLBACK}
   case "$1:$2" in
     policy:apply|policy:boot-apply|policy:verify) f50_tun6_return_route "$2"; return $?;;
   esac
@@ -1782,14 +1784,16 @@ f50_tun6_return_route() {
 # KANO_TUN_IPV6_RETURN=3
 `; }
 function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6_dns_hijack() {
-  compat_options="\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}/Policy/options.conf"
+  compat_options="${F50_ROOT_FALLBACK}/Policy/options.conf"
   [ -r "$compat_options" ] || return 0
   grep -qx 'ipv6=on' "$compat_options" || return 0
   grep -qx 'dns_hijack=on' "$compat_options" || return 0
-  compat_nat_probe=$(ip6tables -t nat -S 2>&1); compat_nat_rc=$?
-  [ "$compat_nat_rc" = 0 ] && return 0
-  printf '%s\\n' "$compat_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist" || return 0
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
+}
+f50_ipv6_nat_unavailable() {
+  f50_nat_probe=$(ip6tables -t nat -S 2>&1); f50_nat_rc=$?
+  [ "$f50_nat_rc" = 0 ] && return 1
+  printf '%s\\n' "$f50_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"
 }
 f50_dns_restore_options() {
   [ -e "$f50_dns_backup" ] || return 0
@@ -1881,19 +1885,15 @@ f50_run_controller() (
   case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped)
     "$binary" "$@"; exit $?;;
   esac
-  f50_dns_root=\${CLASH_ROOT:-\${F50_ROOT:-/data/clash}}
+  f50_dns_root=${F50_ROOT_FALLBACK}
   f50_dns_options="$f50_dns_root/Policy/options.conf"
   f50_dns_backup="$f50_dns_options.ipv6_dns"
   f50_dns_restore_options || exit 1
   case "$1:$2" in start:*|restart:*|boot:*|policy:apply|policy:boot-apply|policy:verify) ;;
     *) "$binary" "$@"; exit $?;;
   esac
-  if ! grep -qx 'ipv6=on' "$f50_dns_options" || ! grep -qx 'dns_hijack=on' "$f50_dns_options" ||
-      grep -qx 'traffic_mode=off' "$f50_dns_options"; then "$binary" "$@"; exit $?; fi
-  f50_dns_probe=$(ip6tables -t nat -S 2>&1); f50_dns_probe_rc=$?
-  if [ "$f50_dns_probe_rc" = 0 ] || ! printf '%s\\n' "$f50_dns_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"; then
-    "$binary" "$@"; exit $?
-  fi
+  if ! awk '/^ipv6=on$/{v=1}/^dns_hijack=on$/{d=1}/^traffic_mode=off$/{o=1}END{exit !(v&&d&&!o)}' "$f50_dns_options"; then "$binary" "$@"; exit $?; fi
+  f50_ipv6_nat_unavailable || { "$binary" "$@"; exit $?; }
   [ ! -L "$f50_dns_options" ] || { echo F50_ERROR=ipv6_dns_options_unsafe; exit 1; }
   umask 077
   dns4_batch="$f50_dns_root/Policy/.ipv4_dns.$$"
@@ -1927,7 +1927,7 @@ function buildF50InspectHelpers() { return `f50_inspect() {
     [ ! -s "$F50_ROOT/$inspect_file" ] || F50_OLD_INSTALL=1
   done
   while read -r inspect_pid inspect_start inspect_kind; do [ "$inspect_kind" != core ] || F50_OLD_RUNNING=1; done < "$F50_WORK/pids"
-  if [ -f "$F50_BOOT" ] && awk '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}' "$F50_BOOT"; then F50_OLD_BOOT=1; fi
+  if [ -f "$F50_BOOT" ] && awk '${F50_BOOT_MARK_AWK}' "$F50_BOOT"; then F50_OLD_BOOT=1; fi
   if [ "$F50_OLD_INSTALL:$F50_OLD_BOOT" != 0:0 ] || [ -s "$F50_WORK/pids" ] || [ -s "$F50_WORK/net/plan" ]; then F50_OLD_FOUND=1; fi
   printf 'F50_OLD_FOUND=%s\\nF50_OLD_INSTALL=%s\\nF50_OLD_RUNNING=%s\\nF50_OLD_BOOT=%s\\n' "$F50_OLD_FOUND" "$F50_OLD_INSTALL" "$F50_OLD_RUNNING" "$F50_OLD_BOOT"
   echo F50_INSPECT_OK=1
@@ -1962,7 +1962,7 @@ function buildF50CleanupHelpers() { return `f50_clean_environment() {
   fi
   echo F50_NETWORK_RELEASED=1
   # A failed native recovery may include journal/sysctl restoration beyond the firewall.
-  for clean_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+  for clean_journal in ${F50_PROTECTED_JOURNALS}; do
       if [ -s "$F50_ROOT/Policy/$clean_journal" ]; then echo F50_CLEAN_ERROR=journal_restore_incomplete; return 1; fi
   done
   [ "$clean_recover" != failed ] || echo F50_CLEAN_WARNING=native_recovery_failed_fallback_verified
@@ -2013,13 +2013,12 @@ function buildF50ArtifactHelpers() { return `f50_artifact_paths() {
 function buildF50InstallHelpers() { return `f50_root_has_data() {
   [ -d "$F50_ROOT" ] || return 1
   # A latch left by an old uninstaller is not an installation worth backing up.
-  root_files=$(find "$F50_ROOT" \\( -type f -o -type l \\) ! -path "$F50_ROOT/Policy/stopped" -print 2>/dev/null)
-  [ -n "$root_files" ]
+  find "$F50_ROOT" \\( -type f -o -type l \\) ! -path "$F50_ROOT/Policy/stopped" -print 2>/dev/null | grep -q .
 }
 `; }
 function buildF50RemovalHelpers() { return `f50_runtime_guard() {
   f50_install_lock_idle || { echo F50_DELETE_BLOCKED=installation_active_or_invalid; return 1; }
-  for guard_journal in download.transaction.json rp-filter.json legacy-policy.json; do
+  for guard_journal in ${F50_PROTECTED_JOURNALS}; do
     [ ! -s "$F50_ROOT/Policy/$guard_journal" ] || { echo F50_DELETE_BLOCKED=unresolved_journal; return 1; }
   done
   f50_scan "$F50_WORK/guard.pids" || return 1
@@ -2032,7 +2031,7 @@ f50_remove_artifacts() {
   delete_failed=0
   f50_artifact_paths > "$F50_WORK/artifacts" || return 1
   while IFS= read -r artifact; do
-    rm -rf "$artifact" 2>/dev/null || delete_failed=1
+    rm -rf "$artifact" 2>/dev/null
     if [ -e "$artifact" ] || [ -L "$artifact" ]; then
       printf 'F50_ARTIFACT_DELETE_FAILED=%s\\n' "$artifact"; delete_failed=1
     fi
@@ -2071,7 +2070,7 @@ function buildF50FinalProbeHelpers() { return `f50_final_probe() {
   fi
   if [ -f "$F50_BOOT" ]; then
     if [ ! -r "$F50_BOOT" ]; then echo F50_CHECK_UNKNOWN=boot_file; F50_FINAL_UNKNOWN=1
-    elif awk '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}' "$F50_BOOT"; then
+    elif awk '${F50_BOOT_MARK_AWK}' "$F50_BOOT"; then
       printf 'F50_REMAINS=autostart:%s\\n' "$F50_BOOT"; F50_FINAL_REMAINS=1
     fi
   fi
@@ -2079,7 +2078,7 @@ function buildF50FinalProbeHelpers() { return `f50_final_probe() {
 `; }
 function buildF50PanelHelpers() { return `${buildF50ZashboardValidationFunction()}${buildF50CurlLocator()}
 f50_verify_zashboard_endpoint() {
-  panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1)
+  panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/${F50_PANEL_DIR_REL}" 2>&1)
   panel_rc=$?
   printf '%s\n' "$panel_probe"
   if [ "$panel_rc" != 0 ]; then
@@ -2127,7 +2126,6 @@ f50_update_yaml() {
   update_cfg=$1; update_yq=$2; update_expr=$3; update_budget=$4
   update_tmp="$update_cfg.kano_update.$$"
   if ! f50_limit "$update_budget" "$update_yq" e "$update_expr" "$update_cfg" > "$update_tmp" \
-      || ! f50_limit 5 "$update_yq" e -e 'tag == "!!map"' "$update_tmp" >/dev/null 2>&1 \
       || ! chmod 600 "$update_tmp" || ! mv -f "$update_tmp" "$update_cfg"; then
     rm -f "$update_tmp" 2>/dev/null || true
     return 1
@@ -2135,7 +2133,7 @@ f50_update_yaml() {
 }
 f50_update_panel_config() {
   panel_cfg=$1; panel_yq=$2
-  export F50_PANEL_DIR=${shellQuote('WebUI/zashboard')}
+  export F50_PANEL_DIR=${shellQuote(F50_PANEL_DIR_REL)}
   export F50_PANEL_URL=${shellQuote(F50_ZASHBOARD_UI_URL)}
   panel_check=${shellQuote(buildF50PanelConfigCheck())}
   if f50_limit 5 "$panel_yq" e -e "$panel_check" "$panel_cfg" >/dev/null 2>&1; then
@@ -2186,29 +2184,19 @@ f50_start_service() {
     printf 'START_SERVICE_RC=%s\nF50_START_CODE=%s\nF50_START_OK=%s\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
     return 1
   fi
-  start_log="$F50_DATA/kano_clash_start.log"
-  log_before=$(cksum "$start_log" 2>/dev/null)
-  f50_disable_unsupported_ipv6_dns_hijack || return 1
+  # The Service skips its own capture wrapper here; redaction and the start log are handled once below.
+  f50_disable_unsupported_ipv6_dns_hijack
   f50_drop_detached_tun_rules "$start_action" || return 1
-  start_raw=$(CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
+  start_raw=$(F50_SERVICE_CAPTURED=1 CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
   F50_START_RC=$?
   F50_START_DETAIL=$(printf '%s\\n' "$start_raw" | f50_redact)
-  # Read only a log changed by this invocation; a previous failed install is not current evidence.
-  log_after=$(cksum "$start_log" 2>/dev/null)
-  case "$F50_START_DETAIL" in *F50_ERROR=*) ;; *)
-    if [ -n "$log_after" ] && [ "$log_after" != "$log_before" ]; then
-      log_detail=$(tail -n 80 "$start_log" 2>/dev/null | f50_redact | awk '/^F50_ERROR=|^START_SERVICE_RC=|^START_STATE=|^F50_START_CODE=/{print}')
-      [ -z "$log_detail" ] || F50_START_DETAIL="$F50_START_DETAIL
-$log_detail"
-    fi ;;
-  esac
   start_cause=$(printf '%s\\n' "$F50_START_DETAIL" | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"");print;exit}')
   F50_START_CODE=service_failed; F50_START_OK=0
   case "$start_cause" in
     *'subscription URL must be HTTPS without userinfo'*|*'subscription URL must use HTTP(S), no userinfo'*|*'empty provider URL'*) F50_START_CODE=invalid_subscription ;;
     panel_config_reload_failed:*|curl_executable_unavailable) F50_START_CODE=service_finalize_failed ;;
     *original_config_invalid*|*CONFIG_TEST_FAILED*|*'configuration is not a YAML mapping'*|*'yq parse failed'*|*'rules must be a list'*) F50_START_CODE=invalid_config ;;
-    *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
+    *iptables*|*ip6tables*|*policy*|*route*|*downstream*|*network*|*tun*|*TUN*|*listener*) F50_START_CODE=network_apply_failed ;;
     *) case "$F50_START_RC" in 124|137) F50_START_CODE=start_timeout ;; esac ;;
   esac
   if [ "$F50_START_RC" = 0 ] && [ -z "$start_cause" ]; then
@@ -2231,7 +2219,6 @@ $log_detail"
       printf '%s\\n' "$panel_check_output" | sed 's/^F50_ERROR=/F50_WARNING=/'
       echo F50_HEALTH_PANEL=failed
     fi
-    echo F50_HEALTH_CORE=controller_confirmed
     echo F50_HEALTH_TAKEOVER=controller_reported
     echo F50_HEALTH_API=unverified
     echo F50_HEALTH_PROVIDERS=unverified
@@ -2314,18 +2301,20 @@ f50_install_finish() {
     [ -n "$F50_INSTALL_CODE" ] || F50_INSTALL_CODE=transaction_interrupted
     printf 'F50_INSTALL_CODE=%s\\n' "$F50_INSTALL_CODE"
     if [ -n "$F50_INSTALL_DETAIL" ]; then
-      printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"F50_INSTALL_CAUSE=");print;exit}'
-      printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact
+      install_detail_redacted=$(printf '%s\\n' "$F50_INSTALL_DETAIL" | f50_redact)
+      printf '%s\\n' "$install_detail_redacted" | awk '/^F50_ERROR=/{sub(/^F50_ERROR=/,"F50_INSTALL_CAUSE=");print;exit}'
+      printf '%s\\n' "$install_detail_redacted"
+      unset install_detail_redacted
     fi
     if [ "$COMMITTED" = 1 ] || [ "$MOVED_OLD" = 1 ] || [ "$CLEAN_ATTEMPTED" = 1 ]; then
-      if f50_restore_previous; then :; else finish_rc=1; KEEP_WORK=1; fi
+      if f50_restore_previous; then :; else KEEP_WORK=1; fi
     fi
     [ -z "$BACKUP" ] || printf 'F50_RECOVERY_BACKUP=%s\\n' "$BACKUP"
     finish_rc=1
   fi
   # Release only our known lock entry; unknown files keep the lock and recovery marker for review.
   if [ "$LOCKED" = 1 ]; then
-    if ! rm -f "$LOCK/pid" || ! rmdir "$LOCK" || [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+    if ! rm -f "$LOCK/pid" || ! rmdir "$LOCK"; then
       echo F50_INSTALL_WARNING=lock_cleanup_failed
       printf 'F50_RECOVERY_LOCK=%s\n' "$LOCK"
       [ "$finish_rc" != 0 ] || finish_rc=1
@@ -2333,7 +2322,7 @@ f50_install_finish() {
     fi
   fi
   if [ "$KEEP_WORK" = 0 ]; then
-    if ! rm -rf "$F50_WORK" || [ -e "$F50_WORK" ] || [ -L "$F50_WORK" ]; then
+    if ! rm -rf "$F50_WORK"; then
       echo F50_INSTALL_WARNING=staging_cleanup_failed
       [ "$finish_rc" != 0 ] || finish_rc=1
       KEEP_WORK=1
@@ -2354,21 +2343,22 @@ f50_install_finish() {
   exit "$finish_rc"
 }
 trap f50_install_finish EXIT
-: > "$F50_WORK/install.journal" || { F50_INSTALL_CODE=journal_write_failed; exit 1; }
 trap 'F50_INSTALL_CODE=interrupted; exit 130' HUP INT TERM
 if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1; fi
 LOCKED=1
 export F50_INSTALL_TRANSACTION="$F50_WORK"
 printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
-${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
+${rotateClashLogCmd()}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
 command -v unzip >/dev/null 2>&1 || { f50_install_fail unzip_missing; exit 1; }
 # No fixed ZIP hash, resource list or template/UI fingerprints.
 names=$(unzip -Z1 "$ZIP" 2>/dev/null); list_rc=$?
 if [ "$list_rc" != 0 ]; then
-  listing=$(unzip -l "$ZIP" 2>/dev/null); list_rc=$?
-  names=$(printf '%s\\n' "$listing" | awk '/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/ {sub(/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/,"");print}')
+  archive_listing=$(unzip -l "$ZIP" 2>/dev/null); list_rc=$?
+  names=$(printf '%s\\n' "$archive_listing" | awk '/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/ {sub(/^[ \\t]*[0-9]+[ \\t]+[-0-9]+[ \\t]+[0-9:]+[ \\t]+/,"");print}')
+else
+  archive_listing=$(unzip -l "$ZIP" 2>/dev/null)
 fi
 [ "$list_rc" = 0 ] && [ -n "$names" ] || { f50_install_fail archive_list_failed; exit 1; }
 while IFS= read -r member; do
@@ -2377,17 +2367,16 @@ while IFS= read -r member; do
 done <<EOF_F50_MEMBERS
 $names
 EOF_F50_MEMBERS
-archive_listing=$(unzip -l "$ZIP" 2>/dev/null)
 archive_bytes=$(printf '%s\\n' "$archive_listing" | awk '$1 ~ /^[0-9]+$/ && $NF ~ /^files?$/ && NF <= 4 {n=$1} END {print n}')
 case "$archive_bytes" in ''|*[!0-9]*) f50_install_fail archive_size_unknown; exit 1 ;; esac
 required_kb=$(( (archive_bytes + 1023) / 1024 + 51200 ))
-case "$names" in *Proxy/Clash.Core*) ;; *)
-  if [ -d "$F50_ROOT" ]; then
-    old_kb=$(du -sk "$F50_ROOT" 2>/dev/null | awk '{print $1}')
-    case "$old_kb" in ''|*[!0-9]*) f50_install_fail data_size_unknown; exit 1 ;; esac
-    required_kb=$((required_kb + old_kb))
-  fi ;;
-esac
+# User data is copied into the package before the old directory is moved away, so its size
+# counts toward the requirement for every package shape, not only patch packages.
+if [ -d "$F50_ROOT" ]; then
+  old_kb=$(du -sk "$F50_ROOT" 2>/dev/null | awk '{print $1}')
+  case "$old_kb" in ''|*[!0-9]*) f50_install_fail data_size_unknown; exit 1 ;; esac
+  required_kb=$((required_kb + old_kb))
+fi
 avail_kb=$(df -k "$F50_DATA" 2>/dev/null | awk 'NR==2{print $4}')
 case "$avail_kb" in ''|*[!0-9]*) f50_install_fail data_space_unknown; exit 1 ;; esac
 [ "$avail_kb" -ge "$required_kb" ] || { f50_install_fail data_space_insufficient_for_archive; exit 1; }
@@ -2442,7 +2431,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Tools/gist-sync Proxy/config.yaml Proxy/subscription_urls.txt Proxy/cache.db Proxy/rules Proxy/rule-providers Proxy/proxies Proxy/mac_bypass.txt Proxy/Policy Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -2451,7 +2440,7 @@ done
 # Custom provider/rule files under Proxy are user data, not part of executable/UI replacement.
 for src in "$F50_ROOT"/Proxy/*; do
   [ -e "$src" ] || continue
-  case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|config.yaml|subscription_urls.txt|cache.db|rules|rule-providers|proxies|mac_bypass.txt|Policy) continue ;; esac
+  case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|${F50_PROXY_USER_DATA.join('|')}) continue ;; esac
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
   dst="$PKG/Proxy/\${src##*/}"
   rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
@@ -2515,9 +2504,9 @@ f50_preflight_config() {
   urls=$(f50_limit 5 "$YQ" e -r '."proxy-providers"[] | select(.type == "http") | (.url // "")' "$CFG" 2>/dev/null); urls_rc=$?
   case "$urls_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
   if [ "$urls_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
-  http_count=$(f50_limit 5 "$YQ" e -r '[."proxy-providers"[] | select(.type == "http")] | length' "$CFG" 2>/dev/null); count_rc=$?
-  [ "$count_rc" = 0 ] || { f50_install_fail config_probe_failed; return 1; }
-  case "$http_count" in ''|*[!0-9]*) f50_install_fail config_probe_failed; return 1 ;; esac
+  # $urls prints exactly one line per http provider; counting it replaces a third yq pass.
+  http_count=0
+  [ -n "$urls" ] && http_count=$(printf '%s\\n' "$urls" | awk 'END{print NR}')
   if [ "$http_count" != 0 ]; then
     while IFS= read -r url; do
       case "$url" in
@@ -2572,9 +2561,7 @@ if ! mv "$PKG" "$F50_ROOT"; then
   f50_install_fail commit_failed; exit 1
 fi
 COMMITTED=1
-panel_probe=$(f50_validate_zashboard "$F50_ROOT/Proxy/WebUI/zashboard" 2>&1); panel_rc=$?
-printf '%s\\n' "$panel_probe"
-[ "$panel_rc" = 0 ] || { f50_install_fail panel_postcheck_failed "$panel_probe"; exit 1; }
+# The package was validated before activation; mv is a same-filesystem rename of that content.
 if [ "$HAD_OLD:$OLD_LATCH:$OLD_RUNNING" = 1:1:0 ]; then
   status=installed_stopped
 elif [ "$NEEDS_CONFIG" != ready ]; then
@@ -2621,7 +2608,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     }
     if (!result?.success || result.deviceCompleted !== true || result.deviceExitCode !== 0 ||
         !/^F50_INSTALL_COMPONENTS_OK=1$/m.test(output) || !/^F50_INSTALL_TRANSACTION_STATE=complete$/m.test(output) ||
-        !/^KANO_INSTALL_OK=1$/m.test(output) || /^KANO_INSTALL_OK=0$|^F50_INSTALL_TRANSACTION_STATE=(?:failed|finalize_failed)$/m.test(output)) {
+        !/^KANO_INSTALL_OK=1$/m.test(output)) {
       throw new Error(output || 'F50_INSTALL_CODE=transaction_interrupted');
     }
     const state = (output.match(/^F50_INSTALL_STATUS=(.+)$/m) || [])[1];
@@ -2864,7 +2851,6 @@ function createPrivateRouteLogic() {
     return tun[key];
   }
   function transform(out, state, mode, connected) {
-    if (!state.enabled || mode === 'off') return out;
     checkConnected(state, connected);
     if (String(out.mode || 'rule').toLowerCase() !== 'rule') throw new Error('私网定向代理仅在 Mihomo 规则模式下可用');
     if (state.cidrs.some((n) => cidr(n).family === 6) && out.ipv6 !== true) throw new Error('目标网段包含 IPv6；请先启用 IPv6 接管');
@@ -2874,7 +2860,7 @@ function createPrivateRouteLogic() {
     if (['direct', 'reject', 'reject-drop', 'pass'].includes(String(target.type || '').toLowerCase())) throw new Error('所选出站不是代理类型');
     const meta = { version: 2, mode, cidrs: state.cidrs, policy: state.policy, rules: [], tun: {}, rulesPresent: own(out, 'rules'), tunPresent: own(out, 'tun') };
     const rule = (n, policy) => (cidr(n).family === 4 ? 'IP-CIDR,' : 'IP-CIDR6,') + n + ',' + policy + ',no-resolve';
-    meta.rules = [...state.cidrs.map((n) => rule(n, state.policy)), ...PRIVATE.map((n) => rule(n, 'DIRECT'))];
+    meta.rules = [...state.cidrs.map((n) => rule(n, state.policy)), ...PRIVATE.filter((n) => !state.cidrs.includes(n)).map((n) => rule(n, 'DIRECT'))];
     out.rules = [...meta.rules, ...(out.rules || [])];
     if (mode === 'tun') {
       if (out.tun != null && (typeof out.tun !== 'object' || Array.isArray(out.tun))) throw new Error('tun must be an object');
@@ -2993,7 +2979,7 @@ function createPrivateRouteLogic() {
       }
     }
   }
-  out['x-f50-profile'] = '8.0.0-compat.2.3';
+  out['x-f50-profile'] = F50_COMPAT_VERSION;
   // 记录被强制纠正的用户设置，供界面提示；Mihomo 忽略 x- 前缀键。
   const overridden = [];
   for (const key of CONTROLLED_TOP_KEYS) {
@@ -3075,27 +3061,6 @@ async function writeYamlObjectAtomic(yamlPath, objectValue, options = {}) {
   }
 }
 
-async function savePolicyState(state, options = {}) {
-  try {
-    const previous = options.replaceOptions ? {} : await kprReadOptions();
-    const next = { ...state, options: { ...previous, ...state.options } };
-    const feature = KPR.fromOptions(next.options);
-    next.options.private_route_enabled = feature.enabled ? 'on' : 'off';
-    next.options.private_route_cidrs = feature.cidrs.join(' ');
-    next.options.private_route_policy = feature.policy;
-    if (feature.enabled && next.options.traffic_mode !== 'off') {
-      const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
-      if (!config.ok) throw new Error(config.message || 'Cannot read config.yaml');
-      KPR.checkConnected(feature, await kprReadConnected(config.value, next.options));
-
-    }
-    return await kprBaseSavePolicyState(next, options);
-  } catch (error) {
-    createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
-    return false;
-  }
-}
-
 async function kprVerifySelection(options) {
   const feature = KPR.fromOptions(options);
   if (!feature.enabled || options.traffic_mode === 'off') return '';
@@ -3121,12 +3086,11 @@ function networkStateKey(state, { runtimeOnly = false } = {}) {
   return JSON.stringify(values);
 }
 
-async function normalizeIpv6DnsCapability(state) {
-  if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
+async function reportIpv6NatLimitation(state) {
+  if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return;
   const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
-  if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
+  if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return;
   createToast('当前内核不支持 IPv6 NAT；已保留 IPv4 DNS 劫持，IPv6 接管仍保持开启。', 'yellow', 10000);
-  return true;
 }
 async function verifyF50TunStack(options) {
   const stack = f50TunStack(options);
@@ -3168,7 +3132,7 @@ async function kprSaveNetworkState(previous, next) {
     next.options.private_route_policy = feature.policy;
     next.options.transparent = next.options.traffic_mode === 'tproxy' ? 'on' : 'off';
     if (next.options.traffic_mode === 'off') next.options.dns_hijack = 'off';
-    await normalizeIpv6DnsCapability(next);
+    await reportIpv6NatLimitation(next);
     if (networkStateKey(previous) === networkStateKey(next)) {
       operationFinish(true, '设置未变更，未写入任何配置');
       if (activeCriticalOperation) activeCriticalOperation.finalToast = ['设置未变更，未写入任何配置', 'green'];
@@ -3200,7 +3164,7 @@ echo NETWORK_SNAPSHOT_READY`, 20000);
     if (!snapshot.success || !/^NETWORK_SNAPSHOT_READY$/m.test(String(snapshot.content || ''))) throw new Error('网络设置快照创建失败；新设置未保存');
     operationStage('写入设置与运行配置', 1, 4);
     saved = true;
-    if (!(await savePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
+    if (!(await kprBaseSavePolicyState(next, { apply: false }))) throw new Error('网络设置未保存');
     if (configChanged) {
       const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, prepared, { label: 'config.yaml', backup: false });
       if (!written.ok) throw new Error(written.content || 'config.yaml 写入失败');
@@ -3218,7 +3182,7 @@ echo NETWORK_SNAPSHOT_READY`, 20000);
     invalidateStatusSnapshot();
     snapshotCommitted = true;
     Object.assign(previous, JSON.parse(JSON.stringify(next)));
-    if (wasRunning && typeof refreshDashboardAfterModeChange === 'function') {
+    if (wasRunning) {
       try { await refreshDashboardAfterModeChange(); } catch (_) {}
     }
     if (next.options.traffic_mode === 'tun' && devices.text.trim()) createToast('TUN 模式已暂停直连设备生效，名单保留；切回 TProxy 后自动恢复', 'yellow', 8000);
@@ -3407,7 +3371,8 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
   function operationFinish(ok, detail = '') {
     const op = activeCriticalOperation;
     if (op && !op.token.cancelled && op.progress) {
-      if (op.finalResult?.ok === false && ok !== false) return;
+      // 首次写入为准：内部流程已带详情收尾时，外层的布尔包一层不再覆盖详情。
+      if (op.finalResult) return;
       op.finalResult = { ok, detail };
     }
   }
@@ -3432,9 +3397,9 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
 
   function buildStatusSnapshotCommand() {
   return `set +e
-if [ -r /data/clash/Scripts/Clash.Service ]; then
-  if command -v timeout >/dev/null 2>&1; then snapshot=$(timeout -k 1 6 sh /data/clash/Scripts/Clash.Service snapshot 2>&1)
-  else snapshot=$(sh /data/clash/Scripts/Clash.Service snapshot 2>&1); fi
+if [ -r ${CLASH_SERVICE} ]; then
+  if command -v timeout >/dev/null 2>&1; then snapshot=$(timeout 6 sh ${CLASH_SERVICE} snapshot 2>&1)
+  else snapshot=$(sh ${CLASH_SERVICE} snapshot 2>&1); fi
   rc=$?
   if [ "$rc" = 0 ] && printf '%s\\n' "$snapshot" | grep -q '^F50_SNAPSHOT='; then
     printf '%s\\nF50_SNAPSHOT_RC=%s\\n' "$snapshot" "$rc"
@@ -3444,7 +3409,7 @@ if [ -r /data/clash/Scripts/Clash.Service ]; then
 fi
 ${buildOwnedCoreFunctions()}
 printf 'F50_SNAPSHOT_FALLBACK=1\\nF50_CORE_PID=%s\\n' "$(find_runtime_pid)"
-if [ -d /data/clash ]; then echo F50_INSTALL_STATE=damaged; else echo F50_INSTALL_STATE=missing; fi
+if [ -d ${CLASH_DIR} ]; then echo F50_INSTALL_STATE=damaged; else echo F50_INSTALL_STATE=missing; fi
 exit 0`;
 }
   async function readStatusSnapshot({fresh=false} = {}) {
@@ -3602,9 +3567,10 @@ exit "$delete_rc"
   const DOWNLOAD_ZIP = '/data/kano_clash.zip';
   const DOWNLOAD_LOG = '/data/kano_mihomo_latest.dlog';
   const CLASH_PACKAGE_URL = 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip';
-  const CLASH_PACKAGE_FALLBACK_URL = 'https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip';
+  // 实测 GitCode 在 F50 上最稳定，作为首选源；常量名与实际优先级保持一致。
+  const CLASH_PACKAGE_PRIMARY_URL = 'https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip';
   const CLASH_PACKAGE_REPO_URL = 'https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip';
-  const ZASHBOARD_UI_DIR = 'WebUI/zashboard';
+  const ZASHBOARD_UI_DIR = F50_PANEL_DIR_REL;
   const ZASHBOARD_UI_URL = F50_ZASHBOARD_UI_URL;
   // tproxy-yq.zip is intentionally updateable. Do not pin package size/hash/core hash in the plugin.
   // Installation only requires a readable ZIP with the expected base layout; deeper features fail locally if incompatible.
@@ -3727,7 +3693,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
   async function f50GistDispatch(action, request = {}) {
     try {
-      if (!request.identity && !request.manualSources) {
+      if (!request.manualSources) {
         const direct=await f50GistExec(['dispatch',action],12000,JSON.stringify(request));
         if (direct.code !== 'invalid_command') return direct;
       }
@@ -3738,7 +3704,6 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
       const sealed=await f50GistSeal(key,action,request);
       return await f50GistExec(['dispatch-sealed',action],12000,JSON.stringify(sealed));
     } catch (error) { return {ok:false,code:['secure_transport_unavailable','component_version_mismatch'].includes(error?.message)?error.message:'request_encryption_failed'}; }
-    finally { request.identity=''; }
   }
 
   const F50_GIST_MESSAGES = {
@@ -3782,7 +3747,6 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     up_to_date:'\u914d\u7f6e\u5df2\u662f\u6700\u65b0', synced:'配置已更新',
     saved_stopped:'\u914d\u7f6e\u5df2\u4fdd\u5b58\uff1b\u6838\u5fc3\u4fdd\u6301\u505c\u6b62\uff0c\u672a\u52a0\u8f7d',
     local_config_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
-    local_conflict:'\u68c0\u6d4b\u5230\u672c\u5730\u4fee\u6539\uff0c\u672a\u8986\u76d6',
     source_changed:'\u540c\u6b65\u6e90\u5df2\u66f4\u6362\uff0c\u65e7\u4efb\u52a1\u672a\u63d0\u4ea4',
     settings_changed:'\u8bbe\u7f6e\u5df2\u88ab\u5176\u4ed6\u9875\u9762\u66f4\u6539\uff1b\u8bf7\u91cd\u65b0\u8bfb\u53d6\u8868\u5355',
     operation_busy:'\u8bbe\u5907\u6b63\u5728\u6267\u884c\u5176\u4ed6\u64cd\u4f5c\uff0c\u672a\u62a2\u5360\u79df\u7ea6',
@@ -3911,6 +3875,8 @@ fi`,8000);
     clearInterval(op.heartbeat);
     if (op.heartbeatPending) await op.heartbeatPending;
     if (!op.leaseOwned || op.recovered) return;
+    // 已释放的租约必须允许后续命令重新获取，否则同一操作内的下一条 shell 会被设备端 owner 校验拒绝。
+    const dropped = () => { op.leaseOwned = false; op.leasePromise = null; };
     try {
       if (op.uncertain) {
         await hostRunShellWithRoot.call(globalThis,
@@ -3923,14 +3889,14 @@ fi`,8000);
           .then(f50ShellReply)
           .catch(error => ({ success: false, content: error?.message || String(error) }));
         if (result?.success && /^F50_LEASE_RELEASED=1$/m.test(String(result.content || ''))) {
-          op.leaseOwned = false;
+          dropped();
           return;
         }
         const checked = f50ShellReply(await hostRunShellWithRoot.call(globalThis,
           buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(f50TaskTag(op.token)), 6000));
         const state = String(checked?.content || '');
         if (checked?.success && /^(F50_LEASE_RELEASED=1|F50_OPERATION_OWNER_CHANGED)$/m.test(state)) {
-          op.leaseOwned = false;
+          dropped();
           return;
         }
         if (!(checked?.success && /^F50_LEASE_OWNED=1$/m.test(state)) || attempt) {
@@ -4003,7 +3969,7 @@ fi`,8000);
       if (lease !== true) return lease;
       if (op.token.cancelled || op.closing) throw operationCancelled();
       const request = tag + '.' + (++taskCommandSequence);
-      const base = `umask 077\nif [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${op.uninstall ? '' : buildF50GistFence()}\n${script}`;
+      const base = `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${op.uninstall ? '' : buildF50GistFence()}\n${script}`;
       const command = `set +e
 exec 2>&1
 umask 077
@@ -4087,26 +4053,23 @@ exit "$kano_task_rc"`;
   const templateFlowMessages = [];
   let templateFlowTimer = null;
   let templateFlowWriting = false;
-  let templateFlowWritePromise = null;
   const flushTemplateFlowDebug = async () => {
     templateFlowTimer = null;
     if (pluginArtifactsRemoved || templateFlowWriting || !templateFlowMessages.length) return;
     templateFlowWriting = true;
     const messages = templateFlowMessages.splice(0);
     try {
-      templateFlowWritePromise = runShellWithRoot(`
+      await runShellWithRoot(`
         FLOW=${shellQuote(KANO_TEMPLATE_FLOW_DEBUG)}
         if [ -f "$FLOW" ] && [ "$(wc -c < "$FLOW")" -gt 262144 ]; then
           tail -c 131072 "$FLOW" > "$FLOW.trim.$$" && mv "$FLOW.trim.$$" "$FLOW"
         fi
         printf '%s\\n' ${messages.map(shellQuote).join(' ')} >> "$FLOW"
       `, 5000);
-      await templateFlowWritePromise;
     } catch (e) {
       console.error(e);
     } finally {
       templateFlowWriting = false;
-      templateFlowWritePromise = null;
       if (templateFlowMessages.length && templateFlowTimer === null) {
         templateFlowTimer = setTimeout(flushTemplateFlowDebug, 250);
       }
@@ -4240,14 +4203,7 @@ exit "$kano_task_rc"`;
     ) {
       return { ok: false, message: '本地转换拒绝回环、私网或保留地址' };
     }
-    return {
-      ok: true,
-      url: url.toString(),
-      hostname,
-      port: url.port || (url.protocol == 'https:' ? '443' : '80'),
-      addressFamily: hostname.includes(':') ? 'ipv6' : 'auto',
-      message: '',
-    };
+    return { ok: true, message: '' };
   };
 
   const getUploadedPath = (url) => {
@@ -4377,7 +4333,7 @@ exit "$kano_task_rc"`;
         `;
 
   // 策略脚本仍保留为高级功能，但不再成为基础开机自启的必需项。
-  const addPolicyToolsBootLineCmd = () => addBootLinesCmd();
+
 
   const syncSafePolicyFilesCmd = () => `
         mkdir -p ${shellQuote(CLASH_POLICY_DIR)} ${shellQuote(CLASH_SAFE_POLICY_DIR)} || exit 1
@@ -4597,7 +4553,7 @@ exit "$kano_task_rc"`;
       }
     }
 
-    const sources = [CLASH_PACKAGE_FALLBACK_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
+    const sources = [CLASH_PACKAGE_PRIMARY_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {
       operationStage('下载并校验组件包：来源 ' + (sources.indexOf(packageUrl) + 1) + '/' + sources.length);
@@ -4658,7 +4614,8 @@ exit "$kano_task_rc"`;
             return { ok: true, stage: 'ready', source: packageUrl, message: '', content };
           }
           if (log.success && /^ARCHIVE_WORKER_FAILED=/m.test(content)) { finished = true; break; }
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 64MB 级下载每秒轮询只增加 root 往返；2.5 秒粒度足够及时看到完成或失败。
+          await new Promise(resolve => setTimeout(resolve, 2500));
         }
         // An unconfirmed worker must retain its lease and block installation.
         if (!finished) throw f50UnknownCompletion(activeCriticalOperation, content);
@@ -5274,7 +5231,7 @@ exit "$kano_task_rc"`;
 
   const readSavedSubSourcesForTemplate = async () => {
     const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
+        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s cat ${shellQuote(CLASH_SUB_URLS)}; fi
         `);
     return res.success ? normalizeSubSourceList(parseStoredSubSourcesFromText(res.content || '')) : [];
   };
@@ -5336,7 +5293,7 @@ exit "$kano_task_rc"`;
     sources = [],
     { forceDefault = false, showToast = false, templatePath = CLASH_TEMPLATE, backup = true } = {},
   ) => {
-    await loadProviderUserAgent();
+    // 该路径生成的 provider 不含 url/header（emptyProviderUrls），无需加载订阅 UA。
     const cleanSources = normalizeSubSourceList(sources);
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
@@ -5360,17 +5317,13 @@ exit "$kano_task_rc"`;
         secret: controllerInfo.secretSet ? controllerInfo.secret : F50_DEFAULT_SECRET,
       });
     } else {
-      const read = await readYamlObject(templatePath, 'template.yaml');
+      const read = await readYamlObject(templatePath, 'template.yaml', { generatedMarker: true });
       if (!read.ok) {
         createToast(`模板自动处理失败<br>${safeTextToHtml(read.message || '')}`, 'red', 10000);
         return false;
       }
       baseObject = read.value;
-      generated = await yamlHasGeneratedMarker(templatePath);
-      if (generated === null) {
-        createToast('无法读取 template.yaml 生成标记；操作已中止，原文件未改写。', 'red', 9000);
-        return false;
-      }
+      generated = read.generated;
     }
 
     let normalized;
@@ -5574,7 +5527,18 @@ exit "$kano_task_rc"`;
     [ -x "$YQ" ] || { echo "YQ_MISSING: $YQ"; exit 1; }
   `;
 
-  const readYamlObject = async (yamlPath, label = 'YAML', { allowDownload = true } = {}) => {
+  // yq 是否支持 --yaml-fix-merge-anchor-to-spec 由设备上的实际版本决定；整页只探测一次。
+  let yqMergeAnchorFlag = null;
+  const yqMergeAnchorFlagCmd = async () => {
+    if (yqMergeAnchorFlag === null) {
+      const res = await runShellWithRoot(`YQ=${shellQuote(`${CLASH_DIR}/Tools/yq_linux_arm64`)}
+        if [ -x "$YQ" ] && "$YQ" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then echo 1; else echo 0; fi`, 10000);
+      yqMergeAnchorFlag = res?.success && String(res.content || '').trim() === '1' ? ' --yaml-fix-merge-anchor-to-spec' : '';
+    }
+    return yqMergeAnchorFlag;
+  };
+
+  const readYamlObject = async (yamlPath, label = 'YAML', { generatedMarker = false } = {}) => {
     const res = await runShellWithRoot(`
         set -e
         ${buildF50ShellBase()}
@@ -5589,10 +5553,7 @@ exit "$kano_task_rc"`;
           echo "YAML_FILE_TOO_LARGE: bytes=$size limit=${YAML_BRIDGE_MAX_BYTES}"
           exit 1
         }
-        set -- e
-        if "$YQ" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then
-          set -- "$@" --yaml-fix-merge-anchor-to-spec
-        fi
+        set -- e${await yqMergeAnchorFlagCmd()}
         yaml_read_stderr="$KANO_YQ_TMP/yq_json_read.$$.err"
         trap 'rm -f "$yaml_read_stderr"' EXIT
         if f50_limit 15 "$YQ" "$@" -o=json '.' "$FILE" 2>"$yaml_read_stderr"; then
@@ -5602,6 +5563,7 @@ exit "$kano_task_rc"`;
           cat "$yaml_read_stderr"
           exit "$yaml_read_rc"
         fi
+        ${generatedMarker ? `printf '\\nF50_YAML_GENERATED=%s\\n' "$(grep -qF ${shellQuote(GENERATED_TEMPLATE_MARKER)} "$FILE" && echo 1 || echo 0)"` : ''}
         `, 20 * 1000);
     if (!res.success) {
       return {
@@ -5612,10 +5574,17 @@ exit "$kano_task_rc"`;
       };
     }
     try {
-      const value = JSON.parse(String(res.content || '').trim());
+      let text = String(res.content || '');
+      let generated;
+      if (generatedMarker) {
+        const at = text.indexOf('\nF50_YAML_GENERATED=');
+        generated = text.slice(at + '\nF50_YAML_GENERATED='.length).trim() === '1';
+        text = text.slice(0, at);
+      }
+      const value = JSON.parse(text.trim());
       assertYamlRootMap(value, label);
       f50AssertSafeJsonNumbers(value);
-      return { ok: true, value, message: '', shell: res };
+      return { ok: true, value, generated, message: '', shell: res };
     } catch (e) {
       return {
         ok: false,
@@ -5633,7 +5602,6 @@ exit "$kano_task_rc"`;
     if (!res || !res.success) return null;
     return String(res.content || '').trim() == '1';
   };
-
   const stageTextBesideTarget = async (targetPath, text, label = 'YAML') => {
     const value = String(text || '');
     const expectedBytes = utf8ByteLength(value);
@@ -5679,14 +5647,6 @@ exit "$kano_task_rc"`;
         trap cleanup_yaml_upload EXIT
         [ -d "$DIR" ] || { echo "YAML_STAGE_DIR_MISSING: $DIR"; exit 1; }
         [ ! -L "$TARGET" ] || { echo "YAML_TARGET_SYMLINK_REJECTED: $TARGET"; exit 1; }
-        if [ -s "$STAGE" ]; then
-          staged_size="$(wc -c < "$STAGE" 2>/dev/null || echo 0)"
-          if [ "$staged_size" = "$expected" ]; then
-            echo "YAML_STAGE_BYTES=$staged_size"
-            exit 0
-          fi
-          rm -f "$STAGE"
-        fi
         [ -s "$UPLOADED" ] || { echo "YAML_UPLOAD_MISSING: $UPLOADED"; exit 1; }
         uploaded_size="$(wc -c < "$UPLOADED" 2>/dev/null || echo 0)"
         [ "$uploaded_size" = "$expected" ] || {
@@ -5790,7 +5750,7 @@ ${buildF50YamlCommitBody(withBase)}
   // TProxy 端口属于受控集合：iptables、DNS nat 与启动校验都按固定值下发，不从 options 读取。
   const buildManagedProxyProviders = (
     sources = [],
-    { emptyUrls = false, ensureOne = false, localFiles = false } = {},
+    { emptyUrls = false, localFiles = false } = {},
   ) => {
     let cleanSources = normalizeSubSourceList(sources);
     // A template without configured sources is an empty mapping, never a live URL placeholder.
@@ -5861,14 +5821,15 @@ ${buildF50YamlCommitBody(withBase)}
 
   const applyManagedDashboardFields = (config, { preserveConfig = false } = {}) => {
     assertYamlRootMap(config, '配置');
+    // unified-delay 不参与接管、路由与面板校验，仅在用户未设置时补默认值。
+    const needsUnifiedDelay = !preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay');
     const changed = config['external-ui'] == null
       || Object.prototype.hasOwnProperty.call(config, 'external-ui-name')
       || config['external-ui-url'] == null
-      || (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay'));
+      || needsUnifiedDelay;
     config['external-ui'] ??= ZASHBOARD_UI_DIR;
     config['external-ui-url'] ??= ZASHBOARD_UI_URL;
-    // unified-delay 不参与接管、路由与面板校验，仅在用户未设置时补默认值。
-    if (!preserveConfig && !Object.prototype.hasOwnProperty.call(config, 'unified-delay')) config['unified-delay'] = true;
+    if (needsUnifiedDelay) config['unified-delay'] = true;
     delete config['external-ui-name'];
     return changed;
   };
@@ -5887,10 +5848,8 @@ ${buildF50YamlCommitBody(withBase)}
     return config;
   };
 
-  const applyOverrideSafetyFields = (config, preservedSecret = '') => {
-    if (typeof preservedSecret === 'string' && preservedSecret.length) config.secret = preservedSecret;
-    return applyRequiredF50Fields(config, { preservedSecret });
-  };
+  const applyOverrideSafetyFields = (config, preservedSecret = '') =>
+    applyRequiredF50Fields(config, { preservedSecret });
 
   const normalizeManagedProxyGroups = (config, providerNames = []) => {
     if (Object.prototype.hasOwnProperty.call(config, 'proxy-groups') && !Array.isArray(config['proxy-groups'])) {
@@ -5933,19 +5892,6 @@ ${buildF50YamlCommitBody(withBase)}
         group.use = providerNames.slice();
       }
     });
-    if (createdFallback) {
-      const proxy = groups.find((group) => group.name == 'Proxy');
-      if (proxy) {
-        proxy.use = providerNames.slice();
-        proxy.proxies = [...new Set([...(Array.isArray(proxy.proxies) ? proxy.proxies : []), 'Auto', 'DIRECT'])];
-      }
-      const auto = groups.find((group) => group.name == 'Auto');
-      if (auto) {
-        auto.use = providerNames.slice();
-        auto.url = 'https://www.gstatic.com/generate_204';
-        auto.interval = 900;
-      }
-    }
     config['proxy-groups'] = groups;
     return { groups, proxyGroup: groups[0] ? groups[0].name : 'Proxy', createdFallback };
   };
@@ -6062,7 +6008,6 @@ ${buildF50YamlCommitBody(withBase)}
     delete config['Proxy-providers'];
     config['proxy-providers'] = buildManagedProxyProviders(sources, {
       emptyUrls: emptyProviderUrls,
-      ensureOne: emptyProviderUrls,
       localFiles: localProviderFiles,
     });
     const groupResult = normalizeManagedProxyGroups(config, providerNames);
@@ -6108,7 +6053,7 @@ ${buildF50YamlCommitBody(withBase)}
       'default-nameserver': ['223.5.5.5', '119.29.29.29'],
       nameserver: ['https://dns.alidns.com/dns-query', 'https://doh.pub/dns-query'],
     },
-    'proxy-providers': buildManagedProxyProviders(sources, { emptyUrls: true, ensureOne: true }),
+    'proxy-providers': buildManagedProxyProviders(sources, { emptyUrls: true }),
     'proxy-groups': [],
     'rule-providers': {},
     rules: [],
@@ -6153,10 +6098,9 @@ ${buildF50YamlCommitBody(withBase)}
     const kind = String(probe.content || '').trim();
     if (!['base', 'current', 'runtime'].includes(kind)) return { ok: false, message: '请先上传模板或配置文件' };
     const path = kind === 'base' ? CLASH_TEMPLATE_BASE : kind === 'current' ? CLASH_TEMPLATE : CLASH_CONFIG;
-    const read = await readYamlObject(path, '基础模板');
+    const read = await readYamlObject(path, '基础模板', { generatedMarker: true });
     if (!read.ok) return read;
-    const generated = await yamlHasGeneratedMarker(path);
-    if (generated === null) return { ok: false, message: '无法读取模板标记' };
+    const generated = read.generated;
     try {
       updateAirportDnsTemplate(read.value, read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {});
       return { ...read, generated };
@@ -6205,7 +6149,7 @@ ${buildF50YamlCommitBody(withBase)}
 
   const readRuleOverrideConfig = async () => {
     const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_RULE_OVERRIDE_JSON)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_RULE_OVERRIDE_JSON)}; fi
+        if [ -f ${shellQuote(CLASH_RULE_OVERRIDE_JSON)} ]; then timeout 5s cat ${shellQuote(CLASH_RULE_OVERRIDE_JSON)}; fi
         `);
     const text = res.success ? String(res.content || '').trim() : '';
     if (!text) return defaultRuleOverrideConfig();
@@ -6289,7 +6233,7 @@ ${buildF50YamlCommitBody(withBase)}
 
   const readJsOverrideText = async () => {
     const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_OVERRIDE_JS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_OVERRIDE_JS)}; fi
+        if [ -f ${shellQuote(CLASH_OVERRIDE_JS)} ]; then timeout 5s cat ${shellQuote(CLASH_OVERRIDE_JS)}; fi
         `);
     const text = res.success ? String(res.content || '') : '';
     return text.trim() ? text : buildDefaultOverrideJs();
@@ -6594,11 +6538,10 @@ KANO_WRITE_CHECK_EOF
     const storage = await ensurePolicyStorage();
     if (!storage.ok) return fail('prepare_policy_storage', storage.content || '策略文件目录准备失败');
 
-    const read = await readYamlObject(CLASH_TEMPLATE, 'template.yaml');
+    const read = await readYamlObject(CLASH_TEMPLATE, 'template.yaml', { generatedMarker: true });
     if (!read.ok) return fail('read_template', read.message || 'template.yaml 无法读取');
 
-    const generated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
-    if (generated === null) return fail('read_template_marker', 'template.yaml 生成标记无法读取');
+    const generated = read.generated;
     let normalized;
     try {
       normalized = normalizeManagedTemplateObject(read.value, cleanSources, {
@@ -6846,17 +6789,14 @@ KANO_WRITE_CHECK_EOF
     const templateExistsRes = await runShellWithRoot(`[ -s ${shellQuote(CLASH_TEMPLATE)} ] && echo 1 || echo 0`, 10 * 1000);
     const templateExists = String(templateExistsRes.content || '').trim() == '1';
     if (templateExists) {
-      const templateRead = await readYamlObject(CLASH_TEMPLATE, 'template.yaml');
+      const templateRead = await readYamlObject(CLASH_TEMPLATE, 'template.yaml', { generatedMarker: true });
       if (!templateRead.ok) {
         return { ...checked, ok: false, message: templateRead.message || 'template.yaml 无法读取' };
       }
       templateObject = cloneJsonValue(templateRead.value);
       templateObject['external-controller'] = checked.controller;
       templateObject.secret = checked.secret;
-      templateGenerated = await yamlHasGeneratedMarker(CLASH_TEMPLATE);
-      if (templateGenerated === null) {
-        return { ...checked, ok: false, message: '无法读取 template.yaml 生成标记；原文件未改写' };
-      }
+      templateGenerated = templateRead.generated;
     }
 
     let templateWrite = null;
@@ -7040,7 +6980,6 @@ KANO_WRITE_CHECK_EOF
         echo
         echo "__HTTP_CODE:\${HTTP_CODE:-000}__"
         echo "__CURL_STATUS:\${CURL_STATUS:-1}__"
-        rm -f ${shellQuote(outFile)} ${shellQuote(errFile)}
         if [ "$CURL_STATUS" -eq 0 ] && [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
           exit 0
         fi
@@ -7184,7 +7123,7 @@ KANO_WRITE_CHECK_EOF
         return { ok: true, repaired: configChanged };
       }
       let disk = await inspectZashboardDisk();
-      if (disk.ok) return { ok: true, repaired: configChanged || !!corePid };
+      if (disk.ok) return { ok: true, repaired: configChanged };
       if (!corePid) return { ok: false, message: 'Zashboard 文件身份异常，核心未运行，无法在线修复' };
 
       const upgraded = await callMihomoApi('/upgrade/ui', 'POST', null, info, 60, { corePid });
@@ -7364,10 +7303,10 @@ KANO_WRITE_CHECK_EOF
       errorType: 'invalid_subscription_url',
     })));
   }
-  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载组件未就绪；请先修复组件'})));
+  if (!(await ensureCompatBackend())) return buildProviderUpdateResult(clean.map(s => ({type:'proxy-provider',name:s.name,ok:false,attempts:1,proxyCount:null,statusCode:0,message:'订阅下载组件未就绪；请先修复组件',errorType:'local_components_missing',rawMessage:'',cacheAvailable:null})), {ok:false,via:'local',committed:false,message:'订阅下载组件未就绪；请先修复组件'});
   const path = '/data/kano_compat_fetch_' + Date.now() + '_' + createRandomString(6) + '.json';
   const staged = await stageTextBesideTarget(path, JSON.stringify({ sources: clean.map(s => ({name:s.name,url:s.url})), userAgent: await loadProviderUserAgent() }), 'subscription request');
-  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({name:s.name,ok:false,message:'订阅下载请求暂存失败；请检查设备连接与可用空间'})));
+  if (!staged.ok) return buildProviderUpdateResult(clean.map(s => ({type:'proxy-provider',name:s.name,ok:false,attempts:1,proxyCount:null,statusCode:0,message:'订阅下载请求暂存失败；请检查设备连接与可用空间',errorType:'local_stage_failed',rawMessage:'',cacheAvailable:null})), {ok:false,via:'local',committed:false,message:'订阅下载请求暂存失败；请检查设备连接与可用空间'});
   let r;
   try {
     operationStage('下载并验证订阅');
@@ -7450,13 +7389,11 @@ KANO_WRITE_CHECK_EOF
     return mergeLocalConversionReloadResult(conversion, runtimeReload);
   };
 
-  const readCurrentModeStatus = async () => readStatusSnapshot();
-
   let ruleModeStatusRequestId = 0;
   const refreshRuleModeStatus = async () => {
     if (!document.querySelector('#mm_rule_mode_status')) return null;
     const requestId = ++ruleModeStatusRequestId;
-    const status = await readCurrentModeStatus();
+    const status = await readStatusSnapshot();
     if (requestId != ruleModeStatusRequestId) return status;
     const el = document.querySelector('#mm_rule_mode_status');
     if (!el) return status;
@@ -7539,7 +7476,6 @@ KANO_WRITE_CHECK_EOF
         ? runtimeSnapshot : await readStatusSnapshot();
       const pid = String(snapshot.corePid || '');
       if (requestId !== runningStatusRequestId) return !!pid;
-      if (label) label.title = [snapshot.processError, snapshot.configError, snapshot.optionsError, snapshot.apiError, snapshot.networkWarning].filter(Boolean).join('\n');
       if (snapshot.processReadStatus === 'unavailable') {
         renderRuntimeStatus('unknown', '猫猫 - 进程状态无法读取', label);
         return false;
@@ -7561,7 +7497,6 @@ KANO_WRITE_CHECK_EOF
         apiOk ? '猫猫 - API 正常' : pid ? '猫猫 - API 未通' : '猫猫 - 已停止', label);
       return !!pid;
     } catch (error) {
-      if (requestId === runningStatusRequestId && label) label.title = f50Error(error?.message || error);
       if (requestId === runningStatusRequestId) renderRuntimeStatus('unknown', '猫猫 - 状态无法读取', label);
       return false;
     }
@@ -8300,13 +8235,13 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         fi
         listen=0
         if command -v ss >/dev/null 2>&1; then
-          ss -lnt 2>/dev/null | grep -Eq '(^|[.:])7788[[:space:]]' && listen=1
+          ss -lnt 2>/dev/null | grep -Eq '(^|[.:])${F50_PORTS.controller}[[:space:]]' && listen=1
         elif command -v netstat >/dev/null 2>&1; then
-          netstat -lnt 2>/dev/null | grep -Eq '(^|[.:])7788[[:space:]]' && listen=1
+          netstat -lnt 2>/dev/null | grep -Eq '(^|[.:])${F50_PORTS.controller}[[:space:]]' && listen=1
         else
-          awk '$2 ~ /:1E6C$/ && $4 == "0A" {found=1} END {exit found ? 0 : 1}' /proc/net/tcp /proc/net/tcp6 2>/dev/null && listen=1
+          awk '$2 ~ /:${F50_PORTS.controller.toString(16).toUpperCase()}$/ && $4 == "0A" {found=1} END {exit found ? 0 : 1}' /proc/net/tcp /proc/net/tcp6 2>/dev/null && listen=1
         fi
-        echo "PORT_7788=$listen"
+        echo "PORT_CONTROLLER=$listen"
         if [ -s "$CORE" ]; then
           core_size="$(wc -c < "$CORE" 2>/dev/null | tr -d ' ')"
           magic=""
@@ -8407,7 +8342,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     if (!pid) problems.push('核心未运行');
     else {
       if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
-      if (proc.PORT_7788 != '1') problems.push('7788 未监听');
+      if (proc.PORT_CONTROLLER != '1') problems.push(F50_PORTS.controller + ' 未监听');
       if (!versionRes.success) problems.push('控制 API 不可用');
       if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
     }
@@ -8424,7 +8359,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const rows = [
       ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
       ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
-      ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_7788 == '1' ? '7788 已监听' : '7788 未监听'}`],
+      ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_CONTROLLER == '1' ? F50_PORTS.controller + ' 已监听' : F50_PORTS.controller + ' 未监听'}`],
       ['控制 API', apiLabel],
       ['运行配置', `${modeLabel} · ${ipv6Label} · ${configLabel}`],
       ['Web 面板', health.panel],
@@ -8645,12 +8580,10 @@ btn_disabled.onclick = async () => {
       proxyDomain: [],
       rejectDomain: [],
     };
-    if (res.success) {
-      String(res.content || '').split('\n').forEach((line) => {
-        const match = line.match(/^KANO_POLICY_(options|deviceBypass|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
-        if (match) sections[match[1]].push(match[2]);
-      });
-    }
+    String(res.content || '').split('\n').forEach((line) => {
+      const match = line.match(/^KANO_POLICY_(options|deviceBypass|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
+      if (match) sections[match[1]].push(match[2]);
+    });
     return {
       options: parsePolicyOptionsText(sections.options.join('\n')),
       deviceBypass: sections.deviceBypass.join('\n'),
@@ -8760,8 +8693,8 @@ btn_disabled.onclick = async () => {
   };
 
   const kprBaseSavePolicyState = async (state, { apply = true } = {}) => {
-    if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(state.options.tun_stack || 'auto') || !Number.isInteger(Number(state.options.dns_port)) || Number(state.options.dns_port) < 1 || Number(state.options.dns_port) > 65535) {
-      createToast('流量模式或 DNS 端口无效', 'red', 8000);
+    if (!state.options || !['tproxy', 'tun', 'off'].includes(state.options.traffic_mode) || !['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(state.options.tun_stack || 'auto')) {
+      createToast('流量模式或 TUN 协议栈无效', 'red', 8000);
       return false;
     }
     const normalizedDevice = normalizeDeviceBypassText(state.deviceBypass || '');
@@ -8774,17 +8707,13 @@ btn_disabled.onclick = async () => {
       .filter(Boolean)
       .filter((item, index, array) => array.indexOf(item) == index);
     const macMirrorText = state.options.traffic_mode === 'tproxy' ? macMirrorRows.join('\n') + (macMirrorRows.length ? '\n' : '') : '';
-    const trafficMode = ['tproxy', 'tun', 'off'].includes(state.options.traffic_mode)
-      ? state.options.traffic_mode
-      : 'tproxy';
+    const trafficMode = state.options.traffic_mode;
     const transparent = trafficMode == 'tproxy' ? 'on' : 'off';
     const ipv6 = state.options.ipv6 == 'on' ? 'on' : 'off';
     const quicBlock = state.options.quic_block == 'on' ? 'on' : 'off';
     const dnsHijack = ['tproxy', 'tun'].includes(trafficMode) && state.options.dns_hijack == 'on' ? 'on' : 'off';
-    const requestedDnsPort = Number(state.options.dns_port);
-    const dnsPort = Number.isInteger(requestedDnsPort) && requestedDnsPort >= 1 && requestedDnsPort <= 65535
-      ? String(requestedDnsPort)
-      : String(F50_PORTS.dns);
+    // DNS 端口由插件固定，不接受配置；见 parsePolicyOptionsText。
+    const dnsPort = String(F50_PORTS.dns);
     const proxyGroup = String(state.options.proxy_group || 'Proxy').replace(/[\r\n]/g, '').trim() || 'Proxy';
     const subRuleMode = await readCurrentSubRuleMode();
     const optionsText = [
@@ -8867,7 +8796,7 @@ btn_disabled.onclick = async () => {
         ${syncSafePolicyFilesCmd()}
         write_policy_file ${shellQuote(CLASH_POLICY_OPTIONS_FILE)} 600 ${shellQuote(optionsText)}
         write_policy_file ${shellQuote(CLASH_SUB_RULE_MODE_FILE)} 600 ${shellQuote(`KANO_SUB_RULE_MODE=${subRuleMode}\n`)}
-        ${bootEnabled ? addPolicyToolsBootLineCmd() : ''}
+        ${bootEnabled ? addBootLinesCmd() : ''}
         echo POLICY_STATE_COMMITTED
         ${apply ? `
         set +e
@@ -9095,7 +9024,7 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS 劫持</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 Mihomo DNS 端口 <input id="mm_policy_dns_port" readonly disabled title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
+                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 Mihomo DNS 端口 <input id="mm_policy_dns_port" readonly title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
                   </div>
                 </div>
               </section>
@@ -9227,28 +9156,24 @@ btn_disabled.onclick = async () => {
           addIp.style.fontSize = '.58rem';
           addIp.dataset.ip = ip || '';
           addIp.textContent = '添加 IP';
+          addIp.onclick = () => appendDeviceBypassValue(ip || '');
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
           addMac.title = '将包含此 MAC 的全部 IPv4/IPv6 地址；若为下级路由器，可能代表多台设备';
           addMac.style.fontSize = '.58rem';
           addMac.dataset.mac = mac || '';
           addMac.textContent = '添加 MAC';
+          addMac.onclick = async () => {
+            const value = normalizeMac(mac);
+            if (!value || get('#mm_policy_device').disabled) return;
+            const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。');
+            if (yes) appendDeviceBypassValue(value);
+          };
           row.appendChild(ipEl);
           row.appendChild(macEl);
           row.appendChild(addIp);
           row.appendChild(addMac);
           box.appendChild(row);
-        });
-        Array.from(box.querySelectorAll('.add_ip')).forEach((btn) => {
-          btn.onclick = () => appendDeviceBypassValue(btn.dataset.ip);
-        });
-        Array.from(box.querySelectorAll('.add_mac')).forEach((btn) => {
-          btn.onclick = async () => {
-            const value = normalizeMac(btn.dataset.mac);
-            if (!value || get('#mm_policy_device').disabled) return;
-            const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。');
-            if (yes) appendDeviceBypassValue(value);
-          };
         });
       } catch (error) {
         setText(box, error.message || String(error));
@@ -9281,7 +9206,6 @@ btn_disabled.onclick = async () => {
       }
     };
     const panel = el.querySelector('[data-policy-panel="private"]');
-    if (!panel) return;
     const card = document.createElement('div');
     card.className = 'kp-card';
     card.innerHTML = '<div class="kp-card-title">私网定向代理</div>' +
@@ -9295,7 +9219,8 @@ btn_disabled.onclick = async () => {
     panel.appendChild(card);
     const feature = KPR.fromOptions(state.options);
     get('#kpr_enabled').checked = feature.enabled;
-    get('#kpr_cidrs').value = feature.cidrs.join('\n') || '192.168.11.0/24';
+    // 空值留空：placeholder 已给出示例，注入示例网段会被当作真实数据保存。
+    get('#kpr_cidrs').value = feature.cidrs.join('\n');
     const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     const names = config.ok ? [...(config.value['proxy-groups'] || []), ...(config.value.proxies || [])]
       .filter((p) => p && p.name && !['direct', 'reject'].includes(String(p.type || '').toLowerCase())).map((p) => p.name) : [];
@@ -9308,14 +9233,20 @@ btn_disabled.onclick = async () => {
     }
     get('#kpr_policy').value = feature.policy || (names.includes('家宽') ? '家宽' : '');
     get('#kpr_status').onclick = async () => {
-      const response = await runShellWithRoot('if [ -x ' + shellQuote(CLASH_POLICY_SCRIPT) + ' ]; then ' + shellQuote(CLASH_POLICY_SCRIPT) + ' private-status; else echo PRIVATE_ROUTE_SCRIPT_MISSING; fi', 15000);
-      let liveStatus;
+      const statusButton = get('#kpr_status');
+      setButtonBusy(statusButton, true, '检查中…');
       try {
-        const savedOptions = await kprReadOptions();
-        const leaf = await kprVerifySelection(savedOptions);
-        liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
-      } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
-      showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
+        const response = await runShellWithRoot('if [ -x ' + shellQuote(CLASH_POLICY_SCRIPT) + ' ]; then ' + shellQuote(CLASH_POLICY_SCRIPT) + ' private-status; else echo PRIVATE_ROUTE_SCRIPT_MISSING; fi', 15000);
+        let liveStatus;
+        try {
+          const savedOptions = await kprReadOptions();
+          const leaf = await kprVerifySelection(savedOptions);
+          liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
+        } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
+        showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
+      } finally {
+        setButtonBusy(statusButton, false);
+      }
     };
     get('#mm_policy_save_apply').onclick = async () => {
       const token = acquireCriticalOperation('保存网络与私网设置');
@@ -9330,7 +9261,7 @@ btn_disabled.onclick = async () => {
           tun_stack: get('#mm_policy_tun_stack').value,
           quic_block: get('#mm_policy_quic').checked ? 'on' : 'off',
           dns_hijack: get('#mm_policy_dns').checked ? 'on' : 'off',
-          dns_port: get('#mm_policy_dns_port').value,
+          dns_port: String(F50_PORTS.dns),
           private_route_enabled: selected.enabled ? 'on' : 'off',
           private_route_cidrs: selected.cidrs.join(' '),
           private_route_policy: selected.policy,
@@ -9344,7 +9275,7 @@ btn_disabled.onclick = async () => {
         get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
         get('#mm_policy_device').value = state.deviceBypass || '';
         get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
-        get('#kpr_cidrs').value = state.options.private_route_cidrs || '';
+        get('#kpr_cidrs').value = String(state.options.private_route_cidrs || '').trim().split(/\s+/).filter(Boolean).join('\n');
         get('#kpr_policy').value = state.options.private_route_policy || '';
         get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
       } catch (error) {
@@ -9377,7 +9308,7 @@ btn_disabled.onclick = async () => {
   }
   const refresh = await Promise.allSettled([
     buildControllerInfo({fresh:true}), isMMRunning(),
-    typeof refreshDashboardAfterModeChange === 'function' ? refreshDashboardAfterModeChange() : Promise.resolve(),
+    refreshDashboardAfterModeChange(),
   ]);
   result.warnings = refresh.filter(item => item.status === 'rejected').map(item => f50Diagnostic(item.reason?.message || String(item.reason)).summary);
   createToast(result.summary, result.panelFailed ? 'yellow' : 'green');
@@ -10041,7 +9972,7 @@ EOF_F50_RESTORE_MEMBERS
       const iframe = document.querySelector('#mm_iframe');
       if (!iframe) return;
       const currentSrc = iframe.getAttribute('src');
-      if (!forceReload && currentSrc && currentSrc != 'about:blank' && currentSrc != 'javascript:;') return;
+      if (!forceReload && currentSrc && currentSrc != 'about:blank') return;
       const requestId = ++panelLoadRequestId;
       const url = await buildPanelUrl();
       if (requestId == panelLoadRequestId && isWebPanelVisible()
@@ -10218,7 +10149,6 @@ EOF_F50_RESTORE_MEMBERS
           close();
         });
       };
-      input.focus();
     };
 
     const rescueBtn = document.createElement('button');
@@ -10557,7 +10487,7 @@ EOF_F50_RESTORE_MEMBERS
   const cleanSources = normalizeSubSourceList(sources), cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   const [read, meta, ua] = await Promise.all([
-    readYamlObject(CLASH_CONFIG, 'config.yaml', { allowDownload: false }),
+    readYamlObject(CLASH_CONFIG, 'config.yaml'),
     runShellWithRoot(`
       [ ! -r ${shellQuote(CLASH_SUB_URLS)} ] || sed -n -e 's/^# KANO_SUB_RULE_MODE=/mode=/p' -e 's/^# KANO_SUB_CONVERT_MODE=/convert=/p' ${shellQuote(CLASH_SUB_URLS)}
       [ ! -r ${shellQuote(CLASH_CONFIG_SOURCE_FILE)} ] || sed -n 's/^KANO_CONFIG_SOURCE=/source=/p' ${shellQuote(CLASH_CONFIG_SOURCE_FILE)}
@@ -10911,7 +10841,7 @@ EOF_F50_RESTORE_MEMBERS
 
     const readCurrentSubSources = async ({ includeDisabled = false } = {}) => {
       const source = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
+        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s cat ${shellQuote(CLASH_SUB_URLS)}; fi
         `);
       if (!source.success) {
         createToast(`无法读取订阅源；旧配置迁移未执行。<br>${safeTextToHtml(source.content || '')}`, 'red', 9000);
@@ -10926,7 +10856,7 @@ EOF_F50_RESTORE_MEMBERS
         || ['subscription_original', 'uploaded_config'].includes(await readConfigSource())) return [];
 
       const res = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_CONFIG)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_CONFIG)}; fi
+        if [ -f ${shellQuote(CLASH_CONFIG)} ]; then timeout 5s cat ${shellQuote(CLASH_CONFIG)}; fi
         `);
       if (!res.success || !res.content) return await migrateLegacySubscriptionSources({ showToast: true });
       const legacySources = parseLegacySubConfig(res.content);
@@ -11173,7 +11103,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const res = await runShellWithRoot(`
         FILE=${shellQuote(allowedFile.path)}
         if [ -f "$FILE" ]; then
-          timeout 8s awk '{print}' "$FILE"
+          timeout 8s cat "$FILE"
         else
           echo __KANO_FILE_MISSING__
         fi
@@ -11539,7 +11469,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           ? '旧订阅原配置已保留；保存并更新时需确认迁移，旧文件会备份'
           : '使用插件本地模板的规则和策略组');
       };
-      ruleModeSelect.onchange = syncRuleMode;
 
       const addSubRow = (source = {}, index = rowsEl.children.length) => {
         const row = document.createElement('div');
@@ -11565,7 +11494,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         input.style.background = '#111827';
         input.style.color = '#dbeafe';
         input.value = source.url || '';
-        input.addEventListener('input', syncRuleMode);
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'mm_sub_toggle_btn';
         toggleBtn.style.fontSize = '.64rem';
@@ -11580,7 +11508,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         toggleBtn.onclick = () => {
           row.dataset.enabled = row.dataset.enabled == 'false' ? 'true' : 'false';
           syncToggleState();
-          syncRuleMode();
         };
         const removeBtn = document.createElement('button');
         removeBtn.className = 'mm_sub_remove_btn';
@@ -11592,18 +11519,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             input.value = '';
             row.dataset.enabled = 'true';
             syncToggleState();
-            syncRuleMode();
             return;
           }
           row.remove();
-          syncRuleMode();
         };
         row.appendChild(input);
         row.appendChild(toggleBtn);
         row.appendChild(removeBtn);
         rowsEl.appendChild(row);
         syncToggleState();
-        syncRuleMode();
       };
 
       if (currentSources.length > 0) {
@@ -11611,7 +11535,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       } else {
         addSubRow();
       }
-      ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       syncRuleMode();
       addBtn.onclick = () => addSubRow();
       clearBtn.onclick = async () => {
@@ -11657,7 +11580,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                 && await askConfirm('mm_sub_migrate_legacy', '迁移到本地模板？', '旧配置及来源文件会备份；校验或启动失败时恢复旧状态。', '迁移并更新', '取消') },
           );
 
-          operationFinish(success);
           if (success) {
             close();
           }
@@ -11693,13 +11615,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       setButtonBusy(updateSubBtn, true, '更新中\u2026');
       try {
         operationStage('检查订阅');
-        if (!(await ensureReady({ readOnly: true }))) { operationFinish(false); return; }
+        if (!(await ensureReady({ readOnly: true }))) return;
         const ruleMode = await readCurrentSubRuleMode();
         if (await readConfigSource() == 'uploaded_config') {
+          // 空来源走 updateSubProviders 的早退路径，内部不会 operationFinish，由这里收尾。
           operationFinish(await updateSubProviders([]));
           return;
-        }
-        const storedSources = await readCurrentSubSources({ includeDisabled: true });
+        }        const storedSources = await readCurrentSubSources({ includeDisabled: true });
         const sources = normalizeSubSourceList(storedSources);
         validateSubscriptionMode(storedSources, ruleMode);
         const convertMode = await readSavedSubConvertMode();
@@ -11715,8 +11637,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           }
         }
         createToast('正在检查订阅并选择更新方式…', 'yellow');
-        const updated = await updateSubProviders(sources, ruleMode, convertMode);
-        operationFinish(updated);
+        // 早退路径由外层兜底收尾；内部已带详情的收尾优先（operationFinish 首写为准）。
+        operationFinish(await updateSubProviders(sources, ruleMode, convertMode));
       } catch (error) {
         if (error?.name === 'OperationCancelled') return;
         operationFinish(false, error.message || String(error));
@@ -12142,7 +12064,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     quickRunBtn.textContent = '安装/启动';
     quickRunBtn.onclick = async ()=>{
  if(!(await ensureAdvanced()))return false;
- const r=await runShellWithRoot('test -s /data/clash/Scripts/Clash.Service && test -x /data/clash/Scripts/clashctl_arm64',4000);
+ const r=await runShellWithRoot(`test -s ${CLASH_SERVICE} && test -x ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)}`,4000);
  if(!r.success)return await installF50PackageFromNetwork();
  return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
 };
@@ -12226,8 +12148,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           const started=await f50GistDispatch(action,request);
           if(!started.ok || !started.job){result(f50GistMessage(started.code));return;}
           currentJob=started.job;
-          result(action==='sync'?'正在同步…':'正在处理…');
-          while(opened){
+          while(opened && el.isConnected){
             const job=await f50GistExec(['job',currentJob],8000);
             if(!opened)break;
             if(job.status==='finished'){
@@ -12256,7 +12177,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       q('test').onclick=()=>formAction('test');
       q('save').onclick=()=>formAction('save');
       q('sync').onclick=()=>settingsLoaded ? launch('sync',{revision,replaceLocal:true,expectedLocal:currentFingerprint}) : result('请先保存 Gist 设置。');
-      q('refresh').onclick=()=>{if(window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return refresh(true);};
+      q('refresh').onclick=async()=>{
+        if(!window.confirm('重读已保存的设置？当前未保存的输入会丢失。'))return;
+        busy(true);
+        try {await refresh(true);} finally {if(opened)busy(false);}
+      };
       q('leave').onclick=async()=>{
         if(!window.confirm('退出 Gist 管理并关闭自动同步？保留当前配置及已保存私钥。'))return;
         busy(true);
@@ -12264,12 +12189,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         catch(error){result(error.message || '退出 Gist 管理失败');}
         finally{if(opened)busy(false);}
       };
-      q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
+      q('cancel').onclick=async()=>{
+        if(!currentJob)return;
+        busy(true);
+        try{
+          const r=await f50GistExec(['cancel',currentJob],15000);
+          result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));
+          await refresh(false);
+        } finally {if(opened)busy(false);}
+      };
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
-      const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
-      observer.observe(document.body,{childList:true,subtree:true});
       await refresh(true);
     };
     const mmBox = document.querySelector('#mm_action_box');
@@ -12295,21 +12226,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
     appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
-    let bootProbeLoaded = false;
-    let bootProbePending = false;
-    coreGroup.addEventListener('toggle', async () => {
-      if (!coreGroup.open || bootProbeLoaded || bootProbePending) return;
-      bootProbePending = true;
-      try {
-        const isBootUp = await checkIsBootUp();
-        boot_on.style.background = isBootUp ? 'var(--dark-btn-color-active)' : '';
-        bootProbeLoaded = true;
-      } catch (e) {
-        console.error('无法读取猫猫自启状态', e);
-      } finally {
-        bootProbePending = false;
-      }
-    });
 
     let colTimer = null;
     let colTimer1 = null;

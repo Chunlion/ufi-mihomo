@@ -2,7 +2,7 @@
   "network": {
     "scan": {
       "before": "04d2c5799270b54a5dc36a5009430717000c117dfda3b0222e45f87b94e39655",
-      "after": "7ca2bd15e8e9dc42033a8bfb8bfbee0ff72c754050fd14163f8e77f2c5afc069"
+      "after": "93494f3d322dbff89755234d5612ff87b210e706143873b7a9dd4b5074cef2de"
     },
     "artifact_paths": {
       "before": "0693984381de59b9c96e7c1a3da2f960d415e48f9e7e9a40012b00beea328aa2",
@@ -10,29 +10,37 @@
     },
     "remove_artifacts": {
       "before": "b0c51290bd379f1a0bafc4f1300d3aba30f9e0867d6992b4b8654d346f4f6373",
-      "after": "0be0b368b110f602815a07530bead65ebea771c7eb4d60cd061780ec471799ad"
+      "after": "d6a0f12ee6769bf1527f15cb4b097a52878fdcdb8ff0a2a8324cb52261d1cb69"
     },
     "runtime_guard": {
       "before": "a42be0fcfeea163bb4c1b69047c68151d7d4df72e27c4da88058e2092257c585",
       "after": "f07b61854be7967049cc5bc83eff430a4f9f44c596c5b9a2a34dad1c66d6d21a"
+    },
+    "firewall_plan": {
+      "before": "47ee03167993adce51f95c84bc805806e277c059d326a2a4be8ef8db3b16baba",
+      "after": "36c88fc5c1c55f9c912c891c9db36c4128c051969d76994c028965443ff12c1f"
+    },
+    "disable_unsupported_ipv6_dns_hijack": {
+      "before": "f53d6ebc510a149aeab3b1e898040005c88e6b3db54bcd217a01e6280e159bfb",
+      "after": "7495279ffdea183f8227a0367f92453e5df013997c11a9ca3519e8c61cd1231b"
     }
   },
   "operations": {
     "inspect": {
       "before": "a16eb3d7e45f1874a5559f7b8d3646629d5c9eeb0fc67ba50ab0105b52dfb7c8",
-      "after": "801b9849cd7e6df57cd7f1e2ad92840e308f3d33045e7b33167765ac381d2d14"
+      "after": "2d7304a496d4bc0af4124cfc316bb748cad1f69bb3f6a320a81f3d813087b1e9"
     },
     "cleanup": {
       "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
-      "after": "6e5434e5da18c37bc1cbba14b2b2adcde69b813fb08be93b80d936a7b47821c0"
+      "after": "63fbcf42ad8779f49a8b0e4254d91d3e55a484fe12de92febf53d0d4dd91389d"
     },
     "final": {
       "before": "b42c7d9ba116c2aba0c4a043b6b9b16d8a10464ea4895719faf8781b5d2df1e0",
-      "after": "130eb29998ea2ac88520af19ab3e50093c35232f731565c1473234cd7ccc0f7e"
+      "after": "34188332c0563a352747aadf323736eccf1099066f015cff6988576159ee2692"
     },
     "uninstall": {
       "before": "7e7378f896aaf8b8b504fddabd8d0fc8a0ee13d8f1889af6458c907831f89827",
-      "after": "d06d4240feb51da9cf14efd0536de8f9b344ddbdc762f3175aeb6649ff5d4a69"
+      "after": "1d34d759de1b6c86629464c883742ef557ea1f7a15172667f167d8a2ff276bdb"
     }
   },
   "labels": {
@@ -70,7 +78,6 @@
     "controller_protocol_mismatch": "控制器与当前页面的接口版本不兼容；请使用配套的 JS 与组件包。",
     "service_protocol_mismatch": "服务脚本与控制器版本不配套；请使用同一套组件包。",
     "panel_candidate_rejected": "组件包中的面板不是有效的 Zashboard；已保留原面板。",
-    "panel_postcheck_failed": "Zashboard 替换后校验未通过；已回滚本次安装。",
     "missing_service_wrapper": "组件包缺少启动包装器 Clash.Service；安装已停止。",
     "service_patch_failed": "启动组件更新失败；请重新安装组件包。",
     "invalid_subscription": "订阅地址未配置或无效；请填写不含账号信息的 HTTP 或 HTTPS 订阅地址。",
@@ -106,6 +113,7 @@
     "tun6_route_query_failed": "无法查询 IPv6 路由表；请检查设备 ip 命令与权限。"
   },
   "removedLabels": [
-    "controller_http_patch_unknown_build"
+    "controller_http_patch_unknown_build",
+    "panel_postcheck_failed"
   ]
 }

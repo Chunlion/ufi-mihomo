@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const source = fs.readFileSync(path.resolve(__dirname, '../..', '猫猫TProxy.js'), 'utf8');
-const constants = source.match(/  const CLASH_PACKAGE_(?:URL|FALLBACK_URL|REPO_URL) = [^\r\n]+/g).join('\n');
+const constants = source.match(/  const CLASH_PACKAGE_(?:URL|PRIMARY_URL|REPO_URL) = [^\r\n]+/g).join('\n');
 const start = source.indexOf('  const downloadCoreArchive = async');
 const end = source.indexOf('  const setButtonBusy =', start);
 

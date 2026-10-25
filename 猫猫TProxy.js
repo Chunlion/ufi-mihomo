@@ -5272,26 +5272,6 @@ exit "$kano_task_rc"`;
 
   
 
-  const setSubRuleMode = async (mode = SUB_RULE_MODE_TEMPLATE) => {
-    const cleanMode = normalizeSubRuleModeValue(mode);
-    const current = await runShellWithRoot(`
-        if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
-        `, 10 * 1000);
-    if (!current.success) {
-      createToast(`无法读取规则模式状态<br>${safeTextToHtml(current.content || '')}`, 'red', 9000);
-      return false;
-    }
-    const storedSources = parseStoredSubSourcesFromText(current.content || '');
-    const convertMode = await readSavedSubConvertMode();
-    const saved = await persistSubSourceState(storedSources, cleanMode, convertMode, { allowEmpty: true });
-    if (!saved) {
-      createToast('规则模式状态写入失败', 'red', 9000);
-    }
-    return saved;
-  };
-
-
-
   const readSavedSubSourcesForTemplate = async () => {
     const res = await runShellWithRoot(`
         if [ -f ${shellQuote(CLASH_SUB_URLS)} ]; then timeout 5s awk '{print}' ${shellQuote(CLASH_SUB_URLS)}; fi
@@ -10963,27 +10943,7 @@ EOF_F50_RESTORE_MEMBERS
       return await migrateLegacySubscriptionSources({ showToast: true });
     };
 
-    const writeSubConfigByMode = async (
-      sources,
-      mode = SUB_RULE_MODE_TEMPLATE,
-      { backup = true, convertMode = SUB_CONVERT_MODE_PROVIDER } = {},
-    ) => {
-      const cleanMode = normalizeSubRuleModeValue(mode);
-      const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
-      const cleanSources = normalizeSubSourceList(sources);
-      appendTemplateFlowDebug(`enter writeSubConfigByMode mode=${cleanMode} convert=${cleanConvertMode} sources=${cleanSources.length}`);
-      validateSubscriptionMode(cleanSources, cleanMode);
-      if (!(await setSubRuleMode(cleanMode))) return false;
-      if (!(await ensureTemplateProviders(cleanSources, { forceTemplate: true }))) {
-        appendTemplateFlowDebug('writeSubConfigByMode template failed at ensureTemplateProviders');
-        return false;
-      }
-      const ok = await writeSubEntrypoint(cleanSources, { backup, convertMode: cleanConvertMode });
-      appendTemplateFlowDebug(`leave writeSubConfigByMode template ok=${ok ? '1' : '0'}`);
-      return ok;
-    };
-
-    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, migrateLegacy = false, onProviderUpdate = null } = {}) => {
+    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, applyTemplate = false, migrateLegacy = false, onProviderUpdate = null } = {}) => {
   const cleanMode = normalizeSubRuleModeValue(mode);
   const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   let storedSources, cleanSources;
@@ -11004,7 +10964,7 @@ EOF_F50_RESTORE_MEMBERS
   }
   operationStage('检查订阅和配置来源', 0, 5);
   const configSource = await readConfigSource();
-  if (configSource === 'uploaded_config') {
+  if (configSource === 'uploaded_config' && !applyTemplate) {
     const gist = await f50GistManaged();
     if (gist) return await f50GistUpdateSources(gist, storedSources);
   }
@@ -11045,7 +11005,8 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
       if (onProviderUpdate) onProviderUpdate(conversion);
       if (conversion.failed > 0) throw new Error((conversion.providers || []).find((item) => !item.ok)?.message || '本地订阅转换失败');
     }
-    if (!(await writeSubConfigByMode(cleanSources, cleanMode, { backup: false, convertMode: cleanConvertMode }))) {
+    if (!(await ensureTemplateProviders(cleanSources, { forceTemplate: true }))
+      || !(await writeSubEntrypoint(cleanSources, { backup: false, convertMode: cleanConvertMode }))) {
       throw new Error('订阅配置生成失败');
     }
     operationStage('停止并启动已校验的新配置', 2, 5);
@@ -11155,40 +11116,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         createToast(hasTemplate
           ? '正在按配置模板生成 config.yaml…'
           : '正在按默认 F50 模板生成 config.yaml…', 'yellow');
-        const rollbackPath = await createConfigRollbackPoint('template_rebuild_sources');
-        if (rollbackPath === null) {
-          createToast('无法创建 config.yaml 回滚点；模板未应用。', 'red', 9000);
-          return false;
-        }
-        if (!(await ensureTemplateProviders(sources, { forceTemplate: true, showToast: true }))) return false;
-        let localConversion = null;
-        if (currentConvertMode == SUB_CONVERT_MODE_LOCAL) {
-          localConversion = await convertSubscriptionsLocally(sources);
-          if (localConversion.failed > 0) {
-            const failed = localConversion.providers.find((item) => !item.ok);
-            createToast(`${escapeHtml(failed && failed.name || '订阅')}：${escapeHtml(failed && failed.message || '本地转换失败')}；运行配置未修改`, 'red', 9000);
-            return false;
-          }
-        }
-        if (!(await writeSubEntrypoint(sources, {
-          backup: true,
-          convertMode: currentConvertMode,
-        }))) {
-          await restoreConfigRollbackPoint(rollbackPath, '应用配置模板');
-          return false;
-        }
-        const restarted = await restartClashWithConfigRollback(rollbackPath, '应用配置模板');
-        if (restarted) {
-          const providerUpdate = currentConvertMode == SUB_CONVERT_MODE_LOCAL
-            ? await reloadLocalSubscriptionProviders(sources, localConversion)
-            : await forceUpdateProvidersFromConfig({ showToast: false });
-          if (currentConvertMode == SUB_CONVERT_MODE_PROVIDER && providerUpdateNeedsLocalFallback(providerUpdate)) {
-            const fallback = await switchHttpProviderToLocal(sources, currentMode, { reason: 'HTTP 390' });
-            return fallback.ok;
-          }
-          await showSubscriptionUpdateSelfCheck(sources, currentMode, providerUpdate, null, currentConvertMode);
-        }
-        return restarted;
+        return await saveSubSources(storedSources, currentMode, currentConvertMode, { applyToCustom: true, applyTemplate: true });
       }
 
       if (!(await applyJsOverrideToTemplate({

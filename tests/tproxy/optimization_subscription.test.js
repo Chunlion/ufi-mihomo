@@ -6,6 +6,28 @@ const sources = [{ url: 'https://one.example/sub', name: 'Provider1' }, { url: '
 const result = (failed = false) => ({ ok: !failed, failed: failed ? 1 : 0,
   providers: sources.map(s => ({ name: s.name, ok: !failed, message: failed ? 'failed' : '', proxyCount: failed ? 0 : 2 })) });
 
+for (const convertMode of ['provider', 'local']) for (const saved of [true, false]) {
+  test(`applying the subscription template uses the save transaction / ${convertMode} / ${saved}`, async () => {
+    const calls = [], stored = [...sources, { url: 'https://disabled.example/sub', enabled: false }];
+    const apply = subscriptionApi(slice('const overwriteConfigByTemplate = async', 'const readEditableLocalFile = async') + 'overwriteConfigByTemplate', {
+      readConfigSource: async () => 'template.yaml', readCurrentSubSources: async () => stored,
+      readCurrentSubRuleMode: async () => 'template',
+      runShellWithRoot: async () => ({ success: true, content: '# KANO_SUB_CONVERT_MODE=' + convertMode + '\n' }),
+      inspectConfigNodeSource: async () => ({ ok: true, source: 'saved_subscription' }),
+      hasUserTemplateYaml: async () => true, askConfirm: async () => true,
+      saveSubSources: async (...args) => { calls.push(plain(args)); return saved; },
+      createConfigRollbackPoint: async () => 'rollback', ensureTemplateProviders: async () => true,
+      convertSubscriptionsLocally: async () => result(), writeSubEntrypoint: async () => true,
+      restartClashWithConfigRollback: async () => true,
+      reloadLocalSubscriptionProviders: async () => result(!saved),
+      forceUpdateProvidersFromConfig: async () => result(!saved),
+      providerUpdateNeedsLocalFallback: () => false, showSubscriptionUpdateSelfCheck: async () => saved,
+    });
+    assert.equal(await apply(), saved, 'a provider failure must not report a successful template application');
+    assert.deepEqual(calls, [[stored, 'template', convertMode, { applyToCustom: true, applyTemplate: true }]]);
+  });
+}
+
 test('subscription URLs retain path names and trailing query characters', () => {
   const { normalizeSubUrl, buildSubUrlsFileText, parseStoredSubSourcesFromText } = subscriptionApi('({normalizeSubUrl,buildSubUrlsFileText,parseStoredSubSourcesFromText})');
   for (const url of [
@@ -406,14 +428,14 @@ for (const status of [200, 390, 500]) {
   });
 }
 
-function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local' } = {}) {
+function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local', gistManaged = false } = {}) {
   const dir = temp();
   const constants = { CLASH_DIR: dir, CLASH_PROXY_DIR: path.join(dir, 'Proxy'), CLASH_POLICY_DIR: path.join(dir, 'Policy') };
   for (const [key, file] of Object.entries({ CLASH_CONFIG: 'Proxy/config.yaml', CLASH_SUB_URLS: 'Proxy/subscription_urls.txt',
     CLASH_SUB_RULE_MODE_FILE: 'Tools/sub_rule_mode.conf', CLASH_POLICY_OPTIONS_FILE: 'Policy/options.conf',
     CLASH_CONFIG_SOURCE_FILE: 'Tools/config_source.conf', CLASH_TEMPLATE: 'Tools/template.yaml',
     CLASH_TEMPLATE_BASE: 'Tools/template.base.yaml', CLASH_RULE_OVERRIDE_APPLIED_JSON: 'Tools/rule_override_applied.json' })) {
-    constants[key] = write(dir, file, key === 'CLASH_SUB_URLS' ? '# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=provider\nhttps://one.example/sub Provider1\n' : 'old:' + key);
+    constants[key] = write(dir, file, key === 'CLASH_SUB_URLS' ? '# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=' + convertMode + '\nhttps://one.example/sub Provider1\n' : 'old:' + key);
   }
   for (const s of sources) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'old cache:' + s.name);
   if (legacy) {
@@ -428,19 +450,24 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
   }
   const before = Object.fromEntries(Object.values(constants).filter(f => fs.existsSync(f) && fs.statSync(f).isFile()).map(f => [f, fs.readFileSync(f, 'utf8')]));
   if (!fresh) for (const s of sources) before[path.join(dir, 'Proxy/proxies/' + s.name + '.yaml')] = 'old cache:' + s.name;
-  let restarts = 0, configWrites = 0;
+  let restarts = 0, configWrites = 0, gistUpdates = 0;
   const commands = [];
   const stored = (ruleMode === 'original' ? sources.slice(0, 1) : sources).map(s => ({ ...s, enabled: !disabled }));
   const extra = slice('function validateSubscriptionMode', 'function buildF50CleanupScript')
-    + slice('const fileSnapshotHelpersCmd', 'const setSubRuleMode')
+    + slice('const fileSnapshotHelpersCmd', 'const readSavedSubSourcesForTemplate')
     + slice('const switchHttpProviderToLocal', 'const readLegacySubscriptionSources')
     + slice('const saveSubSources = async', 'const overwriteConfigByTemplate')
-    + '({saveSubSources,switchHttpProviderToLocal})';
+    + slice('const overwriteConfigByTemplate = async', 'const readEditableLocalFile = async')
+    + '({saveSubSources,switchHttpProviderToLocal,overwriteConfigByTemplate})';
   const api = subscriptionApi(extra, {
     ...constants, activeCriticalOperation: null, createRandomString: () => 'fixture',
     validateLocalSubscriptionUrl: () => ({ ok: true }),
     readCurrentSubSources: async () => stored, readConfigSource: async () => legacy ? 'subscription_original' : custom ? 'uploaded_config' : 'template.yaml',
     readCurrentSubRuleMode: async () => legacy ? 'original' : 'template',
+    inspectConfigNodeSource: async () => ({ ok: true, source: 'saved_subscription' }),
+    hasUserTemplateYaml: async () => true, askConfirm: async () => true,
+    f50GistManaged: async () => gistManaged ? { settings: { revision: 1 } } : null,
+    f50GistUpdateSources: async () => { gistUpdates++; return true; },
     runShellWithRoot: async script => {
       const mapped = script.replaceAll('/data/', dir.replace(/\\/g, '/') + '/');
       const r = shell(mapped);
@@ -452,9 +479,14 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
       for (const s of stored.filter(s => s.enabled)) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'new cache');
       return result();
     },
-    writeSubConfigByMode: async (items, mode, options) => {
+    ensureTemplateProviders: async () => {
+      fs.writeFileSync(constants.CLASH_TEMPLATE, 'new template');
+      fs.writeFileSync(constants.CLASH_TEMPLATE_BASE, 'new template base');
+      return failAt !== 'template';
+    },
+    writeSubEntrypoint: async (items, options) => {
       configWrites++;
-      fs.writeFileSync(constants.CLASH_CONFIG, 'new config:' + mode + ':' + options.convertMode);
+      fs.writeFileSync(constants.CLASH_CONFIG, 'new config:template:' + options.convertMode);
       fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=template.yaml\n');
       if (failAt === 'write') throw new Error('config write failed');
       return true;
@@ -467,8 +499,38 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
     invalidateStatusSnapshot() {}, networkRescue: async () => true,
     buildProviderUpdateResult: () => result(), showSubscriptionUpdateSelfCheck: async () => true,
   });
-  return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites,
+  return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites, gistUpdates: () => gistUpdates,
+    apply: () => api.overwriteConfigByTemplate(),
     execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy }) };
+}
+
+for (const convertMode of ['provider', 'local']) {
+  for (const options of [{}, { failAt: 'template' }, { failAt: 'reload' }, { running: false }]) {
+    test(`template application shares rollback and stopped-core behavior / ${convertMode} / ${JSON.stringify(options)}`, async () => {
+      const c = saveCase({ convertMode, ...options });
+      try {
+        assert.equal(await c.apply(), !options.failAt);
+        if (options.failAt) {
+          for (const [file, text] of Object.entries(c.before)) assert.equal(fs.readFileSync(file, 'utf8'), text, file);
+        }
+        if (options.running === false) {
+          assert.equal(c.restarts(), 0);
+          assert.deepEqual(c.commands, ['prepare']);
+        }
+      } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+    });
+  }
+}
+
+for (const applyTemplate of [false, true]) {
+  test('Gist source merge and explicit template application remain distinct / ' + applyTemplate, async () => {
+    const c = saveCase({ custom: true, gistManaged: true });
+    try {
+      assert.equal(await c.api.saveSubSources(c.stored, 'template', 'local', { applyToCustom: true, applyTemplate }), true);
+      assert.equal(c.gistUpdates(), applyTemplate ? 0 : 1);
+      assert.equal(c.configWrites(), applyTemplate ? 1 : 0);
+    } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+  });
 }
 
 test('saving an enabled subscription retains its URL and ignores a disabled source', async () => {
@@ -526,7 +588,7 @@ for (const options of [{ legacy: true }, { legacy: true, migrateLegacy: true },
 }
 
 test('an original header with no URLs prevents automatic legacy-source migration', async () => {
-  const read = subscriptionApi(slice('const readCurrentSubSources = async', 'const writeSubConfigByMode =') + 'readCurrentSubSources', {
+  const read = subscriptionApi(slice('const readCurrentSubSources = async', 'const saveSubSources =') + 'readCurrentSubSources', {
     runShellWithRoot: async () => ({ success: true, content: '# KANO_SUB_RULE_MODE=original\n' }),
     readConfigSource: async () => { throw new Error('header already identifies protected state'); },
     migrateLegacySubscriptionSources: async () => { throw new Error('must not migrate protected state'); },

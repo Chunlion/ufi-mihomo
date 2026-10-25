@@ -111,7 +111,7 @@ test('legacy sources migrate once; saved and custom configurations bypass migrat
     let saved = '', migrations = 0, legacyReads = 0;
     const sources = [{ name: 'Test', url: 'https://example.com/nodes.yaml' }];
     const read = vm.runInNewContext(slice('    const migrateLegacySubscriptionSources =', '    const inspectConfigNodeSource =')
-      + slice('    const readCurrentSubSources =', '    const writeSubConfigByMode =') + '\nreadCurrentSubSources', {
+      + slice('    const readCurrentSubSources =', '    const saveSubSources =') + '\nreadCurrentSubSources', {
       CLASH_SUB_URLS: '/subscriptions', CLASH_CONFIG: '/config', SUB_RULE_MODE_TEMPLATE: 'template',
       shellQuote: quote, normalizeSubSourceList: items => items,
       createToast() {}, appendTemplateFlowDebug() {},

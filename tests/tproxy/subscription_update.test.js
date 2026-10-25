@@ -86,7 +86,7 @@ test('uploaded config in template mode only refreshes its providers', async () =
   assert.equal(refreshed, true);
 });
 
-const configApi = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_COMPAT_VERSION')}
+const configApi = vm.runInNewContext(`${slice('const F50_PORTS', 'const F50_ORIGINAL_MANAGED_KEYS')}
   ${slice('const F50_ORIGINAL_MANAGED_KEYS', 'let f50BackendReady')}
   ${slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later')}
   ({ runtime: createPrivateRouteLogic().runtime, profiles: F50_FIXED_PROFILES, delta: PROFILE_DELTA,
@@ -145,7 +145,7 @@ function airportDialogHarness(initialPolicy = {}, runtimePolicy = airportPolicy)
     ? plain(template) : { dns: { 'proxy-server-nameserver-policy': plain(runtimePolicy) } } });
   const api = airportApi({
     runShellWithRoot: async () => ({ success: true, content: 'base' }),
-    readYamlObject: read, yamlHasGeneratedMarker: async () => false,
+    readYamlObject: read,
     writeYamlObjectAtomic: async (file, value) => {
       assert.equal(file, '/data/clash/Tools/template.base.yaml');
       template = plain(value); writes.push(template); return { ok: true };
@@ -249,8 +249,7 @@ test('airport DNS saves only the base template, preserving its generation marker
   const fresh = { ...plain(originalConfig), 'log-level': 'warning' };
   const api = airportApi({
     runShellWithRoot: async () => ({ success: true, content: 'base' }),
-    readYamlObject: async () => ({ ok: true, value: fresh }),
-    yamlHasGeneratedMarker: async () => true,
+    readYamlObject: async () => ({ ok: true, value: fresh, generated: true }),
     writeYamlObjectAtomic: async (...args) => { writes.push(args); return { ok: true }; },
   });
   assert.equal(await api.save(airportPolicy), true);
@@ -496,7 +495,7 @@ test('first original config write and later network changes select preservation'
     CLASH_CONFIG: 'config.yaml',
     kprBaseWriteYamlObjectAtomic: async (target, value) => ({ ok: true, value }),
   };
-  vm.runInNewContext(`${slice('async function kprShapeRuntimeConfig', 'async function savePolicyState')}
+  vm.runInNewContext(`${slice('async function kprShapeRuntimeConfig', 'async function kprVerifySelection')}
     this.write = writeYamlObjectAtomic; this.shape = kprShapeRuntimeConfig;`, sandbox);
   await sandbox.write('config.yaml', originalConfig, { configSource: 'subscription_original' });
   const options = { traffic_mode: 'tun', tun_stack: 'auto' };

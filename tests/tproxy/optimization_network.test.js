@@ -6,7 +6,7 @@ const contracts=require('../gist-sync/expected-contracts.json');
 const hash=value=>require('node:crypto').createHash('sha256').update(value).digest('hex');
 const api = shellApi(), baseline = shellApi(original);
 function privateApi(text) {
-  return run(slice('const F50_ZASHBOARD_UI_URL', 'const F50_COMPAT_VERSION', text)
+  return run(slice('const F50_ZASHBOARD_UI_URL', 'const F50_ORIGINAL_MANAGED_KEYS', text)
     // 受控键常量已从闭包提到顶层，配置整形的切片必须带上它们。
     + slice('const F50_ORIGINAL_MANAGED_KEYS', 'function buildF50EmergencyScript', text)
     + slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later', text)

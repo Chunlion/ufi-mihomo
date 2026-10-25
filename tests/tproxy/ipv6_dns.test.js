@@ -10,7 +10,7 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, '猫猫TProxy.js'), 'utf8').replace(/\r\n/g, '\n');
 const quote = value => `'${value.replace(/\\/g, '/').replace(/'/g, `'"'"'`)}'`;
-const helpers = vm.runInNewContext(source.slice(source.indexOf('function buildF50Ipv6DnsCompatFunctions()'), source.indexOf('function buildF50InspectHelpers()')) + '\nbuildF50Ipv6DnsCompatFunctions()');
+const helpers = vm.runInNewContext(source.slice(source.indexOf('function buildF50Ipv6DnsCompatFunctions()'), source.indexOf('function buildF50InspectHelpers()')) + '\nbuildF50Ipv6DnsCompatFunctions()', { F50_ROOT_FALLBACK: source.match(/const F50_ROOT_FALLBACK = '([^']+)';/)[1] });
 function fixture({ mode = 'tproxy', capability = 'missing', backendRc = 0, restoreRc = 0, missingRule = false, privateRoute = false, pending = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f50-dns6-'));
   const bin = path.join(dir, 'bin');
@@ -104,12 +104,15 @@ test('policy verification checks IPv4 rules without rebuilding them', () => {
   finally { f.close(); }
 });
 test('the settings probe preserves the requested DNS preference', async () => {
-  const normalize = vm.runInNewContext(source.slice(source.indexOf('async function normalizeIpv6DnsCapability('), source.indexOf('const policyTransactionFiles')) + '\nnormalizeIpv6DnsCapability', { runShellWithRoot: async () => ({ success: true, content: 'F50_IPV6_NAT=0' }), createToast() {} });
+  const toasts = [];
+  const normalize = vm.runInNewContext(source.slice(source.indexOf('async function reportIpv6NatLimitation('), source.indexOf('const policyTransactionFiles')) + '\nreportIpv6NatLimitation', { runShellWithRoot: async () => ({ success: true, content: 'F50_IPV6_NAT=0' }), createToast: (text, color) => toasts.push([text, color]) });
   const state = { options: { ipv6: 'on', dns_hijack: 'on' } };
-  assert.equal(await normalize(state), true);
+  await normalize(state);
+  // 探测只提示不修改：DNS 偏好必须原样保留，并弹一次说明。
   assert.equal(state.options.dns_hijack, 'on');
+  assert.equal(toasts.length, 1);
 });
-const tunHelpers = vm.runInNewContext(source.match(/const F50_MIPS_MIN_VERSION = '[^']+';/)[0] + '\n' + source.slice(source.indexOf('function buildF50Tun6CompatFunctions()'), source.indexOf('function buildF50Ipv6DnsCompatFunctions()')) + '\nbuildF50Tun6CompatFunctions()');
+const tunHelpers = vm.runInNewContext(source.match(/const F50_MIPS_MIN_VERSION = '[^']+';/)[0] + '\n' + source.match(/const F50_ROOT_FALLBACK = '[^']+';/)[0] + '\n' + source.slice(source.indexOf('function buildF50Tun6CompatFunctions()'), source.indexOf('function buildF50Ipv6DnsCompatFunctions()')) + '\nbuildF50Tun6CompatFunctions()');
 function tunFixture(coreRc = 0, version = 'Mihomo Meta v1.19.32 android arm64', stack = 'auto') {
   const f = fixture({ mode: 'tun' });
   fs.mkdirSync(path.join(f.dir, 'Proxy'));

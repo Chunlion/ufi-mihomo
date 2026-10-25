@@ -1,7 +1,7 @@
 {
   "baseline": "d89be0133be57d17fd667e4e6f48f239d626e5e5",
   "pureCommit": "e5e8568",
-  "sourceBaseCommit": "cd66303b64bddfcd7924f16db820dbe2314af6c5",
+  "sourceBaseCommit": "0a73deb70a89a93f5f5fcb6433a58b905739c53a",
   "format": {
     "original": 641988,
     "license": 606753,
@@ -9,8 +9,8 @@
     "utf8": 583981,
     "dead": 583342
   },
-  "final": 648832,
-  "sha256": "ca3c03160dd4ec8e06f11fe48899515febeda70022b6de8e62acdeba9d68d7f1",
+  "final": 649102,
+  "sha256": "c9d896735a49c2cd5d63c21d20c626de5d0ed80197588347bc3562d0c9a4cb08",
   "functionsBefore": 732,
   "functionsAfter": 793,
   "modules": [
@@ -65,8 +65,8 @@
     {
       "module": "其余调用点与常量",
       "before": 435704,
-      "after": 490820,
-      "saved": -55116
+      "after": 491090,
+      "saved": -55386
     }
   ],
   "shell": [

@@ -410,7 +410,23 @@ ${includeFrontend ? '  if [ "$2" = browser ]; then f50_writer_enter || return 1;
     fi
   fi
   [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
-  [ ! -e "$F50_OPERATION_LOCK/cancelled" ] && [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_BUSY; return 1; }
+${includeFrontend ? `  # Reclaim an expired frontend only after every device task has a completion receipt.
+  if [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" != "$lease_tag" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ]; then
+    read -r stale_owner stale_deadline < "$F50_OPERATION_LOCK/frontend" 2>/dev/null
+    if [ "$stale_owner" = "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" ] && [ -n "$stale_deadline" ] && [ "$stale_deadline" -le "$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)" ] 2>/dev/null; then
+      for stale_task in "$F50_TASK_DIR/$stale_owner."*; do
+        [ -e "$stale_task" ] || [ -L "$stale_task" ] || continue
+        f50_task_receipt "$stale_owner" "$stale_task" || { echo F50_OPERATION_BUSY; return 1; }
+      done
+      for stale_task in "$F50_TASK_DIR/$stale_owner."*; do
+        [ ! -e "$stale_task" ] || rm -f "$stale_task" || return 1
+      done
+      rm -f "$F50_OPERATION_LOCK/frontend" "$F50_OPERATION_LOCK/owner"
+      rmdir "$F50_OPERATION_LOCK" 2>/dev/null
+      mkdir "$F50_OPERATION_LOCK" 2>/dev/null && chmod 700 "$F50_OPERATION_LOCK" && printf '%s\\n' "$lease_tag" > "$F50_OPERATION_LOCK/owner"
+    fi
+  fi
+` : ''}  [ ! -e "$F50_OPERATION_LOCK/cancelled" ] && [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" = "$lease_tag" ] || { echo F50_OPERATION_BUSY; return 1; }
 ${includeFrontend ? '  if [ "$2" = browser ]; then f50_frontend_write "$lease_tag" running && f50_writer_leave || return 1; fi\n' : ''}  echo F50_LEASE_ACQUIRED=1
 )
 f50_lease_release() (
@@ -2505,14 +2521,13 @@ f50_preflight_config() {
   parse_rc=$?
   case "$parse_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
   if [ "$parse_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
-  urls=$(f50_limit 5 "$YQ" e -r '."proxy-providers"[] | select(.type == "http") | (.url // "")' "$CFG" 2>/dev/null); urls_rc=$?
+  urls=$(f50_limit 5 "$YQ" e -r '."proxy-providers"[] | select(.type == "http") | ("URL=" + (.url // ""))' "$CFG" 2>/dev/null); urls_rc=$?
   case "$urls_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
   if [ "$urls_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
-  # $urls prints exactly one line per http provider; counting it replaces a third yq pass.
-  http_count=0
-  [ -n "$urls" ] && http_count=$(printf '%s\\n' "$urls" | awk 'END{print NR}')
-  if [ "$http_count" != 0 ]; then
+  # The prefix preserves empty URL rows through command substitution.
+  if [ -n "$urls" ]; then
     while IFS= read -r url; do
+      url=\${url#URL=}
       case "$url" in
         http://*|https://*) authority=\${url#*://}; authority=\${authority%%[/?#]*}
           case "$authority" in ''|*@*|*[[:space:]]*) NEEDS_CONFIG=invalid_subscription ;; esac ;;

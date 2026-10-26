@@ -777,7 +777,7 @@ NEW=''
 // 用户可能在设备上手改配置：非 map 的 dns/tun/sniffer/profile 一律丢弃，由控制器生成的值兜底，
 // 否则 yq 合并直接报错，会把整个启动拖成 F50_ERROR=original_config_merge_failed。
 // 注释放在 JS 侧而非生成的脚本里：设备脚本每多一行都是安装包体积。
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=20
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=21
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -924,7 +924,7 @@ disable_unsupported_ipv6_dns_hijack() {
 F50_SERVICE_TARGET=${service}
 [ -f "$F50_SERVICE_TARGET" ] && [ ! -L "$F50_SERVICE_TARGET" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
 # All patch segments carry their final marker and the script still parses: nothing to rebuild.
-if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=20' "$F50_SERVICE_TARGET" &&
+if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=21' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_CURL_ABSOLUTE=1' "$F50_SERVICE_TARGET" && grep -qx '# KANO_TUN_IPV6_RETURN=3' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_IPV6_DNS_SPLIT=3' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
   echo F50_SERVICE_PATCH_COMMITTED=1
@@ -968,14 +968,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=20' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=21' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9])$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9]|20)$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -3393,8 +3393,8 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
   function operationFinish(ok, detail = '') {
     const op = activeCriticalOperation;
     if (op && !op.token.cancelled && op.progress) {
-      // 首次写入为准：内部流程已带详情收尾时，外层的布尔包一层不再覆盖详情。
-      if (op.finalResult) return;
+      // 保留内部详情，但后续失败仍须覆盖成功。
+      if (op.finalResult && (op.finalResult.ok === false || ok !== false)) return;
       op.finalResult = { ok, detail };
     }
   }

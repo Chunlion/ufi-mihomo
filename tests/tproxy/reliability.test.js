@@ -339,6 +339,35 @@ test('Service patch is idempotent and preserves file permissions', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('Service version 20 migrates before restoring the selected Gist TUN stack', { skip: !process.env.F50_TEST_YQ }, () => {
+  const dir = temp();
+  try {
+    const controlled = '["enable","device","auto-route","auto-redirect","strict-route","dns-hijack","stack"]';
+    const legacy = service.replace('# KANO_ORIGINAL_CONFIG_PRESERVATION=21', '# KANO_ORIGINAL_CONFIG_PRESERVATION=20')
+      .split(controlled).join(controlled.replace(',"stack"', ''));
+    const file = write(dir, 'Clash.Service', legacy);
+    const patch = shell(api.patch(quote(file)));
+    assert.equal(patch.status, 0, patch.stdout + patch.stderr);
+    const migrated = fs.readFileSync(file, 'utf8');
+    assert.equal((migrated.match(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=/gm) || []).length, 1);
+    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=21$/m);
+    assert.notEqual(migrated, legacy);
+    write(dir, 'Tools/config_source.conf', 'KANO_CONFIG_SOURCE=uploaded_config\n');
+    fs.symlinkSync(process.env.F50_TEST_YQ, path.join(dir, 'Tools/yq_linux_arm64'));
+    write(dir, 'Proxy/config.yaml', 'x-f50-gist-sync: true\ntun: {enable: true, stack: gvisor}\n');
+    const runtime = write(dir, 'runtime.yaml', 'tun: {enable: true, stack: mixed}\n');
+    const core = write(dir, 'Proxy/Clash.Core', '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(core, 0o755);
+    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=21', '\nF50_OPERATION_LOCK=', migrated);
+    const restored = shell(helpers + `\nf50_save_original_config start || exit 1
+cp ${quote(runtime)} "$CLASH_ROOT/Proxy/config.yaml" || exit 1
+f50_restore_original_config || exit 1
+"$CLASH_ROOT/Tools/yq_linux_arm64" e '.tun.stack' "$CLASH_ROOT/Proxy/config.yaml"`, { CLASH_ROOT: dir });
+    assert.equal(restored.status, 0, restored.stdout + restored.stderr);
+    assert.equal(restored.stdout.trim(), 'mixed');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('packaged Service migration installs executable DNS address validation', () => {
   const dir = temp();
   try {

@@ -202,6 +202,22 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 		out[k] = clone(v)
 	}
 	applySourceNetwork(out, source)
+	ports := map[int]bool{numeric(out["tproxy-port"]): true}
+	for _, listen := range []any{obj(out["dns"])["listen"], out["external-controller"]} {
+		parts := strings.Split(fmt.Sprint(listen), ":")
+		port, _ := strconv.Atoi(parts[len(parts)-1])
+		ports[port] = true
+	}
+	for _, name := range []string{"port", "socks-port", "mixed-port"} {
+		port, err := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(out[name])), 64)
+		if err != nil || port <= 0 || port != float64(int(port)) {
+			continue
+		}
+		if ports[int(port)] {
+			return nil, fail("local_port_conflict")
+		}
+		ports[int(port)] = true
+	}
 	if mode == "tun" {
 		stack := options["tun_stack"]
 		if stack == "" || stack == "auto" {

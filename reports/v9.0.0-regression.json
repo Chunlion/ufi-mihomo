@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-26T03:09:56.394Z",
+  "date": "2026-10-26T10:23:56.769Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "d32acae4eafc5a2e3dd0ade6ab294155167c1fd8",
-    "bytes": 643294,
-    "sha256": "61ebf387417f41dafe3294ee5858122a51c9ec3944024217dccc5ec1c82667c7"
+    "baseCommit": "0ecc2a202b8b24d28cb17cf93d03536e6489e803",
+    "bytes": 643301,
+    "sha256": "c430e8918806bc05b684d9836a56c9f1e327b4220f94068286906740cdbc6ff2"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 708,
+    "passed": 714,
     "failed": 0,
     "notRun": 0
   },
@@ -621,7 +621,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/commit_guard.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/commit_guard.test.js.stderr.log",
-      "passed": 13,
+      "passed": 15,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -670,11 +670,19 @@
           "status": "PASS"
         },
         {
-          "name": "component package guard / contains token=false",
+          "name": "component package guard / token=empty",
           "status": "PASS"
         },
         {
-          "name": "component package guard / contains token=true",
+          "name": "component package guard / token=AAAAAAAAAAAAAAAA",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=12345678-1234-1234-1234-123456789abc",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=Abc_def-ghi_jkl-mno_pqr-stu_vwx-yza",
           "status": "PASS"
         }
       ]
@@ -1688,10 +1696,22 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 80,
+      "passed": 83,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "combined provider/Gist update preserves the final outcome / false/true",
+          "status": "PASS"
+        },
+        {
+          "name": "combined provider/Gist update preserves the final outcome / true/false",
+          "status": "PASS"
+        },
+        {
+          "name": "combined provider/Gist update preserves the final outcome / true/true",
+          "status": "PASS"
+        },
         {
           "name": "applying the subscription template uses the save transaction / provider / true",
           "status": "PASS"
@@ -2147,7 +2167,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
-      "passed": 174,
+      "passed": 175,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -2297,6 +2317,10 @@
         },
         {
           "name": "Service patch is idempotent and preserves file permissions",
+          "status": "PASS"
+        },
+        {
+          "name": "Service version 20 migrates before restoring the selected Gist TUN stack",
           "status": "PASS"
         },
         {

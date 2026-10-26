@@ -65,17 +65,17 @@ test('component package cannot skip inspection when Python is missing', t => {
   assert.match(result.stderr, /no python found/);
 });
 
-for (const secret of [false, true]) {
-  test('component package guard / contains token=' + secret, t => {
+for (const token of ['', 'A'.repeat(16), '12345678-1234-1234-1234-123456789abc', 'Abc_def-ghi_jkl-mno_pqr-stu_vwx-yza']) {
+  test('component package guard / token=' + (token || 'empty'), t => {
     const f = fixture(t, {});
     const generated = spawnSync('python3', ['-c',
       "import sys,zipfile; z=zipfile.ZipFile('tproxy-yq.zip','w'); z.writestr('Tools/template.yaml',sys.argv[1]); z.close()",
-      secret ? 'url: https://example.test/sub?token=' + 'A'.repeat(16) : 'rules: [MATCH,DIRECT]',
+      'url: https://example.test/sub?token=' + token,
     ], { cwd: f.dir, encoding: 'utf8' });
     assert.equal(generated.status, 0, generated.stderr);
     assert.equal(spawnSync('git', ['add', 'tproxy-yq.zip'], { cwd: f.dir }).status, 0);
     const result = f.run();
-    assert.equal(result.status, secret ? 1 : 0, result.stderr);
-    if (secret) assert.match(result.stderr, /unredacted values/);
+    assert.equal(result.status, token ? 1 : 0, result.stderr);
+    if (token) assert.match(result.stderr, /unredacted values/);
   });
 }

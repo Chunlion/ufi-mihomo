@@ -95,6 +95,42 @@ func TestNormalizationUserOverrides(t *testing.T) {
 		})
 	}
 }
+func TestNormalizationLocalPorts(t *testing.T) {
+	for _, mode := range []string{"tproxy", "tun", "off"} {
+		for _, tc := range []struct {
+			name  string
+			field string
+			value any
+			valid bool
+		}{
+			{"custom", "mixed-port", 18082, true},
+			{"string", "mixed-port", "18082", true},
+			{"disabled", "mixed-port", 0, true},
+			{"duplicate", "mixed-port", 18080, false},
+			{"dns", "mixed-port", 1053, false},
+			{"dns_string", "port", "1053", false},
+			{"controller", "socks-port", json.Number("7788"), false},
+			{"tproxy", "mixed-port", 7895, mode != "tproxy"},
+		} {
+			t.Run(mode+"/"+tc.name, func(t *testing.T) {
+				config := map[string]any{"port": 18080, "socks-port": 18081, "mixed-port": 18082}
+				config[tc.field] = tc.value
+				before := canonical(config)
+				_, err := normalizeConfig(config, map[string]string{"traffic_mode": mode}, nil)
+				if (err == nil) != tc.valid {
+					t.Fatalf("valid=%v: %v", tc.valid, err)
+				}
+				if !tc.valid && code(err) != "local_port_conflict" {
+					t.Fatal(err)
+				}
+				if canonical(config) != before {
+					t.Fatal("source config was mutated")
+				}
+			})
+		}
+	}
+}
+
 func TestJSONGuards(t *testing.T) {
 	for _, s := range []string{`{"a":1,"a":2}`, `{} {}`, `{"n":9007199254740992}`, `{"n":NaN}`} {
 		if _, e := parseJSON([]byte(s)); e == nil {

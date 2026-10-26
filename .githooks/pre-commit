@@ -47,7 +47,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
             text = z.read(name).decode('utf-8', 'replace')
         except KeyError:
             continue
-        if re.search(r'AGE-SECRET-KEY-1[0-9A-Z]{58}', text) or re.search(r'[?&]token=[0-9A-Za-z]{12,}', text):
+        if re.search(r'AGE-SECRET-KEY-1[0-9A-Z]{58}', text) or re.search(r'''[?&]token=[^\s&#'"<>]+''', text):
             bad.append(name)
 if bad:
     sys.stderr.write('pre-commit: unredacted values in package members: %s\n' % ', '.join(bad))

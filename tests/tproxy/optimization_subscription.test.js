@@ -6,6 +6,29 @@ const sources = [{ url: 'https://one.example/sub', name: 'Provider1' }, { url: '
 const result = (failed = false) => ({ ok: !failed, failed: failed ? 1 : 0,
   providers: sources.map(s => ({ name: s.name, ok: !failed, message: failed ? 'failed' : '', proxyCount: failed ? 0 : 2 })) });
 
+for (const [providerOk, gistOk] of [[false, true], [true, false], [true, true]]) {
+  test(`combined provider/Gist update preserves the final outcome / ${providerOk}/${gistOk}`, async () => {
+    const op = { token: {}, progress: {} };
+    const update = subscriptionApi(slice('function operationFinish(', 'function operationCancelled()')
+      + slice('async function f50GistUpdateSources(', '// Accept pasted Raw links')
+      + slice('const updateSubProviders = async', 'const readCurrentSubSources = async')
+      + '(async () => { const ok = await updateSubProviders([]); operationFinish(ok); return ok; })', {
+      activeCriticalOperation: op, ensureCompatBackend: async () => true,
+      readConfigSource: async () => 'uploaded_config',
+      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': { airport: { type: 'http' } } } }),
+      readCurrentSubSources: async () => [], forceUpdateProvidersFromConfig: async () => result(!providerOk),
+      f50GistManaged: async () => ({ settings: { revision: 1 } }), f50ReleaseLease: async () => {},
+      f50GistDispatch: async () => ({ ok: true, job: 'fixture' }),
+      f50GistExec: async () => ({ ok: true, status: 'finished', result: { ok: gistOk, code: 'fixture_failure' } }),
+      invalidateStatusSnapshot() {}, f50GistMessage: String,
+    });
+    assert.equal(await update(), providerOk && gistOk);
+    assert.equal(op.finalResult.ok, providerOk && gistOk);
+    assert.equal(op.finalResult.detail, !gistOk ? 'fixture_failure'
+      : providerOk ? 'Gist 配置已更新，手动订阅已合并' : 'Gist 配置已更新，但节点来源更新失败');
+  });
+}
+
 for (const convertMode of ['provider', 'local']) for (const saved of [true, false]) {
   test(`applying the subscription template uses the save transaction / ${convertMode} / ${saved}`, async () => {
     const calls = [], stored = [...sources, { url: 'https://disabled.example/sub', enabled: false }];

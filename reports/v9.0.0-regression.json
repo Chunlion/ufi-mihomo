@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-24T15:40:33.624Z",
+  "date": "2026-10-26T03:09:56.394Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "ea1cf9b2dd57114b511dac9d31e525c56f0014b4",
-    "bytes": 649102,
-    "sha256": "c9d896735a49c2cd5d63c21d20c626de5d0ed80197588347bc3562d0c9a4cb08"
+    "baseCommit": "d32acae4eafc5a2e3dd0ade6ab294155167c1fd8",
+    "bytes": 643294,
+    "sha256": "61ebf387417f41dafe3294ee5858122a51c9ec3944024217dccc5ec1c82667c7"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 672,
+    "passed": 708,
     "failed": 0,
     "notRun": 0
   },
@@ -40,7 +40,7 @@
           "status": "PASS"
         },
         {
-          "name": "插件发布版本为 v9.0.0",
+          "name": "插件发布版本为 v9.1.0-beta.1",
           "status": "PASS"
         },
         {
@@ -610,6 +610,71 @@
         },
         {
           "name": "cleanup preserves all diagnostic labels and result fields",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/commit_guard.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/commit_guard.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/commit_guard.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/commit_guard.test.js.stderr.log",
+      "passed": 13,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "credential guard inspects staged content: \"notes.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"with spaces.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"中文.js\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"reports/probe.log\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"line\\\\nbreak.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"F50 config.yaml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"nested/F50中文.yml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"F50\\\\nprivate.yaml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"private-download/note.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "guard ignores unstaged credentials and ordinary archive names",
+          "status": "PASS"
+        },
+        {
+          "name": "component package cannot skip inspection when Python is missing",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / contains token=false",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / contains token=true",
           "status": "PASS"
         }
       ]
@@ -1321,7 +1386,7 @@
           "status": "PASS"
         },
         {
-          "name": "missing start marker uses a fallback; log text cannot spoof anchored markers",
+          "name": "failed IPv6 DNS precheck stops service start; fallback markers and redaction survive",
           "status": "PASS"
         },
         {
@@ -1341,7 +1406,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_install.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_install.test.js.stderr.log",
-      "passed": 33,
+      "passed": 39,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1375,6 +1440,30 @@
         },
         {
           "name": "first installation without subscriptions installs components and keeps the core stopped",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles empty HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles missing HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles trailing empty HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles valid HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "low data space preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "panel postcheck failure preserves failure code and old installation",
           "status": "PASS"
         },
         {
@@ -1599,10 +1688,26 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 66,
+      "passed": 80,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "applying the subscription template uses the save transaction / provider / true",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / provider / false",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / local / true",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / local / false",
+          "status": "PASS"
+        },
         {
           "name": "subscription URLs retain path names and trailing query characters",
           "status": "PASS"
@@ -1773,6 +1878,46 @@
         },
         {
           "name": "Mihomo HTTP Provider API status 500",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"failAt\":\"template\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"failAt\":\"reload\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"failAt\":\"template\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"failAt\":\"reload\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source merge and explicit template application remain distinct / false",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source merge and explicit template application remain distinct / true",
           "status": "PASS"
         },
         {
@@ -1974,7 +2119,7 @@
           "status": "PASS"
         },
         {
-          "name": "9.0.0 retains the bundled controller and wrapper protocol",
+          "name": "the plugin release retains the bundled controller and wrapper protocol",
           "status": "PASS"
         },
         {
@@ -2002,7 +2147,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
-      "passed": 171,
+      "passed": 174,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -2048,6 +2193,18 @@
         },
         {
           "name": "writer failure releases its lock and preserves the caller trap / receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend lease is reclaimed; live, cancelled and ownerless leases still block",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend cannot replace the lease of a running device task",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend reclaims only confirmed finished receipts and removes them",
           "status": "PASS"
         },
         {

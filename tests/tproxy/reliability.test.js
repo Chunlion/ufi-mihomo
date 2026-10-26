@@ -50,6 +50,73 @@ echo OP_RC=$rc
   });
 }
 
+test('expired frontend lease is reclaimed; live, cancelled and ownerless leases still block', () => {
+  const now = Number(String(shell('cut -d" " -f1 /proc/uptime | cut -d. -f1').stdout).trim());
+  assert.ok(Number.isFinite(now) && now > 0, 'host uptime unavailable');
+  // An expired frontend can be reclaimed only after device tasks have finished.
+  for (const [name, owner, deadline, cancelled, expected, frontendOwner = owner] of [
+    ['expired', 'mm_stale', now - 10, false, 'F50_LEASE_ACQUIRED=1'],
+    ['live', 'mm_live', now + 100, false, 'F50_OPERATION_BUSY'],
+    ['cancelled', 'mm_stale', now - 10, true, 'F50_OPERATION_BUSY'],
+    ['no frontend record', 'rescue_fixture', null, false, 'F50_OPERATION_BUSY'],
+    ['malformed deadline', 'mm_bad', 'nope', false, 'F50_OPERATION_BUSY'],
+    ['frontend owner mismatch', 'mm_stale', now - 10, false, 'F50_OPERATION_BUSY', 'mm_other'],
+  ]) {
+    const dir = temp(), lock = path.join(dir, 'lease'), recovery = path.join(dir, 'recovery');
+    try {
+      write(lock, 'owner', owner + '\n');
+      if (deadline !== null) write(lock, 'frontend', frontendOwner + ' ' + deadline + '\n');
+      if (cancelled) write(lock, 'cancelled', '1');
+      const result = shell(api.lease() + '\nf50_lease_acquire mm_fixture browser\n',
+        { F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: recovery, F50_TASK_DIR: path.join(dir, 'tasks') });
+      assert.match(result.stdout + result.stderr, new RegExp(expected), name);
+      if (expected === 'F50_OPERATION_BUSY') assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), owner + '\n', name);
+      else assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), 'mm_fixture\n', name);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('expired frontend cannot replace the lease of a running device task', () => {
+  const dir = temp(), lock = path.join(dir, 'lease');
+  try {
+    write(lock, 'owner', 'mm_stale\n');
+    write(lock, 'frontend', 'mm_stale 1\n');
+    fs.mkdirSync(path.join(dir, 'tasks'));
+    const result = shell(api.lease() + `
+sleep 30 &
+worker=$!
+trap 'kill "$worker" 2>/dev/null; wait "$worker" 2>/dev/null' EXIT
+worker_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$worker/stat)
+manager_start=$(awk '{sub(/^.*\\) /, ""); split($0,s," "); print s[20]}' /proc/$$/stat)
+printf 'F50_TASK_V2 mm_stale mm_stale.1 %s %s %s %s running 0\\n' "$worker" "$worker_start" "$$" "$manager_start" > "$F50_TASK_DIR/mm_stale.1"
+f50_lease_acquire mm_fixture browser
+echo ACQUIRE_RC=$?
+kill -0 "$worker" && echo OLD_TASK_RUNNING=1
+`, { F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: path.join(dir, 'recovery'), F50_TASK_DIR: path.join(dir, 'tasks') });
+    assert.match(result.stdout, /ACQUIRE_RC=1/);
+    assert.match(result.stdout, /OLD_TASK_RUNNING=1/);
+    assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), 'mm_stale\n');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('expired frontend reclaims only confirmed finished receipts and removes them', () => {
+  for (const state of ['finished', 'running', 'invalid']) {
+    const dir = temp(), lock = path.join(dir, 'lease'), receipt = path.join(dir, 'tasks/mm_stale.1');
+    try {
+      write(lock, 'owner', 'mm_stale\n');
+      write(lock, 'frontend', 'mm_stale 1\n');
+      write(dir, 'tasks/mm_stale.1', state === 'invalid' ? 'unconfirmed\n'
+        : `F50_TASK_V2 mm_stale mm_stale.1 2147483647 1 2147483646 1 ${state} 0\n`);
+      const result = shell(api.lease() + '\nf50_lease_acquire mm_fixture browser\n', {
+        F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: path.join(dir, 'recovery'), F50_TASK_DIR: path.join(dir, 'tasks'),
+      });
+      assert.equal(result.status, state === 'finished' ? 0 : 1, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(receipt), state !== 'finished');
+      assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), state === 'finished' ? 'mm_fixture\n' : 'mm_stale\n');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
 test('API curl keeps sensitive values off argv and preserves request bytes', async () => {
   const http = require('node:http'), { execFile } = require('node:child_process'), { promisify } = require('node:util');
   const dir = temp(), body = '{"value":"quotes \\\" 中文"}\nsecond line\t$(not-a-command)';

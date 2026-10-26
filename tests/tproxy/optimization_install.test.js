@@ -139,6 +139,29 @@ test('first installation without subscriptions installs components and keeps the
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+for (const [name, providers, ready] of [
+  ['empty HTTP URL', { Empty: { type: 'http', url: '' } }, false],
+  ['missing HTTP URL', { Empty: { type: 'http' } }, false],
+  ['trailing empty HTTP URL', { Valid: { type: 'http', url: 'https://example.test/sub' }, Empty: { type: 'http', url: '' } }, false],
+  ['valid HTTP URL', { Valid: { type: 'http', url: 'https://example.test/sub' } }, true],
+]) {
+  test('installation preflight handles ' + name, { skip: !yq }, () => {
+    const { dir, root, result } = installCase({ config: config + 'proxy-providers: ' + JSON.stringify(providers) + '\n' });
+    try {
+      assert.equal(result.status, ready ? 0 : 1, result.stdout + result.stderr);
+      if (ready) {
+        assert.match(result.stdout, /^F50_INSTALL_STATUS=installed_running$/m);
+        assert.match(result.stdout, /^F50_CONFIG_STATE=ready$/m);
+      } else {
+        assert.match(result.stdout, /^F50_INSTALL_CODE=invalid_subscription$/m);
+        assert.match(result.stdout, /^F50_INSTALL_COMPONENTS_OK=0$/m);
+        assert.doesNotMatch(result.stdout, /^F50_ROLLBACK=|^KANO_INSTALL_OK=1$/m);
+      }
+      assert.equal(fs.existsSync(path.join(root, 'started')), ready);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
 for (const [name, options, code] of [
   ['low data space', { old: true, lowSpace: true }, 'data_space_low'],
   ['panel postcheck failure', { old: true, panelPostcheckFailure: true }, 'panel_postcheck_failed'],

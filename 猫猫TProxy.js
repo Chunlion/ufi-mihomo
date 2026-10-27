@@ -2610,6 +2610,31 @@ fi
 exit 0
 `;
 }
+// 安装/卸载由页面驱动、设备端执行：页面一旦消失，设备上的任务仍在跑，新页面却看不到任何痕迹，
+// 用户只能凭感觉重试，然后被设备租约拒绝。用短时效标记把这件事记下来，让后面的面板能开口提醒。
+const F50_OPERATION_MARK = 'kano_f50_operation_inflight';
+const F50_OPERATION_MARK_TTL = 15 * 60 * 1000;
+function markF50OperationInFlight(label) {
+  try { localStorage.setItem(F50_OPERATION_MARK, JSON.stringify({label, at: Date.now()})); } catch (_) {}
+}
+function clearF50OperationInFlight() {
+  try { localStorage.removeItem(F50_OPERATION_MARK); } catch (_) {}
+}
+function readF50OperationInFlight() {
+  try {
+    const value = JSON.parse(localStorage.getItem(F50_OPERATION_MARK) || 'null');
+    if (!value || typeof value.at !== 'number' || Date.now() - value.at > F50_OPERATION_MARK_TTL) {
+      clearF50OperationInFlight();
+      return null;
+    }
+    return value;
+  } catch (_) { return null; }
+}
+function confirmF50OperationNotInFlight() {
+  const pending = readF50OperationInFlight();
+  if (!pending) return true;
+  return window.confirm(`上次${pending.label}（${new Date(pending.at).toLocaleTimeString()} 开始）可能仍在设备上执行。\n继续会被设备租约拒绝。仍要继续？`);
+}
 async function installF50PackageAtDevicePath(uploaded) {
   lastInstallDiagnostic = null;
   try {
@@ -2644,11 +2669,14 @@ async function installF50PackageAtDevicePath(uploaded) {
     if (recoveredWithFallback) message += '；旧环境恢复曾报错，已通过兜底清理复查';
     if (warning) message += warning === 'previous_components_retained' ? '；旧组件回滚目录已保留' : '；安装告警：' + warning;
     lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
+    clearF50OperationInFlight();
     operationFinish(true, message);
     createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
     return true;
   } catch (error) {
     if (error?.name === 'OperationCancelled') return false;
+    // 设备已经给出明确结局（成功或缺内核这类硬错误）才清标记；用户中止时设备可能还在执行，保留提示。
+    clearF50OperationInFlight();
     lastInstallDiagnostic = f50Diagnostic(error?.message || String(error), '安装失败：未获取到具体原因');
     operationFinish(false, lastInstallDiagnostic.summary);
     createToast(safeTextToHtml(lastInstallDiagnostic.summary) + '<br>详细进度与错误原因见“状态与日志”。', 'red', 15000);
@@ -2676,6 +2704,8 @@ async function ensureF50InstallLease() {
 
 async function installF50PackageFromNetwork() {
   return runCriticalOperation('安装核心', async () => {
+    if (!confirmF50OperationNotInFlight()) return false;
+    markF50OperationInFlight('安装');
     lastInstallDiagnostic = null;
     operationStage('下载组件包');
     const ready = await ensureF50InstallLease();
@@ -2715,6 +2745,8 @@ async function chooseF50Package() {
     f50PackageInput.value = '';
     if (!file) return;
     await runCriticalOperation('安装核心', async () => {
+        if (!confirmF50OperationNotInFlight()) return false;
+        markF50OperationInFlight('安装');
         lastInstallDiagnostic = null;
         let uploaded = '';
         try {
@@ -8516,15 +8548,22 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   localPackageBtn.classList.add('btn');
   localPackageBtn.textContent = '导入组件包';
   localPackageBtn.onclick = chooseF50Package;
+  // 上个页面没跑完就消失了，设备端可能还在装：先给个提示，别让人以为是没装过。
+  const pendingOperation = readF50OperationInFlight();
+  if (pendingOperation) {
+    createToast(`上次${escapeHtml(pendingOperation.label)}（${new Date(pendingOperation.at).toLocaleTimeString()} 开始）可能仍在设备上执行；请先在“状态与日志”确认设备空闲，再开始新的操作。`, 'yellow', 12000);
+  }
   const btn_disabled = document.createElement('button');
   btn_disabled.classList.add('btn', 'kano-danger');
   btn_disabled.textContent = '卸载插件';
 
 btn_disabled.onclick = async () => {
+  if (!confirmF50OperationNotInFlight()) return;
   // 卸载会 rm -rf /data/clash，含订阅链接与 Gist 私钥，误触无法挽回：先要一次明确确认。
   if (!window.confirm('卸载将删除 /data/clash 下的全部组件、运行配置、订阅链接和 Gist 私钥，无法撤销。\n\n卸载后需要重新导入组件包并重新配置订阅。确认继续？')) return;
   const operationToken = acquireCriticalOperation('卸载猫猫', null, true);
   if (!operationToken) return;
+  markF50OperationInFlight('卸载');
   setButtonBusy(btn_disabled, true, '卸载中\u2026');
   pluginArtifactsRemoved = true;
   try {
@@ -8533,6 +8572,7 @@ btn_disabled.onclick = async () => {
     templateFlowMessages.length = 0;
     const result = await performF50Uninstall();
     if (result.ok) {
+      clearF50OperationInFlight();
       runtimePreflightCache = null; runtimePreflightLoadPromise = null; f50BackendReady = false;
       invalidateBinarySnapshot(); invalidateStatusSnapshot();
       try { localStorage.removeItem('kano_mm_web_panel_visible'); localStorage.removeItem('#collapse_mm'); } catch (_) {}

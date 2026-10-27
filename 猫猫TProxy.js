@@ -2727,7 +2727,9 @@ async function chooseF50Package() {
           lastInstallDiagnostic = f50Diagnostic(error && (error.message || String(error)));
           const message = lastInstallDiagnostic.summary;
           operationFinish(false, message);
-          createToast('安装失败<br>' + safeTextToHtml(message), 'red', 15000);
+          // 租约冲突不是“安装失败”，是设备还在跑上一次任务；把两者分开说，免得用户以为组件包坏了。
+          const blockedByDevice = /^F50_OPERATION_BUSY$/m.test(String(error && (error.message || error)));
+          createToast((blockedByDevice ? '设备仍在执行上一次操作<br>' : '安装失败<br>') + safeTextToHtml(message), 'red', 15000);
           return false;
         } finally {
           if (uploaded) {
@@ -8519,6 +8521,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   btn_disabled.textContent = '卸载插件';
 
 btn_disabled.onclick = async () => {
+  // 卸载会 rm -rf /data/clash，含订阅链接与 Gist 私钥，误触无法挽回：先要一次明确确认。
+  if (!window.confirm('卸载将删除 /data/clash 下的全部组件、运行配置、订阅链接和 Gist 私钥，无法撤销。\n\n卸载后需要重新导入组件包并重新配置订阅。确认继续？')) return;
   const operationToken = acquireCriticalOperation('卸载猫猫', null, true);
   if (!operationToken) return;
   setButtonBusy(btn_disabled, true, '卸载中\u2026');
@@ -10066,7 +10070,10 @@ EOF_F50_RESTORE_MEMBERS
       const status = state && state.state || 'disabled';
       boot_on.dataset.bootState = status;
       boot_on.style.background = status == 'disabled' ? '' : 'var(--dark-btn-color-active)';
-      boot_on.textContent = '开机自启';
+      // 按钮文字必须反映真实状态：只改背景色会让用户看不出自启到底开没开。
+      boot_on.textContent = status == 'direct' || status == 'managed' ? '已开启自启'
+        : status == 'incomplete' ? '自启待修复'
+        : '开机自启';
       boot_on.title = state && state.message || '';
     };
     boot_on.addEventListener('click', async () => {

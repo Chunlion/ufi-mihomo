@@ -1119,6 +1119,27 @@ const F50_DIAGNOSTIC_LABELS = {
   gist_backup_cleanup_failed: '组件已安装，但旧同步数据副本清理失败；请按原恢复流程处理，不要重复提交任务。',
   gist_transient_cleanup_failed: '同步临时数据清理失败；原组件未被替换。',
   zip_missing_or_empty: '组件包不存在或内容为空；请重新上传。',
+  backup_already_exists: '安装备份目录已存在；请先在“状态与日志”确认上次安装结果。',
+  backup_rename_failed: '无法备份现有组件目录；安装已停止。',
+  controller_http_patch_failed: '控制器 HTTP 订阅兼容修复失败；请重新获取配套组件包。',
+  data_size_unknown: '无法读取现有组件大小；请检查设备存储状态后重试。',
+  data_space_unknown: '无法读取设备可用空间；请检查设备存储状态后重试。',
+  executable_permission_failed: '无法设置组件执行权限；请检查设备存储权限。',
+  gist_preserve_failed: '无法保留原 Gist 同步数据；安装已停止。',
+  invalid_package_root: '组件包目录结构无效；请重新获取配套组件包。',
+  lock_write_failed: '无法写入安装任务记录；请检查设备存储权限与空间。',
+  package_directory_failed: '无法创建组件目录；请检查设备存储权限与空间。',
+  patch_merge_failed: '增量组件合并失败；请检查可用空间或改用完整组件包。',
+  stage_create_failed: '无法创建安装临时目录；请检查设备存储权限与空间。',
+  stale_latch_remove_failed: '无法清理旧停止标记；安装已停止。',
+  stopped_latch_failed: '无法保存组件停止状态；安装已停止。',
+  target_changed_during_install: '安装期间组件目录发生变化；请确认没有其他安装任务后重试。',
+  target_symlink: '组件目录是符号链接；请检查 /data/clash 的实际位置。',
+  template_missing: '组件包缺少配置模板；请重新获取完整组件包。',
+  template_not_yaml_map: '组件包配置模板格式错误；请重新获取完整组件包。',
+  unexpected_panel_payload: '组件包包含不支持的面板；请重新获取配套组件包。',
+  user_data_symlink: '用户数据包含符号链接，无法安全保留；安装已停止。',
+  uploaded_package_cleanup_failed: '临时上传文件删除失败；请确认设备空闲后重新安装，系统会再次清理。',
   archive_size_unknown: '安装失败：无法读取 ZIP 解压后的大小。',
   data_space_insufficient_for_archive: '存储空间不足，无法完成解压与回滚；组件未被替换。',
   controller_interface_incompatible: '控制器缺少所需命令接口；当前操作无法继续。',
@@ -2717,6 +2738,21 @@ async function ensureF50InstallLease() {
   return runShellWithRoot(':', 5000);
 }
 
+const F50_UPLOAD_MARK = 'kano_f50_uploaded_package';
+async function cleanupF50UploadedPackage(uploaded = '') {
+  if (!uploaded) {
+    try { uploaded = localStorage.getItem(F50_UPLOAD_MARK) || ''; } catch (_) { return; }
+  }
+  if (!uploaded) return;
+  if (!uploaded.startsWith(F50_FILES_DIR + '/') || uploaded.includes('..')) {
+    try { localStorage.removeItem(F50_UPLOAD_MARK); } catch (_) {}
+    return;
+  }
+  const removed = await runShellWithRoot('rm -f ' + shellQuote(uploaded), 5000);
+  if (!removed?.success) throw new Error('F50_INSTALL_CODE=uploaded_package_cleanup_failed');
+  try { localStorage.removeItem(F50_UPLOAD_MARK); } catch (_) {}
+}
+
 async function offerCachedArchive() {
   // 设备上可能躺着上一次没装完的整包（67MB）。只有「完整 + 与当前插件配套」才谈复用，
   // 而且必须让用户自己选：三个下载源都是可变地址，缓存包不保证是最新的。
@@ -2760,13 +2796,21 @@ async function installF50PackageFromNetwork() {
       createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 15000);
       return false;
     }
+    try { await cleanupF50UploadedPackage(); }
+    catch (error) {
+      if (error?.name === 'OperationCancelled') throw error;
+      lastInstallDiagnostic = f50Diagnostic(error?.message || String(error));
+      operationFinish(false, lastInstallDiagnostic.summary);
+      createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 15000);
+      return false;
+    }
     // 上一次在线安装若在下载阶段被关掉页面，整包会留在设备上（清理在页面 finally 里，页面没了就不执行）。
     // 能复用就省一次 67MB 传输；不能复用（缺失/损坏/版本不配套）就地清掉。
     const reuseCached = await offerCachedArchive();
     if (reuseCached) operationStage('复用上次下载的组件包');
     const archive = reuseCached
       ? { ok: true, source: 'cached', message: '', content: '' }
-      : await downloadCoreArchive({ allowCached: false });
+      : await downloadCoreArchive();
     if (!archive.ok) {
       const detail = archive.content || archive.message || '组件包下载失败';
       lastInstallDiagnostic = f50Diagnostic(detail);
@@ -2795,6 +2839,15 @@ async function chooseF50Package() {
       const file = f50PackageInput.files && f50PackageInput.files[0];
     f50PackageInput.value = '';
     if (!file) return;
+    try {
+      const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+      if (header.length !== 4 || header[0] !== 0x50 || header[1] !== 0x4b || header[2] !== 0x03 || header[3] !== 0x04) {
+        throw new Error('所选文件不是 ZIP 组件包；请重新选择完整的组件包。');
+      }
+    } catch (error) {
+      createToast(safeTextToHtml(error?.message || '无法读取所选文件；请重新选择组件包。'), 'red', 9000);
+      return;
+    }
     await runCriticalOperation('安装核心', async () => {
         if (!confirmF50OperationNotInFlight()) return false;
         markF50OperationInFlight('安装');
@@ -2803,8 +2856,10 @@ async function chooseF50Package() {
         try {
           const ready = await ensureF50InstallLease();
           if (!ready.success) throw new Error(ready.content);
+          await cleanupF50UploadedPackage();
           operationStage('上传组件包');
           uploaded = await uploadFileToDevice(file);
+          try { localStorage.setItem(F50_UPLOAD_MARK, uploaded); } catch (_) {}
           return await installF50PackageAtDevicePath(uploaded);
         } catch (error) {
           lastInstallDiagnostic = f50Diagnostic(error && (error.message || String(error)));
@@ -2817,8 +2872,7 @@ async function chooseF50Package() {
         } finally {
           if (uploaded) {
             try {
-              const removed = await runShellWithRoot('rm -f ' + shellQuote(uploaded), 5000);
-              if (!removed?.success) throw new Error('uploaded_package_cleanup_failed');
+              await cleanupF50UploadedPackage(uploaded);
             } catch (cleanupError) {
               if (cleanupError?.name !== 'OperationCancelled') {
                 if (lastInstallDiagnostic) lastInstallDiagnostic.details += '\nF50_INSTALL_WARNING=uploaded_package_cleanup_failed';
@@ -4644,24 +4698,8 @@ exit "$kano_task_rc"`;
   };
 
 
-  const downloadCoreArchive = async ({ allowCached = false } = {}) => {
+  const downloadCoreArchive = async () => {
     // Keep the device download independent of the host request window.
-    operationStage('检查组件包缓存');
-    if (allowCached) {
-      const cached = await runShellWithRoot(`
-        ZIP=${shellQuote(DOWNLOAD_ZIP)}
-        LOG=${shellQuote(DOWNLOAD_LOG)}
-        [ -s "$ZIP" ] || exit 1
-        command -v unzip >/dev/null 2>&1 || exit 1
-        unzip -t "$ZIP" >"$LOG" 2>&1 || exit 1
-        echo "ARCHIVE_READY=cached"
-      `, 20 * 1000);
-      if (cached.deviceCompleted === false) return { ok: false, stage: 'lease', source: '', message: cached.content, content: cached.content };
-      if (cached.success && String(cached.content || '').includes('ARCHIVE_READY=cached')) {
-        return { ok: true, stage: 'ready', source: 'cached', message: '', content: String(cached.content || '') };
-      }
-    }
-
     const sources = [CLASH_PACKAGE_PRIMARY_URL, CLASH_PACKAGE_URL, CLASH_PACKAGE_REPO_URL].filter(Boolean);
     const errors = [];
     for (const packageUrl of sources) {

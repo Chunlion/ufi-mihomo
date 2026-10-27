@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -153,5 +155,28 @@ func TestPrivateSelection(t *testing.T) {
 	}
 	if e := resolveSelection(map[string]any{"Proxy": map[string]any{"now": "node"}, "node": map[string]any{"type": "Shadowsocks"}}, "Proxy"); e != nil {
 		t.Fatal(e)
+	}
+	proxies := map[string]any{"node": map[string]any{"type": "Shadowsocks"}}
+	for i := 63; i >= 0; i-- {
+		next := "node"
+		if i < 63 {
+			next = fmt.Sprintf("group%d", i+1)
+		}
+		proxies[fmt.Sprintf("group%d", i)] = map[string]any{"now": next}
+	}
+	if e := resolveSelection(proxies, "group0"); e != nil {
+		t.Fatal("acyclic selection rejected", e)
+	}
+	proxies["group63"] = map[string]any{"now": "group0"}
+	if e := resolveSelection(proxies, "group0"); code(e) != "private_route_selection_cycle" {
+		t.Fatal("deep cycle accepted", e)
+	}
+}
+
+func TestNormalizationLongPrivatePolicy(t *testing.T) {
+	policy := strings.Repeat("Proxy", 40)
+	config := map[string]any{"proxy-groups": []any{map[string]any{"name": policy, "type": "select", "proxies": []any{"node"}}}, "rules": []any{"MATCH,DIRECT"}}
+	if _, e := normalizeConfig(config, map[string]string{"traffic_mode": "tproxy", "private_route_enabled": "on", "private_route_cidrs": "192.168.250.0/24", "private_route_policy": policy}, nil); e != nil {
+		t.Fatal("policy supported by the frontend was rejected", e)
 	}
 }

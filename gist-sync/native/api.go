@@ -124,7 +124,7 @@ func manualProviderReady(value any) bool {
 }
 func resolveSelection(proxies map[string]any, name string) error {
 	seen := map[string]bool{}
-	for i := 0; i < 32; i++ {
+	for {
 		if seen[name] {
 			return fail("private_route_selection_cycle")
 		}
@@ -152,7 +152,6 @@ func resolveSelection(proxies map[string]any, name string) error {
 		}
 		return nil
 	}
-	return fail("private_route_selection_depth")
 }
 func (a *App) applyRuntime(ctx context.Context, l *Lease, tx string, m map[string]any) error {
 	if e := l.Check(); e != nil {
@@ -177,7 +176,11 @@ func (a *App) applyRuntime(ctx context.Context, l *Lease, tx string, m map[strin
 	if e := a.point("policy_apply"); e != nil {
 		return e
 	}
-	if _, e := a.api(ctx, str(m["secret"]), "PATCH", "/configs", map[string]string{"mode": "rule"}); e != nil {
+	mode := str(m["mode"])
+	if mode == "" {
+		mode = "rule"
+	}
+	if _, e := a.api(ctx, str(m["secret"]), "PATCH", "/configs", map[string]string{"mode": mode}); e != nil {
 		return e
 	}
 	if e := a.service(ctx, l, tx, "policy", "apply"); e != nil {

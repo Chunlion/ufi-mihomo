@@ -368,6 +368,60 @@ func TestRuntimeFailureRollback(t *testing.T) {
 		})
 	}
 }
+func TestRunningCorePreservesModeOnApplyAndRollback(t *testing.T) {
+	for _, mode := range []string{"global", "direct"} {
+		for _, rollback := range []bool{false, true} {
+			name := mode + "/apply"
+			if rollback {
+				name = mode + "/rollback"
+			}
+			t.Run(name, func(t *testing.T) {
+				a := processFixture(t)
+				ctx := context.Background()
+				b, _ := os.ReadFile(a.cfg())
+				v, _ := parseJSON(b)
+				m := obj(v)
+				m["mode"] = mode
+				mustWrite(t, a.cfg(), jsonBytes(m), 0600)
+				before, e := a.fingerprint(ctx)
+				if e != nil {
+					t.Fatal(e)
+				}
+				v, _ = parseJSON(remoteConfig(2))
+				remote := obj(v)
+				remote["mode"] = mode
+				setRemote(a, fixtureKey, jsonBytes(remote))
+				startFakeCore(t, a)
+				used := false
+				if rollback {
+					a.Hook = func(point string) error {
+						if point == "policy_apply" && !used {
+							used = true
+							return fail("runtime_injected")
+						}
+						return nil
+					}
+				}
+				out, e := a.syncConfig(ctx, Request{ReplaceLocal: true, ExpectedLocal: &before}, false)
+				if rollback {
+					if code(e) != "runtime_injected" || out.OK || out.Warning != "old_config_restored" {
+						t.Fatal(out, e)
+					}
+					after, e := a.fingerprint(ctx)
+					if e != nil || before != after {
+						t.Fatal("rollback changed configuration", e)
+					}
+				} else if e != nil || !out.OK || !out.RuntimeVerified {
+					t.Fatal(out, e)
+				}
+				live, e := a.api(ctx, "local-protected-secret", "GET", "/configs", nil)
+				if e != nil || live["mode"] != mode || exists(a.journalDir()) {
+					t.Fatal("mode or activation state not restored", e)
+				}
+			})
+		}
+	}
+}
 func TestDaemonSingletonAndDisable(t *testing.T) {
 	a := processFixture(t)
 	startFakeCore(t, a)

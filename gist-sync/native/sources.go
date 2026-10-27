@@ -60,16 +60,16 @@ func (a *App) manualSources() ([]ManualSource, error) {
 	return sources, nil
 }
 
-func (a *App) saveManualSources(sources []ManualSource) error {
+func encodeManualSources(sources []ManualSource) ([]byte, error) {
 	if len(sources) > 100 {
-		return fail("manual_source_limit")
+		return nil, fail("manual_source_limit")
 	}
 	text := "# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=provider\n"
 	seen := map[string]bool{}
 	for _, source := range sources {
 		u, e := sourceURL(source.URL)
 		if e != nil {
-			return e
+			return nil, e
 		}
 		if seen[u] {
 			continue
@@ -80,7 +80,15 @@ func (a *App) saveManualSources(sources []ManualSource) error {
 		}
 		text += u + "\n"
 	}
-	return atomicWrite(a.sourcesPath(), []byte(text), 0600)
+	return []byte(text), nil
+}
+
+func (a *App) saveManualSources(sources []ManualSource) error {
+	data, e := encodeManualSources(sources)
+	if e != nil {
+		return e
+	}
+	return atomicWrite(a.sourcesPath(), data, 0600)
 }
 
 // Rebuild from the downloaded document, never from last sync's additions.

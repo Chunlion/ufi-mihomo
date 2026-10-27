@@ -377,11 +377,11 @@ func TestInterruptedJournalAndDeletedSettings(t *testing.T) {
 	}
 	plain := work + "/plain.yaml"
 	mustWrite(t, plain, remoteConfig(2), 0600)
-	candidate, hash, e := a.candidate(ctx, plain, work)
+	candidate, hash, e := a.candidate(ctx, plain, work, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	j, e := a.makeJournal(s, before, hash, false)
+	j, e := a.makeJournal(s, before, hash, false, nil, "")
 	if e != nil {
 		t.Fatal(e)
 	}

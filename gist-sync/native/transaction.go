@@ -9,16 +9,17 @@ import (
 )
 
 type Journal struct {
-	Version       int         `json:"version"`
-	ID            string      `json:"id"`
-	Generation    string      `json:"generation"`
-	Boot          string      `json:"boot"`
-	Phase         string      `json:"phase"`
-	HadSource     bool        `json:"hadSource"`
-	Running       bool        `json:"running"`
-	Before        Fingerprint `json:"before"`
-	CandidateHash string      `json:"candidateHash"`
-	Result        Outcome     `json:"result"`
+	Version             int         `json:"version"`
+	ID                  string      `json:"id"`
+	Generation          string      `json:"generation"`
+	Boot                string      `json:"boot"`
+	Phase               string      `json:"phase"`
+	HadSource           bool        `json:"hadSource"`
+	ManualSourcesBefore string      `json:"manualSourcesBefore,omitempty"`
+	Running             bool        `json:"running"`
+	Before              Fingerprint `json:"before"`
+	CandidateHash       string      `json:"candidateHash"`
+	Result              Outcome     `json:"result"`
 }
 
 func (a *App) journalDir() string { return a.data() + "/activation" }
@@ -45,7 +46,7 @@ func (a *App) journal() (Journal, error) {
 	return j, nil
 }
 func (a *App) writeJournal(j Journal) error { return writeJSON(a.journalDir()+"/journal.json", j) }
-func (a *App) makeJournal(s Settings, before Fingerprint, hash string, running bool) (Journal, error) {
+func (a *App) makeJournal(s Settings, before Fingerprint, hash string, running bool, manualData []byte, sourcesHash string) (Journal, error) {
 	j := Journal{Version: 1, ID: nonce(), Generation: s.Generation, Boot: bootID(), Phase: "prepared", Before: before, CandidateHash: hash, Running: running}
 	tmp := a.data() + "/activation.new." + j.ID
 	if exists(a.journalDir()) {
@@ -61,6 +62,13 @@ func (a *App) makeJournal(s Settings, before Fingerprint, hash string, running b
 	if exists(a.source()) {
 		j.HadSource = true
 		if e := copyPrivate(a.source(), tmp+"/source.conf"); e != nil {
+			return j, e
+		}
+	}
+	if manualData != nil {
+		// Publish requested sources only when the verified activation is finalized.
+		j.ManualSourcesBefore = sourcesHash
+		if e := atomicWrite(tmp+"/subscription_urls.txt", manualData, 0600); e != nil {
 			return j, e
 		}
 	}
@@ -90,6 +98,31 @@ func (a *App) cleanJournal() error {
 		return fail("completed_journal_cleanup_failed")
 	}
 	return dirSync(a.data())
+}
+func (a *App) finishActivation(j Journal, out Outcome) error {
+	if j.ManualSourcesBefore != "" {
+		data, e := readFile(a.journalDir()+"/subscription_urls.txt", 1<<20)
+		if e != nil {
+			return e
+		}
+		current, e := fileHash(a.sourcesPath())
+		if e != nil {
+			return e
+		}
+		next := hashBytes(data)
+		if current != j.ManualSourcesBefore && current != next {
+			return fail("manual_sources_changed")
+		}
+		if current != next {
+			if e = atomicWrite(a.sourcesPath(), data, 0600); e != nil {
+				return e
+			}
+		}
+	}
+	if e := a.finishState(out); e != nil {
+		return e
+	}
+	return a.cleanJournal()
 }
 func (a *App) rollback(ctx context.Context, l *Lease, j Journal, stopped bool) error {
 	if e := l.Check(); e != nil {
@@ -170,12 +203,7 @@ func (a *App) recoverActivation(ctx context.Context, l *Lease, stopped bool) (Ou
 		}
 		// A verified marker survives status/receipt loss. Do not reload or undo it.
 		out = j.Result
-		if e = a.finishState(out); e != nil {
-			out.OK = false
-			out.Code = "committed_pending_finalize"
-			return out, e
-		}
-		if e = a.cleanJournal(); e != nil {
+		if e = a.finishActivation(j, out); e != nil {
 			out.OK = false
 			out.Code = "committed_pending_finalize"
 			return out, e
@@ -335,11 +363,13 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 			return out, fail("local_config_conflict")
 		}
 	}
+	var manualData []byte
 	if req.ManualSources != nil {
 		if req.Revision == nil {
 			return out, fail("settings_changed")
 		}
-		if e = a.saveManualSources(*req.ManualSources); e != nil {
+		manualData, e = encodeManualSources(*req.ManualSources)
+		if e != nil {
 			return out, e
 		}
 	}
@@ -347,7 +377,7 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 	if e != nil {
 		return out, e
 	}
-	candidate, hash, e := a.candidate(ctx, plain, work)
+	candidate, hash, e := a.candidate(ctx, plain, work, req.ManualSources)
 	if e != nil {
 		return out, e
 	}
@@ -386,12 +416,22 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 			out.OK = false
 			return out, e
 		}
+		if manualData != nil {
+			if h, e := fileHash(a.sourcesPath()); e != nil || h != sourcesHash {
+				out.OK = false
+				return out, fail("manual_sources_changed")
+			}
+			if e = a.saveManualSources(*req.ManualSources); e != nil {
+				out.OK = false
+				return out, e
+			}
+		}
 		return out, nil
 	}
 	if e = l.Check(); e != nil {
 		return out, e
 	}
-	j, e := a.makeJournal(s, before, hash, pid != 0)
+	j, e := a.makeJournal(s, before, hash, pid != 0, manualData, sourcesHash)
 	if e != nil {
 		return out, e
 	}
@@ -478,12 +518,7 @@ func (a *App) syncConfig(ctx context.Context, req Request, automatic bool) (out 
 		out.Code = "committed_pending_finalize"
 		return out, e
 	}
-	if e = a.finishState(out); e != nil {
-		out.OK = false
-		out.Code = "committed_pending_finalize"
-		return out, e
-	}
-	if e = a.cleanJournal(); e != nil {
+	if e = a.finishActivation(j, out); e != nil {
 		out.OK = false
 		out.Code = "committed_pending_finalize"
 		return out, e

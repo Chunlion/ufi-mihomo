@@ -256,7 +256,7 @@ func (a *App) validateSave(ctx context.Context, req Request, save bool) (out Out
 		return out, fail("config_transaction_pending")
 	}
 	if plain != "" {
-		_, hash, e := a.candidate(ctx, plain, work)
+		_, hash, e := a.candidate(ctx, plain, work, nil)
 		if e != nil {
 			return out, e
 		}

@@ -56,13 +56,43 @@ test('component package cannot skip inspection when Python is missing', t => {
   const f = fixture(t, { 'tproxy-yq.zip': 'package placeholder' });
   const bin = path.join(f.dir, 'bin');
   fs.mkdirSync(bin);
-  for (const tool of ['sh', 'git', 'grep', 'xargs', 'mktemp', 'rm']) {
+  for (const tool of ['sh', 'git', 'grep', 'xargs', 'awk', 'mktemp', 'rm']) {
     const executable = spawnSync('sh', ['-c', 'command -v "$1"', 'sh', tool], { encoding: 'utf8' }).stdout.trim();
     fs.symlinkSync(executable, path.join(bin, tool));
   }
   const result = f.run({ ...process.env, PATH: bin });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /no python found/);
+});
+
+for (const param of ['access_token', 'AccessToken']) {
+  test('component package guard / ' + param, t => {
+    const f = fixture(t, {});
+    const generated = spawnSync('python3', ['-c',
+      "import sys,zipfile; z=zipfile.ZipFile('tproxy-yq.zip','w'); z.writestr('Tools/template.yaml',sys.argv[1]); z.close()",
+      'url: https://example.test/sub?' + param + '=' + 'A'.repeat(16),
+    ], { cwd: f.dir, encoding: 'utf8' });
+    assert.equal(generated.status, 0, generated.stderr);
+    assert.equal(spawnSync('git', ['add', 'tproxy-yq.zip'], { cwd: f.dir }).status, 0);
+    const result = f.run();
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /unredacted values/);
+  });
+}
+
+test('guard refuses when staged content cannot be inspected', t => {
+  const f = fixture(t, { 'clean.txt': 'clean index' });
+  const bin = path.join(f.dir, 'bin');
+  fs.mkdirSync(bin);
+  for (const tool of ['sh', 'mktemp', 'rm']) {
+    const executable = spawnSync('sh', ['-c', 'command -v "$1"', 'sh', tool], { encoding: 'utf8' }).stdout.trim();
+    fs.symlinkSync(executable, path.join(bin, tool));
+  }
+  fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\nexit 2\n');
+  fs.chmodSync(path.join(bin, 'git'), 0o755);
+  const result = f.run({ ...process.env, PATH: bin });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /cannot inspect staged changes/);
 });
 
 for (const token of ['', 'A'.repeat(16), '12345678-1234-1234-1234-123456789abc', 'Abc_def-ghi_jkl-mno_pqr-stu_vwx-yza']) {

@@ -25,9 +25,26 @@ if [ -n "$private" ]; then
   status=1
 fi
 
-keys=$(git diff --cached --name-only -z --diff-filter=ACMR |
-  xargs -0 git --literal-pathspecs grep --cached -I -l -E 'AGE-SECRET-KEY-1[0-9A-Z]{58}' -- || true)
-if [ -n "$keys" ]; then
+# Scan staged additions for plaintext age private keys. Only added lines can
+# introduce a key (removed lines are cleanups and must pass), and any scanner
+# failure must refuse the commit instead of counting as "no key found".
+tmp=$(mktemp) || exit 1
+if ! git diff --cached --diff-filter=ACMR -U0 >"$tmp"; then
+  rm -f "$tmp"
+  printf 'pre-commit: cannot inspect staged changes; refusing commit\n' >&2
+  exit 1
+fi
+keys=$(awk '
+  /^diff --git / { name = "" }
+  /^\+\+\+ / { name = substr($0, 7) }
+  /^\+/ && $0 !~ /^\+\+\+/ && /AGE-SECRET-KEY-1[0-9A-Z]{58}/ && name != "" && !seen[name]++ { print name }
+' "$tmp")
+rc=$?
+rm -f "$tmp"
+if [ "$rc" -ge 2 ]; then
+  printf 'pre-commit: age key scan failed (awk exit %s); refusing commit\n' "$rc" >&2
+  status=1
+elif [ -n "$keys" ]; then
   printf 'pre-commit: age private key in staged files:\n%s\n' "$keys" >&2
   status=1
 fi
@@ -47,7 +64,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
             text = z.read(name).decode('utf-8', 'replace')
         except KeyError:
             continue
-        if re.search(r'AGE-SECRET-KEY-1[0-9A-Z]{58}', text) or re.search(r'''[?&]token=[^\s&#'"<>]+''', text):
+        if re.search(r'AGE-SECRET-KEY-1[0-9A-Z]{58}', text) or re.search(r'''[?&][a-z_]*token[a-z_]*=[^\s&#'"<>]+''', text, re.I):
             bad.append(name)
 if bad:
     sys.stderr.write('pre-commit: unredacted values in package members: %s\n' % ', '.join(bad))

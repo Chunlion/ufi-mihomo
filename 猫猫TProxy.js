@@ -1212,6 +1212,7 @@ function f50Diagnostic(content, fallback = '操作失败') {
   const labels = F50_DIAGNOSTIC_LABELS;
   let summary = labels[code] || labels[cause] || cause || lines.find(line => line.trim()) || fallback;
   if (/^F50_OPERATION_BUSY$/m.test(safe)) summary = '设备操作锁被上次未完成的操作占用；已自动尝试恢复未成功，请稍后重试或执行“恢复网络”。';
+  if (/^F50_OPERATION_RECOVERY_BUSY$/m.test(safe)) summary = '设备任务记录锁被占用；请稍后重试，持续占用时执行“恢复网络”。';
   const downloadFailure = safe.match(/^ARCHIVE_DOWNLOAD_FAILED=(\d+)$/m);
   if (downloadFailure) {
     const curlCodes = { 6: '域名解析失败', 7: '无法连接下载服务器', 22: '下载服务器返回错误状态', 28: '下载超时', 35: 'SSL 握手失败', 47: '重定向次数过多', 56: '接收下载数据中断', 60: '下载服务器 SSL 证书无效' };
@@ -1306,13 +1307,13 @@ async function performF50Uninstall() {
     operationStage(stages[i].title, i, stages.length+1);
     try {
       let response = await runShellWithRoot(stages[i].script, stages[i].timeout);
-      if (i === 0 && /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''))) {
+      if (i === 0 && /^F50_OPERATION_(?:RECOVERY_)?BUSY$/m.test(String(response?.content || ''))) {
         if (await recoverIdleLease()) {
           operationStage(stages[i].title, i, stages.length+1);
           response = await runShellWithRoot(stages[i].script, stages[i].timeout);
         }
       }
-      operationBlocked = /^F50_OPERATION_BUSY$/m.test(String(response?.content || ''));
+      operationBlocked = /^F50_OPERATION_(?:RECOVERY_)?BUSY$/m.test(String(response?.content || ''));
       diagnostics.push({stage:stages[i].title, transportOk:response?.success === true,
         detail:f50Diagnostic(response?.content || 'F50_STAGE_ERROR=empty_response').details});
       if (!response?.success) { failedStage = stages[i].title; break; }
@@ -2724,7 +2725,7 @@ async function ensureF50InstallLease() {
   const ready = deviceTaskUncertain ? { success: false, content: 'F50_OPERATION_BUSY', deviceCompleted: false }
     : await runShellWithRoot(':', 5000);
   const op = activeCriticalOperation;
-  if (!/^F50_OPERATION_BUSY$/m.test(String(ready.content || '')) || !op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return ready;
+  if (!/^F50_OPERATION_(?:RECOVERY_)?BUSY$/m.test(String(ready.content || '')) || !op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return ready;
   let recovered;
   try {
     recovered = f50ShellReply(await hostRunShellWithRoot.call(globalThis, buildF50EmergencyScript('', true, true, false), 120000));
@@ -2866,7 +2867,7 @@ async function chooseF50Package() {
           const message = lastInstallDiagnostic.summary;
           operationFinish(false, message);
           // 租约冲突不是“安装失败”，是设备还在跑上一次任务；把两者分开说，免得用户以为组件包坏了。
-          const blockedByDevice = /^F50_OPERATION_BUSY$/m.test(String(error && (error.message || error)));
+          const blockedByDevice = /^F50_OPERATION_(?:RECOVERY_)?BUSY$/m.test(String(error && (error.message || error)));
           createToast((blockedByDevice ? '设备仍在执行上一次操作<br>' : '安装失败<br>') + safeTextToHtml(message), 'red', 15000);
           return false;
         } finally {
@@ -4101,7 +4102,7 @@ fi`,8000);
               buildF50LeaseFunctions() + '\nf50_lease_acquire ' + shellQuote(tag) + ' browser', 6000));
           } catch (error) { result = { success: false, content: error?.message || String(error) }; }
           let text = String(result?.content || '');
-          if (!(result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) && !/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) {
+          if (!(result?.success && /^F50_LEASE_ACQUIRED=1$/m.test(text)) && !/^F50_OPERATION_(BUSY|RECOVERY_BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) {
             const checked = await hostRunShellWithRoot.call(globalThis,
               buildF50LeaseFunctions() + '\nf50_lease_status ' + shellQuote(tag), 6000)
               .then(f50ShellReply)
@@ -4124,7 +4125,7 @@ fi`,8000);
                 }).finally(() => { op.heartbeatPending = null; });
             }, 20000);
             return true; }
-          if (/^F50_OPERATION_(BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return { ...result, success: false, content: text, deviceCompleted: false };
+          if (/^F50_OPERATION_(BUSY|RECOVERY_BUSY|INVALID_OWNER|UNSAFE_PATH)$/m.test(text)) return { ...result, success: false, content: text, deviceCompleted: false };
           throw f50UnknownCompletion(op, text);
         })();
       }

@@ -2715,6 +2715,9 @@ async function installF50PackageFromNetwork() {
       createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 15000);
       return false;
     }
+    // 上一次在线安装若在下载阶段被关掉页面，zip/日志会留在设备上（清理在页面 finally 里，页面没了就不执行）。
+    // 这里先清掉，避免旧包长期占空间，也避免它和这次的结果混在一起。
+    await runShellWithRoot('rm -f ' + shellQuote(DOWNLOAD_ZIP) + ' ' + shellQuote(DOWNLOAD_LOG) + ' ' + shellQuote(DOWNLOAD_SOURCE_FILE), 5000).catch(() => {});
     const archive = await downloadCoreArchive({ allowCached: false });
     if (!archive.ok) {
       const detail = archive.content || archive.message || '组件包下载失败';

@@ -2717,6 +2717,36 @@ async function ensureF50InstallLease() {
   return runShellWithRoot(':', 5000);
 }
 
+async function offerCachedArchive() {
+  // 设备上可能躺着上一次没装完的整包（67MB）。只有「完整 + 与当前插件配套」才谈复用，
+  // 而且必须让用户自己选：三个下载源都是可变地址，缓存包不保证是最新的。
+  const probe = await runShellWithRoot(`set +e
+ZIP=${shellQuote(DOWNLOAD_ZIP)}
+[ -s "$ZIP" ] || { echo CACHE_ABSENT=1; exit 0; }
+command -v unzip >/dev/null 2>&1 || { echo CACHE_ABSENT=1; exit 0; }
+unzip -t "$ZIP" >/dev/null 2>&1 || { echo CACHE_INVALID=1; exit 0; }
+unzip -p "$ZIP" Tools/components.json 2>/dev/null | grep -qF '"plugin": "${F50_COMPAT_VERSION}"' || { echo CACHE_INVALID=1; exit 0; }
+unzip -p "$ZIP" Tools/components.json 2>/dev/null | grep -qF '"controller": "${F50_COMPAT_VERSION}"' || { echo CACHE_INVALID=1; exit 0; }
+echo CACHE_OK=1
+echo "CACHE_CORE_VERSION=$(unzip -p "$ZIP" Tools/mihomo.version 2>/dev/null | head -n 1)"
+echo "CACHE_BYTES=$(wc -c < "$ZIP" | tr -d ' ')"
+`, 25000);
+  const text = String(probe?.content || '');
+  if (!/^CACHE_OK=1$/m.test(text)) {
+    // 不可用的缓存只会白占 67MB，顺手清掉；页面中断留下的日志一并带走。
+    if (/^CACHE_(?:ABSENT|INVALID)=1$/m.test(text)) {
+      await runShellWithRoot('rm -f ' + shellQuote(DOWNLOAD_ZIP) + ' ' + shellQuote(DOWNLOAD_LOG), 5000).catch(() => {});
+    }
+    return false;
+  }
+  const coreVersion = (text.match(/^CACHE_CORE_VERSION=(.+)$/m) || [])[1] || '未知版本';
+  const bytes = Number((text.match(/^CACHE_BYTES=(\d+)$/m) || [])[1] || 0);
+  const sizeText = bytes > 0 ? `，约 ${Math.round(bytes / 1048576)} MB` : '';
+  return window.confirm(
+    `设备上有一份上次没装完的组件包（内核 ${coreVersion}${sizeText}），与当前插件版本匹配。\n\n`
+    + '确定：直接安装它，不重新下载\n取消：重新下载最新包',
+  );
+}
 async function installF50PackageFromNetwork() {
   return runCriticalOperation('安装核心', async () => {
     if (!confirmF50OperationNotInFlight()) return false;
@@ -2730,10 +2760,13 @@ async function installF50PackageFromNetwork() {
       createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 15000);
       return false;
     }
-    // 上一次在线安装若在下载阶段被关掉页面，zip/日志会留在设备上（清理在页面 finally 里，页面没了就不执行）。
-    // 这里先清掉，避免旧包长期占空间，也避免它和这次的结果混在一起。
-    await runShellWithRoot('rm -f ' + shellQuote(DOWNLOAD_ZIP) + ' ' + shellQuote(DOWNLOAD_LOG) + ' ' + shellQuote(DOWNLOAD_SOURCE_FILE), 5000).catch(() => {});
-    const archive = await downloadCoreArchive({ allowCached: false });
+    // 上一次在线安装若在下载阶段被关掉页面，整包会留在设备上（清理在页面 finally 里，页面没了就不执行）。
+    // 能复用就省一次 67MB 传输；不能复用（缺失/损坏/版本不配套）就地清掉。
+    const reuseCached = await offerCachedArchive();
+    if (reuseCached) operationStage('复用上次下载的组件包');
+    const archive = reuseCached
+      ? { ok: true, source: 'cached', message: '', content: '' }
+      : await downloadCoreArchive({ allowCached: false });
     if (!archive.ok) {
       const detail = archive.content || archive.message || '组件包下载失败';
       lastInstallDiagnostic = f50Diagnostic(detail);

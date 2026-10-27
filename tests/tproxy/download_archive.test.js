@@ -211,6 +211,28 @@ test('online package failure replaces the previous installation diagnostic', asy
   assert.equal(api.diagnostic().details, 'F50_OPERATION_BUSY');
 });
 
+for (const entry of ['online', 'upload']) for (const idle of [false, true]) {
+  test(`installation recovers only an idle writer mutex / ${entry} / ${idle}`, async () => {
+    let attempts = 0, recoveries = 0, downloads = 0, uploads = 0;
+    const { api, input } = installers({
+      runShellWithRoot: async script => script === ':'
+        ? { success: ++attempts > 1, content: 'F50_OPERATION_RECOVERY_BUSY' } : { success: true },
+      hostRunShellWithRoot: async script => {
+        assert.equal(script, 'RECOVER_IDLE'); recoveries++;
+        return { success: idle, content: idle ? 'F50_LEASE_RELEASED=1' : 'F50_CLEAN_ERROR=recovery_busy' };
+      },
+      downloadCoreArchive: async () => { downloads++; return { ok: true }; },
+      uploadFileToDevice: async () => { uploads++; return '/fixture/upload.zip'; },
+    });
+    if (entry === 'online') assert.equal(await api.network(), idle);
+    else { await api.choose(); await input.onchange(); }
+    assert.equal(recoveries, 1);
+    assert.equal(attempts, idle ? 2 : 1);
+    assert.equal(downloads, entry === 'online' && idle ? 1 : 0);
+    assert.equal(uploads, entry === 'upload' && idle ? 1 : 0);
+  });
+}
+
 for (const entry of ['online', 'upload']) for (const outcome of ['idle', 'active_task', 'unknown_owner', 'transport_lost']) {
   test(`uncertain device state through real installation entry / ${entry} / ${outcome}`, async () => {
     let recoveries = 0, downloads = 0, uploads = 0, probes = 0;

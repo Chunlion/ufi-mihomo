@@ -2706,6 +2706,7 @@ async function installF50PackageAtDevicePath(uploaded) {
     if (recoveredWithFallback) message += '；旧环境恢复曾报错，已通过兜底清理复查';
     if (warning) message += warning === 'previous_components_retained' ? '；旧组件回滚目录已保留' : '；安装告警：' + warning;
     lastInstallDiagnostic = {...f50Diagnostic(output), summary: message, ok: true};
+    if (refreshBootButtonState) await refreshBootButtonState();
     clearF50OperationInFlight();
     operationFinish(true, message);
     createToast(safeTextToHtml(message), warning || recoveredWithFallback ? 'yellow' : 'green', 9000);
@@ -3682,6 +3683,7 @@ exit "$delete_rc"
 `},
 ]; }
   let refreshDashboardAfterModeChange = null;
+  let refreshBootButtonState = null;
 
 
 
@@ -8669,6 +8671,7 @@ btn_disabled.onclick = async () => {
       const frame = document.getElementById('mm_iframe'); if (frame) frame.src = 'about:blank';
       renderRuntimeStatus('stopped', '猫猫 - 未安装', document.querySelector('#running_mm'));
       const ruleStatus = document.querySelector('#mm_rule_mode_status'); if (ruleStatus) ruleStatus.textContent = '猫猫组件已删除';
+      if (refreshBootButtonState) await refreshBootButtonState();
     } else pluginArtifactsRemoved = false;
     operationFinish(result.ok, result.summary);
     createToast(safeTextToHtml(result.summary), result.ok ? 'green' : 'red', result.ok ? 5000 : 12000);
@@ -10204,6 +10207,7 @@ EOF_F50_RESTORE_MEMBERS
       boot_on.textContent = status == 'direct' || status == 'managed' ? '已开启自启'
         : status == 'incomplete' ? '自启待修复'
         : '开机自启';
+      if (boot_on.dataset.kanoBusy === '1') boot_on.dataset.rawText = boot_on.textContent;
       boot_on.title = state && state.message || '';
     };
     boot_on.addEventListener('click', async () => {
@@ -10233,9 +10237,10 @@ EOF_F50_RESTORE_MEMBERS
       });
     });
 
-    inspectBootIntegration()
+    refreshBootButtonState = () => inspectBootIntegration()
       .then(applyBootButtonState)
       .catch((error) => console.error('[KANO] 开机自启状态检查失败:', error));
+    refreshBootButtonState();
 
     const showLogBtn = document.createElement('button');
     showLogBtn.classList.add('btn');

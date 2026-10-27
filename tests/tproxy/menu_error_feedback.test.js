@@ -108,3 +108,54 @@ test('权限校验失败时不弹错误提示, 保持原有静默返回', async 
   await promise;
   assert.equal(toasts.length, 0);
 });
+
+for (const ok of [true, false]) test('卸载后只在成功时重新读取自启状态 / ' + ok, async () => {
+  let refreshes = 0;
+  const { promise } = run('btn_disabled.onclick = async () => {', {
+    confirmF50OperationNotInFlight: () => true, window: { confirm: () => true },
+    acquireCriticalOperation: () => ({}), markF50OperationInFlight() {}, clearF50OperationInFlight() {},
+    btn_disabled: {}, templateFlowTimer: null, templateFlowMessages: [],
+    performF50Uninstall: async () => ({ ok, summary: 'uninstall result' }),
+    refreshBootButtonState: async () => { refreshes++; },
+    invalidateBinarySnapshot() {}, invalidateStatusSnapshot() {},
+    localStorage: { removeItem() {} }, document: { getElementById: () => null, querySelector: () => null },
+    renderRuntimeStatus() {}, operationFinish() {}, releaseCriticalOperation: async () => {},
+  });
+  await promise;
+  assert.equal(refreshes, ok ? 1 : 0);
+});
+
+for (const ok of [true, false]) test('安装后只在确认完成时重新读取自启状态 / ' + ok, async () => {
+  let refreshes = 0, requests = 0;
+  const start = source.indexOf('async function installF50PackageAtDevicePath(');
+  const code = source.slice(start, source.indexOf('async function ensureF50InstallLease()', start));
+  const install = vm.runInNewContext(code + '\ninstallF50PackageAtDevicePath', {
+    operationStage() {}, buildF50InspectScript: () => 'inspect', buildF50InstallScript: () => 'install',
+    runShellWithRoot: async () => ++requests === 1 ? { success: true, content: 'F50_INSPECT_OK=1' }
+      : { success: ok, deviceCompleted: true, deviceExitCode: ok ? 0 : 1,
+        content: ok ? 'F50_INSTALL_COMPONENTS_OK=1\nF50_INSTALL_TRANSACTION_STATE=complete\nKANO_INSTALL_OK=1\nF50_INSTALL_STATUS=installed_running'
+          : 'F50_INSTALL_CODE=unzip_failed' },
+    refreshBootButtonState: async () => { refreshes++; },
+    invalidateStatusSnapshot() {}, invalidateBinarySnapshot() {},
+    f50Diagnostic: details => ({ details }), clearF50OperationInFlight() {},
+    operationFinish() {}, createToast() {}, safeTextToHtml: String,
+  });
+  assert.equal(await install('/fixture/package.zip'), ok);
+  assert.equal(refreshes, ok ? 1 : 0);
+});
+
+for (const state of ['direct', 'disabled']) test('自启按钮解除忙碌时保留新状态文案 / ' + state, () => {
+  const button = { textContent: '处理中…', disabled: true, style: {},
+    dataset: { kanoBusy: '1', rawText: state === 'direct' ? '开机自启' : '已开启自启', rawDisabled: '0' } };
+  const applyStart = source.indexOf('const applyBootButtonState =');
+  const busyStart = source.indexOf('const setButtonBusy =');
+  const api = vm.runInNewContext(
+    source.slice(applyStart, source.indexOf("boot_on.addEventListener('click'", applyStart))
+    + source.slice(busyStart, source.indexOf('let activeCriticalOperation', busyStart))
+    + '\n({apply:applyBootButtonState,busy:setButtonBusy})', { boot_on: button });
+  api.apply({ state });
+  api.busy(button, false);
+  assert.equal(button.dataset.bootState, state);
+  assert.equal(button.textContent, state === 'direct' ? '已开启自启' : '开机自启');
+  assert.equal(button.disabled, false);
+});

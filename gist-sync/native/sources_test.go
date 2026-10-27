@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -149,5 +151,94 @@ func TestManualProviderPlaceholderIsNotALoadedNode(t *testing.T) {
 	}
 	if !manualProviderReady(map[string]any{"proxies": []any{map[string]any{"name": "actual", "type": "Shadowsocks"}}}) {
 		t.Fatal("real node rejected")
+	}
+}
+
+func TestManualSourcesFollowActivationTransaction(t *testing.T) {
+	for _, stage := range []string{"core_test", "after_commit", "before_state_record", "state_write", "finalize"} {
+		t.Run(stage, func(t *testing.T) {
+			a := fixture(t)
+			ctx := context.Background()
+			saveFixture(t, a)
+			if e := a.saveManualSources([]ManualSource{{"https://old.example.test/sub", true}}); e != nil {
+				t.Fatal(e)
+			}
+			before, _ := fileHash(a.sourcesPath())
+			configBefore, _ := fileHash(a.cfg())
+			s, _ := a.readSettings()
+			sources := []ManualSource{{"https://new.example.test/sub", true}}
+			a.Hook = func(point string) error {
+				if point == stage {
+					return fail("activation_injected")
+				}
+				return nil
+			}
+			out, e := a.syncConfig(ctx, Request{Revision: &s.Revision, ManualSources: &sources}, false)
+			if code(e) != "activation_injected" || out.OK {
+				t.Fatal(out, e)
+			}
+			after, _ := fileHash(a.sourcesPath())
+			if stage == "core_test" || stage == "after_commit" {
+				configAfter, _ := fileHash(a.cfg())
+				if before != after || configBefore != configAfter || exists(a.journalDir()) {
+					t.Fatal("failed activation changed the source list or configuration")
+				}
+				return
+			}
+			if stage == "before_state_record" && before != after {
+				t.Fatal("unfinalized activation published source settings")
+			}
+			a.Hook = nil
+			a.HTTPClient = doFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("finalization downloaded the configuration again")
+				return nil, io.EOF
+			})
+			out, e = a.syncConfig(ctx, Request{}, false)
+			stored, se := a.manualSources()
+			if e != nil || se != nil || !out.OK || out.Code != "commit_finalized" || exists(a.journalDir()) || len(stored) != 1 || stored[0] != sources[0] {
+				t.Fatal("source settings did not follow recovered activation", out, e, se)
+			}
+		})
+	}
+}
+
+func TestManualSourcesNoopPublishesDisabledAndEmptyLists(t *testing.T) {
+	a := fixture(t)
+	ctx := context.Background()
+	saveFixture(t, a)
+	s, _ := a.readSettings()
+	for i, sources := range [][]ManualSource{{{"https://one.example.test/sub", false}}, {{"https://two.example.test/sub", false}}, {}} {
+		before, _ := fileHash(a.cfg())
+		out, e := a.syncConfig(ctx, Request{Revision: &s.Revision, ManualSources: &sources}, false)
+		stored, se := a.manualSources()
+		if e != nil || se != nil || !out.OK || !same(stored, sources) {
+			t.Fatal(out, e, se)
+		}
+		if i > 0 {
+			after, _ := fileHash(a.cfg())
+			if out.Code != "up_to_date" || out.Written || before != after || exists(a.journalDir()) {
+				t.Fatal("source-only save rewrote the configuration", out)
+			}
+		}
+	}
+}
+
+func TestManualSourcesFinalizePreservesConcurrentEdit(t *testing.T) {
+	a := fixture(t)
+	ctx := context.Background()
+	saveFixture(t, a)
+	s, _ := a.readSettings()
+	external := []ManualSource{{"https://external.example.test/sub", true}}
+	a.Hook = func(point string) error {
+		if point == "before_state_record" {
+			return a.saveManualSources(external)
+		}
+		return nil
+	}
+	sources := []ManualSource{{"https://new.example.test/sub", true}}
+	out, e := a.syncConfig(ctx, Request{Revision: &s.Revision, ManualSources: &sources}, false)
+	stored, _ := a.manualSources()
+	if code(e) != "manual_sources_changed" || out.OK || out.Code != "committed_pending_finalize" || !same(stored, external) {
+		t.Fatal("concurrent source edit was overwritten", out, e)
 	}
 }

@@ -154,14 +154,19 @@ func (a *App) options(ctx context.Context) (map[string]string, []string, error) 
 	}
 	return o, connected, nil
 }
-func (a *App) candidate(ctx context.Context, plain, work string) (string, string, error) {
+func (a *App) candidate(ctx context.Context, plain, work string, manualSources *[]ManualSource) (string, string, error) {
 	m, e := a.readYAML(ctx, plain)
 	if e != nil {
 		return "", "", e
 	}
-	sources, e := a.manualSources()
-	if e != nil {
-		return "", "", e
+	var sources []ManualSource
+	if manualSources != nil {
+		sources = *manualSources
+	} else {
+		sources, e = a.manualSources()
+		if e != nil {
+			return "", "", e
+		}
 	}
 	if e = mergeManualSources(m, sources); e != nil {
 		return "", "", e

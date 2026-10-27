@@ -456,7 +456,7 @@ func applyPrivate(out map[string]any, o map[string]string, connected []string) (
 		}
 	}
 	policy := strings.TrimSpace(o["private_route_policy"])
-	if len([]rune(policy)) > 128 || regexp.MustCompile(`[,\x00-\x1f\x7f]`).MatchString(policy) {
+	if regexp.MustCompile(`[,\x00-\x1f\x7f]`).MatchString(policy) {
 		return nil, fail("private_policy_invalid")
 	}
 	if enabled && (len(cidrs) == 0 || policy == "") {

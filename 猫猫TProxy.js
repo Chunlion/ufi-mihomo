@@ -410,13 +410,28 @@ ${includeFrontend ? '  if [ "$2" = browser ]; then f50_writer_enter || return 1;
     fi
   fi
   [ ! -L "$F50_OPERATION_LOCK/owner" ] || return 1
-${includeFrontend ? `  # Reclaim an expired frontend only after every device task has a completion receipt.
+${includeFrontend ? `  # 页面在任务执行途中被关掉/锁屏时，壳进程来不及写回执，记录会永远停在 running。
+  # 那种记录对应的 worker 与 manager 进程都已消失，永远不可能再产生回执，必须允许回收，
+  # 否则租约会一直 BUSY，用户只能去“恢复网络”才能继续操作。
+  f50_pid_gone() {
+    [ -n "$1" ] && [ -d "/proc/$1" ] || return 0
+    [ -z "$2" ] && return 1
+    [ "$(awk '{sub(/^.*\\) /, ""); split($0, s, " "); print s[20]}' "/proc/$1/stat" 2>/dev/null)" = "$2" ] && return 1
+    return 0
+  }
+  f50_task_dead_record() {
+    read -r dr_fmt dr_owner dr_req dr_pid dr_start dr_mgr dr_mstart dr_state dr_rc dr_extra < "$1" 2>/dev/null || return 1
+    [ "$dr_fmt" = F50_TASK_V2 ] && [ "$dr_state" = running ] || return 1
+    f50_pid_gone "$dr_pid" "$dr_start" && f50_pid_gone "$dr_mgr" "$dr_mstart"
+  }
+  # Reclaim an expired frontend only when every device task either has a completion receipt
+  # or its processes are provably gone.
   if [ "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" != "$lease_tag" ] && [ ! -e "$F50_OPERATION_LOCK/cancelled" ]; then
     read -r stale_owner stale_deadline < "$F50_OPERATION_LOCK/frontend" 2>/dev/null
     if [ "$stale_owner" = "$(cat "$F50_OPERATION_LOCK/owner" 2>/dev/null)" ] && [ -n "$stale_deadline" ] && [ "$stale_deadline" -le "$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)" ] 2>/dev/null; then
       for stale_task in "$F50_TASK_DIR/$stale_owner."*; do
         [ -e "$stale_task" ] || [ -L "$stale_task" ] || continue
-        f50_task_receipt "$stale_owner" "$stale_task" || { echo F50_OPERATION_BUSY; return 1; }
+        f50_task_receipt "$stale_owner" "$stale_task" || f50_task_dead_record "$stale_task" || { echo F50_OPERATION_BUSY; return 1; }
       done
       for stale_task in "$F50_TASK_DIR/$stale_owner."*; do
         [ ! -e "$stale_task" ] || rm -f "$stale_task" || return 1

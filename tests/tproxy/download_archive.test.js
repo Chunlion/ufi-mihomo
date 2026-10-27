@@ -28,7 +28,7 @@ function downloader(responses, logs = []) {
       calls.push(script);
       assert.ok(responses.length, 'unexpected download attempt');
       const result = responses.shift();
-      if (result.deviceCompleted === false || result.content === 'ARCHIVE_READY=cached') return result;
+      if (result.deviceCompleted === false) return result;
       assert.equal(timeout, 10000);
       if (/^ARCHIVE_(?:READY=downloaded|DOWNLOAD_FAILED=|VERIFY_FAILED=|DOWNLOAD_STARTED=)/.test(result.content)) {
         currentLog = { success: true, content: result.content === 'ARCHIVE_DOWNLOAD_STARTED=1' ? ''
@@ -97,14 +97,6 @@ test('all download failures retain diagnostics and report failure', async () => 
   assert.match(result.content, /HTTP 500/);
 });
 
-test('cached compatible packages do not require a pinned release hash',async()=>{
-  const {download,calls}=downloader([{success:true,content:'ARCHIVE_READY=cached'}]);
-  assert.equal((await download({allowCached:true})).ok,true);
-  assert.equal(calls.length,1);
-  assert.match(calls[0],/unzip -t "\$ZIP"/);
-  assert.doesNotMatch(calls[0],/sha256sum/);
-});
-
 test('background downloads tolerate a failed log read without restarting the worker', async () => {
   const { download, calls, reads } = downloader([{ success: true, content: 'ARCHIVE_READY=downloaded' }], [
     { success: true, content: 'downloading' }, { success: false, content: 'Load failed' },
@@ -164,27 +156,30 @@ for (const valid of [true, false]) test('device background worker verifies ZIP b
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const allowCached of [false, true]) {
-  for (const content of ['F50_OPERATION_BUSY', 'F50_OPERATION_UNSAFE_PATH']) {
-    test(`lease failure stops package requests / cache=${allowCached} / ${content}`, async () => {
-      const { download, calls } = downloader([{ success: false, content, deviceCompleted: false }]);
-      const result = await download({ allowCached });
-      assert.equal(result.ok, false);
-      assert.equal(result.stage, 'lease');
-      assert.equal(result.content, content);
-      assert.equal(calls.length, 1);
-    });
-  }
+for (const content of ['F50_OPERATION_BUSY', 'F50_OPERATION_UNSAFE_PATH']) {
+  test(`lease failure stops package requests / ${content}`, async () => {
+    const { download, calls } = downloader([{ success: false, content, deviceCompleted: false }]);
+    const result = await download();
+    assert.equal(result.ok, false);
+    assert.equal(result.stage, 'lease');
+    assert.equal(result.content, content);
+    assert.equal(calls.length, 1);
+  });
 }
 
 function installers(overrides = {}, realEntry = false) {
-  const input = { files: [{}], click() {} }, calls = [];
+  const input = { files: [new Blob([new Uint8Array([0x50, 0x4b, 3, 4])])], click() {} }, calls = [];
+  const storage = new Map();
   const prior = { ok: false, summary: 'previous install', details: 'F50_INSTALL_WARNING=uploaded_package_cleanup_failed' };
   const api = vm.runInNewContext('let lastInstallDiagnostic = prior, f50PackageInput = null;\n'
+    + source.slice(source.indexOf('const F50_OPERATION_MARK ='), source.indexOf('async function installF50PackageAtDevicePath'))
     + (realEntry ? source.slice(source.indexOf('const acquireCriticalOperation ='), source.indexOf('const runCriticalButtonOperation =')) : '')
     + source.slice(source.indexOf('async function ensureF50InstallLease()'), source.indexOf('  // KPR: dual-stack'))
     + '\n({network:installF50PackageFromNetwork,choose:chooseF50Package,diagnostic:()=>lastInstallDiagnostic,run:runCriticalOperation,state:()=>deviceTaskUncertain,operation:()=>activeCriticalOperation})', {
     prior, document: { createElement: () => input, body: { appendChild() {} } },
+    localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+    window: { confirm: () => true }, F50_COMPAT_VERSION: 'fixture', F50_FILES_DIR: '/fixture',
+    DOWNLOAD_ZIP: '/fixture/package.zip', DOWNLOAD_LOG: '/fixture/package.log', DOWNLOAD_SOURCE_FILE: '/fixture/package.source',
     deviceTaskUncertain: false,
     transientShellOperation: null, recoveryInProgress: false,
     createOperationProgress: () => ({ finish() {} }), createRandomString: () => 'fixture',
@@ -206,7 +201,7 @@ function installers(overrides = {}, realEntry = false) {
     installF50PackageAtDevicePath: async () => { calls.push('install'); return true; },
     ...overrides,
   });
-  return { api, input, calls, prior };
+  return { api, input, calls, prior, storage };
 }
 
 test('online package failure replaces the previous installation diagnostic', async () => {
@@ -242,7 +237,7 @@ for (const entry of ['online', 'upload']) for (const outcome of ['idle', 'active
     assert.equal(recoveries, 1);
     assert.equal(downloads, entry === 'online' && outcome === 'idle' ? 1 : 0);
     assert.equal(uploads, entry === 'upload' && outcome === 'idle' ? 1 : 0);
-    assert.equal(probes, outcome === 'idle' ? 2 : 0);
+    assert.equal(probes, outcome === 'idle' ? (entry === 'online' ? 3 : 2) : 0);
     assert.equal(api.state(), outcome !== 'idle');
     assert.equal(api.operation(), null);
     if (['active_task', 'unknown_owner'].includes(outcome)) assert.match(api.diagnostic().details, new RegExp('F50_RECOVERY_STATE=' + outcome));
@@ -288,6 +283,107 @@ test('cleanup failure retains the original installation error', async () => {
   await api.choose();
   await input.onchange();
   assert.equal(api.diagnostic().details, 'install_fixture_failure\nF50_INSTALL_WARNING=uploaded_package_cleanup_failed');
+});
+
+for (const bytes of ['<html>download failed</html>', '', 'PK', 'PK\u0005\u0006']) {
+  test('invalid local package is rejected before upload / ' + JSON.stringify(bytes), async () => {
+    const toasts = [];
+    const { api, input, calls } = installers({ createToast: text => toasts.push(text) });
+    input.files = [new Blob([bytes])];
+    await api.choose();
+    await input.onchange();
+    assert.deepEqual(calls, []);
+    assert.match(toasts[0], /不是 ZIP 组件包/);
+  });
+}
+
+test('local header check reads only four bytes and handles unreadable files', async () => {
+  let slices = 0;
+  const { api, input, calls } = installers();
+  input.files = [{ slice(start, end) {
+    assert.equal(start, 0); assert.equal(end, 4); slices++;
+    return { arrayBuffer: async () => { throw Error('file_unreadable'); } };
+  } }];
+  await api.choose(); await input.onchange();
+  assert.equal(slices, 1);
+  assert.deepEqual(calls, []);
+});
+
+for (const entry of ['online', 'upload']) {
+  test('a new page cleans only the recorded upload after acquiring its lease / ' + entry, async () => {
+    const storage = new Map([['kano_f50_uploaded_package', '/fixture/old upload.zip']]);
+    const { api, input, calls } = installers({
+      localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+      downloadCoreArchive: async () => ({ ok: true }),
+    });
+    if (entry === 'online') await api.network();
+    else { await api.choose(); await input.onchange(); }
+    assert.deepEqual(calls.slice(0, 2), [':', 'rm -f "/fixture/old upload.zip"']);
+    assert.equal(storage.has('kano_f50_uploaded_package'), false);
+    assert.equal(calls.some(script => script.includes('rm -f') && script.includes('*')), false);
+  });
+}
+
+test('uploaded path is recorded before installation; failed cleanup survives a new page', async () => {
+  const storage = new Map();
+  const localStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  const first = installers({ localStorage,
+    runShellWithRoot: async script => ({ success: script === ':' }),
+    installF50PackageAtDevicePath: async path => {
+      assert.equal(storage.get('kano_f50_uploaded_package'), path);
+      return false;
+    },
+  });
+  await first.api.choose(); await first.input.onchange();
+  assert.equal(storage.get('kano_f50_uploaded_package'), '/fixture/upload.zip');
+  const second = installers({ localStorage });
+  await second.api.choose(); await second.input.onchange();
+  assert.deepEqual(second.calls.slice(0, 3), [':', 'rm -f "/fixture/upload.zip"', 'upload']);
+  assert.equal(storage.has('kano_f50_uploaded_package'), false);
+});
+
+test('busy device retains recorded upload and never deletes it', async () => {
+  const { api, input, calls, storage } = installers({ runShellWithRoot: async () => ({ success: false, content: 'F50_OPERATION_BUSY' }) });
+  storage.set('kano_f50_uploaded_package', '/fixture/old.zip');
+  await api.choose(); await input.onchange();
+  assert.deepEqual(calls, []);
+  assert.equal(storage.get('kano_f50_uploaded_package'), '/fixture/old.zip');
+});
+
+for (const entry of ['online', 'upload']) test('failed stale upload cleanup blocks installation / ' + entry, async () => {
+  const { api, input, calls, storage } = installers({ runShellWithRoot: async script => ({ success: script === ':' }) });
+  storage.set('kano_f50_uploaded_package', '/fixture/old.zip');
+  if (entry === 'online') assert.equal(await api.network(), false);
+  else { await api.choose(); await input.onchange(); }
+  assert.deepEqual(calls, []);
+  assert.equal(storage.get('kano_f50_uploaded_package'), '/fixture/old.zip');
+  assert.match(api.diagnostic().details, /uploaded_package_cleanup_failed/);
+});
+
+for (const path of ['/data/clash/Proxy/config.yaml', '/fixture/../config.yaml']) {
+  test('invalid cleanup record cannot delete outside the upload directory / ' + path, async () => {
+    const { api, input, calls, storage } = installers();
+    storage.set('kano_f50_uploaded_package', path);
+    await api.choose(); await input.onchange();
+    assert.equal(calls.includes('rm -f ' + JSON.stringify(path)), false);
+  });
+}
+
+for (const reuse of [true, false]) test('verified cache is offered only by the installation entry / reuse=' + reuse, async () => {
+  let downloads = 0, prompts = 0;
+  const { api, calls } = installers({
+    runShellWithRoot: async script => {
+      calls.push(script);
+      return { success: true, content: script.includes('CACHE_CORE_VERSION=') ? 'CACHE_OK=1\nCACHE_CORE_VERSION=v1\nCACHE_BYTES=67000000' : '' };
+    },
+    window: { confirm: () => { prompts++; return reuse; } },
+    downloadCoreArchive: async () => { downloads++; return { ok: true }; },
+  });
+  assert.equal(await api.network(), true);
+  assert.equal(prompts, 1);
+  assert.equal(downloads, reuse ? 0 : 1);
+  assert.match(calls[1], /unzip -t/);
+  assert.doesNotMatch(calls[1], /sha256sum/);
 });
 
 for (const entry of ['online', 'upload']) {

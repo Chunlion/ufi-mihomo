@@ -14,6 +14,14 @@ function slice(start, end) {
   return source.slice(from, to);
 }
 
+test('every emitted installation failure has a Chinese diagnostic', () => {
+  const labels = vm.runInNewContext(slice('const F50_DIAGNOSTIC_LABELS =', 'function f50Diagnostic') + '\nF50_DIAGNOSTIC_LABELS');
+  const codes = new Set(Array.from(source.matchAll(/\bf50_install_fail\s+([a-z][a-z0-9_]*)/g), match => match[1]));
+  for (const match of source.matchAll(/\bF50_INSTALL_CODE=([a-z][a-z0-9_]*)/g)) codes.add(match[1]);
+  assert.ok(codes.size >= 52);
+  for (const code of codes) assert.match(labels[code] || '', /[\u4e00-\u9fff]/, code);
+});
+
 function harness(overrides = {}) {
   const dialogs = [];
   const base = {

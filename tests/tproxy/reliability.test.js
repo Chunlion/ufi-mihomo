@@ -99,20 +99,30 @@ kill -0 "$worker" && echo OLD_TASK_RUNNING=1
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('expired frontend reclaims only confirmed finished receipts and removes them', () => {
-  for (const state of ['finished', 'running', 'invalid']) {
+// f50_task_dead_record 允许回收「running 且进程已确定消失」的记录：页面在任务执行途中被关掉时
+// 壳进程来不及写回执，那些 worker/manager 已不存在，不回收会让租约永久 BUSY。
+// 因此这里既锁 finished 的回收，也锁 running 的两种情形——进程存活必须保留租约。
+test('expired frontend reclaims only finished or provably dead receipts', () => {
+  const livePid = process.pid;
+  const liveStart = fs.readFileSync(`/proc/${livePid}/stat`, 'utf8').replace(/^.*\)\s/, '').split(' ')[19];
+  const receiptRow = (pid, start, state) => `F50_TASK_V2 mm_stale mm_stale.1 ${pid} ${start} ${pid} ${start} ${state} 0\n`;
+  for (const [label, body, acquired] of [
+    ['finished receipt', receiptRow(2147483647, 1, 'finished'), true],
+    ['running receipt with live processes', receiptRow(livePid, liveStart, 'running'), false],
+    ['running receipt whose processes are gone', receiptRow(2147483647, 1, 'running'), true],
+    ['unconfirmed receipt', 'unconfirmed\n', false],
+  ]) {
     const dir = temp(), lock = path.join(dir, 'lease'), receipt = path.join(dir, 'tasks/mm_stale.1');
     try {
       write(lock, 'owner', 'mm_stale\n');
       write(lock, 'frontend', 'mm_stale 1\n');
-      write(dir, 'tasks/mm_stale.1', state === 'invalid' ? 'unconfirmed\n'
-        : `F50_TASK_V2 mm_stale mm_stale.1 2147483647 1 2147483646 1 ${state} 0\n`);
+      write(dir, 'tasks/mm_stale.1', body);
       const result = shell(api.lease() + '\nf50_lease_acquire mm_fixture browser\n', {
         F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: path.join(dir, 'recovery'), F50_TASK_DIR: path.join(dir, 'tasks'),
       });
-      assert.equal(result.status, state === 'finished' ? 0 : 1, result.stdout + result.stderr);
-      assert.equal(fs.existsSync(receipt), state !== 'finished');
-      assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), state === 'finished' ? 'mm_fixture\n' : 'mm_stale\n');
+      assert.equal(result.status, acquired ? 0 : 1, label + ': ' + result.stdout + result.stderr);
+      assert.equal(fs.existsSync(receipt), !acquired, label + ': receipt retention');
+      assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), acquired ? 'mm_fixture\n' : 'mm_stale\n', label + ': owner');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
 });

@@ -7652,12 +7652,35 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
+  // 弹窗容器的宽度不等于视口宽度：F50 把插件面板放在页面右侧一块窄区域里，
+  // 用 vw 算出来的宽度会把弹窗撑出屏幕、右侧按钮被裁。这里按弹窗自身左边缘和
+  // 父容器宽度取较小值，落成像素宽度；量不到就保留 CSS 里的默认宽度。
+  const fitDialogWidth = (el, target, maxWidth = 960) => {
+    if (!el || !target || target.nodeType !== 1) return;
+    const apply = () => {
+      try {
+        const viewport = document.documentElement.clientWidth || window.innerWidth || 0;
+        if (!viewport) return;
+        const limits = [viewport - Math.max(0, el.getBoundingClientRect().left) - 16];
+        const parent = el.parentElement;
+        if (parent && parent.clientWidth) limits.push(parent.clientWidth - 16);
+        const room = Math.min.apply(null, limits);
+        if (room < 240) return;
+        target.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
+        target.style.maxWidth = '100%';
+      } catch (_) { /* 拿不到布局信息时保留默认宽度 */ }
+    };
+    apply();
+    // 首次调用可能发生在弹窗插入文档之前（量到 0），下一帧布局完成后再校正一次。
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+  };
+
   const askConfirm = (id, title, body, ok = '确认', cancel = '取消') => new Promise((resolve) => {
     const progress = activeCriticalOperation && activeCriticalOperation.progress;
     if (progress) progress.pause(true);
     const { el, close } = createFixedToast(
       id,
-      `<div style="pointer-events:all;width:90vw;max-width:520px;">
+      `<div style="pointer-events:all;width:auto;max-width:520px;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
         <div style="margin-top:10px;font-size:.7rem;line-height:1.75">${body}</div>
         <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:14px;">
@@ -7666,6 +7689,7 @@ KANO_WRITE_CHECK_EOF
         </div>
       </div>`,
     );
+    fitDialogWidth(el, el.firstElementChild, 520);
     const done = (value) => {
       close();
       if (progress) progress.pause(false);
@@ -7675,6 +7699,42 @@ KANO_WRITE_CHECK_EOF
     const cancelBtn = el.querySelector('.cancel');
     if (okBtn) okBtn.addEventListener('click', () => done(true));
     if (cancelBtn) cancelBtn.addEventListener('click', () => done(false));
+  });
+
+  // 单行文本输入框，返回输入内容；取消返回 null。备注编辑走这里。
+  const askText = (id, title, body, defaultValue = '') => new Promise((resolve) => {
+    const progress = activeCriticalOperation && activeCriticalOperation.progress;
+    if (progress) progress.pause(true);
+    const { el, close } = createFixedToast(
+      id,
+      `<div style="pointer-events:all;width:auto;max-width:460px;min-width:0;">
+        <div class="title" style="margin:0">${escapeHtml(title)}</div>
+        <div style="margin-top:10px;font-size:.68rem;line-height:1.7;overflow-wrap:anywhere;">${body}</div>
+        <input class="k-text-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="${escapeHtml(defaultValue)}" style="box-sizing:border-box;width:100%;margin-top:10px;padding:9px;font-size:.7rem;border-radius:9px;border:1px solid rgba(148,163,184,.35);background:rgba(15,23,42,.9);color:#dbeafe;">
+        <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
+          <button class="ok">保存</button>
+          <button class="cancel">取消</button>
+        </div>
+      </div>`,
+    );
+    fitDialogWidth(el, el.firstElementChild, 460);
+    const input = el.querySelector('.k-text-input');
+    const done = (value) => {
+      close();
+      if (progress) progress.pause(false);
+      resolve(value);
+    };
+    const okBtn = el.querySelector('.ok');
+    const cancelBtn = el.querySelector('.cancel');
+    if (okBtn) okBtn.addEventListener('click', () => done(input ? input.value : ''));
+    if (cancelBtn) cancelBtn.addEventListener('click', () => done(null));
+    if (input) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); done(input.value); }
+        else if (event.key === 'Escape') { event.preventDefault(); done(null); }
+      });
+      setTimeout(() => { try { input.focus(); input.select(); } catch (_) { /* 焦点失败不影响输入 */ } }, 30);
+    }
   });
 
   // \u68c0\u6d4b\u662f\u5426\u5f00\u673a\u81ea\u542f
@@ -8211,29 +8271,6 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         rm -f ${shellQuote(txBase)} ${shellQuote(txTemplate)} ${shellQuote(`${txBase}.new`)} ${shellQuote(`${txTemplate}.new`)} ${shellQuote(subRollbackPath)} 2>/dev/null || true
       `, 5000);
     }
-  };
-
-  // 弹窗容器的宽度不等于视口宽度：F50 把插件面板放在页面右侧一块窄区域里，
-  // 用 vw 算出来的宽度会把弹窗撑出屏幕、右侧按钮被裁。这里按弹窗自身左边缘和
-  // 父容器宽度取较小值，落成像素宽度；量不到就保留 CSS 里的默认宽度。
-  const fitDialogWidth = (el, target, maxWidth = 960) => {
-    if (!el || !target || target.nodeType !== 1) return;
-    const apply = () => {
-      try {
-        const viewport = document.documentElement.clientWidth || window.innerWidth || 0;
-        if (!viewport) return;
-        const limits = [viewport - Math.max(0, el.getBoundingClientRect().left) - 16];
-        const parent = el.parentElement;
-        if (parent && parent.clientWidth) limits.push(parent.clientWidth - 16);
-        const room = Math.min.apply(null, limits);
-        if (room < 240) return;
-        target.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
-        target.style.maxWidth = '100%';
-      } catch (_) { /* 拿不到布局信息时保留默认宽度 */ }
-    };
-    apply();
-    // 首次调用可能发生在弹窗插入文档之前（量到 0），下一帧布局完成后再校正一次。
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
   };
 
   const showInfoDialog = (id, title, bodyHtml) => {
@@ -8808,27 +8845,39 @@ btn_disabled.onclick = async () => {
     } catch (_) { return ''; }
   };
 
+  // 直连设备名单每行是「地址[ # 备注]」。设备端读取前会剥掉 # 之后的内容
+  // （Clash.Service 与 DNS 接管分支都做 sed 's/#.*//'），所以备注只影响界面，
+  // 不进入 iptables 规则。
+  const deviceNoteText = (note = '') => String(note).replace(/[#\r\n]+/g, ' ').trim();
+  const parseDeviceBypassLine = (line = '') => {
+    const text = String(line);
+    const commentAt = text.indexOf('#');
+    const address = (commentAt >= 0 ? text.slice(0, commentAt) : text).trim();
+    const note = commentAt >= 0 ? deviceNoteText(text.slice(commentAt + 1)) : '';
+    const normalized = address ? (normalizeMac(address) || normalizeIpLike(address) || normalizeIpv6Like(address)) : '';
+    return { address, note, normalized };
+  };
+  const readDeviceBypassNotes = (value = '') => {
+    const notes = new Map();
+    String(value || '').split('\n').forEach((line) => {
+      const parsed = parseDeviceBypassLine(line);
+      if (parsed.normalized) notes.set(parsed.normalized.toUpperCase(), parsed.note);
+    });
+    return notes;
+  };
   const normalizeDeviceBypassText = (value = '') => {
     const invalid = [];
     const seen = new Set();
     const rows = [];
     String(value || '').split('\n').forEach((line, index) => {
-      const raw = line.replace(/#.*$/, '').trim();
-      if (!raw) return;
-      const item = raw;
-      if (/\s/.test(item)) { invalid.push(`${index + 1}: ${raw}`); return; }
-      const mac = normalizeMac(item);
-      const ip = normalizeIpLike(item);
-      const ipv6 = normalizeIpv6Like(item);
-      const normalized = mac || ip || ipv6;
-      if (!normalized) {
-        invalid.push(`${index + 1}: ${raw}`);
-        return;
-      }
-      if (!seen.has(normalized)) {
-        seen.add(normalized);
-        rows.push(normalized);
-      }
+      const parsed = parseDeviceBypassLine(line);
+      if (!parsed.address) return;
+      if (/\s/.test(parsed.address)) { invalid.push(`${index + 1}: ${parsed.address}`); return; }
+      if (!parsed.normalized) { invalid.push(`${index + 1}: ${parsed.address}`); return; }
+      const key = parsed.normalized.toUpperCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push(parsed.normalized + (parsed.note ? ` # ${parsed.note}` : ''));
     });
     return { text: rows.join('\n') + (rows.length ? '\n' : ''), invalid };
   };
@@ -9198,7 +9247,8 @@ btn_disabled.onclick = async () => {
           #kano_policy_shell .kp-scan-summary{font-size:.55rem;line-height:1.5;opacity:.66;margin-top:8px;}
           #kano_policy_shell .kp-ip-list{display:grid;gap:3px;margin-top:7px;padding-top:7px;border-top:1px dashed rgba(255,255,255,.10);}
           #kano_policy_shell .kp-ip{display:flex;align-items:center;gap:8px;min-width:0;}
-          #kano_policy_shell .kp-ip>span{flex:1 1 auto;min-width:0;font-family:monospace;overflow-wrap:anywhere;word-break:break-all;}
+          #kano_policy_shell .kp-ip-addr{flex:1 1 auto;min-width:0;font-family:monospace;overflow-wrap:anywhere;word-break:break-all;}
+          #kano_policy_shell .kp-ip-note,#kano_policy_shell .kp-client-note{flex:0 1 auto;min-width:0;max-width:44%;color:#93c5fd;opacity:.85;overflow-wrap:anywhere;}
           #kano_policy_shell .kp-ip>button{flex:0 0 auto;width:auto;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;white-space:nowrap;}
           #kano_policy_shell .kp-ip.kp-link-local>span{opacity:.55;}
           #kano_policy_shell .kp-link-local-toggle{width:100%;margin-top:6px;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;text-align:center;opacity:.78;}
@@ -9252,9 +9302,9 @@ btn_disabled.onclick = async () => {
               <section class="kp-panel" data-policy-panel="device">
                 <div class="kp-card">
                   <div class="kp-card-title">直连设备</div>
-                  <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。</div>
+                  <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。每行可加 <code># 备注</code> 用于区分设备，备注不进入规则。</div>
                   <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
-                  <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF"></textarea>
+                  <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50 # 客厅电视&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF # 我的手机"></textarea>
                   <div class="kp-actions" style="margin-top:9px;">
                     <button type="button" id="mm_policy_scan_clients">扫描客户端</button>
                   </div>
@@ -9337,13 +9387,31 @@ btn_disabled.onclick = async () => {
     updateDeviceBypassScope();
 
     get('#mm_policy_close').onclick = close;
-    const appendDeviceBypassValue = (value = '') => {
+    // note 为 undefined 时保留该地址原有备注，传入字符串则覆盖（空串即清空）。
+    const appendDeviceBypassValue = (value = '', note) => {
       const item = String(value || '').trim();
       if (!item || get('#mm_policy_device').disabled) return;
       const textarea = get('#mm_policy_device');
       const rows = String(textarea.value || '').split('\n').map((row) => row.trim()).filter(Boolean);
-      if (!rows.some((row) => row.toUpperCase() == item.toUpperCase())) rows.push(item);
-      textarea.value = rows.join('\n') + (rows.length ? '\n' : '');
+      const key = item.toUpperCase();
+      let matched = false;
+      const next = [];
+      rows.forEach((row) => {
+        const parsed = parseDeviceBypassLine(row);
+        if (parsed.normalized && parsed.normalized.toUpperCase() === key) {
+          if (matched) return;
+          matched = true;
+          const finalNote = note === undefined ? parsed.note : deviceNoteText(note);
+          next.push(item + (finalNote ? ` # ${finalNote}` : ''));
+          return;
+        }
+        next.push(row);
+      });
+      if (!matched) {
+        const finalNote = deviceNoteText(note || '');
+        next.push(item + (finalNote ? ` # ${finalNote}` : ''));
+      }
+      textarea.value = next.join('\n') + (next.length ? '\n' : '');
     };
     get('#mm_policy_scan_clients').onclick = async () => {
       const scanBtn = get('#mm_policy_scan_clients');
@@ -9359,6 +9427,25 @@ btn_disabled.onclick = async () => {
           setText(box, '未扫描到客户端；设备产生流量后才会出现在 ARP 表中。');
           return;
         }
+        // 备注不参与规则，只是给地址挂一个可读标签；名单改了就刷新对应行。
+        const syncNotes = () => {
+          const notes = readDeviceBypassNotes(get('#mm_policy_device').value);
+          Array.from(box.querySelectorAll('[data-note-for]')).forEach((node) => {
+            const note = notes.get(node.dataset.noteFor) || '';
+            node.textContent = note ? `# ${note}` : '';
+            node.hidden = !note;
+          });
+        };
+        const editDeviceNote = async (address) => {
+          const notes = readDeviceBypassNotes(get('#mm_policy_device').value);
+          const current = notes.get(address.toUpperCase()) || '';
+          const value = await askText('mm_device_note', '设备备注',
+            `<div style="font-family:monospace">${escapeHtml(address)}</div><div style="opacity:.72;margin-top:4px">备注只用于区分设备，不影响规则。</div>`,
+            current);
+          if (value === null) return;
+          appendDeviceBypassValue(address, value);
+          syncNotes();
+        };
         const summary = document.createElement('div');
         summary.className = 'kp-scan-summary';
         const totalIps = devices.reduce((sum, device) => sum + device.ips.length, 0);
@@ -9374,9 +9461,16 @@ btn_disabled.onclick = async () => {
           const macEl = document.createElement('span');
           macEl.className = 'kp-client-mac';
           macEl.textContent = device.mac;
+          const macNote = document.createElement('span');
+          macNote.className = 'kp-client-note';
+          macNote.dataset.noteFor = device.mac.toUpperCase();
           const tagEl = document.createElement('span');
           tagEl.className = 'kp-client-tag';
           tagEl.textContent = device.linkLocal ? `${device.routable} 可用 · ${device.linkLocal} 链路本地` : `${device.ips.length} 个地址`;
+          const macNoteBtn = document.createElement('button');
+          macNoteBtn.className = 'kp-note-btn';
+          macNoteBtn.textContent = '备注';
+          macNoteBtn.onclick = () => editDeviceNote(device.mac);
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
           addMac.title = '将包含此 MAC 的全部 IPv4/IPv6 地址；若为下级路由器，可能代表多台设备';
@@ -9388,7 +9482,9 @@ btn_disabled.onclick = async () => {
             if (yes) appendDeviceBypassValue(value);
           };
           head.appendChild(macEl);
+          head.appendChild(macNote);
           head.appendChild(tagEl);
+          head.appendChild(macNoteBtn);
           head.appendChild(addMac);
           const list = document.createElement('div');
           list.className = 'kp-ip-list';
@@ -9397,13 +9493,23 @@ btn_disabled.onclick = async () => {
             const ipRow = document.createElement('div');
             ipRow.className = 'kp-ip' + (linkLocal ? ' kp-link-local' : '');
             const ipEl = document.createElement('span');
+            ipEl.className = 'kp-ip-addr';
             ipEl.textContent = ip;
+            const ipNote = document.createElement('span');
+            ipNote.className = 'kp-ip-note';
+            ipNote.dataset.noteFor = ip.toUpperCase();
+            const noteBtn = document.createElement('button');
+            noteBtn.className = 'kp-note-btn';
+            noteBtn.textContent = '备注';
+            noteBtn.onclick = () => editDeviceNote(ip);
             const addIp = document.createElement('button');
             addIp.className = 'add_ip';
             addIp.dataset.ip = ip;
             addIp.textContent = '添加 IP';
             addIp.onclick = () => appendDeviceBypassValue(ip);
             ipRow.appendChild(ipEl);
+            ipRow.appendChild(ipNote);
+            ipRow.appendChild(noteBtn);
             ipRow.appendChild(addIp);
             list.appendChild(ipRow);
             return ipRow;
@@ -9433,6 +9539,7 @@ btn_disabled.onclick = async () => {
           }
           box.appendChild(row);
         });
+        syncNotes();
       } catch (error) {
         setText(box, error.message || String(error));
       } finally {

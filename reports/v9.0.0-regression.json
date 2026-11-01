@@ -1,17 +1,17 @@
 {
-  "date": "2026-10-26T10:23:56.769Z",
+  "date": "2026-11-01T09:24:52.277Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "0ecc2a202b8b24d28cb17cf93d03536e6489e803",
-    "bytes": 643301,
-    "sha256": "c430e8918806bc05b684d9836a56c9f1e327b4220f94068286906740cdbc6ff2"
+    "baseCommit": "b50bc14126d59b28d3bf6049043297af066ccd2c",
+    "bytes": 665450,
+    "sha256": "c22b94d141987f6cd1d946f2a3fe06a5fce737ed46007e93d3f56bbf8a4378c9"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 714,
+    "passed": 741,
     "failed": 0,
     "notRun": 0
   },
@@ -621,7 +621,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/commit_guard.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/commit_guard.test.js.stderr.log",
-      "passed": 15,
+      "passed": 18,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -670,6 +670,18 @@
           "status": "PASS"
         },
         {
+          "name": "component package guard / access_token",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / AccessToken",
+          "status": "PASS"
+        },
+        {
+          "name": "guard refuses when staged content cannot be inspected",
+          "status": "PASS"
+        },
+        {
           "name": "component package guard / token=empty",
           "status": "PASS"
         },
@@ -715,10 +727,14 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
-      "passed": 8,
+      "passed": 9,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "every emitted installation failure has a Chinese diagnostic",
+          "status": "PASS"
+        },
         {
           "name": "all probes healthy renders the diagnostic dialog",
           "status": "PASS"
@@ -760,7 +776,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/download_archive.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/download_archive.test.js.stderr.log",
-      "passed": 36,
+      "passed": 52,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -785,10 +801,6 @@
           "status": "PASS"
         },
         {
-          "name": "cached compatible packages do not require a pinned release hash",
-          "status": "PASS"
-        },
-        {
           "name": "background downloads tolerate a failed log read without restarting the worker",
           "status": "PASS"
         },
@@ -805,23 +817,31 @@
           "status": "PASS"
         },
         {
-          "name": "lease failure stops package requests / cache=false / F50_OPERATION_BUSY",
+          "name": "lease failure stops package requests / F50_OPERATION_BUSY",
           "status": "PASS"
         },
         {
-          "name": "lease failure stops package requests / cache=false / F50_OPERATION_UNSAFE_PATH",
-          "status": "PASS"
-        },
-        {
-          "name": "lease failure stops package requests / cache=true / F50_OPERATION_BUSY",
-          "status": "PASS"
-        },
-        {
-          "name": "lease failure stops package requests / cache=true / F50_OPERATION_UNSAFE_PATH",
+          "name": "lease failure stops package requests / F50_OPERATION_UNSAFE_PATH",
           "status": "PASS"
         },
         {
           "name": "online package failure replaces the previous installation diagnostic",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / online / false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / online / true",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / upload / false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / upload / true",
           "status": "PASS"
         },
         {
@@ -874,6 +894,66 @@
         },
         {
           "name": "cleanup failure retains the original installation error",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"<html>download failed</html>\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"PK\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"PK\\\\u0005\\\\u0006\"",
+          "status": "PASS"
+        },
+        {
+          "name": "local header check reads only four bytes and handles unreadable files",
+          "status": "PASS"
+        },
+        {
+          "name": "a new page cleans only the recorded upload after acquiring its lease / online",
+          "status": "PASS"
+        },
+        {
+          "name": "a new page cleans only the recorded upload after acquiring its lease / upload",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded path is recorded before installation; failed cleanup survives a new page",
+          "status": "PASS"
+        },
+        {
+          "name": "busy device retains recorded upload and never deletes it",
+          "status": "PASS"
+        },
+        {
+          "name": "failed stale upload cleanup blocks installation / online",
+          "status": "PASS"
+        },
+        {
+          "name": "failed stale upload cleanup blocks installation / upload",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid cleanup record cannot delete outside the upload directory / /data/clash/Proxy/config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid cleanup record cannot delete outside the upload directory / /fixture/../config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "verified cache is offered only by the installation entry / reuse=true",
+          "status": "PASS"
+        },
+        {
+          "name": "verified cache is offered only by the installation entry / reuse=false",
           "status": "PASS"
         },
         {
@@ -1272,7 +1352,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/menu_error_feedback.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/menu_error_feedback.test.js.stderr.log",
-      "passed": 7,
+      "passed": 13,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1302,6 +1382,30 @@
         },
         {
           "name": "权限校验失败时不弹错误提示, 保持原有静默返回",
+          "status": "PASS"
+        },
+        {
+          "name": "卸载后只在成功时重新读取自启状态 / true",
+          "status": "PASS"
+        },
+        {
+          "name": "卸载后只在成功时重新读取自启状态 / false",
+          "status": "PASS"
+        },
+        {
+          "name": "安装后只在确认完成时重新读取自启状态 / true",
+          "status": "PASS"
+        },
+        {
+          "name": "安装后只在确认完成时重新读取自启状态 / false",
+          "status": "PASS"
+        },
+        {
+          "name": "自启按钮解除忙碌时保留新状态文案 / direct",
+          "status": "PASS"
+        },
+        {
+          "name": "自启按钮解除忙碌时保留新状态文案 / disabled",
           "status": "PASS"
         }
       ]
@@ -2167,7 +2271,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
-      "passed": 175,
+      "passed": 176,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -2224,7 +2328,7 @@
           "status": "PASS"
         },
         {
-          "name": "expired frontend reclaims only confirmed finished receipts and removes them",
+          "name": "expired frontend reclaims only finished or provably dead receipts",
           "status": "PASS"
         },
         {
@@ -2585,6 +2689,10 @@
         },
         {
           "name": "browser task ownership and receipt / other_page_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / recovery_busy",
           "status": "PASS"
         },
         {

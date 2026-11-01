@@ -8213,11 +8213,34 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     }
   };
 
+  // 弹窗容器的宽度不等于视口宽度：F50 把插件面板放在页面右侧一块窄区域里，
+  // 用 vw 算出来的宽度会把弹窗撑出屏幕、右侧按钮被裁。这里按弹窗自身左边缘和
+  // 父容器宽度取较小值，落成像素宽度；量不到就保留 CSS 里的默认宽度。
+  const fitDialogWidth = (el, target, maxWidth = 960) => {
+    if (!el || !target || target.nodeType !== 1) return;
+    const apply = () => {
+      try {
+        const viewport = document.documentElement.clientWidth || window.innerWidth || 0;
+        if (!viewport) return;
+        const limits = [viewport - Math.max(0, el.getBoundingClientRect().left) - 16];
+        const parent = el.parentElement;
+        if (parent && parent.clientWidth) limits.push(parent.clientWidth - 16);
+        const room = Math.min.apply(null, limits);
+        if (room < 240) return;
+        target.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
+        target.style.maxWidth = '100%';
+      } catch (_) { /* 拿不到布局信息时保留默认宽度 */ }
+    };
+    apply();
+    // 首次调用可能发生在弹窗插入文档之前（量到 0），下一帧布局完成后再校正一次。
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+  };
+
   const showInfoDialog = (id, title, bodyHtml) => {
     const closeId = `close_${id}_${createRandomString(4)}`;
     const { el, close } = createFixedToast(
       `${id}_${createRandomString(4)}`,
-      `<div style="pointer-events:all;width:92vw;max-width:760px;min-width:0;overflow-wrap:anywhere;">
+      `<div style="pointer-events:all;width:auto;max-width:760px;min-width:0;overflow-wrap:anywhere;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;min-width:0;overflow-wrap:anywhere;">${bodyHtml}</div>
         <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
@@ -8225,6 +8248,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         </div>
       </div>`,
     );
+    fitDialogWidth(el, el.firstElementChild, 760);
     const closeBtn = el.querySelector(`#${closeId}`);
     if (closeBtn) closeBtn.onclick = close;
   };
@@ -8249,7 +8273,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     ].join('<br>');
     const { el, close } = createFixedToast(
       id,
-      `<div style="pointer-events:all;width:92vw;max-width:620px;">
+      `<div style="pointer-events:all;width:auto;max-width:620px;">
         <div class="title" style="margin:0">面板连接</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;">
           <div id="${statusId}" style="margin-bottom:10px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.45);">${sourceRows}</div>
@@ -8272,6 +8296,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         </div>
       </div>`,
     );
+    fitDialogWidth(el, el.firstElementChild, 620);
     const controllerInput = el.querySelector(`#${controllerId}`);
     const secretInput = el.querySelector(`#${secretId}`);
     const secretToggleBtn = el.querySelector(`#${secretToggleId}`);
@@ -9131,7 +9156,7 @@ btn_disabled.onclick = async () => {
       'mm_policy_tools_toast',
       `
         <style>
-          #kano_policy_shell{pointer-events:all;min-width:0;width:min(960px,calc(100vw - 64px));max-width:100%;box-sizing:border-box;}
+          #kano_policy_shell{pointer-events:all;min-width:0;width:auto;max-width:960px;box-sizing:border-box;}
           #kano_policy_shell *{box-sizing:border-box;}
           #kano_policy_shell .kp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
           #kano_policy_shell .kp-title{font-size:.82rem;font-weight:800;line-height:1.2;}
@@ -9271,6 +9296,7 @@ btn_disabled.onclick = async () => {
     );
 
     const get = (id) => el.querySelector(id);
+    fitDialogWidth(el, el.querySelector('#kano_policy_shell'), 960);
     const activatePolicyTab = (name) => {
       Array.from(el.querySelectorAll('[data-policy-tab]')).forEach((btn) => {
         const active = btn.dataset.policyTab == name;
@@ -10841,7 +10867,7 @@ EOF_F50_RESTORE_MEMBERS
       const actionCount = 1 + (repairable ? 1 : 0) + (failedProviders.length > 0 ? 1 : 0);
       const { el, close } = createFixedToast(
         id,
-        `<div style="pointer-events:all;width:92vw;max-width:720px;overflow-wrap:anywhere;word-break:break-word;">
+        `<div style="pointer-events:all;width:auto;max-width:720px;overflow-wrap:anywhere;word-break:break-word;">
           <div class="title" style="margin:0">${escapeHtml(title)}</div>
           <div style="margin-top:10px;max-height:68vh;overflow-y:auto;overflow-x:hidden;padding-right:3px;font-size:.64rem;line-height:1.62;">
             <div style="padding:9px 10px;border:1px solid rgba(148,163,184,.25);border-radius:9px;margin-bottom:9px;">
@@ -10859,6 +10885,7 @@ EOF_F50_RESTORE_MEMBERS
           </div>
         </div>`,
       );
+      fitDialogWidth(el, el.firstElementChild, 720);
       const retryBtn = el.querySelector(`#${retryId}`);
       const repairBtn = el.querySelector(`#${repairId}`);
       const closeBtn = el.querySelector(`#${closeId}`);
@@ -11549,7 +11576,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_local_file_editor',
         `
-          <div style="pointer-events:all;width:92vw;max-width:900px;">
+          <div style="pointer-events:all;width:auto;max-width:900px;">
             <div class="title" style="margin:0">配置文件</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
               <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
@@ -11564,6 +11591,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
+      fitDialogWidth(el, el.firstElementChild, 900);
       const select = el.querySelector('#mm_local_file_select');
       const reloadBtn = el.querySelector('#mm_local_file_reload_btn');
       const saveBtn = el.querySelector('#mm_local_file_save_btn');
@@ -12063,7 +12091,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_js_override_toast',
         `
-          <div style="pointer-events:all;width:92vw;max-width:900px;">
+          <div style="pointer-events:all;width:auto;max-width:900px;">
             <div class="title" style="margin:0">JS 覆写</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
               定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。仅运行信任的代码，Worker 隔离不等于安全沙箱。
@@ -12078,6 +12106,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
+      fitDialogWidth(el, el.firstElementChild, 900);
       const textarea = el.querySelector('#mm_js_override_text');
       const saveBtn = el.querySelector('#mm_js_override_save_btn');
       const applyBtn = el.querySelector('#mm_js_override_apply_btn');
@@ -12108,7 +12137,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const currentPolicy = runtime.ok && runtime.value.dns && runtime.value.dns['proxy-server-nameserver-policy'] || {};
       let editingDomain = null;
       const { el, close } = createFixedToast('mm_airport_dns_dialog', `
-        <div style="pointer-events:all;width:92vw;max-width:760px;">
+        <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0">节点 DNS 策略</div>
           <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
@@ -12253,6 +12282,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
+      fitDialogWidth(el, el.firstElementChild, 760);
       const rulesBtn = el.querySelector('#mm_template_rules_btn');
       const jsBtn = el.querySelector('#mm_template_js_btn');
       const airportDnsBtn = el.querySelector('#mm_template_airport_dns_btn');
@@ -12312,7 +12342,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const {el, close} = createFixedToast('mm_gist_sync_dialog', `
-        <div style="pointer-events:all;width:92vw;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
+        <div style="pointer-events:all;width:auto;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
           <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
@@ -12341,6 +12371,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </details>
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
         </div>`);
+      if (typeof fitDialogWidth === 'function') fitDialogWidth(el, el.firstElementChild, 700);
       const q = id => el.querySelector('#mm_gist_'+id);
       let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 

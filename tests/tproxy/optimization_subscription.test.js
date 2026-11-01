@@ -337,6 +337,8 @@ test('equal node counts do not claim identical node contents', () => {
     + slice('const showSubscriptionUpdateResultDialog', 'const showSubscriptionUpdateSelfCheck') + 'showSubscriptionUpdateResultDialog', {
     ...subContext, createRandomString: () => 'fixture', textToHtml: String,
     createFixedToast: (id, content) => { html = content; return { el: { querySelector: () => null }, close() {} }; },
+    // 弹窗宽度适配在真机上按容器量算，沙箱里没有布局，直接跳过。
+    fitDialogWidth: () => {},
   });
   show({ configValidationResult: { ok: true }, providerUpdateResult: { total: 1, success: 1, failed: 0,
     providers: [{ name: 'Provider1', ok: true, previousProxyCount: 1, proxyCount: 1, countUnchanged: true }] } });
@@ -351,6 +353,8 @@ test('a missing pre-update snapshot falls back to the current node count', () =>
     + slice('const showSubscriptionUpdateResultDialog', 'const showSubscriptionUpdateSelfCheck') + 'showSubscriptionUpdateResultDialog', {
     ...subContext, createRandomString: () => 'fixture', textToHtml: String,
     createFixedToast: (id, content) => { html = content; return { el: { querySelector: () => null }, close() {} }; },
+    // 弹窗宽度适配在真机上按容器量算，沙箱里没有布局，直接跳过。
+    fitDialogWidth: () => {},
   });
   show({ configValidationResult: { ok: true }, providerUpdateResult: { total: 1, success: 1, failed: 0,
     providers: [{ name: 'Provider1', ok: true, previousProxyCount: null, proxyCount: 3, countUnchanged: false }] } });

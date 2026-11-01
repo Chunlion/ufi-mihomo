@@ -7899,7 +7899,7 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const resultToast = [summary, ok ? 'green' : 'red', ok ? 5000 : 15000];
     if (!own && ok) activeCriticalOperation.finalToast = resultToast;
     else createToast(...resultToast);
-    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成；正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成；正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
     return ok;
   } catch (error) {
     deviceTaskUncertain = true;
@@ -8217,9 +8217,9 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const closeId = `close_${id}_${createRandomString(4)}`;
     const { el, close } = createFixedToast(
       `${id}_${createRandomString(4)}`,
-      `<div style="pointer-events:all;width:92vw;max-width:760px;">
+      `<div style="pointer-events:all;width:92vw;max-width:760px;min-width:0;overflow-wrap:anywhere;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
-        <div style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;">${bodyHtml}</div>
+        <div style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;min-width:0;overflow-wrap:anywhere;">${bodyHtml}</div>
         <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
           <button style="font-size:.64rem" id="${closeId}">关闭</button>
         </div>
@@ -8538,9 +8538,9 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       '运行日志与诊断',
       `${renderRows(rows)}
       <details style="margin-top:10px;"><summary>详细信息</summary>${renderRows(detailRows)}</details>
-      ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
+      ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
-      <pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,
+      <pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,
     );
   };
 
@@ -9086,6 +9086,29 @@ btn_disabled.onclick = async () => {
     return rows.join('\n');
   };
 
+  // 邻居表按 IP 逐条列出：同一台设备的 IPv4、全局 IPv6、fe80 链路本地地址会散成多行，
+  // 直接铺开会被误读成「这么多设备」。按 MAC 归并成一台设备一条记录，供面板分组展示。
+  const isLinkLocalAddress = (ip) => /^fe[89ab][0-9a-f]:/i.test(String(ip || '')) || ip === '::1';
+  const readClientDevices = (text) => {
+    const devices = new Map();
+    for (const line of String(text || '').split('\n')) {
+      const [ip, mac] = line.trim().split(/\s+/);
+      const normalizedIp = normalizeIpLike(ip) || normalizeIpv6Like(ip);
+      const normalizedMac = normalizeMac(mac);
+      if (!normalizedIp || !normalizedMac) continue;
+      if (!devices.has(normalizedMac)) devices.set(normalizedMac, { mac: normalizedMac, ips: [] });
+      const device = devices.get(normalizedMac);
+      if (!device.ips.includes(normalizedIp)) device.ips.push(normalizedIp);
+    }
+    for (const device of devices.values()) {
+      // IPv4 在前、全局 IPv6 居中、链路本地最后：一眼能看到可路由地址。
+      device.ips.sort((a, b) => isLinkLocalAddress(a) - isLinkLocalAddress(b));
+      device.linkLocal = device.ips.filter(isLinkLocalAddress).length;
+      device.routable = device.ips.length - device.linkLocal;
+    }
+    return Array.from(devices.values()).sort((a, b) => a.mac.localeCompare(b.mac));
+  };
+
   const showPolicyStatus = async () => {
     const exists = await runShellWithRoot(`[ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] && echo 1 || echo 0`, 10 * 1000);
     if (String(exists.content || '').trim() != '1') {
@@ -9093,7 +9116,7 @@ btn_disabled.onclick = async () => {
       return;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} status`);
-    showInfoDialog('mm_policy_status', '网络与规则状态', `<pre style="white-space:pre-wrap;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '暂无状态')}</pre>`);
+    showInfoDialog('mm_policy_status', '网络与规则状态', `<pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '暂无状态')}</pre>`);
   };
 
   const showPolicyToolsDialog = async ({ initialTab = 'network' } = {}) => {
@@ -9142,10 +9165,21 @@ btn_disabled.onclick = async () => {
           #kano_policy_shell .kp-footer{margin-top:12px;display:flex;justify-content:flex-end;align-items:center;}
           #kano_policy_shell .kp-footer-right{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
           #kano_policy_shell .kp-footer-right button{width:auto;min-width:72px;min-height:30px;padding:5px 10px;}
-          #kano_policy_shell .kp-client{display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1fr) auto auto;gap:7px;align-items:center;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px;margin-top:6px;background:rgba(0,0,0,.18);font-size:.60rem;}
+          #kano_policy_shell .kp-client{min-width:0;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px;margin-top:6px;background:rgba(0,0,0,.18);font-size:.60rem;}
+          #kano_policy_shell .kp-client-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;min-width:0;}
+          #kano_policy_shell .kp-client-mac{flex:1 1 auto;min-width:0;font-family:monospace;font-weight:700;overflow-wrap:anywhere;}
+          #kano_policy_shell .kp-client-tag{flex:0 0 auto;font-size:.53rem;opacity:.62;white-space:nowrap;}
+          #kano_policy_shell .kp-client-head button{flex:0 0 auto;width:auto;min-height:0;font-size:.55rem;line-height:1.2;padding:4px 8px;white-space:nowrap;}
+          #kano_policy_shell .kp-scan-summary{font-size:.55rem;line-height:1.5;opacity:.66;margin-top:8px;}
+          #kano_policy_shell .kp-ip-list{display:grid;gap:3px;margin-top:7px;padding-top:7px;border-top:1px dashed rgba(255,255,255,.10);}
+          #kano_policy_shell .kp-ip{display:flex;align-items:center;gap:8px;min-width:0;}
+          #kano_policy_shell .kp-ip>span{flex:1 1 auto;min-width:0;font-family:monospace;overflow-wrap:anywhere;word-break:break-all;}
+          #kano_policy_shell .kp-ip>button{flex:0 0 auto;width:auto;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;white-space:nowrap;}
+          #kano_policy_shell .kp-ip.kp-link-local>span{opacity:.55;}
+          #kano_policy_shell .kp-link-local-toggle{width:100%;margin-top:6px;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;text-align:center;opacity:.78;}
           #kano_policy_shell code{font-size:.58rem;opacity:.9;}
           #kano_policy_shell button:focus-visible,#kano_policy_shell input:focus-visible,#kano_policy_shell select:focus-visible,#kano_policy_shell textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
-          @media (max-width:720px){#kano_policy_shell .kp-body{grid-template-columns:1fr;max-height:76vh;}#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}#kano_policy_shell .kp-tab{margin-bottom:0;text-align:center;}#kano_policy_shell .kp-row,#kano_policy_shell .kp-maintain-item{grid-template-columns:1fr;}#kano_policy_shell .kp-grid2{grid-template-columns:1fr;}#kano_policy_shell .kp-client{grid-template-columns:1fr 1fr;}}
+          @media (max-width:720px){#kano_policy_shell .kp-body{grid-template-columns:1fr;max-height:76vh;}#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}#kano_policy_shell .kp-tab{margin-bottom:0;text-align:center;}#kano_policy_shell .kp-row,#kano_policy_shell .kp-maintain-item{grid-template-columns:1fr;}#kano_policy_shell .kp-grid2{grid-template-columns:1fr;}}
         </style>
         <div id="kano_policy_shell">
           <div class="kp-head">
@@ -9293,47 +9327,84 @@ btn_disabled.onclick = async () => {
       try {
         const text = await readClientListText();
         if (get('#mm_policy_traffic_mode').value !== 'tproxy') return;
-        const lines = String(text || '').split('\n').filter(line => {
-          const [ip, mac] = line.trim().split(/\s+/);
-          return (normalizeIpLike(ip) || normalizeIpv6Like(ip)) && normalizeMac(mac);
-        });
-        const macCounts = new Map();
-        for (const line of lines) { const [ip, mac] = line.trim().split(/\s+/); const key=normalizeMac(mac); if(!macCounts.has(key))macCounts.set(key,new Set());macCounts.get(key).add(ip); }
+        const devices = readClientDevices(text);
         resetChildren(box);
-        if (lines.length == 0) {
+        if (devices.length == 0) {
           setText(box, '未扫描到客户端；设备产生流量后才会出现在 ARP 表中。');
           return;
         }
-        lines.forEach((line) => {
-          const [ip, mac] = line.trim().split(/\s+/);
+        const summary = document.createElement('div');
+        summary.className = 'kp-scan-summary';
+        const totalIps = devices.reduce((sum, device) => sum + device.ips.length, 0);
+        const linkLocalIps = devices.reduce((sum, device) => sum + device.linkLocal, 0);
+        summary.textContent = `共 ${devices.length} 台设备 · ${totalIps} 个地址`
+          + (linkLocalIps ? ` · 其中 ${linkLocalIps} 个链路本地地址已折叠` : '');
+        box.appendChild(summary);
+        devices.forEach((device) => {
           const row = document.createElement('div');
           row.className = 'kp-client';
-          const ipEl = document.createElement('span');
-          ipEl.textContent = ip || '';
+          const head = document.createElement('div');
+          head.className = 'kp-client-head';
           const macEl = document.createElement('span');
-          macEl.textContent = (mac || '') + ' (' + (macCounts.get(normalizeMac(mac))?.size || 0) + ' IP)';
-          const addIp = document.createElement('button');
-          addIp.className = 'add_ip';
-          addIp.style.fontSize = '.58rem';
-          addIp.dataset.ip = ip || '';
-          addIp.textContent = '添加 IP';
-          addIp.onclick = () => appendDeviceBypassValue(ip || '');
+          macEl.className = 'kp-client-mac';
+          macEl.textContent = device.mac;
+          const tagEl = document.createElement('span');
+          tagEl.className = 'kp-client-tag';
+          tagEl.textContent = device.linkLocal ? `${device.routable} 可用 · ${device.linkLocal} 链路本地` : `${device.ips.length} 个地址`;
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
           addMac.title = '将包含此 MAC 的全部 IPv4/IPv6 地址；若为下级路由器，可能代表多台设备';
-          addMac.style.fontSize = '.58rem';
-          addMac.dataset.mac = mac || '';
           addMac.textContent = '添加 MAC';
           addMac.onclick = async () => {
-            const value = normalizeMac(mac);
+            const value = device.mac;
             if (!value || get('#mm_policy_device').disabled) return;
             const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。');
             if (yes) appendDeviceBypassValue(value);
           };
-          row.appendChild(ipEl);
-          row.appendChild(macEl);
-          row.appendChild(addIp);
-          row.appendChild(addMac);
+          head.appendChild(macEl);
+          head.appendChild(tagEl);
+          head.appendChild(addMac);
+          const list = document.createElement('div');
+          list.className = 'kp-ip-list';
+          const linkLocalRows = [];
+          const appendIpRow = (ip, linkLocal) => {
+            const ipRow = document.createElement('div');
+            ipRow.className = 'kp-ip' + (linkLocal ? ' kp-link-local' : '');
+            const ipEl = document.createElement('span');
+            ipEl.textContent = ip;
+            const addIp = document.createElement('button');
+            addIp.className = 'add_ip';
+            addIp.dataset.ip = ip;
+            addIp.textContent = '添加 IP';
+            addIp.onclick = () => appendDeviceBypassValue(ip);
+            ipRow.appendChild(ipEl);
+            ipRow.appendChild(addIp);
+            list.appendChild(ipRow);
+            return ipRow;
+          };
+          device.ips.forEach((ip) => {
+            if (isLinkLocalAddress(ip)) linkLocalRows.push(ip);
+            else appendIpRow(ip, false);
+          });
+          if (linkLocalRows.length) {
+            const toggle = document.createElement('button');
+            toggle.className = 'kp-link-local-toggle';
+            const label = `显示 ${linkLocalRows.length} 个链路本地地址`;
+            toggle.textContent = label;
+            let expanded = false;
+            toggle.onclick = () => {
+              expanded = !expanded;
+              Array.from(list.querySelectorAll('.kp-ip.kp-link-local')).forEach((node) => node.remove());
+              if (expanded) linkLocalRows.forEach((ip) => appendIpRow(ip, true));
+              toggle.textContent = expanded ? '收起链路本地地址' : label;
+            };
+            row.appendChild(head);
+            row.appendChild(list);
+            row.appendChild(toggle);
+          } else {
+            row.appendChild(head);
+            row.appendChild(list);
+          }
           box.appendChild(row);
         });
       } catch (error) {
@@ -9404,7 +9475,7 @@ btn_disabled.onclick = async () => {
           const leaf = await kprVerifySelection(savedOptions);
           liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
         } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
-        showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
+        showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
       } finally {
         setButtonBusy(statusButton, false);
       }
@@ -11481,11 +11552,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           <div style="pointer-events:all;width:92vw;max-width:900px;">
             <div class="title" style="margin:0">配置文件</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
-              <select id="mm_local_file_select" style="min-width:220px;flex:1;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
+              <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
               <button id="mm_local_file_reload_btn" style="font-size:.64rem">读取</button>
             </div>
             <textarea id="mm_local_file_text" spellcheck="false" style="box-sizing:border-box;width:100%;height:55vh;min-height:260px;padding:10px;background:#050b16;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;font-family:monospace;font-size:.62rem;line-height:1.45;resize:vertical;"></textarea>
-            <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:.6rem;opacity:.76;"></div>
+            <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:.6rem;opacity:.76;overflow-wrap:anywhere;"></div>
             <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:10px;">
               <button id="mm_local_file_save_btn" style="font-size:.64rem">保存</button>
               <button id="mm_local_file_close_btn" style="font-size:.64rem">关闭</button>
@@ -12259,7 +12330,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             <button id="mm_gist_save" type="button">保存设置</button>
             <button id="mm_gist_sync" type="button">同步</button>
           </div>
-          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
+          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0"></div>
           <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
           <details style="margin-top:8px"><summary>更多</summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">

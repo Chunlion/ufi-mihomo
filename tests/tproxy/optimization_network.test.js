@@ -231,7 +231,8 @@ test('UI controls and event entry points retain their IDs and handler counts', (
   assert.deepEqual(ids(source).filter(id=>!id.startsWith('mm_gist_')), ids(original));
   const ui=fs.readFileSync(require('node:path').resolve(__dirname,'../../gist-sync/ui-gist.js'),'utf8');
   assert.deepEqual(ids(source).filter(id=>id.startsWith('mm_gist_')),ids(ui));
-  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length+(ui.match(/\.onclick\s*=/g)||[]).length);
+  // 直连设备列表按 MAC 分组后新增「显示/收起链路本地地址」开关，多出一个 onclick 入口。
+  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length+(ui.match(/\.onclick\s*=/g)||[]).length+1);
 });
 
 for (const outcome of ['success', 'error', 'cancel']) {

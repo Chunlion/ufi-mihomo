@@ -2490,7 +2490,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/device_notes.json Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -3706,6 +3706,7 @@ exit "$delete_rc"
   const CLASH_POLICY_DIR = `${CLASH_DIR}/Policy`;
   const CLASH_POLICY_SCRIPT = `${CLASH_DIR}/Scripts/Clash.PolicyTools`;
   const CLASH_DEVICE_BYPASS_FILE = `${CLASH_POLICY_DIR}/device_bypass.txt`;
+  const CLASH_DEVICE_NOTES_FILE = `${CLASH_DIR}/Tools/device_notes.json`;
   const CLASH_DIRECT_DOMAIN_FILE = `${CLASH_POLICY_DIR}/direct_domain.list`;
   const CLASH_DIRECT_IP_FILE = `${CLASH_POLICY_DIR}/direct_ip.list`;
   const CLASH_PROXY_DOMAIN_FILE = `${CLASH_POLICY_DIR}/proxy_domain.list`;
@@ -4430,6 +4431,7 @@ exit "$kano_task_rc"`;
     { label: 'options.conf', path: CLASH_POLICY_OPTIONS_FILE },
     { label: 'mac_bypass.txt', path: CLASH_MAC_BYPASS_FILE },
     { label: 'device_bypass.txt', path: CLASH_DEVICE_BYPASS_FILE, optional: true },
+    { label: 'device_notes.json', path: CLASH_DEVICE_NOTES_FILE, optional: true },
     { label: 'direct_domain.list', path: CLASH_DIRECT_DOMAIN_FILE, optional: true },
     { label: 'direct_ip.list', path: CLASH_DIRECT_IP_FILE, optional: true },
     { label: 'proxy_domain.list', path: CLASH_PROXY_DOMAIN_FILE, optional: true },
@@ -8803,6 +8805,7 @@ btn_disabled.onclick = async () => {
         }
         emit_policy_file options ${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
         emit_policy_file deviceBypass ${shellQuote(CLASH_DEVICE_BYPASS_FILE)}
+        emit_policy_file deviceNotes ${shellQuote(CLASH_DEVICE_NOTES_FILE)}
         emit_policy_file directDomain ${shellQuote(CLASH_DIRECT_DOMAIN_FILE)}
         emit_policy_file directIp ${shellQuote(CLASH_DIRECT_IP_FILE)}
         emit_policy_file proxyDomain ${shellQuote(CLASH_PROXY_DOMAIN_FILE)}
@@ -8812,18 +8815,26 @@ btn_disabled.onclick = async () => {
     const sections = {
       options: [],
       deviceBypass: [],
+      deviceNotes: [],
       directDomain: [],
       directIp: [],
       proxyDomain: [],
       rejectDomain: [],
     };
     String(res.content || '').split('\n').forEach((line) => {
-      const match = line.match(/^KANO_POLICY_(options|deviceBypass|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
+      const match = line.match(/^KANO_POLICY_(options|deviceBypass|deviceNotes|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
       if (match) sections[match[1]].push(match[2]);
     });
+    const deviceBypass = sections.deviceBypass.join('\n');
+    const deviceRows = deviceBypass.split('\n').map((line) => parseDeviceBypassLine(line).address).filter(Boolean);
+    const notesText = sections.deviceNotes.join('\n').trim();
+    const savedNotes = notesText ? JSON.parse(notesText) : {};
+    if (!savedNotes || typeof savedNotes !== 'object' || Array.isArray(savedNotes)) throw new Error('设备备注文件格式错误');
+    const deviceNotes = { ...Object.fromEntries(readDeviceBypassNotes(deviceBypass)), ...savedNotes };
     return {
       options: parsePolicyOptionsText(sections.options.join('\n')),
-      deviceBypass: sections.deviceBypass.join('\n'),
+      deviceBypass: deviceRows.join('\n') + (deviceRows.length ? '\n' : ''),
+      deviceNotes,
       directDomain: sections.directDomain.join('\n'),
       directIp: sections.directIp.join('\n'),
       proxyDomain: sections.proxyDomain.join('\n'),
@@ -8859,9 +8870,7 @@ btn_disabled.onclick = async () => {
     } catch (_) { return ''; }
   };
 
-  // 直连设备名单每行是「地址[ # 备注]」。设备端读取前会剥掉 # 之后的内容
-  // （Clash.Service 与 DNS 接管分支都做 sed 's/#.*//'），所以备注只影响界面，
-  // 不进入 iptables 规则。
+  // 旧版名单行内的备注在保存时迁入独立文件，地址是否绕过与备注分开维护。
   const deviceNoteText = (note = '') => String(note).replace(/[#\r\n]+/g, ' ').trim();
   const parseDeviceBypassLine = (line = '') => {
     const text = String(line);
@@ -8875,7 +8884,7 @@ btn_disabled.onclick = async () => {
     const notes = new Map();
     String(value || '').split('\n').forEach((line) => {
       const parsed = parseDeviceBypassLine(line);
-      if (parsed.normalized) notes.set(parsed.normalized.toUpperCase(), parsed.note);
+      if (parsed.normalized && parsed.note) notes.set(parsed.normalized.toUpperCase(), parsed.note);
     });
     return notes;
   };
@@ -8891,10 +8900,12 @@ btn_disabled.onclick = async () => {
       const key = parsed.normalized.toUpperCase();
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push(parsed.normalized + (parsed.note ? ` # ${parsed.note}` : ''));
+      rows.push(parsed.normalized);
     });
     return { text: rows.join('\n') + (rows.length ? '\n' : ''), invalid };
   };
+  const saveDeviceNotes = (notes = {}) =>
+    saveOverrideText(CLASH_DEVICE_NOTES_FILE, JSON.stringify(notes, null, 2) + '\n', '设备备注');
 
   const normalizeDomainRuleText = (value = '') => {
     const rows = [];
@@ -9316,7 +9327,7 @@ btn_disabled.onclick = async () => {
               <section class="kp-panel" data-policy-panel="device">
                 <div class="kp-card">
                   <div class="kp-card-title">直连设备</div>
-                  <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。每行可加 <code># 备注</code> 用于区分设备，备注不进入规则。</div>
+                  <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。备注独立保存，不改变名单。</div>
                   <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
                   <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50 # 客厅电视&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF # 我的手机"></textarea>
                   <div class="kp-actions" style="margin-top:9px;">
@@ -9383,6 +9394,7 @@ btn_disabled.onclick = async () => {
     get('#mm_policy_dns').checked = state.options.dns_hijack == 'on';
     get('#mm_policy_dns_port').value = state.options.dns_port || String(F50_PORTS.dns);
     get('#mm_policy_device').value = state.deviceBypass || '';
+    let deviceNotes = { ...state.deviceNotes };
     const updateDeviceBypassScope = () => {
       const mode = get('#mm_policy_traffic_mode').value;
       const note = get('#mm_policy_device_scope');
@@ -9401,31 +9413,17 @@ btn_disabled.onclick = async () => {
     updateDeviceBypassScope();
 
     get('#mm_policy_close').onclick = close;
-    // note 为 undefined 时保留该地址原有备注，传入字符串则覆盖（空串即清空）。
-    const appendDeviceBypassValue = (value = '', note) => {
+    const appendDeviceBypassValue = (value = '') => {
       const item = String(value || '').trim();
       if (!item || get('#mm_policy_device').disabled) return;
       const textarea = get('#mm_policy_device');
       const rows = String(textarea.value || '').split('\n').map((row) => row.trim()).filter(Boolean);
       const key = item.toUpperCase();
-      let matched = false;
-      const next = [];
-      rows.forEach((row) => {
+      if (rows.some((row) => {
         const parsed = parseDeviceBypassLine(row);
-        if (parsed.normalized && parsed.normalized.toUpperCase() === key) {
-          if (matched) return;
-          matched = true;
-          const finalNote = note === undefined ? parsed.note : deviceNoteText(note);
-          next.push(item + (finalNote ? ` # ${finalNote}` : ''));
-          return;
-        }
-        next.push(row);
-      });
-      if (!matched) {
-        const finalNote = deviceNoteText(note || '');
-        next.push(item + (finalNote ? ` # ${finalNote}` : ''));
-      }
-      textarea.value = next.join('\n') + (next.length ? '\n' : '');
+        return parsed.normalized && parsed.normalized.toUpperCase() === key;
+      })) return;
+      textarea.value = [...rows, item].join('\n') + '\n';
     };
     get('#mm_policy_scan_clients').onclick = async () => {
       const scanBtn = get('#mm_policy_scan_clients');
@@ -9441,24 +9439,28 @@ btn_disabled.onclick = async () => {
           setText(box, '未扫描到客户端；设备产生流量后才会出现在 ARP 表中。');
           return;
         }
-        // 备注不参与规则，只是给地址挂一个可读标签；名单改了就刷新对应行。
         const syncNotes = () => {
-          const notes = readDeviceBypassNotes(get('#mm_policy_device').value);
           Array.from(box.querySelectorAll('[data-note-for]')).forEach((node) => {
-            const note = notes.get(node.dataset.noteFor) || '';
+            const note = deviceNotes[node.dataset.noteFor] || '';
             node.textContent = note ? `# ${note}` : '';
             node.hidden = !note;
           });
         };
-        const editDeviceNote = async (address) => {
-          const notes = readDeviceBypassNotes(get('#mm_policy_device').value);
-          const current = notes.get(address.toUpperCase()) || '';
+        const editDeviceNote = async (address, button) => {
+          const key = address.toUpperCase();
+          const current = deviceNotes[key] || '';
           const value = await askText('mm_device_note', '设备备注',
-            `<div style="font-family:monospace">${escapeHtml(address)}</div><div style="opacity:.72;margin-top:4px">备注只用于区分设备，不影响规则。</div>`,
+            `<div style="font-family:monospace">${escapeHtml(address)}</div><div style="opacity:.72;margin-top:4px">备注立即保存，不改变绕过名单。</div>`,
             current);
           if (value === null) return;
-          appendDeviceBypassValue(address, value);
-          syncNotes();
+          await runCriticalButtonOperation('保存设备备注', button, '保存中…', async () => {
+            const nextNotes = { ...deviceNotes };
+            nextNotes[key] = deviceNoteText(value);
+            if (!(await saveDeviceNotes(nextNotes))) return false;
+            state.deviceNotes = deviceNotes = nextNotes;
+            syncNotes();
+            return true;
+          });
         };
         const summary = document.createElement('div');
         summary.className = 'kp-scan-summary';
@@ -9484,7 +9486,7 @@ btn_disabled.onclick = async () => {
           const macNoteBtn = document.createElement('button');
           macNoteBtn.className = 'kp-note-btn';
           macNoteBtn.textContent = '备注';
-          macNoteBtn.onclick = () => editDeviceNote(device.mac);
+          macNoteBtn.onclick = () => editDeviceNote(device.mac, macNoteBtn);
           const addMac = document.createElement('button');
           addMac.className = 'add_mac';
           addMac.title = '将包含此 MAC 的全部 IPv4/IPv6 地址；若为下级路由器，可能代表多台设备';
@@ -9515,7 +9517,7 @@ btn_disabled.onclick = async () => {
             const noteBtn = document.createElement('button');
             noteBtn.className = 'kp-note-btn';
             noteBtn.textContent = '备注';
-            noteBtn.onclick = () => editDeviceNote(ip);
+            noteBtn.onclick = () => editDeviceNote(ip, noteBtn);
             const addIp = document.createElement('button');
             addIp.className = 'add_ip';
             addIp.dataset.ip = ip;
@@ -9634,6 +9636,9 @@ btn_disabled.onclick = async () => {
       setButtonBusy(button, true, '应用中…');
       try {
         const selected = KPR.normalize({ enabled: get('#kpr_enabled').checked, cidrs: get('#kpr_cidrs').value, policy: get('#kpr_policy').value });
+        const nextNotes = { ...deviceNotes, ...Object.fromEntries(readDeviceBypassNotes(get('#mm_policy_device').value)) };
+        if (!(await saveDeviceNotes(nextNotes))) return;
+        state.deviceNotes = deviceNotes = nextNotes;
         const next = { ...state, options: { ...state.options,
           traffic_mode: get('#mm_policy_traffic_mode').value,
           ipv6: get('#mm_policy_ipv6').checked ? 'on' : 'off',
@@ -10158,6 +10163,9 @@ EOF_F50_RESTORE_MEMBERS
               ;;
             rule_override.json|rule_override_applied.json)
               printf '%s' ${shellQuote(defaultRuleOverrideJsonForBackup)} > "$PKG_DIR/$name" || return 1
+              ;;
+            device_notes.json)
+              printf '%s\n' '{}' > "$PKG_DIR/$name" || return 1
               ;;
             *)
               echo "MISSING_REQUIRED: $name"

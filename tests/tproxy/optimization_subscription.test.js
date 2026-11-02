@@ -428,15 +428,19 @@ test('a configuration without providers cannot report a successful subscription 
   assert.equal(updated.providers[0].errorType, 'provider_missing');
 });
 
-for (const status of [200, 390, 500]) {
+for (const status of [200, 390, 500, 'timeout']) {
   test(`Mihomo HTTP Provider API status ${status}`, async () => {
     const calls = [];
     const refresh = run(slice('const forceUpdateProvidersFromConfig', 'const convertSubscriptionsLocally') + 'forceUpdateProvidersFromConfig', {
       ...subContext, buildControllerInfo: async () => ({}), getCorePid: async () => '123',
       mapWithConcurrency: async (items, limit, worker) => { assert.equal(limit, 2); return Promise.all(items.map(worker)); },
       buildProviderUpdateResult: (providers, meta) => ({ providers, failed: providers.filter(p => !p.ok).length, ...meta }),
-      callMihomoApi: async (url, method) => {
+      callMihomoApi: async (url, method, body, info, timeout) => {
         calls.push([url, method]);
+        if (method === 'PUT') assert.equal(timeout, 30);
+        if (status === 'timeout') return method === 'PUT'
+          ? { success: false, errorType: 'timeout', statusCode: 0 }
+          : { success: true, statusCode: 200, responseText: '{"proxies":[{"name":"Node"}]}' };
         return { success: status === 200, statusCode: status, responseText: status === 200 ? '{"proxies":[{"name":"Node"}]}' : `{"message":"HTTP ${status}"}` };
       },
     });
@@ -452,6 +456,10 @@ for (const status of [200, 390, 500]) {
       assert.equal(updated.providers[0].countUnchanged, true);
     }
     if (status === 390) assert.equal(updated.providers[0].errorType, 'upstream_390');
+    if (status === 'timeout') {
+      assert.equal(updated.providers[0].errorType, 'update_pending');
+      assert.equal(updated.providers[0].cacheAvailable, true);
+    }
   });
 }
 
@@ -521,7 +529,9 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
     f50Command: async command => { commands.push(command); return { success: failAt !== 'prepare' }; }, f50Error: String,
     restartClashOk: async () => { restarts++; return failAt !== 'start' || restarts > 1; },
     reloadLocalSubscriptionProviders: async () => result(failAt === 'reload'),
-    forceUpdateProvidersFromConfig: async () => result(failAt === 'reload'),
+    forceUpdateProvidersFromConfig: async () => failAt === 'pending'
+      ? { failed: 1, providers: [{ name: 'Provider1', ok: false, errorType: 'update_pending' }] }
+      : result(failAt === 'reload'),
     providerUpdateNeedsLocalFallback: () => false,
     invalidateStatusSnapshot() {}, networkRescue: async () => true,
     buildProviderUpdateResult: () => result(), showSubscriptionUpdateSelfCheck: async () => true,
@@ -548,6 +558,16 @@ for (const convertMode of ['provider', 'local']) {
     });
   }
 }
+
+test('a pending HTTP update preserves the saved configuration without restarting for rollback', async () => {
+  const c = saveCase({ convertMode: 'provider', failAt: 'pending' });
+  try {
+    assert.equal(await c.execute(), true);
+    assert.equal(c.restarts(), 1);
+    assert.equal(fs.readFileSync(c.constants.CLASH_CONFIG, 'utf8'), 'new config:template:provider');
+    assert.equal(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8').includes(c.stored[0].url), true);
+  } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+});
 
 for (const applyTemplate of [false, true]) {
   test('Gist source merge and explicit template application remain distinct / ' + applyTemplate, async () => {

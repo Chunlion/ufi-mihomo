@@ -8,6 +8,42 @@ const api = shellApi(), yq = process.env.F50_TEST_YQ;
 const shellReply = run(slice('const f50ShellReply =', 'const f50TaskTag') + 'f50ShellReply');
 const productionQuote = run(slice('const shellQuote =', 'const templateFlowMessages') + 'shellQuote');
 
+test('shell and JS redact sensitive keys and share links', () => {
+  const shared = slice('const F50_SENSITIVE_KEYS', '// 深合并');
+  const sanitize = run(shared + slice('const maskSubscriptionUrl', 'const safeTextToHtml') + 'sanitizeSubscriptionSecrets', { URL });
+  const redact = run(shared + slice('function buildF50RedactFunction', 'function buildF50PanelConfigCheck') + 'buildF50RedactFunction()');
+  const samples = ['password="fixture with spaces"', 'uuid: fixture-value', 'private-key: fixture-value', 'auth-str=fixture-value', 'psk=fixture-value', 'access-token=fixture-value', 'Bearer fixture-value',
+    ...['https', 'vmess', 'vless', 'trojan', 'ss', 'ssr', 'hy2', 'hysteria2', 'tuic'].map(scheme => `${scheme}://host.example/fixture-value`)];
+  for (const sample of samples) {
+    assert.ok(!sanitize(sample).includes('fixture'), sample);
+    const result = shell(redact + '\nprintf \'%s\\n\' ' + quote(sample) + ' | f50_redact');
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(!result.stdout.includes('fixture'), sample);
+  }
+});
+
+test('subscription IPv6 validation covers embedded private IPv4 and canonical spellings', () => {
+  const validate = run(slice('const isPrivateOrReservedIpv4', 'const getUploadedPath') + 'validateLocalSubscriptionUrl', { URL });
+  for (const host of ['::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:c0a8:1', '64:ff9b::a00:1', '0064:ff9b::7f00:1', '64:ff9b:1::1', '2002:7f00:1::', '100::1', '::2', '0:0:0:0:0:0:0:1', 'fc00::1', 'fe80::1']) {
+    assert.equal(validate(`https://[${host}]/sub`).ok, false, host);
+  }
+  for (const host of ['2606:4700:4700::1111', '::ffff:808:808', '64:ff9b::808:808', '2002:808:808::']) assert.equal(validate(`https://[${host}]/sub`).ok, true, host);
+});
+
+test('cleanup waits for the xtables lock and leaves route arguments unchanged', () => {
+  const script = api.maintenance() + `
+f50_limit() { [ "$1" -ge 7 ] || return 1; shift; "$@"; }
+iptables() { [ "$1:$2:$3:$4:$5:$6" = '-w:5:-t:filter:-X:KANO_F50_INPUT' ]; }
+ip() { [ "$1:$2:$3" = '-4:rule:show' ]; }
+PLAN=$(mktemp)
+trap 'rm -f "$PLAN"' EXIT
+printf '%s\\n' '@' aiptables a-t afilter a-X aKANO_F50_INPUT '!' '@' aip a-4 arule ashow '!' > "$PLAN"
+f50_execute_plan "$PLAN"
+`;
+  const result = shell(script);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
 for (const [name, end, content] of [
   ['loadProviderUserAgent', 'const persistProviderUserAgent', 'fixture-agent'],
   ['readCurrentSubRuleMode', 'const parseSubRuleModeFromText', 'template'],
@@ -360,7 +396,7 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
     assert.equal(patch.status, 0, patch.stdout + patch.stderr);
     const migrated = fs.readFileSync(file, 'utf8');
     assert.equal((migrated.match(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=/gm) || []).length, 1);
-    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=21$/m);
+    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=22$/m);
     assert.notEqual(migrated, legacy);
     write(dir, 'Tools/config_source.conf', 'KANO_CONFIG_SOURCE=uploaded_config\n');
     fs.symlinkSync(process.env.F50_TEST_YQ, path.join(dir, 'Tools/yq_linux_arm64'));
@@ -368,7 +404,7 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
     const runtime = write(dir, 'runtime.yaml', 'tun: {enable: true, stack: mixed}\n');
     const core = write(dir, 'Proxy/Clash.Core', '#!/bin/sh\nexit 0\n');
     fs.chmodSync(core, 0o755);
-    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=21', '\nF50_OPERATION_LOCK=', migrated);
+    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=22', '\nF50_OPERATION_LOCK=', migrated);
     const restored = shell(helpers + `\nf50_save_original_config start || exit 1
 cp ${quote(runtime)} "$CLASH_ROOT/Proxy/config.yaml" || exit 1
 f50_restore_original_config || exit 1
@@ -459,7 +495,7 @@ function overrideApi() {
   class Blob { constructor(parts) { this.text = parts.join(''); } }
   class Worker {
     constructor(url) {
-      this.worker = new NodeWorker(`const {parentPort}=require('node:worker_threads'); globalThis.self=globalThis; self.postMessage=value=>parentPort.postMessage(value); ${blobs.get(url)}; parentPort.on('message', data=>self.onmessage({data}));`, { eval: true });
+      this.worker = new NodeWorker(`const {parentPort}=require('node:worker_threads'); globalThis.self=globalThis; self.postMessage=value=>parentPort.postMessage(value); let receive; self.addEventListener=(type,handler)=>{receive=handler}; globalThis.WorkerGlobalScope=function(){}; Object.assign(WorkerGlobalScope.prototype,{fetch(){return 'network-open'},importScripts(){return 'network-open'},setTimeout(){return 'eval-open'},dispatchEvent(){return 'dispatch-open'},fonts:{}}); for(const name of ['FontFace','Notification','WebSocketStream'])globalThis[name]=function(){return 'network-open'}; Object.setPrototypeOf(globalThis,WorkerGlobalScope.prototype); ${blobs.get(url)}; parentPort.on('message', data=>receive({data}));`, { eval: true });
       this.worker.on('message', data => this.onmessage?.({ data }));
       this.worker.on('error', error => this.onerror?.(error));
     }
@@ -487,6 +523,18 @@ test('override validation blocks import, self and escaped spellings while accept
   const api = overrideApi();
   for (const code of ['import("https://example.invalid/code.js")', 'self.fetch("x")', '\\u0073elf.fetch("x")', 'Object["\\x63onstructor"]']) assert.throws(() => api.validate(code), /被禁止/);
   assert.equal(api.validate('function main(config) { config.name="\\u4e2d"; return config; }').includes('\\u4e2d'), true);
+});
+test('override never receives or replaces the controller secret', async () => {
+  const config = { secret: 'fixture-private', rules: [] };
+  const result = await overrideApi().apply('function main(config) { config.rules = [String(config.secret)]; config.secret = "changed"; return config; }', config);
+  assert.deepEqual(plain(result), { secret: 'fixture-private', rules: ['undefined'] });
+  assert.deepEqual(config, { secret: 'fixture-private', rules: [] });
+  const withoutSecret = await overrideApi().apply('function main(config) { config.secret = "changed"; return config; }', {});
+  assert.equal(Object.hasOwn(withoutSecret, 'secret'), false);
+});
+test('computed Worker prototype APIs cannot restore network or string execution', async () => {
+  const result = await overrideApi().apply('function main(config) { const p=WorkerGlobalScope["pro"+"totype"]; config.rules=[typeof p["fe"+"tch"],typeof p["im"+"portScripts"],typeof p["set"+"Timeout"],typeof p["dispatch"+"Event"],typeof p.fonts,typeof FontFace,typeof Notification,typeof WebSocketStream,String(typeof onmessage === "function")]; return config; }', {});
+  assert.deepEqual(plain(result.rules), [...Array(8).fill('undefined'), 'false']);
 });
 for (const code of ['function main() { throw new Error("override failure"); }', 'function main() { return []; }', 'function main() { return {rules:"bad"}; }']) test('override rejects invalid result / ' + code, async () => {
   await assert.rejects(overrideApi().apply(code, {}));

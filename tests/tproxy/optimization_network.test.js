@@ -35,6 +35,17 @@ for (const [bypass, saved, expected] of [
   assert.equal(state.deviceBypass, bypass ? '192.168.0.2\n' : '');
 });
 
+test('a corrupted notes file degrades to empty instead of blocking the panel', async () => {
+  const read = run(deviceNoteHelpers + slice('const readPolicyState', 'const updateModeBadge') + 'readPolicyState', {
+    ...deviceNoteContext, runShellWithRoot: async () => ({ success: true, content:
+      'KANO_POLICY_deviceBypass=192.168.0.2 # legacy\nKANO_POLICY_deviceNotes={"broken":' }),
+  });
+  const state = await read();
+  assert.equal(state.deviceNotesCorrupted, true);
+  assert.deepEqual(plain(state.deviceNotes), { '192.168.0.2': 'legacy' });
+  assert.equal(state.deviceBypass, '192.168.0.2\n');
+});
+
 test('editing and clearing notes leave bypass membership unchanged; adding an address is explicit', async () => {
   const textarea = { value: '', disabled: false }, state = {}, saved = [];
   let answer = 'phone';

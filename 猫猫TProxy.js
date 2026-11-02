@@ -2543,10 +2543,11 @@ done
 # Custom provider/rule files under Proxy are user data, not part of executable/UI replacement.
 for src in "$F50_ROOT"/Proxy/* "$F50_ROOT"/Proxy/.[!.]* "$F50_ROOT"/Proxy/..?*; do
   [ -e "$src" ] || continue
-  case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|${F50_PROXY_USER_DATA.join('|')}) continue ;; esac
-  [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
+  case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|.git|${F50_PROXY_USER_DATA.join('|')}) continue ;; esac
+  # 链接一律不跟随（含目录内子链接）：cp -pPR 保留链接本身，避免把目标内容搬进包后随回滚丢失。
+  [ -z "$(find "$src" -type l 2>/dev/null)" ] || { f50_install_fail user_data_symlink; return 1; }
   dst="$PKG/Proxy/\${src##*/}"
-  rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
+  rm -rf "$dst" && cp -pPR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
 done
 # Work files and queued uploads are not durable settings and must not migrate.
 if [ -d "$PKG/Tools/gist-sync" ]; then
@@ -8903,13 +8904,27 @@ btn_disabled.onclick = async () => {
     const deviceBypass = sections.deviceBypass.join('\n');
     const deviceRows = deviceBypass.split('\n').map((line) => parseDeviceBypassLine(line).address).filter(Boolean);
     const notesText = sections.deviceNotes.join('\n').trim();
-    const savedNotes = notesText ? JSON.parse(notesText) : {};
-    if (!savedNotes || typeof savedNotes !== 'object' || Array.isArray(savedNotes)) throw new Error('设备备注文件格式错误');
+    // 备注文件损坏不能让整个网络设置面板打不开：回退为空表，保存时按新内容覆盖即可自愈。
+    let savedNotes = {};
+    let deviceNotesCorrupted = false;
+    if (notesText) {
+      try {
+        savedNotes = JSON.parse(notesText);
+      } catch (_) {
+        savedNotes = {};
+        deviceNotesCorrupted = true;
+      }
+      if (!savedNotes || typeof savedNotes !== 'object' || Array.isArray(savedNotes)) {
+        savedNotes = {};
+        deviceNotesCorrupted = true;
+      }
+    }
     const deviceNotes = { ...Object.fromEntries(readDeviceBypassNotes(deviceBypass)), ...savedNotes };
     return {
       options: parsePolicyOptionsText(sections.options.join('\n')),
       deviceBypass: deviceRows.join('\n') + (deviceRows.length ? '\n' : ''),
       deviceNotes,
+      deviceNotesCorrupted,
       directDomain: sections.directDomain.join('\n'),
       directIp: sections.directIp.join('\n'),
       proxyDomain: sections.proxyDomain.join('\n'),
@@ -9301,6 +9316,7 @@ btn_disabled.onclick = async () => {
       createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       return;
     }
+    if (state.deviceNotesCorrupted) createToast('设备备注文件已损坏，本次按空备注显示；重新保存后会自动修复', 'yellow', 12000);
     const { el, close } = createFixedToast(
       'mm_policy_tools_toast',
       `

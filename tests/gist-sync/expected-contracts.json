@@ -23,24 +23,32 @@
     "disable_unsupported_ipv6_dns_hijack": {
       "before": "f53d6ebc510a149aeab3b1e898040005c88e6b3db54bcd217a01e6280e159bfb",
       "after": "c4636cd934a68be57d8917c95d2c161084d10ee28f3dec1b09f3353021eb62f8"
+    },
+    "save": {
+      "before": "e6ff1ae32c45f25da8a21fb2b683eb89a8e55525ea101640633c34d14816e7eb",
+      "after": "8efb2c6e6590ce0bc8512bf69bd98339935f02a345c62ab55f343c64539d0750"
+    },
+    "execute_plan": {
+      "before": "54f0aee0e157998646b137609f077ec865371833298d7e4ee7ec17c666e189b1",
+      "after": "be2e1715be2ea397e53cee271403c6dfa67802cffa3a4f6ef4a95b47a6318e43"
     }
   },
   "operations": {
     "inspect": {
       "before": "a16eb3d7e45f1874a5559f7b8d3646629d5c9eeb0fc67ba50ab0105b52dfb7c8",
-      "after": "2d7304a496d4bc0af4124cfc316bb748cad1f69bb3f6a320a81f3d813087b1e9"
+      "after": "13f8e1eb9cd6989e1df7cea6296ea072d8d9c4e6cd04b1fc2bdff08283d873c4"
     },
     "cleanup": {
       "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
-      "after": "63fbcf42ad8779f49a8b0e4254d91d3e55a484fe12de92febf53d0d4dd91389d"
+      "after": "6519edcb1d126bb5e7bb03922e8dd4d164de5592cc28471243689aab8bac8f0c"
     },
     "final": {
       "before": "b42c7d9ba116c2aba0c4a043b6b9b16d8a10464ea4895719faf8781b5d2df1e0",
-      "after": "34188332c0563a352747aadf323736eccf1099066f015cff6988576159ee2692"
+      "after": "c74783a7dbb7e74fb63451b5526d5cb9c07cdfc54093428c53e50a9a376d200f"
     },
     "uninstall": {
       "before": "7e7378f896aaf8b8b504fddabd8d0fc8a0ee13d8f1889af6458c907831f89827",
-      "after": "1d34d759de1b6c86629464c883742ef557ea1f7a15172667f167d8a2ff276bdb"
+      "after": "beea0df689e26cca82166b5762b3e67ae05bcadb7a4a1e3d8ca2c9517f343d9a"
     }
   },
   "labels": {

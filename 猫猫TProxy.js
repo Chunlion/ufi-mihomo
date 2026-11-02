@@ -20,6 +20,7 @@ function f50TunStack(options = {}) {
   return stack === 'auto' ? (options.ipv6 === 'on' ? 'gvisor' : 'mixed') : stack;
 }
 const F50_DEFAULT_SECRET = '123456';
+const F50_SENSITIVE_KEYS = 'secret|password|passwd|token|authorization|access[-_]?key|access[-_]?token|uuid|private[-_]key|auth[-_]str|psk';
 // 深合并：plain object 递归合并，数组直接整体替换；返回全新对象，不修改入参。
 function f50IsPlainObject(v) { return !!v && typeof v === "object" && !Array.isArray(v); }
 function f50DeepClone(v) {
@@ -618,6 +619,7 @@ if [ "$WITH_SOURCE" = 1 ]; then
   else chmod 600 "$SOURCE_NEW" && mv -f "$SOURCE_NEW" "$SOURCE_FILE" || exit 1; fi
 fi
 new_hash=$(hash_file "$TARGET")
+sync
 touch "$TX/committed" || exit 1
 sync
 COMMITTED=1
@@ -662,8 +664,8 @@ const F50_TRUSTED_SERVICE_HASHES = ["5cff3c10fc2f556fa1ac7c5ba204ab2168b143da1ff
 function buildF50RedactFunction() { return `f50_redact() {
   awk '{
     low=tolower($0)
-    if(low ~ /bearer[ \\t]|["\\047]?(secret|password|passwd|token|authorization|access_token|uuid|private[-_]key)["\\047]?[ \\t]*[:=]/){print "[SENSITIVE_ERROR_REDACTED]";next}
-    gsub(/(https?|ss|ssr|vmess|vless|trojan|tuic|hysteria2?):\\/\\/[^ \\t"<>]+/,"[URL_REDACTED]")
+    if(low ~ /bearer[ \\t]|["\\047]?(${F50_SENSITIVE_KEYS})["\\047]?[ \\t]*[:=]/){print "[SENSITIVE_ERROR_REDACTED]";next}
+    gsub(/[A-Za-z][A-Za-z0-9+.-]*:\\/\\/[^ \\t"<>]+/,"[URL_REDACTED]")
     print
   }'
 }`; }
@@ -792,7 +794,7 @@ NEW=''
 // 用户可能在设备上手改配置：非 map 的 dns/tun/sniffer/profile 一律丢弃，由控制器生成的值兜底，
 // 否则 yq 合并直接报错，会把整个启动拖成 F50_ERROR=original_config_merge_failed。
 // 注释放在 JS 侧而非生成的脚本里：设备脚本每多一行都是安装包体积。
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=21
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=22
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
@@ -939,9 +941,9 @@ disable_unsupported_ipv6_dns_hijack() {
 F50_SERVICE_TARGET=${service}
 [ -f "$F50_SERVICE_TARGET" ] && [ ! -L "$F50_SERVICE_TARGET" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
 # All patch segments carry their final marker and the script still parses: nothing to rebuild.
-if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=21' "$F50_SERVICE_TARGET" &&
+if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=22' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_CURL_ABSOLUTE=1' "$F50_SERVICE_TARGET" && grep -qx '# KANO_TUN_IPV6_RETURN=3' "$F50_SERVICE_TARGET" &&
-  grep -qx '# KANO_IPV6_DNS_SPLIT=3' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
+  grep -qx '# KANO_IPV6_DNS_SPLIT=4' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
   echo F50_SERVICE_PATCH_COMMITTED=1
   exit 0
 fi
@@ -983,14 +985,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=21' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=22' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9]|20)$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9]|2[01])$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -1058,7 +1060,7 @@ awk -v functions="$FUNCTIONS" '
 ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish}
 fi
-if ! grep -qx '# KANO_IPV6_DNS_SPLIT=3' "$SERVICE"; then
+if ! grep -qx '# KANO_IPV6_DNS_SPLIT=4' "$SERVICE"; then
 TMP="$SERVICE.dns.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
@@ -1572,7 +1574,7 @@ f50_save() {
   fi
   : > "$fw_out"
   for fw_table in mangle nat filter raw; do
-    fw_text=$(f50_limit 4 "$fw_ipt" -t "$fw_table" -S 2>&1); fw_rc=$?
+    fw_text=$(f50_limit 7 "$fw_ipt" -w 5 -t "$fw_table" -S 2>&1); fw_rc=$?
     if [ "$fw_rc" != 0 ]; then
       f50_table_absent "$fw_text" && continue
       printf 'F50_CLEAN_ERROR=%s_%s_unreadable\\n' "$fw_ipt" "$fw_table"; return 1
@@ -1687,8 +1689,8 @@ f50_execute_plan() {
       @) set -- ;;
       a*) set -- "$@" "\${plan_line#a}" ;;
       '!')
-        case "$1" in ip|iptables|ip6tables) ;; *) echo F50_CLEAN_ERROR=invalid_cleanup_command; return 1 ;; esac
-        plan_output=$(f50_limit 4 "$@" 2>&1); plan_rc=$?
+        case "$1" in ip) ;; iptables|ip6tables) plan_bin=$1; shift; set -- "$plan_bin" -w 5 "$@" ;; *) echo F50_CLEAN_ERROR=invalid_cleanup_command; return 1 ;; esac
+        plan_output=$(f50_limit 7 "$@" 2>&1); plan_rc=$?
         if [ "$plan_rc" != 0 ]; then
           printf 'F50_CLEAN_ERROR=network_delete_failed:%s:rc=%s\\n' "$1" "$plan_rc"
           printf '%s\\n' "$plan_output" | f50_redact
@@ -1848,7 +1850,7 @@ function buildF50Ipv6DnsCompatFunctions() { return `f50_disable_unsupported_ipv6
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 }
 f50_ipv6_nat_unavailable() {
-  f50_nat_probe=$(ip6tables -t nat -S 2>&1); f50_nat_rc=$?
+  f50_nat_probe=$(ip6tables -w 5 -t nat -S 2>&1); f50_nat_rc=$?
   [ "$f50_nat_rc" = 0 ] && return 1
   printf '%s\\n' "$f50_nat_probe" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"
 }
@@ -1973,7 +1975,7 @@ f50_run_controller() (
   case "$1:$2" in policy:verify) f50_ipv4_dns_rules verify;; *) f50_ipv4_dns_rules apply;; esac || exit 1
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 )
-# KANO_IPV6_DNS_SPLIT=3
+# KANO_IPV6_DNS_SPLIT=4
 `; }
 
 function buildF50InspectHelpers() { return `f50_inspect() {
@@ -3250,7 +3252,7 @@ function networkStateKey(state, { runtimeOnly = false } = {}) {
 
 async function normalizeIpv6DnsCapability(state) {
   if (!state?.options || state.options.ipv6 !== 'on' || state.options.dns_hijack !== 'on') return false;
-  const probe = await runShellWithRoot("probe=$(ip6tables -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 5000);
+  const probe = await runShellWithRoot("probe=$(ip6tables -w 5 -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo F50_IPV6_NAT=1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo F50_IPV6_NAT=0; else echo F50_IPV6_NAT=unknown; fi", 7000);
   if (!probe?.success || !/^F50_IPV6_NAT=0$/m.test(String(probe.content || ''))) return false;
   createToast('当前内核不支持 IPv6 NAT；已保留 IPv4 DNS 劫持，IPv6 接管仍保持开启。', 'yellow', 10000);
   return true;
@@ -4287,8 +4289,9 @@ exit "$kano_task_rc"`;
 
   const sanitizeSubscriptionSecrets = (value = '') => String(value || '')
     .replace(/https?:\/\/[^\s"'<>)}\]]+/gi, (url) => maskSubscriptionUrl(url) || '[订阅地址已隐藏]')
+    .replace(/\b(?!https?:)[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)}\]]+/gi, '[链接已隐藏]')
     .replace(/\bbearer\s+[^\s,;"']+/gi, 'Bearer ***')
-    .replace(/(["']?(?:token|secret|authorization|access[_-]?(?:key|token))["']?\s*[=:]\s*["']?)[^\s,;&}"']+/gi, '$1***');
+    .replace(new RegExp(`(["']?(?:${F50_SENSITIVE_KEYS})["']?\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&}]+)`, 'gi'), '$1***');
 
   const safeTextToHtml = (value = '') => textToHtml(sanitizeSubscriptionSecrets(value));
 
@@ -4332,13 +4335,22 @@ exit "$kano_task_rc"`;
   };
 
   const isPrivateOrReservedIpv6 = (hostname = '') => {
-    const value = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
-    if (!value || !/^[0-9a-f:.]+$/.test(value)) return true;
-    if (value.includes('.')) return true;
-    return value == '::' || value == '::1'
-      || value.startsWith('fc') || value.startsWith('fd')
-      || /^fe[89ab]/.test(value) || value.startsWith('ff')
-      || value.startsWith('2001:db8:');
+    let value;
+    try { value = new URL(`http://[${String(hostname).replace(/^\[|\]$/g, '')}]/`).hostname.slice(1, -1); }
+    catch (_) { return true; }
+    const halves = value.split('::');
+    const left = halves[0] ? halves[0].split(':') : [];
+    const right = halves[1] ? halves[1].split(':') : [];
+    const words = (halves.length === 1 ? left : [...left, ...Array(8 - left.length - right.length).fill('0'), ...right]).map(word => parseInt(word, 16));
+    const embeddedIpv4 = offset => [words[offset] >> 8, words[offset] & 255, words[offset + 1] >> 8, words[offset + 1] & 255].join('.');
+    if (words.slice(0, 5).every(word => word === 0) && words[5] === 0xffff) return isPrivateOrReservedIpv4(embeddedIpv4(6));
+    if (words[0] === 0x64 && words[1] === 0xff9b && words.slice(2, 6).every(word => word === 0)) return isPrivateOrReservedIpv4(embeddedIpv4(6));
+    if (words[0] === 0x2002) return isPrivateOrReservedIpv4(embeddedIpv4(1));
+    return words.slice(0, 6).every(word => word === 0)
+      || (words[0] & 0xfe00) === 0xfc00 || (words[0] & 0xffc0) === 0xfe80 || (words[0] & 0xff00) === 0xff00
+      || (words[0] === 0x100 && words.slice(1, 4).every(word => word === 0))
+      || (words[0] === 0x64 && words[1] === 0xff9b && words[2] === 1)
+      || (words[0] === 0x2001 && words[1] === 0xdb8);
   };
 
   const validateLocalSubscriptionUrl = (value = '') => {
@@ -5785,7 +5797,7 @@ exit "$kano_task_rc"`;
         TARGET=${shellQuote(targetPath)}
         STAGE=${shellQuote(stagePath)}
         UPLOADED=${shellQuote(uploadedPath)}
-        DIR="${stagePath.replace(/\/[^/]*$/, '')}"
+        DIR=${shellQuote(stagePath.replace(/\/[^/]*$/, ''))}
         expected=${expectedBytes}
         cleanup_yaml_upload() {
           rc=$?
@@ -6414,33 +6426,32 @@ ${buildF50YamlCommitBody(withBase)}
     }
 
     const input = JSON.parse(JSON.stringify(config || {}));
+    delete input.secret;
     const workerSource = `
       "use strict";
       (() => {
       const FunctionConstructor = Function;
       const safePostMessage = self.postMessage.bind(self);
+      const safeAddEventListener = self.addEventListener.bind(self);
       for (const prototype of [Function.prototype, Object.getPrototypeOf(async function() {}), Object.getPrototypeOf(function*() {}), Object.getPrototypeOf(async function*() {})]) {
         Object.defineProperty(prototype, "constructor", { value: undefined, writable: false, configurable: false });
       }
       const blockedGlobals = [
         "Function", "eval",
-        "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "WebTransport",
+        "fetch", "XMLHttpRequest", "WebSocket", "WebSocketStream", "EventSource", "WebTransport",
+        "FontFace", "fonts", "Notification",
         "Worker", "SharedWorker", "importScripts", "indexedDB", "caches",
-        "navigator", "location", "postMessage", "close"
+        "navigator", "location", "postMessage", "close", "setTimeout", "setInterval", "BroadcastChannel",
+        "addEventListener", "removeEventListener", "dispatchEvent"
       ];
-      for (const name of blockedGlobals) {
-        try {
-          Object.defineProperty(self, name, {
-            value: undefined,
-            writable: false,
-            configurable: false,
-            enumerable: false
-          });
-        } catch (_) {
-          try { self[name] = undefined; } catch (_) {}
+      // Worker APIs can also be reached through WorkerGlobalScope.prototype.
+      for (let scope = self; scope; scope = Object.getPrototypeOf(scope)) {
+        for (const name of blockedGlobals) {
+          if (scope !== self && !Object.prototype.hasOwnProperty.call(scope, name)) continue;
+          Object.defineProperty(scope, name, { value: undefined, writable: false, configurable: false });
         }
       }
-      self.onmessage = (event) => {
+      safeAddEventListener("message", (event) => {
         try {
           const code = String(event.data && event.data.code || "");
           const config = event.data && event.data.config;
@@ -6465,7 +6476,7 @@ ${buildF50YamlCommitBody(withBase)}
             error: String(error && (error.stack || error.message) || error)
           });
         }
-      };
+      });
       })();
     `;
 
@@ -6502,6 +6513,8 @@ ${buildF50YamlCommitBody(withBase)}
       if (output['proxy-groups'] && !Array.isArray(output['proxy-groups'])) {
         throw new Error('config["proxy-groups"] 必须是数组');
       }
+      if (Object.prototype.hasOwnProperty.call(config, 'secret')) output.secret = config.secret;
+      else delete output.secret;
       const serialized = JSON.stringify(output);
       if (serialized.length > 5 * 1024 * 1024) {
         throw new Error('JS 覆写输出超过 5 MiB；已拒绝写入');
@@ -7395,7 +7408,7 @@ KANO_WRITE_CHECK_EOF
       try { const value=JSON.parse(before.responseText || ''); if (Array.isArray(value.proxies)) previousCount=value.proxies.length; }
       catch (_) {}
     }
-    const updated=await callMihomoApi(path,'PUT',null,info,5,{corePid:pid});
+    const updated=await callMihomoApi(path,'PUT',null,info,defs[name]?.type==='http'?30:5,{corePid:pid});
     // An update error says nothing about the still-loaded cache. Observe it independently.
     const snap=await callMihomoApi(path,'GET',null,info,5,{corePid:pid});
     let count=null,parseFailed=false;
@@ -7408,14 +7421,15 @@ KANO_WRITE_CHECK_EOF
     const rawMessage=sanitizeSubscriptionSecrets(failure.responseText || failure.message || failure.content || '');
     const http=defs[name]?.type==='http';
     const upstream390=http && (updated.statusCode===390 || /(?:HTTP|status(?: code)?)\s*[:=]?\s*390\b/i.test(rawMessage));
-    const errorType=ok ? '' : upstream390 ? 'upstream_390' : !updated.success ? (updated.statusCode===404 ? 'provider_missing' : updated.errorType || 'provider_update_failed')
+    const pending=http && !updated.success && updated.errorType==='timeout';
+    const errorType=ok ? '' : pending ? 'update_pending' : upstream390 ? 'upstream_390' : !updated.success ? (updated.statusCode===404 ? 'provider_missing' : updated.errorType || 'provider_update_failed')
       : !snap.success ? snap.errorType || 'provider_snapshot_failed' : parseFailed ? 'provider_parse_failed' : 'provider_empty';
     return {type:'proxy-provider',name,ok,attempts:1,proxyCount:count,previousProxyCount:previousCount,
       countUnchanged:previousCount!==null && count===previousCount,
       cacheAvailable:count>0,
       updateSucceeded:updated.success===true,loadObserved:snap.success===true && !parseFailed,connectivity:'unverified',
       statusCode:updated.statusCode || 0,snapshotStatusCode:snap.statusCode || 0,errorType,rawMessage,
-      message:ok ? '' : rawMessage || (count===0 ? '节点来源已响应，但未返回可用节点' : '无法读取节点加载状态')};
+      message:ok ? '' : pending ? '节点来源更新仍待确认，请稍后重新检查' : rawMessage || (count===0 ? '节点来源已响应，但未返回可用节点' : '无法读取节点加载状态')};
   });
   const result=buildProviderUpdateResult(results,{controllerInfo:info,corePid:pid,
     notRunReason:!pid && names.length ? '核心未运行' : '',via:names.some(name=>defs[name]?.type==='http')?'http':'file'});
@@ -11323,6 +11337,14 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
       const fallback = await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' });
       if (!fallback.ok) throw new Error('节点更新与本地转换回退均失败');
     } else if (providers.failed > 0) {
+      const failures = (providers.providers || []).filter((item) => !item.ok);
+      if (failures.length && failures.every((item) => item.errorType === 'update_pending')) {
+        committed = true;
+        invalidateStatusSnapshot();
+        operationFinish(true, '配置已保存；节点更新仍待确认');
+        createToast('配置已保存；节点更新仍待确认，请稍后重新检查', 'yellow', 9000);
+        return true;
+      }
       const failed = (providers.providers || []).find((item) => !item.ok);
       throw new Error(failed && failed.message || '节点来源更新失败');
     }

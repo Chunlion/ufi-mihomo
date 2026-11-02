@@ -279,11 +279,13 @@ for (const state of ['clean', 'residual', 'unknown']) {
 
 test('UI controls and event entry points retain their IDs and handler counts', () => {
   const ids = text => [...text.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]);
-  assert.deepEqual(ids(source).filter(id=>!id.startsWith('mm_gist_')), ids(original));
+  // 面板新增控件（安装锁清理）；其余 ID 必须与基线逐项一致，顺序也不能变。
+  const addedIds = ['mm_policy_clear_install_lock'];
+  assert.deepEqual(ids(source).filter(id => !id.startsWith('mm_gist_') && !addedIds.includes(id)), ids(original));
   const ui=fs.readFileSync(require('node:path').resolve(__dirname,'../../gist-sync/ui-gist.js'),'utf8');
   assert.deepEqual(ids(source).filter(id=>id.startsWith('mm_gist_')),ids(ui));
-  // 直连设备列表新增三个 onclick 入口：链路本地地址折叠开关、IP 备注、MAC 备注。
-  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length+(ui.match(/\.onclick\s*=/g)||[]).length+3);
+  // 直连设备列表三个 onclick 入口（链路本地折叠、IP 备注、MAC 备注）加安装锁清理。
+  assert.equal((source.match(/\.onclick\s*=/g) || []).length, (original.match(/\.onclick\s*=/g) || []).length+(ui.match(/\.onclick\s*=/g)||[]).length+4);
 });
 
 for (const outcome of ['success', 'error', 'cancel']) {

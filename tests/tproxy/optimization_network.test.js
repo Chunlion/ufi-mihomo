@@ -44,6 +44,7 @@ test('editing and clearing notes leave bypass membership unchanged; adding an ad
     + '({edit:editDeviceNote,add:appendDeviceBypassValue})', {
     ...deviceNoteContext, state, deviceNotes: {}, get: () => textarea, escapeHtml: String, syncNotes() {},
     askText: async () => answer, runCriticalButtonOperation: async (label, button, busy, action) => action(),
+    readPolicyState: async () => ({ deviceNotes: saved.at(-1) || {} }),
     saveOverrideText: async (file, text) => { assert.equal(file, deviceNoteContext.CLASH_DEVICE_NOTES_FILE); saved.push(JSON.parse(text)); return true; },
   });
   await edit.edit('192.168.0.2', {});
@@ -62,6 +63,46 @@ test('editing and clearing notes leave bypass membership unchanged; adding an ad
   answer = null;
   await edit.edit('192.168.0.2', {});
   assert.equal(saved.length, 2);
+});
+
+test('two open device editors preserve each other\'s notes and cleared values', async () => {
+  let stored = {};
+  const editor = answer => run(deviceNoteHelpers
+    + slice('const editDeviceNote =', 'const summary = document.createElement') + 'editDeviceNote', {
+    ...deviceNoteContext, state: {}, deviceNotes: {}, escapeHtml: String, syncNotes() {},
+    askText: async () => answer, runCriticalButtonOperation: async (label, button, busy, action) => action(),
+    readPolicyState: async () => ({ deviceNotes: { ...stored } }),
+    saveOverrideText: async (file, text) => { stored = JSON.parse(text); return true; },
+  });
+  const first = editor('phone'), second = editor('computer'), clear = editor('');
+  await first('192.168.0.2', {});
+  await second('192.168.0.3', {});
+  assert.deepEqual(stored, { '192.168.0.2': 'phone', '192.168.0.3': 'computer' });
+  await clear('192.168.0.2', {});
+  await second('192.168.0.4', {});
+  assert.deepEqual(stored, { '192.168.0.2': '', '192.168.0.3': 'computer', '192.168.0.4': 'computer' });
+});
+
+test('saving an old network dialog preserves newer notes and merges inline edits', async () => {
+  let stored = { '192.168.0.2': '', '192.168.0.3': 'new note' };
+  const elements = new Map();
+  const get = id => {
+    if (!elements.has(id)) elements.set(id, { value: '', checked: false, dispatchEvent() {} });
+    return elements.get(id);
+  };
+  get('#mm_policy_device').value = '192.168.0.4 # inline note';
+  const handler = slice("get('#mm_policy_save_apply').onclick", '\n    };\n  };');
+  run(deviceNoteHelpers + handler + '\n};', {
+    ...deviceNoteContext, F50_PORTS: { dns: 1053 }, get, state: { options: {} },
+    deviceNotes: { '192.168.0.2': 'stale note' },
+    readPolicyState: async () => ({ deviceNotes: { ...stored } }),
+    saveOverrideText: async (file, text) => { stored = JSON.parse(text); return true; },
+    acquireCriticalOperation: () => ({}), setButtonBusy() {}, releaseCriticalOperation: async () => {},
+    kprSaveNetworkState: async () => {}, Event: class {}, safeTextToHtml: String,
+    createToast(message) { assert.fail(message); },
+  });
+  await get('#mm_policy_save_apply').onclick();
+  assert.deepEqual(stored, { '192.168.0.2': '', '192.168.0.3': 'new note', '192.168.0.4': 'inline note' });
 });
 
 const base = { 'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],

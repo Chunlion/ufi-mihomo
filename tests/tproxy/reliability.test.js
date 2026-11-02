@@ -980,8 +980,12 @@ for (const installer of ['exited', 'running', 'unknown_entry']) test('uninstall 
     if (installer === 'unknown_entry') write(lock, 'foreign', 'keep');
     const script = api.uninstall()[0].script.replace('f50_inspect || exit 1', 'f50_inspect() { F50_OLD_FOUND=0; }\nf50_inspect || exit 1');
     const result = shell(script, { F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc });
-    assert.equal(result.status, installer === 'exited' ? 0 : 1, result.stdout + result.stderr);
-    assert.equal(fs.existsSync(lock), installer !== 'exited');
+    // 卸载随后会删掉整个目录：只有 pid 存活（无法排除真实安装）才阻塞，
+    // 目录里带陌生文件的残留降级为告警并连带清掉。
+    const blocked = installer === 'running';
+    assert.equal(result.status, blocked ? 1 : 0, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(lock), blocked);
+    if (installer === 'unknown_entry') assert.match(result.stdout, /F50_CLEAN_WARNING=stale_install_lock/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

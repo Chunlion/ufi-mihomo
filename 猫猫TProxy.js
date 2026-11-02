@@ -1286,7 +1286,7 @@ async function performF50Uninstall() {
   const diagnostics = [];
   const stages = buildUninstallStages();
   let operationBlocked = false;
-  let failedStage = '';
+  let failedStage = '', failedStageIndex = -1;
   const recoverIdleLease = async () => {
     const op = activeCriticalOperation;
     if (!op || op.leaseOwned || op.uncertain || op.token.cancelled || op.requests) return false;
@@ -1318,12 +1318,13 @@ async function performF50Uninstall() {
       operationBlocked = /^F50_OPERATION_(?:RECOVERY_)?BUSY$/m.test(String(response?.content || ''));
       diagnostics.push({stage:stages[i].title, transportOk:response?.success === true,
         detail:f50Diagnostic(response?.content || 'F50_STAGE_ERROR=empty_response').details});
-      if (!response?.success) { failedStage = stages[i].title; break; }
+      if (!response?.success) { failedStage = stages[i].title; failedStageIndex = i; break; }
     } catch (error) {
       if (error?.name === 'OperationCancelled') throw error;
       diagnostics.push({stage:stages[i].title, transportOk:false,
         detail:f50Diagnostic(error?.message || String(error)).details});
       failedStage = stages[i].title;
+      failedStageIndex = i;
       break;
     }
   }
@@ -1341,7 +1342,8 @@ async function performF50Uninstall() {
     + '\nFINAL_TRANSPORT_OK=' + Number(finalResponse?.success === true) + '\n' + verdict.detail;
   const summary = ok ? '猫猫及全部组件数据已卸载'
     : operationBlocked ? '卸载失败：设备操作锁检查未通过；请查看“状态与日志”'
-    : failedStage ? '卸载失败：' + failedStage + '失败；请查看“状态与日志”'
+    : failedStage ? '卸载失败：' + failedStage + '失败' + (failedStageIndex > 0
+      ? '；核心已停止、组件仍在，可重试卸载' : '；请查看“状态与日志”')
     : verdict.code === 'residual' ? '卸载失败：仍有猫猫残留；残留项见“状态与日志”'
     : '卸载失败：无法读取最终状态；请检查设备连接后重试';
   const result = {...verdict, ok, code:operationBlocked ? 'operation_busy' : failedStage ? 'stage_failed' : verdict.code, summary, details};
@@ -2447,13 +2449,12 @@ done <<EOF_F50_MEMBERS
 $names
 EOF_F50_MEMBERS
 archive_bytes=$(printf '%s\\n' "$archive_listing" | awk '$1 ~ /^[0-9]+$/ && $NF ~ /^files?$/ && NF <= 4 {n=$1} END {print n}')
-case "$archive_bytes" in ''|*[!0-9]*) f50_install_fail archive_size_unknown; exit 1 ;; esac
+# unzip -l 的汇总行随 locale 变化，取不到时按 50MB 保底继续，而不是拒绝安装。
+case "$archive_bytes" in ''|*[!0-9]*) echo F50_INSTALL_WARNING=archive_size_unknown; archive_bytes=0 ;; esac
 required_kb=$(( (archive_bytes + 1023) / 1024 + 51200 ))
-# User data is copied into the package before the old directory is moved away, so its size
-# counts toward the requirement for every package shape, not only patch packages.
+# 旧目录靠同盘 mv 让位，不占额外空间；真正被复制的是用户数据，按整棵旧目录估会误判空间不足。
 if [ -d "$F50_ROOT" ]; then
-  old_kb=$(du -sk "$F50_ROOT" 2>/dev/null | awk '{print $1}')
-  case "$old_kb" in ''|*[!0-9]*) f50_install_fail data_size_unknown; exit 1 ;; esac
+  old_kb=$(f50_limit 20 du -sk "$F50_ROOT/Proxy" "$F50_ROOT/Tools/gist-sync" 2>/dev/null | awk '{s+=$1} END {print s+0}')
   required_kb=$((required_kb + old_kb))
 fi
 avail_kb=$(df -k "$F50_DATA" 2>/dev/null | awk 'NR==2{print $4}')
@@ -2471,7 +2472,7 @@ case "$PKG" in "$STAGE"|"$STAGE"/*) ;; *) f50_install_fail invalid_package_root;
 if [ ! -s "$PKG/Proxy/Clash.Core" ]; then
   [ -s "$F50_ROOT/Proxy/Clash.Core" ] || { f50_install_fail missing_core; exit 1; }
   MERGED="$F50_WORK/merged"
-  cp -pR "$F50_ROOT" "$MERGED" && cp -pR "$PKG/." "$MERGED/" || { f50_install_fail patch_merge_failed; exit 1; }
+  f50_limit 60 cp -pR "$F50_ROOT" "$MERGED" && cp -pR "$PKG/." "$MERGED/" || { f50_install_fail patch_merge_failed; exit 1; }
   PKG=$MERGED
 fi
 mkdir -p "$PKG/Scripts" "$PKG/Proxy" "$PKG/Tools" "$PKG/Policy" || { f50_install_fail package_directory_failed; exit 1; }
@@ -2705,7 +2706,8 @@ async function installF50PackageAtDevicePath(uploaded) {
     }
     const hasOld = /^F50_OLD_FOUND=1$/m.test(text);
     operationStage(hasOld ? '清理旧环境并安装组件' : '解压、校验并安装组件');
-    const result = await runShellWithRoot(buildF50InstallScript(uploaded), 150000);
+    // 解包 35s、启动 85s、清理与复制用户数据串行执行，150s 在慢盘上不够用。
+    const result = await runShellWithRoot(buildF50InstallScript(uploaded), 240000);
     const output = String(result?.content || '');
     if (/^F50_INSTALL_COMPONENTS_OK=1$/m.test(output)) {
       pluginArtifactsRemoved = false; f50BackendReady = false;
@@ -3648,9 +3650,14 @@ function buildF50CleanupScript(forUninstall = false) {
   return buildF50MaintenanceFunctions('cleanup') + (forUninstall ? buildF50ConfigTransactionFunctions() : '') + `
 F50_WORK=$(mktemp -d "$F50_DATA/.f50-clean.XXXXXX") || exit 1
 trap 'rm -rf "$F50_WORK"' EXIT
-${forUninstall ? `f50_install_lock_idle || { echo F50_CLEAN_ERROR=installation_active_or_invalid; exit 1; }
-if [ -d "$F50_DATA/clash.install.lock.d" ]; then
-  rm -f "$F50_DATA/clash.install.lock.d/pid" && rmdir "$F50_DATA/clash.install.lock.d" || exit 1
+${forUninstall ? `if ! f50_install_lock_idle; then
+  # 卸载随后会删掉整个目录，只有无法排除「真有安装在跑」的形态才挡住这条出口。
+  # extra_lock_entry 不可能是正常安装（安装只写 pid），可以安全降级为告警。
+  case "$f50_install_lock_reason" in installer_running|legacy_lock_record|process_table_unreadable|unsafe_lock_path) echo F50_CLEAN_ERROR=installation_active_or_invalid; exit 1 ;; esac
+  echo F50_CLEAN_WARNING=stale_install_lock
+fi
+if [ -e "$F50_DATA/clash.install.lock.d" ] || [ -L "$F50_DATA/clash.install.lock.d" ]; then
+  rm -rf "$F50_DATA/clash.install.lock.d" || exit 1
 fi
 if [ -d "$F50_ROOT/Tools/gist-sync/activation" ]; then
   KANO_GIST_TRANSACTION=$(cat "$F50_ROOT/Tools/gist-sync/activation/id" 2>/dev/null)
@@ -8794,6 +8801,13 @@ btn_disabled.onclick = async () => {
     return result.ok;
   } catch (error) {
     pluginArtifactsRemoved = false;
+    // 用户主动取消不是失败；卸载中途取消时组件状态未知，仍需提示去“状态与日志”确认。
+    if (error?.name === 'OperationCancelled') {
+      lastInstallDiagnostic = f50Diagnostic(error?.message || '卸载已取消');
+      operationFinish(false, '卸载已取消');
+      createToast('卸载已取消；若已开始停止核心，请在“状态与日志”确认当前状态', 'yellow', 10000);
+      return false;
+    }
     lastInstallDiagnostic = f50Diagnostic(error?.message || String(error));
     operationFinish(false, lastInstallDiagnostic.summary);
     createToast(safeTextToHtml(lastInstallDiagnostic.summary), 'red', 12000);

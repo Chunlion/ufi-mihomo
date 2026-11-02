@@ -48,7 +48,7 @@
     },
     "uninstall": {
       "before": "7e7378f896aaf8b8b504fddabd8d0fc8a0ee13d8f1889af6458c907831f89827",
-      "after": "941aea6208a65fc3b641cb6efff3f0ad666d1e58c6da011c0f072ec146df04c4"
+      "after": "3ca612eb9561c60679dea38be9c5aa1636b7c027c2ed0e89440214828a5b6f95"
     }
   },
   "labels": {

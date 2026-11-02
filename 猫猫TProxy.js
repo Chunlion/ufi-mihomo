@@ -2057,9 +2057,8 @@ function buildF50CleanupHelpers() { return `f50_clean_environment() {
   fi
   f50_scan "$F50_WORK/after.pids" || return 1
   [ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; return 1; }
-  # Service 自己坏了（补丁破损、被替换）时它不会走原生恢复；此时仍要用 clashctl 收尾，
-  # 否则残留 journal 会把卸载卡在 journal_restore_incomplete。进程已确认停止，可以安全调用。
-  if [ "$clean_recover" = failed ]; then
+  # Service 缺失或恢复失败时，进程停止后用原生控制器恢复 journal。
+  if [ "\${F50_SKIP_NATIVE_RECOVERY:-0}" != 1 ] && [ "$clean_recover" != ok ]; then
     for clean_journal in ${F50_PROTECTED_JOURNALS}; do
       [ -s "$F50_ROOT/Policy/$clean_journal" ] || continue
       case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
@@ -8541,7 +8540,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     });
     const controllerInfoPromise = buildControllerInfo();
     const pidPromise = getCorePid();
-    const runtimeStatePromise = checkInstallState({ fresh: true });
+    const runtimeStatePromise = settle('运行状态', checkInstallState({ fresh: true }), { state: 'unknown', message: '读取失败' });
     const bootStatePromise = inspectBootIntegration();
     const configPromise = readBinarySnapshot().then((snapshot) => {
       if (snapshot) {
@@ -8600,7 +8599,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         fi
         `, 8 * 1000));
     // 遍历 /proc 找遗留测试进程最慢，单独一路，回来后再补进详细信息。
-    const stalePromise = pidPromise.then((pid) => (pid ? runShellWithRoot(`
+    const stalePromise = settle('遗留测试进程', pidPromise.then((pid) => (pid ? runShellWithRoot(`
         CORE=${shellQuote(CLASH_CORE)}
         stale=""
         for p in /proc/[0-9]*; do
@@ -8613,7 +8612,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           esac
         done
         echo "STALE_TEST_PIDS=$stale"
-        `, 8 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' })));
+        `, 8 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' }))).then((res) => {
+      if (!res?.success) throw new Error(res?.content || '读取失败');
+      return res;
+    }), { success: false, content: '' });
     const noCore = { success: false, statusCode: 0, message: '核心未运行' };
     const versionPromise = Promise.all([controllerInfoPromise, pidPromise, runtimeStatePromise]).then(([info, pid, runtime]) => {
       // 核心没跑就不发请求，避免白等超时；预检刚测过 /version 时直接复用。
@@ -8641,7 +8643,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       providerHealth,
       panelHealth,
     ] = await Promise.all([
-      settle('运行状态', runtimeStatePromise, { state: 'unknown', message: '读取失败' }),
+      runtimeStatePromise,
       settle('开机自启', bootStatePromise, { state: 'unknown', message: '读取失败' }),
       settle('核心进程', pidPromise, ''),
       settle('控制地址', controllerInfoPromise, {
@@ -8727,7 +8729,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
         ['核心命令行', proc.CMDLINE || '无'],
         ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
-        ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
+        ['遗留测试进程', proc.STALE_TEST_FAILED ? '读取失败' : (proc.STALE_TEST_PIDS || '无')],
         ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
         ['预检信息', runtimeState.message || '无'],
         ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
@@ -8737,10 +8739,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     };
     paint();
     // 遗留测试进程慢一步回来，补进明细并刷新总览。
-    stalePromise.then((res) => {
-      proc.STALE_TEST_PIDS = parseKeyValueOutput(res && res.content || '').STALE_TEST_PIDS || '';
-      paint();
-    }).catch(() => {});
+    const staleRes = await stalePromise;
+    proc.STALE_TEST_PIDS = parseKeyValueOutput(staleRes.content || '').STALE_TEST_PIDS || '';
+    proc.STALE_TEST_FAILED = !staleRes.success;
+    paint();
   };
 
 

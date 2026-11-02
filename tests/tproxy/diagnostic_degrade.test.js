@@ -100,6 +100,52 @@ test('a failing probe degrades that row instead of aborting the dialog', async (
   assert.match(h.dialogs[0].html, /未读取/);
 });
 
+for (const timing of ['early', 'late', 'nonzero']) test('stale-process failures remain visible without blocking dialog opening / ' + timing, async () => {
+  let releasePanel, resolveScan, rejectScan;
+  const panel = new Promise(resolve => { releasePanel = resolve; });
+  const scan = new Promise((resolve, reject) => { resolveScan = resolve; rejectScan = reject; });
+  const h = harness({ runShellWithRoot: async script => {
+    if (script.includes('STALE_TEST_PIDS=')) return scan;
+    if (script.includes('f50_verify_zashboard_endpoint') && timing !== 'late') return panel;
+    return { success: true, content: 'exists=1\nsize=2048' };
+  } });
+  const running = h.api.run();
+  assert.equal(h.dialogs.length, 1, 'dialog must open before probes finish');
+  await new Promise(setImmediate);
+  if (timing === 'nonzero') resolveScan({ success: false, content: 'scan failed' });
+  else rejectScan(new Error('scan failed'));
+  await new Promise(setImmediate);
+  releasePanel({ success: true, content: '' });
+  await running;
+  assert.match(h.dialogs[0].html, /遗留测试进程：scan failed/);
+  assert.match(h.dialogs[0].html, /需注意：[^<]*1 项读取失败/);
+  assert.match(h.dialogs[0].html, /遗留测试进程<\/strong><span[^>]*>读取失败/);
+});
+
+test('failed runtime preflight still checks the controller API independently', async () => {
+  const requests = [];
+  const h = harness({
+    checkInstallState: async () => { throw new Error('preflight unavailable'); },
+    callMihomoApi: async route => { requests.push(route); return { success: true, statusCode: 200, responseText: '{"connections":[]}' }; },
+  });
+  await h.api.run();
+  assert.equal(requests.filter(route => route === '/version').length, 1);
+  assert.match(h.dialogs[0].html, /运行状态：preflight unavailable/);
+  assert.match(h.dialogs[0].html, /控制 API<\/strong><span[^>]*>正常（HTTP 200）/);
+  assert.doesNotMatch(h.dialogs[0].html, /控制 API：preflight unavailable/);
+});
+
+test('diagnostics reuse the version response from successful runtime preflight', async () => {
+  const requests = [];
+  const h = harness({
+    checkInstallState: async () => ({ state: 'healthy', api: { success: true, statusCode: 200 } }),
+    callMihomoApi: async route => { requests.push(route); return { success: true, statusCode: 200, responseText: '{"connections":[]}' }; },
+  });
+  await h.api.run();
+  assert.ok(!requests.includes('/version'));
+  assert.match(h.dialogs[0].html, /正常（HTTP 200）/);
+});
+
 test('every probe failing still renders one dialog with all failures listed', async () => {
   const fail = async () => { throw new Error('device offline'); };
   const h = harness({

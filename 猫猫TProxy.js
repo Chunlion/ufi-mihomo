@@ -1377,7 +1377,7 @@ f50_validate_zashboard() {
 function buildF50MaintenanceFunctions(operation = 'all') {
   const sections = {
     base: { build: buildF50ShellBase, requires: [] },
-    process: { build: buildF50ProcessHelpers, requires: ["base"] },
+    process: { build: () => buildF50ProcessHelpers(operation !== 'install'), requires: ["base"] },
     network: { build: buildF50NetworkHelpers, requires: ["base"] },
     compat: { build: buildF50NetworkCompatHelpers, requires: ["base"] },
     inspect: { build: buildF50InspectHelpers, requires: ["process","network"] },
@@ -1427,7 +1427,7 @@ f50_limit() {
 }
 ${buildF50RedactFunction()}
 `; }
-function buildF50ProcessHelpers() { return `f50_stat() {
+function buildF50ProcessHelpers(includeInstallLock = true) { return `f50_stat() {
   F50_STAT_START=; F50_STAT_PARENT=; F50_STAT_STATE=
   { IFS= read -r ps_stat < "$F50_PROC/$1/stat"; } 2>/dev/null || return 1
   ps_stat=\${ps_stat##*) }
@@ -1522,7 +1522,7 @@ f50_same_process() {
   [ "$F50_STAT_START" = "$2" ] || return 1
   case "$F50_STAT_STATE" in Z|X) return 1 ;; esac
 }
-f50_install_lock_block() {
+${includeInstallLock ? `f50_install_lock_block() {
   f50_install_lock_reason=$1
   printf 'F50_INSTALL_LOCK_REASON=%s\\n' "$1"
   [ -z "$f50_install_lock_pid" ] || printf 'F50_INSTALL_LOCK_PID=%s\\n' "$f50_install_lock_pid"
@@ -1532,12 +1532,7 @@ f50_install_lock_idle() {
   install_lock="$F50_DATA/clash.install.lock.d"
   f50_install_lock_pid=
   [ -e "$install_lock" ] || [ -L "$install_lock" ] || return 0
-  # 只有「pid 存活且启动时间一致」才算真实安装事务；重启后 pid 复用、目录只写了一半都按残留回收。
   [ -d "$install_lock" ] && [ ! -L "$install_lock" ] || { f50_install_lock_block unsafe_lock_path; return 1; }
-  for install_entry in "$install_lock"/* "$install_lock"/.[!.]* "$install_lock"/..?*; do
-    [ -e "$install_entry" ] || [ -L "$install_entry" ] || continue
-    [ "$install_entry" = "$install_lock/pid" ] || { f50_install_lock_block extra_lock_entry; return 1; }
-  done
   install_pid=; install_start=; install_extra=
   if [ -f "$install_lock/pid" ] && [ ! -L "$install_lock/pid" ]; then read -r install_pid install_start install_extra < "$install_lock/pid"; fi
   case "$install_pid" in ''|0|*[!0-9]*) install_pid=;; *) f50_install_lock_pid="$install_pid";; esac
@@ -1550,11 +1545,39 @@ f50_install_lock_idle() {
       if f50_stat "$install_pid" && [ "$F50_STAT_START" = "$install_start" ]; then f50_install_lock_block installer_running; return 1; fi
     fi
   fi
-  rm -f "$install_lock/pid" 2>/dev/null
-  rmdir "$install_lock" 2>/dev/null || { f50_install_lock_block lock_not_removable; return 1; }
+  # 安装器先建锁目录再写 pid；任务仍存活时不能回收这个初始化中的锁。
+  if [ -z "$install_pid" ]; then
+    for install_task in "\${F50_TASK_DIR:-/dev/kano_tproxy_tasks}"/*; do
+      [ -f "$install_task" ] && [ ! -L "$install_task" ] || continue
+      case "$install_task" in *.output|*.receipt) continue ;; esac
+      read -r install_format install_tag install_request install_worker install_worker_start install_manager install_manager_start install_state install_rc install_extra < "$install_task" || continue
+      [ "$install_format" = F50_TASK_V2 ] && [ "$install_state" = running ] || continue
+      [ "$install_worker" != "$$" ] || continue
+      for install_identity in "$install_worker:$install_worker_start" "$install_manager:$install_manager_start"; do
+        install_process=\${install_identity%:*}; install_process_start=\${install_identity#*:}
+        case "$install_identity" in *[!0-9:]*|:*|*:) f50_install_lock_block invalid_lock_record; return 1 ;; esac
+        if [ -d "$F50_PROC/$install_process" ]; then
+          f50_stat "$install_process" || { f50_install_lock_block process_table_unreadable; return 1; }
+          if [ "$F50_STAT_START" = "$install_process_start" ]; then
+            case "$F50_STAT_STATE" in Z|X) ;; *) f50_install_lock_pid=$install_process; f50_install_lock_block installer_running; return 1 ;; esac
+          fi
+        fi
+      done
+    done
+  fi
+  for install_entry in "$install_lock"/* "$install_lock"/.[!.]* "$install_lock"/..?*; do
+    [ -e "$install_entry" ] || [ -L "$install_entry" ] || continue
+    [ "$install_entry" = "$install_lock/pid" ] || [ "\${1:-}" = clear ] || { f50_install_lock_block extra_lock_entry; return 1; }
+  done
+  if [ "\${1:-}" = clear ]; then
+    rm -rf "$install_lock" || { f50_install_lock_block lock_not_removable; return 1; }
+  else
+    rm -f "$install_lock/pid" 2>/dev/null
+    rmdir "$install_lock" 2>/dev/null || { f50_install_lock_block lock_not_removable; return 1; }
+  fi
   return 0
 }
-f50_stop_recorded() {
+` : ''}f50_stop_recorded() {
   ps_list=$1
   [ -s "$ps_list" ] || { echo PROCESSES_STOPPED; return 0; }
   while read -r ps_pid ps_start ps_kind; do
@@ -9510,7 +9533,7 @@ btn_disabled.onclick = async () => {
             current);
           if (value === null) return;
           await runCriticalButtonOperation('保存设备备注', button, '保存中…', async () => {
-            const nextNotes = { ...deviceNotes };
+            const nextNotes = { ...(await readPolicyState()).deviceNotes };
             nextNotes[key] = deviceNoteText(value);
             if (!(await saveDeviceNotes(nextNotes))) return false;
             state.deviceNotes = deviceNotes = nextNotes;
@@ -9653,13 +9676,10 @@ btn_disabled.onclick = async () => {
         const res = await runShellWithRoot(buildF50ShellBase() + buildF50ProcessHelpers() + `
 lock="$F50_DATA/clash.install.lock.d"
 if [ ! -e "$lock" ] && [ ! -L "$lock" ]; then echo F50_INSTALL_LOCK_ABSENT; exit 0; fi
-if f50_install_lock_idle; then echo F50_INSTALL_LOCK_RECLAIMED; exit 0; fi
+if f50_install_lock_idle clear; then echo F50_INSTALL_LOCK_RECLAIMED; exit 0; fi
 # 真在跑的安装不能被这里抢掉，否则会与并发安装互相覆盖。
 [ "$f50_install_lock_reason" = installer_running ] && { echo F50_INSTALL_LOCK_RUNNING; exit 1; }
-[ -d "$lock" ] && [ ! -L "$lock" ] || { echo F50_INSTALL_LOCK_UNSAFE; exit 1; }
-rm -f "$lock/pid" || exit 1
-rmdir "$lock" 2>/dev/null || { echo F50_INSTALL_LOCK_NOT_EMPTY; exit 1; }
-echo F50_INSTALL_LOCK_CLEARED`, 10000);
+exit 1`, 10000);
         const out = String(res.content || '');
         const reason = (out.match(/^F50_INSTALL_LOCK_REASON=(.+)$/m) || [])[1] || '';
         if (/^F50_INSTALL_LOCK_(CLEARED|RECLAIMED|ABSENT)$/m.test(out)) {
@@ -9723,7 +9743,7 @@ echo F50_INSTALL_LOCK_CLEARED`, 10000);
       setButtonBusy(button, true, '应用中…');
       try {
         const selected = KPR.normalize({ enabled: get('#kpr_enabled').checked, cidrs: get('#kpr_cidrs').value, policy: get('#kpr_policy').value });
-        const nextNotes = { ...deviceNotes, ...Object.fromEntries(readDeviceBypassNotes(get('#mm_policy_device').value)) };
+        const nextNotes = { ...(await readPolicyState()).deviceNotes, ...Object.fromEntries(readDeviceBypassNotes(get('#mm_policy_device').value)) };
         if (!(await saveDeviceNotes(nextNotes))) return;
         state.deviceNotes = deviceNotes = nextNotes;
         const next = { ...state, options: { ...state.options,

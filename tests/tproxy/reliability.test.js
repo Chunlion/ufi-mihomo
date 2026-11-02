@@ -699,6 +699,51 @@ for (const [label, seed, eligible] of [
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+for (const preempt of [false, true]) for (const owner of ['worker', 'manager']) test('recovery preserves an initializing installer lock / ' + preempt + '/' + owner, () => {
+  const dir = temp(), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
+  try {
+    fs.mkdirSync(proc); fs.mkdirSync(lock);
+    write(dir, 'lease/owner', 'mm_install\n'); write(dir, 'lease/frontend', 'mm_install 0\n');
+    write(dir, 'tasks/mm_install.1', 'F50_TASK_V2 mm_install mm_install.1 111 21 222 22 running 0\n');
+    const pid = owner === 'worker' ? 111 : 222, start = owner === 'worker' ? 21 : 22;
+    write(proc, pid + '/stat', `${pid} (sh) S ${Array(18).fill('0').join(' ')} ${start}\n`);
+    const result = shell(api.maintenance('cleanup') + api.eligibility() + '\nf50_recovery_eligible', {
+      F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc, F50_OPERATION_LOCK: path.join(dir, 'lease'),
+      F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_PREEMPT: preempt ? '1' : '0',
+    });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /F50_INSTALL_LOCK_REASON=installer_running/);
+    assert.ok(fs.existsSync(lock));
+    const resultWrite = shell('printf "%s\\n" "111 21" > ' + quote(path.join(lock, 'pid')));
+    assert.equal(resultWrite.status, 0, 'installer must still be able to finish initializing its lock');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const owner of ['exited', 'running', 'legacy', 'initializing', 'self']) test('manual install lock cleanup handles extra files without deleting active locks / ' + owner, () => {
+  const dir = temp(), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
+  try {
+    fs.mkdirSync(proc); write(lock, 'extra', 'residue');
+    if (owner !== 'initializing' && owner !== 'self') write(lock, 'pid', owner === 'legacy' ? '333\n' : '333 31\n');
+    if (owner === 'running' || owner === 'legacy') write(proc, '333/stat', `333 (sh) S ${Array(18).fill('0').join(' ')} 31\n`);
+    if (owner === 'initializing') {
+      write(dir, 'tasks/mm_install.1', 'F50_TASK_V2 mm_install mm_install.1 333 31 444 41 running 0\n');
+      write(proc, '333/stat', `333 (sh) S ${Array(18).fill('0').join(' ')} 31\n`);
+    }
+    const handler = slice("get('#mm_policy_clear_install_lock').onclick", 'const panel = el.querySelector');
+    const command = handler.slice(handler.indexOf('lock="$F50_DATA'), handler.indexOf('`, 10000)'));
+    const selfRecord = owner === 'self' ? 'mkdir -p "$F50_TASK_DIR"; printf "F50_TASK_V2 mm_clear mm_clear.1 %s 1 444 41 running 0\\n" "$$" > "$F50_TASK_DIR/mm_clear.1"\n' : '';
+    const result = shell(api.maintenance('cleanup') + selfRecord + command, {
+      F50_ROOT: path.join(dir, 'clash'), F50_PROC: proc, F50_TASK_DIR: path.join(dir, 'tasks'),
+    });
+    const cleared = owner === 'exited' || owner === 'self';
+    assert.equal(result.status, cleared ? 0 : 1, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(lock), !cleared);
+    if (cleared) assert.match(result.stdout, /F50_INSTALL_LOCK_RECLAIMED/);
+    else assert.equal(fs.readFileSync(path.join(lock, 'extra'), 'utf8'), 'residue');
+    if (owner === 'running' || owner === 'legacy') assert.ok(fs.existsSync(path.join(lock, 'pid')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const owned of [false, true]) test('recovery scan identifies orphaned file writers by task ownership / ' + owned, () => {
   const dir = temp(), proc = path.join(dir, 'proc');
   try {

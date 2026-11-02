@@ -234,6 +234,8 @@ test('repeated full update preserves private identity and exact settings bytes',
   assert.equal(c.result.status,0,c.result.stdout+c.result.stderr);
   const settings='{"url":"https://gist.githubusercontent.com/fixture/0123456789abcdef/raw/one.age","intervalHours":24,"auto":false}\n';
   const key='fixture-private-identity-never-log\n';
+  const notes='{"192.168.0.2":"phone"}\n';
+  write(c.root,'Tools/device_notes.json',notes);
   write(c.root,'Tools/gist-sync/settings.conf',settings);write(c.root,'Tools/gist-sync/sources/fixture/identity.txt',key);
   fs.chmodSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt'),0o600);
   for(let i=0;i<2;i++){
@@ -241,6 +243,7 @@ test('repeated full update preserves private identity and exact settings bytes',
    assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/settings.conf'),'utf8'),settings);
    assert.equal(fs.readFileSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt'),'utf8'),key);
    assert.equal(fs.statSync(path.join(c.root,'Tools/gist-sync/sources/fixture/identity.txt')).mode&0o777,0o600);
+   assert.equal(fs.readFileSync(path.join(c.root,'Tools/device_notes.json'),'utf8'),notes);
   }
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });

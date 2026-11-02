@@ -13,6 +13,57 @@ function privateApi(text) {
     + 'createPrivateRouteLogic()');
 }
 const current = privateApi(source), previous = privateApi(original);
+const deviceNoteHelpers = slice('const normalizeMac', 'const ensurePolicyToolsScript')
+  + slice('const normalizeIpLike', 'const normalizeDomainRuleText');
+const deviceNoteContext = { KPR: current, CLASH_DEVICE_NOTES_FILE: '/clash/Tools/device_notes.json',
+  CLASH_POLICY_OPTIONS_FILE: '/clash/Policy/options.conf', CLASH_DEVICE_BYPASS_FILE: '/clash/Policy/device_bypass.txt',
+  CLASH_DIRECT_DOMAIN_FILE: '/clash/Policy/direct_domain.list', CLASH_DIRECT_IP_FILE: '/clash/Policy/direct_ip.list',
+  CLASH_PROXY_DOMAIN_FILE: '/clash/Policy/proxy_domain.list', CLASH_REJECT_DOMAIN_FILE: '/clash/Policy/reject_domain.list',
+  shellQuote: quote, parsePolicyOptionsText: () => ({}) };
+
+for (const [bypass, saved, expected] of [
+  ['192.168.0.2 # old note', null, { '192.168.0.2': 'old note' }],
+  ['', { '192.168.0.2': 'retained' }, { '192.168.0.2': 'retained' }],
+  ['192.168.0.2 # old note', { '192.168.0.2': '' }, { '192.168.0.2': '' }],
+]) test('device notes survive migration, bypass removal and clearing / ' + JSON.stringify([bypass, saved]), async () => {
+  const read = run(deviceNoteHelpers + slice('const readPolicyState', 'const updateModeBadge') + 'readPolicyState', {
+    ...deviceNoteContext, runShellWithRoot: async () => ({ success: true, content:
+      `KANO_POLICY_deviceBypass=${bypass}\n` + (saved === null ? '' : 'KANO_POLICY_deviceNotes=' + JSON.stringify(saved)) }),
+  });
+  const state = await read();
+  assert.deepEqual(plain(state.deviceNotes), expected);
+  assert.equal(state.deviceBypass, bypass ? '192.168.0.2\n' : '');
+});
+
+test('editing and clearing notes leave bypass membership unchanged; adding an address is explicit', async () => {
+  const textarea = { value: '', disabled: false }, state = {}, saved = [];
+  let answer = 'phone';
+  const edit = run(deviceNoteHelpers
+    + slice('const appendDeviceBypassValue', "get('#mm_policy_scan_clients').onclick")
+    + slice('const editDeviceNote =', 'const summary = document.createElement')
+    + '({edit:editDeviceNote,add:appendDeviceBypassValue})', {
+    ...deviceNoteContext, state, deviceNotes: {}, get: () => textarea, escapeHtml: String, syncNotes() {},
+    askText: async () => answer, runCriticalButtonOperation: async (label, button, busy, action) => action(),
+    saveOverrideText: async (file, text) => { assert.equal(file, deviceNoteContext.CLASH_DEVICE_NOTES_FILE); saved.push(JSON.parse(text)); return true; },
+  });
+  await edit.edit('192.168.0.2', {});
+  assert.equal(textarea.value, '');
+  assert.equal(saved[0]['192.168.0.2'], 'phone');
+  edit.add('192.168.0.2');
+  assert.equal(textarea.value, '192.168.0.2\n');
+  edit.add('192.168.0.2');
+  assert.equal(textarea.value, '192.168.0.2\n');
+  textarea.value = '';
+  assert.equal(state.deviceNotes['192.168.0.2'], 'phone');
+  answer = '';
+  await edit.edit('192.168.0.2', {});
+  assert.equal(textarea.value, '');
+  assert.equal(saved.at(-1)['192.168.0.2'], '');
+  answer = null;
+  await edit.edit('192.168.0.2', {});
+  assert.equal(saved.length, 2);
+});
+
 const base = { 'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],
   rules: ['MATCH,Proxy'] };
 

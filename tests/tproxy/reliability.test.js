@@ -663,12 +663,39 @@ for (const installer of ['exited', 'running', 'unknown_entry']) test('manual rec
     const env = { F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: path.join(dir, 'lease'), F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_LOCK: path.join(dir, 'recovery') };
     const precheck = shell(api.maintenance('cleanup') + api.eligibility() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', env);
     assert.equal(precheck.status, installer === 'exited' ? 0 : 1, precheck.stdout + precheck.stderr);
-    assert.ok(fs.existsSync(lock));
+    // 残留（安装进程已退出）会被判定时直接回收，真实在跑或目录形态异常的才保留。
+    assert.equal(fs.existsSync(lock), installer !== 'exited');
     const script = api.emergency().replace('\nF50_RESUME_TAG=', '\nf50_scan() { : > "$1"; }\nf50_clean_environment() { return 0; }\nF50_RESUME_TAG=');
     const result = shell('mkdir "$F50_PROC/$$"; ln -s /proc/$$/stat "$F50_PROC/$$/stat"\n' + script, env);
     assert.equal(result.status, installer === 'exited' ? 0 : 1, result.stdout + result.stderr);
     assert.equal(fs.existsSync(lock), installer !== 'exited');
     assert.equal(/^RECOVERY_VERIFIED$/m.test(result.stdout), installer === 'exited');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// 安装锁残留（缺 pid、pid 被重启复用）会让恢复和重装永久失效，必须自动回收；
+// 只有「pid 存活且启动时间与锁文件记录一致」才算真实安装事务。
+for (const [label, seed, eligible] of [
+  ['missing pid file', () => {}, true],
+  ['reused pid', (lock, proc) => {
+    write(lock, 'pid', '333 31\n');
+    write(proc, '333/stat', `333 (clash) S ${Array(18).fill('0').join(' ')} 99\n`);
+  }, true],
+  ['matching pid', (lock, proc) => {
+    write(lock, 'pid', '333 31\n');
+    write(proc, '333/stat', `333 (clash) S ${Array(18).fill('0').join(' ')} 31\n`);
+  }, false],
+]) test('installer lock residue is reclaimed unless the recorded process still matches / ' + label, () => {
+  const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
+  try {
+    fs.mkdirSync(proc); fs.mkdirSync(lock, { recursive: true });
+    seed(lock, proc);
+    const env = { F50_ROOT: root, F50_PROC: proc, F50_OPERATION_LOCK: path.join(dir, 'lease'), F50_TASK_DIR: path.join(dir, 'tasks'), F50_RECOVERY_LOCK: path.join(dir, 'recovery') };
+    const precheck = shell(api.maintenance('cleanup') + api.eligibility() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', env);
+    assert.equal(precheck.status, eligible ? 0 : 1, precheck.stdout + precheck.stderr);
+    assert.equal(fs.existsSync(lock), !eligible, 'lock directory');
+    if (eligible) assert.doesNotMatch(precheck.stdout, /F50_INSTALL_LOCK_REASON=/);
+    else assert.match(precheck.stdout, /F50_INSTALL_LOCK_REASON=installer_running\nF50_INSTALL_LOCK_PID=333/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -872,7 +899,9 @@ for (const forUninstall of [false, true]) for (const outcome of ['idle', 'active
         assert.ok(fs.existsSync(path.join(tasks, 'mm_old.1')));
       }
       assert.equal(fs.readFileSync(backup, 'utf8'), 'backup');
-      assert.ok(fs.existsSync(path.join(dir, 'clash.install.lock.d/pid')));
+      // 只有真实在跑的安装（pid 存活）或无法判断的目录形态才保留锁，其余残留都会被回收。
+      const keepsLock = ['active_installer', 'unknown_install_entry'].includes(outcome);
+      assert.equal(fs.existsSync(path.join(dir, 'clash.install.lock.d/pid')), keepsLock, outcome + ' lock retention');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 }

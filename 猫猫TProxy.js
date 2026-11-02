@@ -1520,17 +1520,37 @@ f50_same_process() {
   [ "$F50_STAT_START" = "$2" ] || return 1
   case "$F50_STAT_STATE" in Z|X) return 1 ;; esac
 }
+f50_install_lock_block() {
+  f50_install_lock_reason=$1
+  printf 'F50_INSTALL_LOCK_REASON=%s\\n' "$1"
+  [ -z "$f50_install_lock_pid" ] || printf 'F50_INSTALL_LOCK_PID=%s\\n' "$f50_install_lock_pid"
+  return 1
+}
 f50_install_lock_idle() {
   install_lock="$F50_DATA/clash.install.lock.d"
+  f50_install_lock_pid=
   [ -e "$install_lock" ] || [ -L "$install_lock" ] || return 0
-  [ -d "$install_lock" ] && [ ! -L "$install_lock" ] && [ -f "$install_lock/pid" ] && [ ! -L "$install_lock/pid" ] || return 1
-  read -r install_pid install_extra < "$install_lock/pid" || return 1
-  case "$install_pid" in ''|0|*[!0-9]*) return 1;; esac
-  [ -z "$install_extra" ] && [ -r "$F50_PROC" ] && [ -x "$F50_PROC" ] && [ ! -d "$F50_PROC/$install_pid" ] || return 1
+  # 只有「pid 存活且启动时间一致」才算真实安装事务；重启后 pid 复用、目录只写了一半都按残留回收。
+  [ -d "$install_lock" ] && [ ! -L "$install_lock" ] || { f50_install_lock_block unsafe_lock_path; return 1; }
   for install_entry in "$install_lock"/* "$install_lock"/.[!.]* "$install_lock"/..?*; do
     [ -e "$install_entry" ] || [ -L "$install_entry" ] || continue
-    [ "$install_entry" = "$install_lock/pid" ] || return 1
+    [ "$install_entry" = "$install_lock/pid" ] || { f50_install_lock_block extra_lock_entry; return 1; }
   done
+  install_pid=; install_start=; install_extra=
+  if [ -f "$install_lock/pid" ] && [ ! -L "$install_lock/pid" ]; then read -r install_pid install_start install_extra < "$install_lock/pid"; fi
+  case "$install_pid" in ''|0|*[!0-9]*) install_pid=;; *) f50_install_lock_pid="$install_pid";; esac
+  if [ -n "$install_pid" ]; then
+    [ -z "$install_extra" ] || { f50_install_lock_block invalid_lock_record; return 1; }
+    [ -r "$F50_PROC" ] && [ -x "$F50_PROC" ] || { f50_install_lock_block process_table_unreadable; return 1; }
+    if [ -d "$F50_PROC/$install_pid" ]; then
+      # 旧格式只有 pid，无法判断是否被复用，保守视为进行中。
+      [ -n "$install_start" ] || { f50_install_lock_block legacy_lock_record; return 1; }
+      if f50_stat "$install_pid" && [ "$F50_STAT_START" = "$install_start" ]; then f50_install_lock_block installer_running; return 1; fi
+    fi
+  fi
+  rm -f "$install_lock/pid" 2>/dev/null
+  rmdir "$install_lock" 2>/dev/null || { f50_install_lock_block lock_not_removable; return 1; }
+  return 0
 }
 f50_stop_recorded() {
   ps_list=$1
@@ -2406,7 +2426,7 @@ trap 'F50_INSTALL_CODE=interrupted; exit 130' HUP INT TERM
 if ! mkdir "$LOCK" 2>/dev/null; then f50_install_fail installation_busy; exit 1; fi
 LOCKED=1
 export F50_INSTALL_TRANSACTION="$F50_WORK"
-printf '%s\\n' "$$" > "$LOCK/pid" || { f50_install_fail lock_write_failed; exit 1; }
+{ f50_stat "$$" && printf '%s %s\\n' "$$" "$F50_STAT_START" > "$LOCK/pid"; } || { f50_install_fail lock_write_failed; exit 1; }
 [ ! -L "$F50_ROOT" ] || { f50_install_fail target_symlink; exit 1; }
 ${rotateClashLogCmd()}${dataSpaceGuardCmd('f50_install_fail data_space_low; exit 1')}
 [ -s "$ZIP" ] || { f50_install_fail zip_missing_or_empty; exit 1; }
@@ -7902,6 +7922,20 @@ kano_stop_watchers() (
 )`;
 
 
+  // 安装锁判定失败时，设备端只给出原因码；这里换成用户能照做的说明。
+  const f50InstallLockSummary = (reason, pid) => {
+    const owner = pid ? `（pid ${pid}）` : '';
+    switch (reason) {
+      case 'installer_running': return `安装或更新仍在进行${owner}，等它结束后重试`;
+      case 'legacy_lock_record': return `安装锁是旧版本留下的记录${owner}；确认没有安装在运行后，可在“检查修复”中清理安装锁`;
+      case 'extra_lock_entry': return '安装锁目录里有额外文件，无法自动回收；请在“检查修复”中清理安装锁';
+      case 'unsafe_lock_path': return '安装锁路径异常（符号链接），需要人工处理';
+      case 'lock_not_removable': return '安装锁残留但无法自动删除；请在“检查修复”中清理安装锁';
+      case 'process_table_unreadable': return '无法读取进程表，不能判断安装是否结束；请检查设备状态后重试';
+      default: return '安装事务未结束；详见“状态与日志”';
+    }
+  };
+
   const networkRescue = async ({ showOutput = true, preempt = false } = {}) => {
   if (recoveryInProgress) return false;
   recoveryInProgress = true;
@@ -7911,9 +7945,13 @@ kano_stop_watchers() (
       const checked = f50ShellReply(await hostRunShellWithRoot.call(globalThis,
         buildF50ShellBase() + buildF50ProcessHelpers() + buildF50RecoveryEligibilityFunctions() + '\nF50_RECOVERY_PREEMPT=1 f50_recovery_eligible', 10000));
       if (!checked?.success || !/^F50_RECOVERY_ELIGIBLE=1$/m.test(String(checked.content || ''))) {
-        const detail = f50Diagnostic(checked?.content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
-        const summary = /^F50_RECOVERY_ELIGIBLE=0$/m.test(String(checked?.content || ''))
-          ? '恢复失败；详见“状态与日志”' : '恢复失败：无法读取设备状态；请检查设备连接后重试';
+        const content = String(checked?.content || '');
+        const detail = f50Diagnostic(content || 'F50_RECOVERY_STATE=check_unconfirmed').details;
+        const lockReason = (content.match(/^F50_INSTALL_LOCK_REASON=(.+)$/m) || [])[1] || '';
+        const lockPid = (content.match(/^F50_INSTALL_LOCK_PID=(\d+)$/m) || [])[1] || '';
+        const summary = /^F50_RECOVERY_ELIGIBLE=0$/m.test(content)
+          ? '恢复失败：' + f50InstallLockSummary(lockReason, lockPid)
+          : '恢复失败：无法读取设备状态；请检查设备连接后重试';
         createToast(summary, 'red', 12000);
         lastInstallDiagnostic = { ...f50Diagnostic(detail), ok: false, summary };
         recoveryInProgress = false;
@@ -9355,6 +9393,10 @@ btn_disabled.onclick = async () => {
                     <button type="button" id="mm_policy_status_btn">查看规则状态</button>
                     <span>显示实际使用的 iptables 后端、直连设备列表和当前规则链，不会改动配置。</span>
                   </div>
+                  <div class="kp-maintain-item">
+                    <button type="button" id="mm_policy_clear_install_lock">清理安装锁</button>
+                    <span>仅在“恢复网络”提示安装事务未结束、且确认没有安装或更新在进行时使用；只删除 /data/clash.install.lock.d，不卸载组件、不改配置。</span>
+                  </div>
                 </div>
               </section>
             </div>
@@ -9582,6 +9624,37 @@ btn_disabled.onclick = async () => {
       setButtonBusy(btn, true, '读取中…');
       try {
         await showPolicyStatus();
+      } finally {
+        setButtonBusy(btn, false);
+      }
+    };
+    // 安装锁残留会同时挡住恢复和重装，之前只能靠 root shell 手删，这里给一个受控入口。
+    get('#mm_policy_clear_install_lock').onclick = async () => {
+      const btn = get('#mm_policy_clear_install_lock');
+      const yes = await askConfirm('mm_clear_install_lock', '清理安装锁？',
+        '只在确认没有安装或更新正在进行时执行。会删除 /data/clash.install.lock.d，已安装的组件与配置不受影响。');
+      if (!yes) return;
+      setButtonBusy(btn, true, '清理中…');
+      try {
+        const res = await runShellWithRoot(buildF50ShellBase() + buildF50ProcessHelpers() + `
+lock="$F50_DATA/clash.install.lock.d"
+if [ ! -e "$lock" ] && [ ! -L "$lock" ]; then echo F50_INSTALL_LOCK_ABSENT; exit 0; fi
+if f50_install_lock_idle; then echo F50_INSTALL_LOCK_RECLAIMED; exit 0; fi
+# 真在跑的安装不能被这里抢掉，否则会与并发安装互相覆盖。
+[ "$f50_install_lock_reason" = installer_running ] && { echo F50_INSTALL_LOCK_RUNNING; exit 1; }
+[ -d "$lock" ] && [ ! -L "$lock" ] || { echo F50_INSTALL_LOCK_UNSAFE; exit 1; }
+rm -f "$lock/pid" || exit 1
+rmdir "$lock" 2>/dev/null || { echo F50_INSTALL_LOCK_NOT_EMPTY; exit 1; }
+echo F50_INSTALL_LOCK_CLEARED`, 10000);
+        const out = String(res.content || '');
+        const reason = (out.match(/^F50_INSTALL_LOCK_REASON=(.+)$/m) || [])[1] || '';
+        if (/^F50_INSTALL_LOCK_(CLEARED|RECLAIMED|ABSENT)$/m.test(out)) {
+          createToast(/ABSENT/.test(out) ? '没有找到安装锁，无需清理' : '安装锁已清理，可以重新尝试恢复网络', 'green', 8000);
+        } else if (/^F50_INSTALL_LOCK_RUNNING$/m.test(out)) {
+          createToast('安装或更新仍在进行，请等它结束后重试', 'yellow', 10000);
+        } else {
+          createToast(`清理安装锁失败：${reason ? f50InstallLockSummary(reason, '') : '无法读取设备返回'}`, 'red', 10000);
+        }
       } finally {
         setButtonBusy(btn, false);
       }

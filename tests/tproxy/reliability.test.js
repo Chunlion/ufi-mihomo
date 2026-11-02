@@ -1017,6 +1017,49 @@ test('uninstall artifact cleanup preserves its own task registry', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('boot autostart probe ignores lines that are only commented leftovers', () => {
+  const mark = run(slice('const F50_BOOT_MARK_AWK', 'function f50TunStack') + 'F50_BOOT_MARK_AWK');
+  const dir = temp();
+  try {
+    const commented = write(dir, 'commented.sh', '# 曾使用 /data/clash/Scripts/Clash.Service start\n  # /data/f50_boot_fix/clash_boot.sh >/dev/null 2>&1 &\n');
+    const active = write(dir, 'active.sh', 'sh /data/clash/Scripts/Clash.Service boot\n');
+    assert.notEqual(shell(`awk '${mark}' ${productionQuote(commented)}`).status, 0);
+    assert.equal(shell(`awk '${mark}' ${productionQuote(active)}`).status, 0);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Service 补丁破损时 recover 走不通，但原生控制器还能收尾 journal；否则卸载会被
+// journal_restore_incomplete 挡住。原生二进制缺失时必须仍然拒绝删除。
+for (const native of ['present', 'missing']) test('cleanup falls back to the native controller when the Service cannot recover / ' + native, () => {
+  const dir = temp(), root = path.join(dir, 'clash'), proc = path.join(dir, 'proc');
+  try {
+    fs.mkdirSync(proc);
+    const journal = write(root, 'Policy/rp-filter.json', 'saved network settings');
+    write(root, 'Scripts/Clash.Service', '#!/bin/sh\nexit 99\n');
+    if (native === 'present') {
+      const binary = write(root, 'Scripts/clashctl_arm64', '#!/bin/sh\n[ "$1" = recover ] && rm -f "$CLASH_ROOT/Policy/rp-filter.json"\n');
+      fs.chmodSync(binary, 0o755);
+    }
+    const stub = `f50_inspect() { F50_OLD_FOUND=1; }
+getprop() { echo arm64-v8a; }
+uname() { echo aarch64; }
+f50_scan() { : > "$1"; }
+f50_network_snapshot() { mkdir -p "$1"; return 0; }
+f50_inspect || exit 1`;
+    const result = shell(api.cleanup().replace('f50_inspect || exit 1', stub), { F50_ROOT: root, F50_PROC: proc });
+    if (native === 'present') {
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /^F50_NATIVE_RECOVERY_RC=0$/m);
+      assert.ok(!fs.existsSync(journal));
+      assert.match(result.stdout, /^F50_CLEAN_OK=1$/m);
+    } else {
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.ok(fs.existsSync(journal));
+      assert.match(result.stdout, /F50_CLEAN_ERROR=journal_restore_incomplete/);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const installer of ['exited', 'running', 'unknown_entry']) test('uninstall cleanup releases only an exited installer lock / ' + installer, () => {
   const dir = temp(), proc = path.join(dir, 'proc'), lock = path.join(dir, 'clash.install.lock.d');
   try {

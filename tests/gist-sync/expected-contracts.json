@@ -31,24 +31,32 @@
     "execute_plan": {
       "before": "54f0aee0e157998646b137609f077ec865371833298d7e4ee7ec17c666e189b1",
       "after": "be2e1715be2ea397e53cee271403c6dfa67802cffa3a4f6ef4a95b47a6318e43"
+    },
+    "clean_environment": {
+      "before": "5b706dc70cd55797c65a447ea5adb530dc7e91a8e1327980fef660c019e5702c",
+      "after": "429fa6676a710246ed73150279fb3930ef913e2591c063925b447e7aedc2c395"
+    },
+    "final_probe": {
+      "before": "4d3f085d159b904414fbad53f04b5bda9465aaf1e3ab7fd1b76f7efbbb79f966",
+      "after": "c7e56999b8998b29337d26afdc01759443f9f54c0313b8103a9143066ab66d95"
     }
   },
   "operations": {
     "inspect": {
       "before": "a16eb3d7e45f1874a5559f7b8d3646629d5c9eeb0fc67ba50ab0105b52dfb7c8",
-      "after": "e50df5ae94ffa36b0655581a2bc3de466f31813614a5429d85093c9463b5c3c9"
+      "after": "5e39c8c6b731f0e2d234bf86718aa4219b56262708bfe3015687b4c57a3b26a6"
     },
     "cleanup": {
       "before": "f49d8fbbd313ba4e77cc97bffd269d516ac2625583f07261fa7cf281f62afbb2",
-      "after": "6d1a86d5146f3b1cd8560d6dde50c0b862c1557c4a40c475946abbbb22e3fab5"
+      "after": "c360b899100c1ab95f412a3a2fa5845668012b04efe7d009a5765f50ec13ace5"
     },
     "final": {
       "before": "b42c7d9ba116c2aba0c4a043b6b9b16d8a10464ea4895719faf8781b5d2df1e0",
-      "after": "dbd22c762ce93678a322d709d872eaf1036d6b83fe38d319a3333e5db25f3d1e"
+      "after": "1c6cc4368092c899a6ef0fb277688df203eade010bfcd0f9083b8b38ea32cc3b"
     },
     "uninstall": {
       "before": "7e7378f896aaf8b8b504fddabd8d0fc8a0ee13d8f1889af6458c907831f89827",
-      "after": "435234b6822894b84ce3dcbbab1a4d236f5809724883a179a70872f7e5663687"
+      "after": "c02543b3b68d5086b480ef16a27aa7e242792424146bbc84b14a9706f8790e6d"
     }
   },
   "labels": {

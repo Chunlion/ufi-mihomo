@@ -13,7 +13,8 @@ const F50_ROOT_FALLBACK = '${CLASH_ROOT:-${F50_ROOT:-/data/clash}}';
 const F50_PANEL_DIR_REL = 'WebUI/zashboard';
 // Proxy/ 下属于用户数据的条目：显式保留清单与通配排除共用，新增文件只改这里。
 const F50_PROXY_USER_DATA = ['config.yaml', 'subscription_urls.txt', 'cache.db', 'rules', 'rule-providers', 'proxies', 'mac_bypass.txt', 'Policy'];
-const F50_BOOT_MARK_AWK = '/\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}';
+// 注释行（# 曾使用 ...）不代表自启仍然存在，先跳过再匹配路径。
+const F50_BOOT_MARK_AWK = '/^[ \\t]*#/{next} /\\/data\\/clash\\/Scripts\\/Clash\\.|\\/data\\/f50_boot_fix\\/clash_boot\\.sh/{f=1} END{exit !f}';
 function f50TunStack(options = {}) {
   const stack = options.tun_stack || 'auto';
   if (!['auto', 'mixed', 'gvisor', 'system', 'mips'].includes(stack)) throw new Error('TUN 协议栈无效');
@@ -2056,6 +2057,23 @@ function buildF50CleanupHelpers() { return `f50_clean_environment() {
   fi
   f50_scan "$F50_WORK/after.pids" || return 1
   [ ! -s "$F50_WORK/after.pids" ] || { echo F50_CLEAN_ERROR=process_respawned; return 1; }
+  # Service 自己坏了（补丁破损、被替换）时它不会走原生恢复；此时仍要用 clashctl 收尾，
+  # 否则残留 journal 会把卸载卡在 journal_restore_incomplete。进程已确认停止，可以安全调用。
+  if [ "$clean_recover" = failed ]; then
+    for clean_journal in ${F50_PROTECTED_JOURNALS}; do
+      [ -s "$F50_ROOT/Policy/$clean_journal" ] || continue
+      case "$(getprop ro.product.cpu.abi 2>/dev/null) $(uname -m 2>/dev/null)" in
+        *arm64*|*aarch64*|*armv8*) clean_binary="$F50_ROOT/Scripts/clashctl_arm64" ;;
+        *armeabi*|*armv7*) clean_binary="$F50_ROOT/Scripts/clashctl_armv7" ;;
+        *) clean_binary="$F50_ROOT/Scripts/clashctl" ;;
+      esac
+      [ -x "$clean_binary" ] || break
+      clean_native=$(PATH="/system/bin:/system/xbin:/vendor/bin:/data/kano_tproxy_tools/bin:$PATH" CLASH_ROOT="$F50_ROOT" f50_limit 35 "$clean_binary" recover 2>&1); clean_native_rc=$?
+      printf 'F50_NATIVE_RECOVERY_RC=%s\\n' "$clean_native_rc"
+      printf '%s\\n' "$clean_native" | f50_redact
+      break
+    done
+  fi
   f50_network_snapshot "$F50_WORK/net" || return 1
   if [ -s "$F50_WORK/net/plan" ]; then
     clean_plan_rc=0

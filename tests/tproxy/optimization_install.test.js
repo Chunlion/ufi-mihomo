@@ -72,6 +72,12 @@ f50_drop_detached_tun_rules() { return 0; }
 f50_disable_unsupported_ipv6_dns_hijack() { return 0; }
 f50_verify_zashboard_endpoint() { return ${options.panelFailure ? 1 : 0}; }
 ${options.lockCleanupFailure ? 'rmdir() { case "$1" in */clash.install.lock.d) return 1;; esac; command rmdir "$@"; }' : ''}
+${options.backupRenameFailure || options.commitFailure || options.rollbackRenameFailure ? `mv() {
+  ${options.backupRenameFailure ? 'case "$1:$2" in "$F50_ROOT":"$F50_ROOT".rollback.install.*) return 1;; esac' : ''}
+  ${options.commitFailure ? '[ "$1" != "$PKG" ] || [ "$2" != "$F50_ROOT" ] || return 1' : ''}
+  ${options.rollbackRenameFailure ? '[ "$1" != "$BACKUP" ] || [ "$2" != "$F50_ROOT" ] || return 1' : ''}
+  command mv "$@"
+}` : ''}
 ${cleanupFault ? `rm() { case "$1:$2" in -rf:*/.f50-install.*) if [ -f ${quote(cleanupFault)} ]; then command rm -f ${quote(cleanupFault)}; return 1; fi;; esac; command rm "$@"; }` : ''}
 `;
   const script = api.install(zip).replace('# The transaction owns staging', () => mocks + '\n# The transaction owns staging');
@@ -89,6 +95,22 @@ test('failed rollback retains the old backup and reports blocked cleanup', { ski
     assert.equal(fs.readFileSync(path.join(match[1], 'Proxy/Clash.Core'), 'utf8'), 'old core');
     assert.ok(fs.readdirSync(dir).some(name => name.startsWith('.f50-install.')));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('failed rollback rename retains the old configuration and the recovery directory', { skip: !yq }, () => {
+  const c = installCase({ old: true, running: true, startRc: 124, rollbackRenameFailure: true });
+  try {
+    assert.equal(c.result.status, 1, c.result.stdout + c.result.stderr);
+    assert.match(c.result.stdout, /^F50_ROLLBACK=restore_directory_failed$/m);
+    const backup = c.result.stdout.match(/^F50_RECOVERY_BACKUP=(.+)$/m)?.[1];
+    const work = c.result.stdout.match(/^F50_RECOVERY_WORK=(.+)$/m)?.[1];
+    assert.ok(backup);
+    assert.ok(work);
+    assert.equal(fs.readFileSync(path.join(backup, 'Proxy/Clash.Core'), 'utf8'), 'old core');
+    assert.match(fs.readFileSync(path.join(backup, 'Proxy/config.yaml'), 'utf8'), /custom-old: retained/);
+    assert.ok(fs.existsSync(work));
+    assert.doesNotMatch(c.result.stdout, /^KANO_INSTALL_OK=1$/m);
+  } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
 });
 
 test('installation interruption preserves the old configuration and permits a complete retry', { skip: !yq }, () => {
@@ -176,6 +198,8 @@ for (const [name, options, code] of [
   ['invalid core config', { old: true, running: true, startOutput: 'F50_ERROR=original_config_invalid', startRc: 1 }, 'invalid_config'],
   ['network application failure', { old: true, running: true, startOutput: 'F50_ERROR=iptables_apply_failed', startRc: 8 }, 'network_apply_failed'],
   ['service patch failure', { old: true, running: true, patchFailure: true }, 'service_patch_failed'],
+  ['backup rename failure', { old: true, running: true, backupRenameFailure: true }, 'backup_rename_failed'],
+  ['candidate activation rename failure', { old: true, running: true, commitFailure: true }, 'commit_failed'],
 ]) {
   test(name + ' preserves failure code and old installation', { skip: !yq }, () => {
     const { dir, root, result } = installCase(options);
@@ -246,6 +270,22 @@ test('repeated full update preserves private identity and exact settings bytes',
    assert.equal(fs.readFileSync(path.join(c.root,'Tools/device_notes.json'),'utf8'),notes);
   }
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
+});
+
+test('upgrade preserves hidden custom provider and rule files referenced by the configuration', { skip: !yq }, () => {
+  const c = installCase({ old: true, stopped: true });
+  try {
+    assert.equal(c.result.status, 0, c.result.stdout + c.result.stderr);
+    const provider = 'proxies: [{name: Local, type: socks5, server: example.com, port: 1080}]\n';
+    const rules = 'payload: [DOMAIN,example.com]\n';
+    write(c.root, 'Proxy/.provider.yaml', provider);
+    write(c.root, 'Proxy/.rules/direct.yaml', rules);
+    write(c.root, 'Proxy/config.yaml', config + 'proxy-providers:\n  custom: {type: file, path: ./.provider.yaml}\nrule-providers:\n  custom: {type: file, behavior: classical, path: ./.rules/direct.yaml}\n');
+    const result = c.execute();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(path.join(c.root, 'Proxy/.provider.yaml'), 'utf8'), provider);
+    assert.equal(fs.readFileSync(path.join(c.root, 'Proxy/.rules/direct.yaml'), 'utf8'), rules);
+  } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
 });
 
 for(const options of [{futureVersion:true},{missing:'Tools/gist-sync-component.json'},{missing:'Tools/age'},{missing:'Tools/kano-gist-sync'},{runtimeProbeFailure:true},{legacy:true}]) {

@@ -2517,7 +2517,7 @@ for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).
   mkdir -p "\${dst%/*}" && rm -rf "$dst" && cp -pR "$src" "$dst" || { f50_install_fail preserve_user_data_failed; return 1; }
 done
 # Custom provider/rule files under Proxy are user data, not part of executable/UI replacement.
-for src in "$F50_ROOT"/Proxy/*; do
+for src in "$F50_ROOT"/Proxy/* "$F50_ROOT"/Proxy/.[!.]* "$F50_ROOT"/Proxy/..?*; do
   [ -e "$src" ] || continue
   case "\${src##*/}" in Clash.Core|GeoIP.dat|GeoSite.dat|WebUI|Clash.log|${F50_PROXY_USER_DATA.join('|')}) continue ;; esac
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }

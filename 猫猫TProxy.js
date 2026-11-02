@@ -8382,7 +8382,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       `${id}_${createRandomString(4)}`,
       `<div style="pointer-events:all;width:auto;max-width:760px;min-width:0;overflow-wrap:anywhere;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
-        <div style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;min-width:0;overflow-wrap:anywhere;">${bodyHtml}</div>
+        <div class="kano-info-body" style="margin-top:10px;font-size:.66rem;line-height:1.65;max-height:70vh;overflow:auto;min-width:0;overflow-wrap:anywhere;">${bodyHtml}</div>
         <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:12px;">
           <button style="font-size:.64rem" id="${closeId}">关闭</button>
         </div>
@@ -8391,6 +8391,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     fitDialogWidth(el, el.firstElementChild, 760);
     const closeBtn = el.querySelector(`#${closeId}`);
     if (closeBtn) closeBtn.onclick = close;
+    return { el, close };
   };
 
   const showControllerSettingsDialog = async ({ afterSave = null } = {}) => {
@@ -8501,12 +8502,42 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     };
   };
 
+  // 诊断窗口先出、日志先填：设备慢或 API 不通时，不该让人盯着空屏等整套探测。
   const showStatusDiagnostic = async () => {
-    // 单项探测失败不应让整个诊断无法打开；降级项在结果里标出。
     const degraded = [];
     const settle = (label, promise, fallback) => Promise.resolve(promise).catch((error) => {
       degraded.push(`${label}：${sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error))}`);
       return fallback;
+    });
+    const { el } = showInfoDialog(
+      'mm_status_diagnostic',
+      '运行日志与诊断',
+      `<div class="kano-diag-summary">正在读取设备状态…</div>
+      <details class="kano-diag-more" style="margin-top:10px;"><summary>详细信息</summary><div class="kano-diag-detail">正在读取…</div></details>
+      <div class="kano-diag-install"></div>
+      <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
+      <pre class="kano-diag-log" style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">正在读取日志…</pre>`,
+    );
+    const summaryEl = el.querySelector('.kano-diag-summary');
+    const detailEl = el.querySelector('.kano-diag-detail');
+    const installEl = el.querySelector('.kano-diag-install');
+    const logEl = el.querySelector('.kano-diag-log');
+    if (installEl && lastInstallDiagnostic) {
+      installEl.innerHTML = '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>';
+    }
+    // 日志单独一路，不参与诊断聚合：谁先回来谁先显示。
+    runShellWithRoot(`
+        START_LOG=${shellQuote('/data/kano_clash_start.log')}
+        RUN_LOG=${shellQuote(LOG_FILE)}
+        echo "[Clash.Service 启动输出]"
+        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null || echo "（无法读取启动日志）"; else echo "（暂无启动输出）"; fi
+        echo
+        echo "[Clash 内核运行日志]"
+        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（无法读取内核日志）"; else echo "（暂无内核日志）"; fi
+        `).then((res) => {
+      if (logEl) logEl.textContent = sanitizeSubscriptionSecrets(String(res?.content || '').trim() || '暂无日志');
+    }).catch((error) => {
+      if (logEl) logEl.textContent = '日志读取失败：' + sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error));
     });
     const controllerInfoPromise = buildControllerInfo();
     const pidPromise = getCorePid();
@@ -8567,6 +8598,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           echo "CORE_SIZE=0"
           echo "CORE_ELF=0"
         fi
+        `, 8 * 1000));
+    // 遍历 /proc 找遗留测试进程最慢，单独一路，回来后再补进详细信息。
+    const stalePromise = pidPromise.then((pid) => (pid ? runShellWithRoot(`
+        CORE=${shellQuote(CLASH_CORE)}
         stale=""
         for p in /proc/[0-9]*; do
           [ -r "$p/cmdline" ] || continue
@@ -8578,20 +8613,21 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           esac
         done
         echo "STALE_TEST_PIDS=$stale"
-        `, 8 * 1000));
-    const logPromise = runShellWithRoot(`
-        START_LOG=${shellQuote('/data/kano_clash_start.log')}
-        RUN_LOG=${shellQuote(LOG_FILE)}
-        echo "[Clash.Service 启动输出]"
-        if [ -f "$START_LOG" ]; then tail -n 100 "$START_LOG" 2>/dev/null || echo "（无法读取启动日志）"; else echo "（暂无启动输出）"; fi
-        echo
-        echo "[Clash 内核运行日志]"
-        if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（无法读取内核日志）"; else echo "（暂无内核日志）"; fi
-        `);
-    const versionPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid }));
+        `, 8 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' })));
+    const noCore = { success: false, statusCode: 0, message: '核心未运行' };
+    const versionPromise = Promise.all([controllerInfoPromise, pidPromise, runtimeStatePromise]).then(([info, pid, runtime]) => {
+      // 核心没跑就不发请求，避免白等超时；预检刚测过 /version 时直接复用。
+      if (!pid) return noCore;
+      if (runtime && runtime.api && typeof runtime.api.success === 'boolean') return runtime.api;
+      return callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid });
+    });
     const connectionsPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      callMihomoApi('/connections', 'GET', null, info, 5, { corePid: pid }));
+      pid ? callMihomoApi('/connections', 'GET', null, info, 5, { corePid: pid }) : noCore);
+    // 节点来源与面板探测不再等第一轮：它们只依赖控制地址和 pid。
+    const providerPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
+      pid ? callMihomoApi('/providers/proxies', 'GET', null, info, 5, { corePid: pid }) : noCore);
+    const panelPromise = Promise.resolve().then(() =>
+      runShellWithRoot(buildF50ShellBase() + buildF50PanelHelpers() + '\nf50_verify_zashboard_endpoint', 12000));
     const [
       runtimeState,
       bootState,
@@ -8600,9 +8636,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       policyState,
       configRes,
       processRes,
-      logRes,
       versionRes,
       connectionsRes,
+      providerHealth,
+      panelHealth,
     ] = await Promise.all([
       settle('运行状态', runtimeStatePromise, { state: 'unknown', message: '读取失败' }),
       settle('开机自启', bootStatePromise, { state: 'unknown', message: '读取失败' }),
@@ -8613,9 +8650,10 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       settle('网络设置', readPolicyState(), { options: {} }),
       settle('配置文件', configPromise, { success: false, content: '' }),
       settle('核心进程详情', processPromise, { success: false, content: '' }),
-      settle('运行日志', logPromise, { success: false, content: '' }),
       settle('控制 API', versionPromise, { success: false, statusCode: 0, message: '未读取' }),
       settle('活动连接', connectionsPromise, { success: false, responseText: '' }),
+      settle('节点来源', providerPromise, { success: false }),
+      settle('Zashboard', panelPromise, { success: false, content: '' }),
     ]);
     const configLines = String(configRes.content || '').split('\n');
     const configExists = (configLines.find((line) => line == 'exists=1'));
@@ -8633,12 +8671,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         connectionStatus = '响应格式不受支持';
       }
     }
-    const [providerHealth,panelHealth] = await Promise.all([
-      settle('节点来源', callMihomoApi('/providers/proxies','GET',null,controllerInfo,5,{corePid:pid}), { success: false }),
-      settle('Zashboard', Promise.resolve().then(() =>
-        runShellWithRoot(buildF50ShellBase()+buildF50PanelHelpers()+'\nf50_verify_zashboard_endpoint',12000)), { success: false, content: '' }),
-    ]);
-    const health=f50HealthLayers({pid,api:versionRes,panel:panelHealth,provider:providerHealth});
+    const health = f50HealthLayers({ pid, api: versionRes, panel: panelHealth, provider: providerHealth });
     // 主表只给结论，逐字段明细收进折叠区：默认 9 行，不再平铺 23 行。
     const runStateLabels = {
       healthy: '运行正常', installed_stopped: '已安装未运行', running_api_unavailable: '运行中但 API 不可用',
@@ -8652,61 +8685,62 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const configLabel = configExists ? `config.yaml ${(Number(configSize) / 1024).toFixed(1)} KB` : 'config.yaml 缺失';
     const coreLabel = !pid ? '未运行' : (proc.PROCESS_KIND == 'config_test' ? '仅配置测试进程' : '运行中');
     const apiLabel = !pid ? '核心未运行' : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : (versionRes.message || '不可用'));
-    // 异常项集中到「总览」一行，正常时逐行比对没有意义。
-    const problems = [];
-    if (!pid) problems.push('核心未运行');
-    else {
-      if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
-      if (proc.PORT_CONTROLLER != '1') problems.push(F50_PORTS.controller + ' 未监听');
-      if (!versionRes.success) problems.push('控制 API 不可用');
-      if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
-    }
-    if (proc.STALE_TEST_PIDS) problems.push(`遗留测试进程 ${proc.STALE_TEST_PIDS}`);
-    if (!configExists) problems.push('config.yaml 缺失');
-    if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
-    if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
-    // 复用 f50HealthLayers 的解析结论：请求成功但格式错误/部分来源读不到时，总览同样要报出来。
-    const providerProblems = Array.isArray(health.providerProblems)
-      ? health.providerProblems
-      : (providerHealth.success ? [] : ['节点来源读取失败']);
-    for (const item of providerProblems) problems.push(item);
-    if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
-    const rows = [
-      ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
-      ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
-      ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_CONTROLLER == '1' ? F50_PORTS.controller + ' 已监听' : F50_PORTS.controller + ' 未监听'}`],
-      ['控制 API', apiLabel],
-      ['运行配置', `${modeLabel} · ${ipv6Label} · ${configLabel}`],
-      ['Web 面板', health.panel],
-      ['节点来源', health.providers],
-      ['活动连接', connectionStatus],
-      ['未实测', `${health.unverified || '数据面接管、代理连通性'}（进程与 API 状态不能替代）`],
-      ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
-    ];
-    const detailRows = [
-      ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
-      ['API 地址', controllerInfo.apiBase],
-      ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
-      ['核心命令行', proc.CMDLINE || '无'],
-      ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
-      ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
-      ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
-      ['预检信息', runtimeState.message || '无'],
-      ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
-    ];
     const renderRows = (list) => list.map(([key, value]) =>
       `<div style="display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12);">
         <strong>${escapeHtml(key)}</strong><span style="word-break:break-all;">${escapeHtml(value)}</span>
       </div>`).join('');
-    showInfoDialog(
-      'mm_status_diagnostic',
-      '运行日志与诊断',
-      `${renderRows(rows)}
-      <details style="margin-top:10px;"><summary>详细信息</summary>${renderRows(detailRows)}</details>
-      ${lastInstallDiagnostic ? '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>' : ''}
-      <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
-      <pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">${escapeHtml(sanitizeSubscriptionSecrets(logRes.content || '暂无日志'))}</pre>`,
-    );
+    const paint = () => {
+      // 异常项集中到「总览」一行，正常时逐行比对没有意义。
+      const problems = [];
+      if (!pid) problems.push('核心未运行');
+      else {
+        if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
+        if (proc.PORT_CONTROLLER != '1') problems.push(F50_PORTS.controller + ' 未监听');
+        if (!versionRes.success) problems.push('控制 API 不可用');
+        if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
+      }
+      if (proc.STALE_TEST_PIDS) problems.push(`遗留测试进程 ${proc.STALE_TEST_PIDS}`);
+      if (!configExists) problems.push('config.yaml 缺失');
+      if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
+      if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
+      // 复用 f50HealthLayers 的解析结论：请求成功但格式错误/部分来源读不到时，总览同样要报出来。
+      const providerProblems = Array.isArray(health.providerProblems)
+        ? health.providerProblems
+        : (providerHealth.success ? [] : ['节点来源读取失败']);
+      for (const item of providerProblems) problems.push(item);
+      if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
+      const rows = [
+        ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
+        ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
+        ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_CONTROLLER == '1' ? F50_PORTS.controller + ' 已监听' : F50_PORTS.controller + ' 未监听'}`],
+        ['控制 API', apiLabel],
+        ['运行配置', `${modeLabel} · ${ipv6Label} · ${configLabel}`],
+        ['Web 面板', health.panel],
+        ['节点来源', health.providers],
+        ['活动连接', connectionStatus],
+        ['未实测', `${health.unverified || '数据面接管、代理连通性'}（进程与 API 状态不能替代）`],
+        ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
+      ];
+      const detailRows = [
+        ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
+        ['API 地址', controllerInfo.apiBase],
+        ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
+        ['核心命令行', proc.CMDLINE || '无'],
+        ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
+        ['遗留测试进程', proc.STALE_TEST_PIDS || '无'],
+        ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
+        ['预检信息', runtimeState.message || '无'],
+        ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
+      ];
+      if (summaryEl) summaryEl.innerHTML = renderRows(rows);
+      if (detailEl) detailEl.innerHTML = renderRows(detailRows);
+    };
+    paint();
+    // 遗留测试进程慢一步回来，补进明细并刷新总览。
+    stalePromise.then((res) => {
+      proc.STALE_TEST_PIDS = parseKeyValueOutput(res && res.content || '').STALE_TEST_PIDS || '';
+      paint();
+    }).catch(() => {});
   };
 
 

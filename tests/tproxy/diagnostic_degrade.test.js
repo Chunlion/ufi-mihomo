@@ -24,6 +24,32 @@ test('every emitted installation failure has a Chinese diagnostic', () => {
 
 function harness(overrides = {}) {
   const dialogs = [];
+  // 诊断现在是「先开窗、后填充」：showInfoDialog 立即拿到骨架，各区块随后写 innerHTML/textContent。
+  // 这里把骨架和填充结果合成回一份 HTML，保持原有断言按内容顺序切片的方式。
+  const openDialog = (id, title, skeleton) => {
+    const nodes = new Map();
+    const node = (sel) => {
+      if (!nodes.has(sel)) nodes.set(sel, { innerHTML: '', textContent: '' });
+      return nodes.get(sel);
+    };
+    const fill = (source, cls, tag) => {
+      const entry = nodes.get('.' + cls);
+      if (!entry) return source;
+      const body = (tag === 'text' ? entry.textContent : entry.innerHTML) || '';
+      const element = tag === 'text' ? 'pre' : 'div';
+      const pattern = new RegExp(`(<${element} class="${cls}"[^>]*>)[\\s\\S]*?(</${element}>)`);
+      return source.replace(pattern, (match, head, tail) => head + body + tail);
+    };
+    dialogs.push({
+      id, title, skeleton,
+      get html() {
+        let out = fill(skeleton, 'kano-diag-summary');
+        out = fill(out, 'kano-diag-detail');
+        return fill(out, 'kano-diag-log', 'text');
+      },
+    });
+    return { el: { querySelector: node }, close() {} };
+  };
   const base = {
     buildControllerInfo: async () => ({ externalController: '127.0.0.1:7788', apiBase: 'http://127.0.0.1:7788', secretSet: true, usingFallbackController: false }),
     getCorePid: async () => '1234',
@@ -34,7 +60,7 @@ function harness(overrides = {}) {
     readPolicyState: async () => ({ options: { traffic_mode: 'tproxy', ipv6: 'on' } }),
     callMihomoApi: async () => ({ success: true, statusCode: 200, responseText: '{"connections":[]}' }),
     f50HealthLayers: () => ({ core: '进程存在', api: '可访问', panel: '可访问', providers: '', providerProblems: [], unverified: '数据面接管、代理连通性' }),
-    showInfoDialog: (id, title, html) => dialogs.push({ id, title, html }),
+    showInfoDialog: openDialog,
     escapeHtml: (value) => String(value),
     sanitizeSubscriptionSecrets: (value) => String(value),
     parseKeyValueOutput: () => ({

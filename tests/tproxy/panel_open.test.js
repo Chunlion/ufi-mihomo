@@ -17,6 +17,33 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('dialog sizing expands the host wrapper and respects a narrow parent', () => {
+  for (const [viewport, parentWidth, maximum, expected] of [
+    [1280, 1280, 960, 960],
+    [1280, 480, 960, 448],
+    [390, 390, 760, 358],
+  ]) {
+    const el = { style: {}, parentElement: { clientWidth: parentWidth } };
+    const target = { nodeType: 1, style: {}, classList: { add() {} } };
+    const fit = vm.runInNewContext(slice('  const fitDialogWidth =', '  const askConfirm =') + '\nfitDialogWidth', {
+      document: { documentElement: { clientWidth: viewport } },
+    });
+    fit(el, target, maximum);
+    assert.equal(el.style.width, expected + 'px');
+    assert.equal(target.style.width, '100%');
+  }
+});
+
+test('UFI toast sizing uses the page width instead of its shrinking toast container', () => {
+  const el = { style: {}, parentElement: { id: 'toastContainer', clientWidth: 40, parentElement: { clientWidth: 1280 } } };
+  const target = { nodeType: 1, style: {}, classList: { add() {} } };
+  const fit = vm.runInNewContext(slice('  const fitDialogWidth =', '  const askConfirm =') + '\nfitDialogWidth', {
+    document: { documentElement: { clientWidth: 1280 } },
+  });
+  fit(el, target, 960);
+  assert.equal(el.style.width, '960px');
+});
+
 test('panel settings open without subscription backend checks and retain access checks', async () => {
   for (const allowed of [true, false]) {
     let accessChecks = 0, opened = 0;

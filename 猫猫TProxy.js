@@ -7736,24 +7736,25 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
-  // 弹窗容器的宽度不等于视口宽度：F50 把插件面板放在页面右侧一块窄区域里，
-  // 用 vw 算出来的宽度会把弹窗撑出屏幕、右侧按钮被裁。这里按弹窗自身左边缘和
-  // 父容器宽度取较小值，落成像素宽度；量不到就保留 CSS 里的默认宽度。
+  // 外层也需调整宽度，否则宿主默认的窄窗口会继续限制内容。
   const fitDialogWidth = (el, target, maxWidth = 760) => {
     if (!el || !target || target.nodeType !== 1) return;
     target.classList.add('kano-dialog');
     target.style.boxSizing = 'border-box';
-    target.style.maxWidth = 'min(100%, calc(100vw - 64px))';
+    target.style.width = '100%';
+    target.style.maxWidth = '100%';
     const apply = () => {
       try {
         const viewport = document.documentElement.clientWidth || window.innerWidth || 0;
         if (!viewport) return;
-        const limits = [viewport - Math.max(0, el.getBoundingClientRect().left) - 16];
-        const parent = el.parentElement;
-        if (parent && parent.clientWidth) limits.push(parent.clientWidth - 16);
+        const limits = [viewport - 32];
+        const parent = el.parentElement?.id === 'toastContainer' ? el.parentElement.parentElement : el.parentElement;
+        if (parent && parent.clientWidth) limits.push(parent.clientWidth - 32);
         const room = Math.min.apply(null, limits);
         if (room <= 0) return;
-        target.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
+        el.style.boxSizing = 'border-box';
+        el.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
+        el.style.maxWidth = 'calc(100vw - 32px)';
       } catch (_) { /* 拿不到布局信息时保留默认宽度 */ }
     };
     apply();
@@ -9381,12 +9382,12 @@ btn_disabled.onclick = async () => {
           #kano_policy_shell *{box-sizing:border-box;}
           #kano_policy_shell .kp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
           #kano_policy_shell .kp-title{font-size:.82rem;font-weight:800;line-height:1.2;}
-          #kano_policy_shell .kp-body{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px;max-height:72vh;min-height:430px;}
+          #kano_policy_shell .kp-body{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px;height:min(62vh,560px);min-height:0;}
           #kano_policy_shell .kp-nav{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:8px;background:rgba(255,255,255,.045);height:max-content;}
           #kano_policy_shell .kp-tab{width:100%;text-align:left;border:1px solid transparent;border-radius:10px;padding:10px 11px;margin-bottom:6px;background:transparent;color:inherit;font-size:.64rem;line-height:1.25;}
           #kano_policy_shell .kp-tab:last-child{margin-bottom:0;}
           #kano_policy_shell .kp-tab.kp-active{background:var(--dark-btn-color-active);border-color:rgba(255,255,255,.18);color:#fff;}
-          #kano_policy_shell .kp-main{max-width:100%;min-width:0;overflow:auto;padding-right:4px;}
+          #kano_policy_shell .kp-main{max-width:100%;min-width:0;min-height:0;overflow:auto;padding-right:4px;}
           #kano_policy_shell .kp-panel{display:none;}
           #kano_policy_shell .kp-panel.kp-show{display:block;}
           #kano_policy_shell .kp-card{min-width:0;overflow-wrap:anywhere;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px;background:rgba(255,255,255,.045);margin-bottom:10px;}
@@ -9426,7 +9427,7 @@ btn_disabled.onclick = async () => {
           #kano_policy_shell .kp-link-local-toggle{width:100%;margin-top:6px;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;text-align:center;opacity:.78;}
           #kano_policy_shell code{font-size:.58rem;opacity:.9;}
           #kano_policy_shell button:focus-visible,#kano_policy_shell input:focus-visible,#kano_policy_shell select:focus-visible,#kano_policy_shell textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
-          @media (max-width:720px){#kano_policy_shell .kp-body{grid-template-columns:1fr;max-height:76vh;}#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}#kano_policy_shell .kp-tab{margin-bottom:0;text-align:center;}#kano_policy_shell .kp-row,#kano_policy_shell .kp-maintain-item{grid-template-columns:1fr;}#kano_policy_shell .kp-grid2{grid-template-columns:1fr;}}
+          @container (max-width:720px){#kano_policy_shell .kp-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);height:min(65vh,640px);}#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}#kano_policy_shell .kp-tab{margin-bottom:0;text-align:center;}#kano_policy_shell .kp-row,#kano_policy_shell .kp-maintain-item{grid-template-columns:1fr;}#kano_policy_shell .kp-grid2{grid-template-columns:1fr;}}
         </style>
         <div id="kano_policy_shell">
           <div class="kp-head">
@@ -10464,13 +10465,8 @@ EOF_F50_RESTORE_MEMBERS
       #IFRAME_KANO #mm_iframe{border:none;padding:0;margin:0;width:100%;height:70vh;min-height:420px;max-height:720px;display:block;background:#0f172a;}
       .kano-dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto;}
       .kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:30px;padding:5px 10px;}
-      .kano-dialog{min-width:0;max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px);overflow:auto;overflow-wrap:anywhere;scrollbar-width:thin;scrollbar-color:#475569 transparent;background:inherit;font-size:.64rem;line-height:1.65;}
-      .kano-dialog>.title{position:sticky;top:0;z-index:1;padding-bottom:12px;border-bottom:1px solid rgba(148,163,184,.18);background:inherit;font-size:.82rem;line-height:1.4;}
-      .kano-dialog textarea{font:inherit;line-height:1.5;border:1px solid rgba(148,163,184,.3);border-radius:10px;background:#0f172a;color:#dbeafe;padding:10px;resize:vertical;}
-      .kano-dialog>.kano-dialog-actions:last-child{position:sticky;bottom:0;padding-top:12px;border-top:1px solid rgba(148,163,184,.18);background:inherit;}
-      .kano-dialog .kano-dialog-actions>button{min-height:36px;padding:7px 14px;}
-      .kano-dialog button:is([id$="_save"],[id$="_save_btn"],[id$="_submit_btn"],.ok){background:rgba(59,130,246,.2);border-color:rgba(96,165,250,.55);color:#bfdbfe;}
-      .kano-dialog :is(input,textarea,select):focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
+      .kano-dialog{container-type:inline-size;min-width:0;max-height:calc(100vh - 96px);max-height:calc(100dvh - 96px);overflow:auto;}
+      @container (max-width:600px){.kano-dialog-actions.kano-actions-4{display:grid;grid-template-columns:repeat(2,max-content);}}
       .kano-log-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;max-width:440px;margin-left:auto;}
       .kano-log-actions>button{width:100%;min-width:0;min-height:30px;padding:5px 8px;}
       .kano-dialog-menu{display:grid;gap:9px;margin-top:12px;}
@@ -11906,7 +11902,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
               <button id="mm_local_file_reload_btn" style="font-size:.64rem">读取</button>
             </div>
-            <textarea id="mm_local_file_text" spellcheck="false" style="box-sizing:border-box;width:100%;height:55vh;min-height:260px;padding:10px;background:#050b16;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;font-family:monospace;font-size:.62rem;line-height:1.45;resize:vertical;"></textarea>
+            <textarea id="mm_local_file_text" spellcheck="false" style="box-sizing:border-box;width:100%;height:min(52vh,480px);min-height:180px;padding:10px;background:#050b16;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;font-family:monospace;font-size:.62rem;line-height:1.45;resize:vertical;"></textarea>
             <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:.6rem;opacity:.76;overflow-wrap:anywhere;"></div>
             <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:10px;">
               <button id="mm_local_file_save_btn" style="font-size:.64rem">保存</button>
@@ -12467,12 +12463,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           <div class="title" style="margin:0">节点 DNS 策略</div>
           <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;">
-            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="3" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
-            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="3" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
+            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
+            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
           </div>
           <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
           <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `已识别 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '无法读取'}</div>
-          <textarea id="mm_airport_dns_yaml" rows="3" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
+          <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
           <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
             <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
             <button id="mm_airport_dns_import">导入粘贴内容</button>
@@ -12669,7 +12665,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const {el, close} = createFixedToast('mm_gist_sync_dialog', `
-        <div style="pointer-events:all;width:auto;max-width:760px;">
+        <div style="pointer-events:all;width:auto;max-width:760px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
           <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">

@@ -10588,7 +10588,7 @@ EOF_F50_RESTORE_MEMBERS
     controllerSettingsBtn.classList.add('btn');
     controllerSettingsBtn.textContent = '面板连接';
     controllerSettingsBtn.onclick = async () => {
-      if (!(await ensureReady({ readOnly: true }))) return;
+      if (!(await ensureAdvanced())) return;
       await showControllerSettingsDialog({
         afterSave: async () => {
           if (isWebPanelVisible()) await refreshPanel();

@@ -17,6 +17,23 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('panel settings open without subscription backend checks and retain access checks', async () => {
+  for (const allowed of [true, false]) {
+    let accessChecks = 0, opened = 0;
+    const button = { classList: { add() {} } };
+    const click = vm.runInNewContext(slice('    const controllerSettingsBtn =', '    const boot_on =')
+      + '\ncontrollerSettingsBtn.onclick', {
+      document: { createElement: () => button },
+      ensureAdvanced: async () => { accessChecks++; return allowed; },
+      ensureReady: async () => assert.fail('panel settings must not require subscription repair'),
+      showControllerSettingsDialog: async () => { opened++; },
+    });
+    await click();
+    assert.equal(accessChecks, 1);
+    assert.equal(opened, Number(allowed));
+  }
+});
+
 test('dashboard defaults preserve custom fields and explicit false values', () => {
   const apply = vm.runInNewContext(slice('  const applyManagedDashboardFields =', '  const applyRequiredF50Fields =') + 'applyManagedDashboardFields', {
     assertYamlRootMap() {}, ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.test/default.zip',

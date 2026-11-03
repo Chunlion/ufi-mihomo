@@ -4,7 +4,7 @@
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const {el, close} = createFixedToast('mm_gist_sync_dialog', `
-        <div style="pointer-events:all;width:auto;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
+        <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
           <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
@@ -22,7 +22,7 @@
             <button id="mm_gist_save" type="button">保存设置</button>
             <button id="mm_gist_sync" type="button">同步</button>
           </div>
-          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;margin:10px 0"></div>
+          <div id="mm_gist_result" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0"></div>
           <div id="mm_gist_status" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8"></div>
           <details style="margin-top:8px"><summary>更多</summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
@@ -33,7 +33,7 @@
           </details>
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
         </div>`);
-      if (typeof fitDialogWidth === 'function') fitDialogWidth(el, el.firstElementChild, 700);
+      if (typeof fitDialogWidth === 'function') fitDialogWidth(el, el.firstElementChild);
       const q = id => el.querySelector('#mm_gist_'+id);
       let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 

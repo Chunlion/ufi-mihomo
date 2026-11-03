@@ -34,6 +34,24 @@ test('panel settings open without subscription backend checks and retain access 
   }
 });
 
+test('read-only settings retain access checks without requiring the subscription backend', async () => {
+  for (const allowed of [true, false]) {
+    for (const backendReady of [true, false]) {
+      for (const readOnly of [true, false]) {
+        let accessChecks = 0, backendChecks = 0;
+        const ready = vm.runInNewContext(slice('  const ensureInstalled =', '  const buildOwnedCoreFunctions =')
+          + '\nensureReady', {
+          ensureAdvanced: async () => { accessChecks++; return allowed; },
+          ensureCompatBackend: async () => { backendChecks++; return backendReady; },
+        });
+        assert.equal(await ready({ readOnly }), allowed && (readOnly || backendReady));
+        assert.equal(accessChecks, 1);
+        assert.equal(backendChecks, Number(allowed && !readOnly));
+      }
+    }
+  }
+});
+
 test('dashboard defaults preserve custom fields and explicit false values', () => {
   const apply = vm.runInNewContext(slice('  const applyManagedDashboardFields =', '  const applyRequiredF50Fields =') + 'applyManagedDashboardFields', {
     assertYamlRootMap() {}, ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.test/default.zip',

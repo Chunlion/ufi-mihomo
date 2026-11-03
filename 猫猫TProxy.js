@@ -7739,8 +7739,11 @@ KANO_WRITE_CHECK_EOF
   // 弹窗容器的宽度不等于视口宽度：F50 把插件面板放在页面右侧一块窄区域里，
   // 用 vw 算出来的宽度会把弹窗撑出屏幕、右侧按钮被裁。这里按弹窗自身左边缘和
   // 父容器宽度取较小值，落成像素宽度；量不到就保留 CSS 里的默认宽度。
-  const fitDialogWidth = (el, target, maxWidth = 960) => {
+  const fitDialogWidth = (el, target, maxWidth = 760) => {
     if (!el || !target || target.nodeType !== 1) return;
+    target.classList.add('kano-dialog');
+    target.style.boxSizing = 'border-box';
+    target.style.maxWidth = 'min(100%, calc(100vw - 64px))';
     const apply = () => {
       try {
         const viewport = document.documentElement.clientWidth || window.innerWidth || 0;
@@ -7749,9 +7752,8 @@ KANO_WRITE_CHECK_EOF
         const parent = el.parentElement;
         if (parent && parent.clientWidth) limits.push(parent.clientWidth - 16);
         const room = Math.min.apply(null, limits);
-        if (room < 240) return;
+        if (room <= 0) return;
         target.style.width = Math.min(maxWidth, Math.floor(room)) + 'px';
-        target.style.maxWidth = '100%';
       } catch (_) { /* 拿不到布局信息时保留默认宽度 */ }
     };
     apply();
@@ -7791,7 +7793,7 @@ KANO_WRITE_CHECK_EOF
     if (progress) progress.pause(true);
     const { el, close } = createFixedToast(
       id,
-      `<div style="pointer-events:all;width:auto;max-width:460px;min-width:0;">
+      `<div style="pointer-events:all;width:auto;max-width:520px;min-width:0;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
         <div style="margin-top:10px;font-size:.68rem;line-height:1.7;overflow-wrap:anywhere;">${body}</div>
         <input class="k-text-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="${escapeHtml(defaultValue)}" style="box-sizing:border-box;width:100%;margin-top:10px;padding:9px;font-size:.7rem;border-radius:9px;border:1px solid rgba(148,163,184,.35);background:rgba(15,23,42,.9);color:#dbeafe;">
@@ -7801,7 +7803,7 @@ KANO_WRITE_CHECK_EOF
         </div>
       </div>`,
     );
-    fitDialogWidth(el, el.firstElementChild, 460);
+    fitDialogWidth(el, el.firstElementChild, 520);
     const input = el.querySelector('.k-text-input');
     const done = (value) => {
       close();
@@ -7854,7 +7856,7 @@ KANO_WRITE_CHECK_EOF
   const ensureInstalled = async () => await ensureCompatBackend();
 
   const ensureReady = async (options = {}) =>
-    (await ensureAdvanced()) && (await ensureInstalled(options));
+    (await ensureAdvanced()) && (options.readOnly === true || (await ensureInstalled()));
 
 
 
@@ -8413,7 +8415,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     ].join('<br>');
     const { el, close } = createFixedToast(
       id,
-      `<div style="pointer-events:all;width:auto;max-width:620px;">
+      `<div style="pointer-events:all;width:auto;max-width:760px;">
         <div class="title" style="margin:0">面板连接</div>
         <div style="margin-top:10px;font-size:.66rem;line-height:1.65;">
           <div id="${statusId}" style="margin-bottom:10px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.45);">${sourceRows}</div>
@@ -8436,7 +8438,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         </div>
       </div>`,
     );
-    fitDialogWidth(el, el.firstElementChild, 620);
+    fitDialogWidth(el, el.firstElementChild);
     const controllerInput = el.querySelector(`#${controllerId}`);
     const secretInput = el.querySelector(`#${secretId}`);
     const secretToggleBtn = el.querySelector(`#${secretToggleId}`);
@@ -10283,7 +10285,7 @@ EOF_F50_RESTORE_MEMBERS
   backupBtn.classList.add('btn');
   backupBtn.textContent = '导出配置包';
   backupBtn.onclick = async () => {
-    if (!(await ensureReady())) return;
+    if (!(await ensureReady({ readOnly: true }))) return;
     const operationToken = acquireCriticalOperation('导出配置包');
     if (!operationToken) return;
     setButtonBusy(backupBtn, true, '导出中…');
@@ -10462,6 +10464,13 @@ EOF_F50_RESTORE_MEMBERS
       #IFRAME_KANO #mm_iframe{border:none;padding:0;margin:0;width:100%;height:70vh;min-height:420px;max-height:720px;display:block;background:#0f172a;}
       .kano-dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto;}
       .kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:30px;padding:5px 10px;}
+      .kano-dialog{min-width:0;max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px);overflow:auto;overflow-wrap:anywhere;scrollbar-width:thin;scrollbar-color:#475569 transparent;background:inherit;font-size:.64rem;line-height:1.65;}
+      .kano-dialog>.title{position:sticky;top:0;z-index:1;padding-bottom:12px;border-bottom:1px solid rgba(148,163,184,.18);background:inherit;font-size:.82rem;line-height:1.4;}
+      .kano-dialog textarea{font:inherit;line-height:1.5;border:1px solid rgba(148,163,184,.3);border-radius:10px;background:#0f172a;color:#dbeafe;padding:10px;resize:vertical;}
+      .kano-dialog>.kano-dialog-actions:last-child{position:sticky;bottom:0;padding-top:12px;border-top:1px solid rgba(148,163,184,.18);background:inherit;}
+      .kano-dialog .kano-dialog-actions>button{min-height:36px;padding:7px 14px;}
+      .kano-dialog button:is([id$="_save"],[id$="_save_btn"],[id$="_submit_btn"],.ok){background:rgba(59,130,246,.2);border-color:rgba(96,165,250,.55);color:#bfdbfe;}
+      .kano-dialog :is(input,textarea,select):focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
       .kano-log-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;max-width:440px;margin-left:auto;}
       .kano-log-actions>button{width:100%;min-width:0;min-height:30px;padding:5px 8px;}
       .kano-dialog-menu{display:grid;gap:9px;margin-top:12px;}
@@ -10682,7 +10691,7 @@ EOF_F50_RESTORE_MEMBERS
       const { el, close } = createFixedToast(
         'mm_provider_user_agent',
         `
-          <div style="pointer-events:all;width:86vw;max-width:720px;">
+          <div style="pointer-events:all;width:auto;max-width:760px;">
             <div class="title" style="margin:0">订阅 User-Agent</div>
             <div style="margin:14px 0 8px;font-size:.62rem;line-height:1.55;opacity:.82;">
               设置订阅请求使用的 User-Agent；留空使用默认值 ${escapeHtml(KANO_PROVIDER_USER_AGENT)}，下次更新生效。
@@ -10698,6 +10707,7 @@ EOF_F50_RESTORE_MEMBERS
           </div>
         `,
       );
+      fitDialogWidth(el, el.firstElementChild);
       const input = el.querySelector('#mm_provider_user_agent_input');
       const saveBtn = el.querySelector('#mm_provider_user_agent_save');
       el.querySelector('#mm_provider_user_agent_close').onclick = close;
@@ -11173,7 +11183,7 @@ EOF_F50_RESTORE_MEMBERS
       const actionCount = 1 + (repairable ? 1 : 0) + (failedProviders.length > 0 ? 1 : 0);
       const { el, close } = createFixedToast(
         id,
-        `<div style="pointer-events:all;width:auto;max-width:720px;overflow-wrap:anywhere;word-break:break-word;">
+        `<div style="pointer-events:all;width:auto;max-width:760px;overflow-wrap:anywhere;word-break:break-word;">
           <div class="title" style="margin:0">${escapeHtml(title)}</div>
           <div style="margin-top:10px;max-height:68vh;overflow-y:auto;overflow-x:hidden;padding-right:3px;font-size:.64rem;line-height:1.62;">
             <div style="padding:9px 10px;border:1px solid rgba(148,163,184,.25);border-radius:9px;margin-bottom:9px;">
@@ -11191,7 +11201,7 @@ EOF_F50_RESTORE_MEMBERS
           </div>
         </div>`,
       );
-      fitDialogWidth(el, el.firstElementChild, 720);
+      fitDialogWidth(el, el.firstElementChild);
       const retryBtn = el.querySelector(`#${retryId}`);
       const repairBtn = el.querySelector(`#${repairId}`);
       const closeBtn = el.querySelector(`#${closeId}`);
@@ -11890,7 +11900,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_local_file_editor',
         `
-          <div style="pointer-events:all;width:auto;max-width:900px;">
+          <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">配置文件</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
               <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
@@ -11905,7 +11915,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
-      fitDialogWidth(el, el.firstElementChild, 900);
+      fitDialogWidth(el, el.firstElementChild, 960);
       const select = el.querySelector('#mm_local_file_select');
       const reloadBtn = el.querySelector('#mm_local_file_reload_btn');
       const saveBtn = el.querySelector('#mm_local_file_save_btn');
@@ -11999,7 +12009,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_sub_input_toast',
         `
-            <div style="pointer-events:all;width:80vw;max-width:800px;">
+            <div style="pointer-events:all;width:auto;max-width:760px;">
                 <div class="title" style="margin:0">订阅设置</div>
                 <div style="margin:14px 0;display:flex;flex-direction:column;gap:10px;">
                     ${gistOverview}
@@ -12034,6 +12044,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         `,
       );
 
+      fitDialogWidth(el, el.firstElementChild);
       const rowsEl = el.querySelector('#mm_sub_rows');
       const addBtn = el.querySelector('#mm_sub_add_btn');
       const clearBtn = el.querySelector('#mm_sub_clear_btn');
@@ -12254,7 +12265,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_rule_override_toast',
         `
-          <div style="pointer-events:all;width:94vw;max-width:980px;">
+          <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">图形规则</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
               用于少量自定义规则。应用时会重建并校验配置，失败自动回滚。
@@ -12283,6 +12294,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
+      fitDialogWidth(el, el.firstElementChild, 960);
       const enabledInput = el.querySelector('#mm_rule_override_enabled');
       const typeInput = el.querySelector('#mm_rule_override_type');
       const contentInput = el.querySelector('#mm_rule_override_content');
@@ -12405,7 +12417,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const { el, close } = createFixedToast(
         'mm_js_override_toast',
         `
-          <div style="pointer-events:all;width:auto;max-width:900px;">
+          <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">JS 覆写</div>
             <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
               定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。仅运行信任的代码，Worker 隔离不等于安全沙箱。
@@ -12420,7 +12432,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         `,
       );
-      fitDialogWidth(el, el.firstElementChild, 900);
+      fitDialogWidth(el, el.firstElementChild, 960);
       const textarea = el.querySelector('#mm_js_override_text');
       const saveBtn = el.querySelector('#mm_js_override_save_btn');
       const applyBtn = el.querySelector('#mm_js_override_apply_btn');
@@ -12454,13 +12466,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0">节点 DNS 策略</div>
           <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
-          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
-            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;">
+            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="3" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
+            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="3" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
           </div>
           <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
           <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `已识别 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '无法读取'}</div>
-          <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
+          <textarea id="mm_airport_dns_yaml" rows="3" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
           <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
             <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
             <button id="mm_airport_dns_import">导入粘贴内容</button>
@@ -12472,6 +12484,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </div>
         </div>
       `);
+      fitDialogWidth(el, el.firstElementChild);
       const domains = el.querySelector('#mm_airport_dns_domains');
       const servers = el.querySelector('#mm_airport_dns_servers');
       const yaml = el.querySelector('#mm_airport_dns_yaml');
@@ -12656,7 +12669,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       const {el, close} = createFixedToast('mm_gist_sync_dialog', `
-        <div style="pointer-events:all;width:auto;max-width:700px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
+        <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
           <input id="mm_gist_url" type="url" maxlength="2048" spellcheck="false" autocomplete="off" placeholder="https://gist.githubusercontent.com/.../raw/config.yaml.age" style="box-sizing:border-box;width:100%;padding:10px;font:inherit;background:#111827;color:#fff;border:1px solid #64748b;border-radius:8px;">
@@ -12685,7 +12698,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           </details>
           <div style="text-align:right;margin-top:8px"><button id="mm_gist_close">关闭</button></div>
         </div>`);
-      if (typeof fitDialogWidth === 'function') fitDialogWidth(el, el.firstElementChild, 700);
+      if (typeof fitDialogWidth === 'function') fitDialogWidth(el, el.firstElementChild);
       const q = id => el.querySelector('#mm_gist_'+id);
       let opened=true, pendingKey='', revision=0, currentJob='', foreground=false, settingsLoaded=false, refreshSequence=0, currentFingerprint=null;
 

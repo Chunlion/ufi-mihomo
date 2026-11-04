@@ -96,7 +96,7 @@ function loadApi(directory) {
     + slice('const providerNameFor', 'const readConfigSource')
     + slice('const yamlScalar', 'const stageTextBesideTarget')
     + slice('const buildManagedProxyProviders', 'const buildF50TemplateObject')
-    + '\n({ read:readYamlObject, dump:dumpConfigYaml, normalize:normalizeManagedTemplateObject, required:applyRequiredF50Fields,'
+    + '\n({ read:readYamlObject, dump:dumpConfigYaml, shape:assertTemplateShapeForWrite, normalize:normalizeManagedTemplateObject, required:applyRequiredF50Fields,'
     + ' runtime:createPrivateRouteLogic().runtime, merge:f50DeepMerge, profiles:F50_FIXED_PROFILES, service:buildF50OriginalConfigFunctions })', {
       CLASH_DIR: directory,
       shellQuote: quote,
@@ -375,6 +375,7 @@ test('pinned real Mihomo templates retain fields throughout configuration handli
       assert.equal(read.ok, true, read.message);
       const original = clone(read.value);
       checkStage(relative, 'read', parse(input), original);
+      checkStage(relative, 'template-write-shape/original', original, clone(api.shape(clone(original), relative)));
       const merged = clone(api.merge(original, {}));
       checkStage(relative, 'deep-merge', original, merged);
       checkStage(relative, 'deep-merge/input-unchanged', original, clone(read.value));
@@ -409,6 +410,7 @@ test('pinned real Mihomo templates retain fields throughout configuration handli
       let normalized;
       try { normalized = clone(api.normalize(configured, sources, { generated: false }).config); }
       catch (error) { throw new Error(`${relative}: template normalization: ${error.message}`); }
+      checkStage(relative, 'template-write-shape/normalized', normalized, clone(api.shape(clone(normalized), relative)));
       checkNormalization(relative, configured, normalized, candidates);
       checkStage(relative, 'normalize/repeated', normalized, clone(api.normalize(normalized, sources, { generated: false }).config));
       let finalTemplate, finalUpload;

@@ -1,0 +1,372 @@
+{"Time":"2026-11-04T19:41:01.501137169+08:00","Action":"start","Package":"kano-gist-sync"}
+{"Time":"2026-11-04T19:41:01.504081163+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential"}
+{"Time":"2026-11-04T19:41:01.504100998+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential","Output":"=== RUN   TestNormalizationDifferential\n"}
+{"Time":"2026-11-04T19:41:01.620846995+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_"}
+{"Time":"2026-11-04T19:41:01.620899089+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.622013922+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.622039714+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.622068145+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.622077042+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.622260404+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.622264027+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.622266793+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.622267936+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.622425616+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.622433952+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.622436961+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.622438177+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.622662553+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.622670784+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.622673166+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.622675784+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.622922957+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.622943086+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.62297296+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.622978149+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.623253577+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.623268938+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.623272234+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_"}
+{"Time":"2026-11-04T19:41:01.623273566+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.623494013+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.623503033+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.623505464+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_on"}
+{"Time":"2026-11-04T19:41:01.623506726+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.623713428+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.623716482+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.623718674+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_"}
+{"Time":"2026-11-04T19:41:01.62371989+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.623974779+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.623984842+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.623989609+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.623992492+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_off_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.624185457+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_off_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.624199015+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_off_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.624203829+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_"}
+{"Time":"2026-11-04T19:41:01.624207063+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.624369582+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.624378486+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.624381474+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.624382708+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.624602811+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.624611317+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.624613666+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.624615051+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.624827681+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.624918986+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.62492245+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.624923784+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.625061117+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.625064804+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.625067057+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.625068311+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.625882315+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.625895129+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.625898179+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.625899441+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.626150076+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.626155495+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.626157534+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_"}
+{"Time":"2026-11-04T19:41:01.626158632+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.626376362+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.626383966+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.626386168+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_on"}
+{"Time":"2026-11-04T19:41:01.626387433+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.626612583+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.626615778+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.626617876+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_"}
+{"Time":"2026-11-04T19:41:01.626619131+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.626845407+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.626854243+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.62685652+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.626857707+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/tproxy_on_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.627074085+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/tproxy_on_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.627077679+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tproxy_on_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.627084001+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_"}
+{"Time":"2026-11-04T19:41:01.627085256+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_","Output":"=== RUN   TestNormalizationDifferential/tun_off_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.627329875+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_","Output":"--- PASS: TestNormalizationDifferential/tun_off_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.627339354+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.627341515+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.627342792+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_off_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.627639712+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_off_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.627651112+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.627655621+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.627658233+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/tun_off_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.627822945+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/tun_off_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.627827068+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.627829085+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.627833452+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_off_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.628086658+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_off_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.628089754+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.62809139+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.628092687+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/tun_off_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.628298954+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/tun_off_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.628301244+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.628303247+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.62830771+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_off_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.628560396+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_off_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.628562699+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.628564607+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_"}
+{"Time":"2026-11-04T19:41:01.628565925+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_","Output":"=== RUN   TestNormalizationDifferential/tun_off_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.628767678+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_","Output":"--- PASS: TestNormalizationDifferential/tun_off_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.628770112+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.628789952+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_on"}
+{"Time":"2026-11-04T19:41:01.628791616+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_off_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.629839573+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_off_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.629854275+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.629857014+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_"}
+{"Time":"2026-11-04T19:41:01.62985821+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_","Output":"=== RUN   TestNormalizationDifferential/tun_off_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.630071938+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_","Output":"--- PASS: TestNormalizationDifferential/tun_off_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.630092872+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.630095135+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.630096541+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_off_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.630325731+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_off_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.63032882+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_off_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.63033105+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_"}
+{"Time":"2026-11-04T19:41:01.630332284+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_","Output":"=== RUN   TestNormalizationDifferential/tun_on_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.630551141+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_","Output":"--- PASS: TestNormalizationDifferential/tun_on_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.630559741+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.630563462+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.630564719+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_on_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.630853668+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_on_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.630856991+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.630884644+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.630886373+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/tun_on_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.631115234+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/tun_on_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.631124003+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.631126257+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.631127709+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_on_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.631435348+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_on_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.631438835+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.631443331+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.63144458+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/tun_on_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.63165256+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/tun_on_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.631655584+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.631657353+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.631658599+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_on_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.632476421+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_on_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.632488692+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.632490915+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_"}
+{"Time":"2026-11-04T19:41:01.63249227+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_","Output":"=== RUN   TestNormalizationDifferential/tun_on_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.632880566+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_","Output":"--- PASS: TestNormalizationDifferential/tun_on_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.632891992+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.632898784+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_on"}
+{"Time":"2026-11-04T19:41:01.632901485+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_on_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.633504454+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_on_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.633511868+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.633514654+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_"}
+{"Time":"2026-11-04T19:41:01.633515889+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_","Output":"=== RUN   TestNormalizationDifferential/tun_on_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.633753171+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_","Output":"--- PASS: TestNormalizationDifferential/tun_on_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.63375544+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.633782884+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.633784697+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/tun_on_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.634116513+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/tun_on_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.634130852+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/tun_on_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.634133396+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_"}
+{"Time":"2026-11-04T19:41:01.634134639+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_","Output":"=== RUN   TestNormalizationDifferential/off_off_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.634322914+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_","Output":"--- PASS: TestNormalizationDifferential/off_off_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.634335237+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.634337556+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.634338928+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/off_off_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.634534177+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/off_off_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.634540834+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.634542817+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.634544099+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/off_off_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.634708834+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/off_off_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.634711053+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.634720107+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.634721379+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/off_off_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.634910056+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/off_off_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.63491432+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.63491674+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.634917958+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/off_off_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.635114594+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/off_off_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.635122213+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.635124474+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.635125715+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/off_off_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.635308433+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/off_off_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.635317691+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.635324256+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_"}
+{"Time":"2026-11-04T19:41:01.635325622+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_","Output":"=== RUN   TestNormalizationDifferential/off_off_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.635972827+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_","Output":"--- PASS: TestNormalizationDifferential/off_off_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.636140093+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.636193826+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_on"}
+{"Time":"2026-11-04T19:41:01.636196388+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_on","Output":"=== RUN   TestNormalizationDifferential/off_off_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.636481372+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_on","Output":"--- PASS: TestNormalizationDifferential/off_off_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.636486871+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.636515434+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_"}
+{"Time":"2026-11-04T19:41:01.63653428+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_","Output":"=== RUN   TestNormalizationDifferential/off_off_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.636699857+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_","Output":"--- PASS: TestNormalizationDifferential/off_off_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.636705903+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.636714137+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.636717042+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/off_off_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.636883072+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/off_off_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.636891767+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_off_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.636893857+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_"}
+{"Time":"2026-11-04T19:41:01.636895141+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_","Output":"=== RUN   TestNormalizationDifferential/off_on_auto_private_\n"}
+{"Time":"2026-11-04T19:41:01.637126323+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_","Output":"--- PASS: TestNormalizationDifferential/off_on_auto_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.637134782+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.637137651+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_on"}
+{"Time":"2026-11-04T19:41:01.63714372+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_on","Output":"=== RUN   TestNormalizationDifferential/off_on_auto_private_on\n"}
+{"Time":"2026-11-04T19:41:01.637341939+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_on","Output":"--- PASS: TestNormalizationDifferential/off_on_auto_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.637344188+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_auto_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.637347038+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_"}
+{"Time":"2026-11-04T19:41:01.637348204+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_","Output":"=== RUN   TestNormalizationDifferential/off_on_mixed_private_\n"}
+{"Time":"2026-11-04T19:41:01.637528057+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_","Output":"--- PASS: TestNormalizationDifferential/off_on_mixed_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.637529983+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.637531872+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_on"}
+{"Time":"2026-11-04T19:41:01.637533071+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_on","Output":"=== RUN   TestNormalizationDifferential/off_on_mixed_private_on\n"}
+{"Time":"2026-11-04T19:41:01.637730674+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_on","Output":"--- PASS: TestNormalizationDifferential/off_on_mixed_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.637741128+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mixed_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.637743148+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_"}
+{"Time":"2026-11-04T19:41:01.63774434+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_","Output":"=== RUN   TestNormalizationDifferential/off_on_gvisor_private_\n"}
+{"Time":"2026-11-04T19:41:01.637964619+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_","Output":"--- PASS: TestNormalizationDifferential/off_on_gvisor_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.637971663+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.637973226+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_on"}
+{"Time":"2026-11-04T19:41:01.637974444+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_on","Output":"=== RUN   TestNormalizationDifferential/off_on_gvisor_private_on\n"}
+{"Time":"2026-11-04T19:41:01.638152446+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_on","Output":"--- PASS: TestNormalizationDifferential/off_on_gvisor_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.638161866+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_gvisor_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.638163731+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_"}
+{"Time":"2026-11-04T19:41:01.638164934+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_","Output":"=== RUN   TestNormalizationDifferential/off_on_system_private_\n"}
+{"Time":"2026-11-04T19:41:01.63834412+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_","Output":"--- PASS: TestNormalizationDifferential/off_on_system_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.638347241+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.638717992+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_on"}
+{"Time":"2026-11-04T19:41:01.638726234+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_on","Output":"=== RUN   TestNormalizationDifferential/off_on_system_private_on\n"}
+{"Time":"2026-11-04T19:41:01.63912748+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_on","Output":"--- PASS: TestNormalizationDifferential/off_on_system_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.639136291+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_system_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.639138466+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_"}
+{"Time":"2026-11-04T19:41:01.639139705+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_","Output":"=== RUN   TestNormalizationDifferential/off_on_mips_private_\n"}
+{"Time":"2026-11-04T19:41:01.639358784+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_","Output":"--- PASS: TestNormalizationDifferential/off_on_mips_private_ (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.639370898+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.639375363+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_on"}
+{"Time":"2026-11-04T19:41:01.639377982+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_on","Output":"=== RUN   TestNormalizationDifferential/off_on_mips_private_on\n"}
+{"Time":"2026-11-04T19:41:01.639539128+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_on","Output":"--- PASS: TestNormalizationDifferential/off_on_mips_private_on (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.639546971+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential/off_on_mips_private_on","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.639551764+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationDifferential","Output":"--- PASS: TestNormalizationDifferential (0.14s)\n"}
+{"Time":"2026-11-04T19:41:01.63956008+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationDifferential","Elapsed":0.14}
+{"Time":"2026-11-04T19:41:01.639564132+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides"}
+{"Time":"2026-11-04T19:41:01.639568652+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides","Output":"=== RUN   TestNormalizationUserOverrides\n"}
+{"Time":"2026-11-04T19:41:01.639572926+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tproxy"}
+{"Time":"2026-11-04T19:41:01.639575182+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tproxy","Output":"=== RUN   TestNormalizationUserOverrides/tproxy\n"}
+{"Time":"2026-11-04T19:41:01.639738088+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tproxy","Output":"--- PASS: TestNormalizationUserOverrides/tproxy (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.639746379+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tproxy","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.639757933+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tun"}
+{"Time":"2026-11-04T19:41:01.639760761+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tun","Output":"=== RUN   TestNormalizationUserOverrides/tun\n"}
+{"Time":"2026-11-04T19:41:01.639892491+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tun","Output":"--- PASS: TestNormalizationUserOverrides/tun (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.639901276+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/tun","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.639903503+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/off"}
+{"Time":"2026-11-04T19:41:01.639904709+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/off","Output":"=== RUN   TestNormalizationUserOverrides/off\n"}
+{"Time":"2026-11-04T19:41:01.640063455+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/off","Output":"--- PASS: TestNormalizationUserOverrides/off (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640072356+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides/off","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640074867+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides","Output":"--- PASS: TestNormalizationUserOverrides (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640076388+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationUserOverrides","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640077893+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts"}
+{"Time":"2026-11-04T19:41:01.640079078+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts","Output":"=== RUN   TestNormalizationLocalPorts\n"}
+{"Time":"2026-11-04T19:41:01.640080506+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/custom"}
+{"Time":"2026-11-04T19:41:01.640081622+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/custom","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/custom\n"}
+{"Time":"2026-11-04T19:41:01.640148494+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/custom","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/custom (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640152981+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/custom","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.64015705+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/string"}
+{"Time":"2026-11-04T19:41:01.640158205+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/string","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/string\n"}
+{"Time":"2026-11-04T19:41:01.640252297+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/string","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640254593+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640256515+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/disabled"}
+{"Time":"2026-11-04T19:41:01.640257812+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/disabled","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/disabled\n"}
+{"Time":"2026-11-04T19:41:01.640338243+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/disabled","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/disabled (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640342712+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/disabled","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640349077+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/duplicate"}
+{"Time":"2026-11-04T19:41:01.640350336+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/duplicate","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/duplicate\n"}
+{"Time":"2026-11-04T19:41:01.640463174+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/duplicate","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/duplicate (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640466832+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/duplicate","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640468569+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns"}
+{"Time":"2026-11-04T19:41:01.640469784+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/dns\n"}
+{"Time":"2026-11-04T19:41:01.640571077+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/dns (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640578717+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640581286+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns_string"}
+{"Time":"2026-11-04T19:41:01.640582623+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns_string","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/dns_string\n"}
+{"Time":"2026-11-04T19:41:01.640645879+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns_string","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/dns_string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.64064954+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/dns_string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640658179+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/controller"}
+{"Time":"2026-11-04T19:41:01.6406596+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/controller","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/controller\n"}
+{"Time":"2026-11-04T19:41:01.640750299+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/controller","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/controller (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640759013+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/controller","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640761881+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/tproxy"}
+{"Time":"2026-11-04T19:41:01.640763124+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/tproxy","Output":"=== RUN   TestNormalizationLocalPorts/tproxy/tproxy\n"}
+{"Time":"2026-11-04T19:41:01.640837255+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/tproxy","Output":"--- PASS: TestNormalizationLocalPorts/tproxy/tproxy (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640841123+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tproxy/tproxy","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.640872814+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/custom"}
+{"Time":"2026-11-04T19:41:01.640876024+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/custom","Output":"=== RUN   TestNormalizationLocalPorts/tun/custom\n"}
+{"Time":"2026-11-04T19:41:01.640989495+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/custom","Output":"--- PASS: TestNormalizationLocalPorts/tun/custom (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.640999883+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/custom","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.641004014+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/string"}
+{"Time":"2026-11-04T19:41:01.641006572+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/string","Output":"=== RUN   TestNormalizationLocalPorts/tun/string\n"}
+{"Time":"2026-11-04T19:41:01.64108015+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/string","Output":"--- PASS: TestNormalizationLocalPorts/tun/string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.641115578+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.641121603+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/disabled"}
+{"Time":"2026-11-04T19:41:01.641123232+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/disabled","Output":"=== RUN   TestNormalizationLocalPorts/tun/disabled\n"}
+{"Time":"2026-11-04T19:41:01.641169194+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/disabled","Output":"--- PASS: TestNormalizationLocalPorts/tun/disabled (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.641173171+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/disabled","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.641196365+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/duplicate"}
+{"Time":"2026-11-04T19:41:01.641203416+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/duplicate","Output":"=== RUN   TestNormalizationLocalPorts/tun/duplicate\n"}
+{"Time":"2026-11-04T19:41:01.641363386+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/duplicate","Output":"--- PASS: TestNormalizationLocalPorts/tun/duplicate (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.641400923+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/duplicate","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.641426178+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns"}
+{"Time":"2026-11-04T19:41:01.641427949+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns","Output":"=== RUN   TestNormalizationLocalPorts/tun/dns\n"}
+{"Time":"2026-11-04T19:41:01.641797725+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns","Output":"--- PASS: TestNormalizationLocalPorts/tun/dns (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.641841842+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.641845065+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns_string"}
+{"Time":"2026-11-04T19:41:01.641846492+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns_string","Output":"=== RUN   TestNormalizationLocalPorts/tun/dns_string\n"}
+{"Time":"2026-11-04T19:41:01.642007793+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns_string","Output":"--- PASS: TestNormalizationLocalPorts/tun/dns_string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642018147+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/dns_string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642022096+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/controller"}
+{"Time":"2026-11-04T19:41:01.642024591+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/controller","Output":"=== RUN   TestNormalizationLocalPorts/tun/controller\n"}
+{"Time":"2026-11-04T19:41:01.642076353+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/controller","Output":"--- PASS: TestNormalizationLocalPorts/tun/controller (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642084592+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/controller","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.6420873+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/tproxy"}
+{"Time":"2026-11-04T19:41:01.642088507+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/tproxy","Output":"=== RUN   TestNormalizationLocalPorts/tun/tproxy\n"}
+{"Time":"2026-11-04T19:41:01.642223215+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/tproxy","Output":"--- PASS: TestNormalizationLocalPorts/tun/tproxy (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642237586+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/tun/tproxy","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642242464+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/custom"}
+{"Time":"2026-11-04T19:41:01.642245142+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/custom","Output":"=== RUN   TestNormalizationLocalPorts/off/custom\n"}
+{"Time":"2026-11-04T19:41:01.6422924+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/custom","Output":"--- PASS: TestNormalizationLocalPorts/off/custom (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642301183+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/custom","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642304204+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/string"}
+{"Time":"2026-11-04T19:41:01.642305418+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/string","Output":"=== RUN   TestNormalizationLocalPorts/off/string\n"}
+{"Time":"2026-11-04T19:41:01.642421792+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/string","Output":"--- PASS: TestNormalizationLocalPorts/off/string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642429221+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642431373+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/disabled"}
+{"Time":"2026-11-04T19:41:01.64243258+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/disabled","Output":"=== RUN   TestNormalizationLocalPorts/off/disabled\n"}
+{"Time":"2026-11-04T19:41:01.642553386+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/disabled","Output":"--- PASS: TestNormalizationLocalPorts/off/disabled (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642561866+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/disabled","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642622315+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/duplicate"}
+{"Time":"2026-11-04T19:41:01.642629614+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/duplicate","Output":"=== RUN   TestNormalizationLocalPorts/off/duplicate\n"}
+{"Time":"2026-11-04T19:41:01.642750138+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/duplicate","Output":"--- PASS: TestNormalizationLocalPorts/off/duplicate (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642753627+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/duplicate","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642759448+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns"}
+{"Time":"2026-11-04T19:41:01.642768184+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns","Output":"=== RUN   TestNormalizationLocalPorts/off/dns\n"}
+{"Time":"2026-11-04T19:41:01.642865118+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns","Output":"--- PASS: TestNormalizationLocalPorts/off/dns (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642868769+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.64287069+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns_string"}
+{"Time":"2026-11-04T19:41:01.64287191+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns_string","Output":"=== RUN   TestNormalizationLocalPorts/off/dns_string\n"}
+{"Time":"2026-11-04T19:41:01.642953011+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns_string","Output":"--- PASS: TestNormalizationLocalPorts/off/dns_string (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.642957364+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/dns_string","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.642976373+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/controller"}
+{"Time":"2026-11-04T19:41:01.642977971+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/controller","Output":"=== RUN   TestNormalizationLocalPorts/off/controller\n"}
+{"Time":"2026-11-04T19:41:01.64306795+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/controller","Output":"--- PASS: TestNormalizationLocalPorts/off/controller (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.643069899+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/controller","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.643071749+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/tproxy"}
+{"Time":"2026-11-04T19:41:01.643072883+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/tproxy","Output":"=== RUN   TestNormalizationLocalPorts/off/tproxy\n"}
+{"Time":"2026-11-04T19:41:01.643175329+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/tproxy","Output":"--- PASS: TestNormalizationLocalPorts/off/tproxy (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.643178098+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts/off/tproxy","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.643179804+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts","Output":"--- PASS: TestNormalizationLocalPorts (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.643181486+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLocalPorts","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.643183593+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestControlledTunStack"}
+{"Time":"2026-11-04T19:41:01.643184849+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestControlledTunStack","Output":"=== RUN   TestControlledTunStack\n"}
+{"Time":"2026-11-04T19:41:01.643645474+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestControlledTunStack","Output":"--- PASS: TestControlledTunStack (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.643654565+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestControlledTunStack","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.643656828+08:00","Action":"run","Package":"kano-gist-sync","Test":"TestNormalizationLongPrivatePolicy"}
+{"Time":"2026-11-04T19:41:01.643657987+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLongPrivatePolicy","Output":"=== RUN   TestNormalizationLongPrivatePolicy\n"}
+{"Time":"2026-11-04T19:41:01.643774407+08:00","Action":"output","Package":"kano-gist-sync","Test":"TestNormalizationLongPrivatePolicy","Output":"--- PASS: TestNormalizationLongPrivatePolicy (0.00s)\n"}
+{"Time":"2026-11-04T19:41:01.643782453+08:00","Action":"pass","Package":"kano-gist-sync","Test":"TestNormalizationLongPrivatePolicy","Elapsed":0}
+{"Time":"2026-11-04T19:41:01.643928503+08:00","Action":"output","Package":"kano-gist-sync","Output":"PASS\n"}
+{"Time":"2026-11-04T19:41:01.644136242+08:00","Action":"output","Package":"kano-gist-sync","Output":"ok  \tkano-gist-sync\t0.143s\n"}
+{"Time":"2026-11-04T19:41:01.644143128+08:00","Action":"pass","Package":"kano-gist-sync","Elapsed":0.143}

@@ -1,0 +1,2455 @@
+{
+  "reviewedCommit": "3e0a8f9",
+  "pluginSha256": "b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613",
+  "upstreamCommit": "982bf8104b123c4b9cb9f36431bd4acdb33191da",
+  "productionCodeChanged": false,
+  "syntax": "PASS",
+  "suite": {
+    "passed": 852,
+    "failed": 0,
+    "notRun": 12
+  },
+  "configurationTests": {
+    "pass": 72,
+    "fail": 0,
+    "skip": 0
+  },
+  "corpusTests": {
+    "pass": 97,
+    "fail": 0,
+    "skip": 0,
+    "inputs": 93,
+    "parsed": 88
+  },
+  "templateWriteShape": {
+    "original": 88,
+    "normalized": 74,
+    "rejectedValidInputs": 0,
+    "changes": [
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-01.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-01.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-single-provider.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-single-provider.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProPlus.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProPlus.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/us_la.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/us_la.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Tangerinell/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Tangerinell/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/echs-top/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/echs-top/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-all-fallback.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-all-fallback.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/wanswu/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/wanswu/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/BoxProxy/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/BoxProxy/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/HenryChiao/MihomoSmartProMax.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/edison/OneSmartProMCX.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/qichiyuhub/smart.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/MihomoPro_Config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/MihomoPro_Config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoConfigLite.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoConfigLite.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-01.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-01.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/service-single-provider.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/service-single-provider.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_NoAd.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_NoAd.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/2-subscription-clash-rule-set.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/2-subscription-clash-rule-set.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config_lite.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Geo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Geo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/XVSVTSAMA/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/XVSVTSAMA/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/fufu/ConfigForClash.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/fufu/ConfigForClash.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-all.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-all.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liuran001/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liuran001/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_multi.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_multi.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/ClashMix/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/666OS/OneSmart_Config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/HenryChiao/MihomoSmartProPlus.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/liandu2024/clash-all-fallback-smart.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-01.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-01.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ClashConnectRules/Clash.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ClashConnectRules/Clash.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIO.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIO.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/3-subscription-clash-rule-set.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/3-subscription-clash-rule-set.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Rule-Set.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Rule-Set.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/YiXuanZX/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/YiXuanZX/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi-fx.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi-fx.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-dialer.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-dialer.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/loneshu7/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/loneshu7/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_single.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_single.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/Surfing/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/Surfing/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/666OS/OneSmart_Lite_Config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/HenryChiao/THESmart.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/liandu2024/clash-all-smart.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/OneTouch_Config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/OneTouch_Config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-01.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-01.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Kerronex/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Kerronex/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Mitchell/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Mitchell/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/backup.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/backup.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/lvbibir/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/lvbibir/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/sfssup/mihomo.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/General_Config/sfssup/mihomo.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/geox_config.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/geox_config.yaml",
+        "stage": "template-write-shape/normalized",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/HenryChiao/MihomoSmartAIO.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/echs-top/mihomo_smart.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      },
+      {
+        "sample": "THEYAMLS/Smart_Mode/liandu2024/clash-fallback-smart-std.yaml",
+        "stage": "template-write-shape/original",
+        "changes": []
+      }
+    ]
+  },
+  "invalidTemplateWrites": {
+    "paths": [
+      "template.yaml",
+      "template.base.yaml",
+      "imported-template.yaml"
+    ],
+    "originalBytesPreserved": true,
+    "rejectedBeforeStaging": true
+  },
+  "fieldComparison": {
+    "stages": 5002,
+    "classifiedChanges": 13626,
+    "unclassifiedChanges": 0,
+    "unchangedStagesMatchPreviousReports": true,
+    "reference": "../templates-{0,1,2,3}.json"
+  },
+  "core": {
+    "checks": 223,
+    "perStage": {
+      "processed-with-local-resources": {
+        "pass": 69,
+        "upstream-input-limited": 3,
+        "external-resource-limited": 1,
+        "platform-path-limited": 1
+      },
+      "uploaded-with-local-resources": {
+        "pass": 69,
+        "upstream-input-limited": 3,
+        "external-resource-limited": 1,
+        "platform-path-limited": 1
+      },
+      "upstream-with-local-resources": {
+        "pass": 69,
+        "upstream-input-limited": 4,
+        "external-resource-limited": 1,
+        "platform-path-limited": 1
+      }
+    },
+    "unexpectedFailures": 0,
+    "version": "Mihomo Meta v1.19.33 linux amd64 with go1.26.10 Wed Oct 21 16:41:58 UTC 2026\nUse tags: with_gvisor",
+    "results": [
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-01.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-01.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-01.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-single-provider.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-single-provider.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-single-provider.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProPlus.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProPlus.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProPlus.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/us_la.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:21.944285392+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/us_la.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:24.331069049+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/us_la.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:24.993023926+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Tangerinell/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Tangerinell/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Tangerinell/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/echs-top/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/echs-top/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/echs-top/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-all-fallback.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-all-fallback.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-all-fallback.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/wanswu/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/wanswu/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/wanswu/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/BoxProxy/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/BoxProxy/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/BoxProxy/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/MihomoPro_Config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/MihomoPro_Config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/MihomoPro_Config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoConfigLite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoConfigLite.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoConfigLite.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-03-Non.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-03-Non.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-03-Non.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-01.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-01.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-01.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:11.911792912+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:12.331713164+08:00\" level=error msg=\"not found rule-set: ChinaMax_Domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:13.014964786+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:13.444618397+08:00\" level=error msg=\"not found rule-set: ChinaMax_Domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:13.454101405+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:13.872686072+08:00\" level=error msg=\"not found rule-set: ChinaMax_Domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/service-single-provider.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/service-single-provider.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/service-single-provider.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_NoAd.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_NoAd.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_NoAd.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/2-subscription-clash-rule-set.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/2-subscription-clash-rule-set.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/2-subscription-clash-rule-set.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config_lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:24.555848089+08:00\" level=error msg=\"yaml: unmarshal errors:\\n  line 11: cannot unmarshal !!seq into map[string]interface {}\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Geo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Geo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Geo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/XVSVTSAMA/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/XVSVTSAMA/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/XVSVTSAMA/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/fufu/ConfigForClash.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:31.210493003+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/fufu/ConfigForClash.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:34.063362043+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/fufu/ConfigForClash.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:34.238949027+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-all.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-all.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-all.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liuran001/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:37.862714778+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liuran001/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:39.309674521+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liuran001/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:39.657936991+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:40.302896872+08:00\" level=error msg=\"proxy group[14]: 🚀 默认代理: '直连' not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:41.892973011+08:00\" level=error msg=\"proxy group[14]: 🚀 默认代理: '直连' not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:42.128848045+08:00\" level=error msg=\"proxy group[14]: 🚀 默认代理: '直连' not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_multi.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:42.158496492+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_multi.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:43.578308292+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_multi.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:43.589360972+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-01.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-01.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-01.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[通用模版]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ClashConnectRules/Clash.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ClashConnectRules/Clash.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/ClashConnectRules/Clash.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIO.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIO.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/JohnsonRan/AIO.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "external-resource-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:21.262266670+08:00\" level=error msg=\"rules[27] [GEOSITE,biliintl,哔哩东南亚] error: load GeoSite data error, list biliintl not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "external-resource-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:24.642639241+08:00\" level=error msg=\"rules[27] [GEOSITE,biliintl,哔哩东南亚] error: load GeoSite data error, list biliintl not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "external-resource-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:26.543822783+08:00\" level=error msg=\"rules[27] [GEOSITE,biliintl,哔哩东南亚] error: load GeoSite data error, list biliintl not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/3-subscription-clash-rule-set.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/3-subscription-clash-rule-set.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/3-subscription-clash-rule-set.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Rule-Set.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Rule-Set.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Seven1echo/Seven1_fallback_Rule-Set.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/YiXuanZX/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/YiXuanZX/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/YiXuanZX/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi-fx.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi-fx.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi-fx.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:35.344879749+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:36.523398011+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:36.533993152+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-dialer.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-dialer.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-dialer.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/loneshu7/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/loneshu7/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/loneshu7/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:44.379085754+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:44.380356222+08:00\" level=error msg=\"dns.fake-ip-filter[0] \\\"rule-set:fakeipfilter_domain\\\": not found rule-set: fakeipfilter_domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:45.889665444+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:45.890968807+08:00\" level=error msg=\"dns.fake-ip-filter[0] \\\"rule-set:fakeipfilter_domain\\\": not found rule-set: fakeipfilter_domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "upstream-input-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:46.126068817+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T19:49:46.127372733+08:00\" level=error msg=\"dns.fake-ip-filter[0] \\\"rule-set:fakeipfilter_domain\\\": not found rule-set: fakeipfilter_domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_single.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:46.164721038+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_single.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:47.565732220+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/yyhhyyyyyy/mihomo_single.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:47.576438965+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/Surfing/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/Surfing/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/Surfing/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/OneTouch_Config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/OneTouch_Config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/666OS/OneTouch_Config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-01.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-01.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/BlackList-01.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Kerronex/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:08.853415311+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Kerronex/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:11.642195992+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Kerronex/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:13.155690222+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Mitchell/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:14.792884374+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Mitchell/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:16.719508688+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Mitchell/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:17.078383491+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:19.390339703+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:21.904216263+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:22.588763700+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/bgpeer/Clashmi.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/backup.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:28.500371276+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/backup.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:29.829729493+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/iKeLee/backup.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": "time=\"2026-11-04T19:49:29.840296669+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "platform-path-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:30.052057892+08:00\" level=error msg=\"path is not subpath of home directory or SAFE_PATHS: /usr/share/openclash/ui \\n allowed paths: [/root/maomao-final-20261104/repository-results/shape-core-inputs/THEYAMLS/General_Config/liandu2024/clash-fallback-std]\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "platform-path-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:31.775326661+08:00\" level=error msg=\"path is not subpath of home directory or SAFE_PATHS: /usr/share/openclash/ui \\n allowed paths: [/root/maomao-final-20261104/repository-results/shape-core-inputs/THEYAMLS/General_Config/liandu2024/clash-fallback-std/processed]\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "platform-path-limited",
+        "exit": 1,
+        "detail": "time=\"2026-11-04T19:49:31.969522600+08:00\" level=error msg=\"path is not subpath of home directory or SAFE_PATHS: /usr/share/openclash/ui \\n allowed paths: [/root/maomao-final-20261104/repository-results/shape-core-inputs/THEYAMLS/General_Config/liandu2024/clash-fallback-std/uploaded]\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/lvbibir/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/lvbibir/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/lvbibir/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/sfssup/mihomo.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/sfssup/mihomo.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/sfssup/mihomo.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/geox_config.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/geox_config.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      },
+      {
+        "sample": "THEYAMLS/Official_Examples/Metacubex/geox_config.yaml",
+        "stage": "uploaded-with-local-resources",
+        "status": "pass",
+        "exit": 0,
+        "detail": ""
+      }
+    ]
+  },
+  "goTests": {
+    "pass": 92
+  },
+  "differentialCases": 60,
+  "deviceTests": "NOT RUN; no device plugin replacement or network changes",
+  "boundaries": [
+    "Public provider and rule resources are local fixtures.",
+    "13 Smart-only configs are not claimed to load with the standard core.",
+    "5 malformed/nonmapping inputs are rejected; 6 standard configs retain recorded source/resource/path limits."
+  ]
+}

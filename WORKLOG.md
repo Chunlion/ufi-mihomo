@@ -588,3 +588,28 @@ Git 变更：`猫猫TProxy.js`、`tests/tproxy/reliability.test.js`、已有 `WO
 仍未运行：`real_templates`（需要 `MIHOMO_YAMLS` 语料），新加的 shape 校验可能误拦真实模板，有语料时必须补跑这一项。
 
 Git 变更：`猫猫TProxy.js`、`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.go`、`tests/gist-sync/baseline-normalizer.js`、`tests/tproxy/controlled_keys.test.js`（新增）、`tests/tproxy/config_semantics.test.js`、`tproxy-yq.zip`、`reports/v9.0.0-{regression,size}.json`、`dist/` 交付包、已有 `WORKLOG.md` 追加本节。
+
+## 2026-11-04：独立复核 3e0a8f9
+
+受控键补 stack、参考实现同步和模板顶层容器校验均确认正确，本轮不改生产 JS、Go 或组件。安装脚本仍为 95372 字节、体积门槛余量 296 字节，没有为扩大余量改动安装逻辑。
+
+确认并修复一个测试覆盖空档：原 `real_templates.test.js` 只经过读取、dump 和规范化，没有调用新增的 `assertTemplateShapeForWrite`，直接重跑原测试不能证明新校验不会误拦。现将真实原文与规范化输出都送入生产校验函数，严格比较校验前后字段；生命周期测试另从实际写入入口验证三种模板路径，错误覆写必须在暂存上传之前被拒绝，文件字节不变。
+
+| 实际执行 | 结果 |
+| --- | --- |
+| JS 语法检查 | PASS |
+| 现有 `scripts/verify_plugin.js` | 852 PASS / 0 FAIL / 12 NOT RUN；输出重定向到独立目录，保留已有工作区日志 |
+| config_semantics/config_lifecycle/config_recovery/controlled_keys 四份配置测试 | 72 PASS / 0 FAIL / 0 SKIP |
+| 四分片真实语料测试 | 97 PASS / 0 FAIL / 0 SKIP，93 份输入；新增 88 份可解析原文、74 份规范化模板的 shape 校验，0 误拦、0 字段变化 |
+| 生命周期与字段 | 5002 个阶段、13626 处已解释差异、0 未解释差异；原有阶段与前轮逐字段报告完全一致。template.yaml、template.base.yaml、导入模板的错误输出均在上传暂存前失败，原文件不变 |
+| Linux Mihomo 1.19.33 | 223 次实际检查；原始可加载的 69 份，模板输出及上传保留输出全部可加载。16 次未通过仍对应既有六份输入/资源/路径限制，具体错误断言全部匹配，没有新增失败 |
+| `go test -json -run 'TestControlledTunStack\|TestNormalization' -count=1` | 92 个测试/子项 PASS，含 60 组差分，0 FAIL / SKIP |
+| 独立重编 native | 相同 Go 1.24.4 和发布参数重编；ARM64 与当前包内二进制逐字节一致，AMD64 哈希也与发布值一致 |
+| 包内清单 | 五个 Gist 成员哈希及嵌套清单一致；相对 806338d 仅 native 和两份清单变化，Service、Mihomo 核心及其他成员不变 |
+| `python scripts/package_plugin.py` | PASS；重打包纳入两份修改后的测试，395236 字节 / 39 文件，逐字节校验通过；主插件哈希未变，沿用同源码的发布回归与体积输入 |
+
+核心检查继续使用本地 Provider/规则资源。五份坏 YAML/非映射输入被拒绝，十三份 Smart-only 不记作标准核心通过，六份标准模板原有的引用/数据/路径限制详见前节。本轮没有替换设备插件，没有做新的 F50 现场测试；不冒用前轮设备结果作为当前 b92619b7 版本的实机通过证据。未操作电脑网卡、Sparkle、F50 网络模式或开机自启动。
+
+主插件 SHA256 为 `b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613`，组件 SHA256 为 `17e945fae65a3a5f1ade64377a5703a6e89bce4d1ddda41e3a871f0a85292440`。报告位于 `reports/final-review-20261104/shape-review/`；summary.json 保存新增 162 次校验和全部核心结果，component.json 保存独立重编及包差异证据，TAP/Go JSONL 保存实际输出。
+
+本轮修改：`tests/tproxy/real_templates.test.js`、`tests/tproxy/config_lifecycle.test.js`、本 WORKLOG、复查报告、重打的 dist 精简交付 ZIP 及其 delivery.json。没有需要新增生产修复的已知问题；此次必要优化是补齐测试入口，避免把未经过新校验的语料测试误当成通过证据。

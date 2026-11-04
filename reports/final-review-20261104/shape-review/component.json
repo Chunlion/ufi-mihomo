@@ -1,0 +1,17 @@
+{
+  "pluginSha256": "b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613",
+  "packageSha256": "17e945fae65a3a5f1ade64377a5703a6e89bce4d1ddda41e3a871f0a85292440",
+  "nativeRebuildSha256": {
+    "arm64": "22ad066357699bbedb10a14f304f30e094873bd31a5aee5134c4de02496a7e4c",
+    "amd64": "1d2f2a121ee2c2b684eb105cf4c6f483bbd961f299e4869e59a672ad610cc3c9"
+  },
+  "arm64SourceMatchesPackage": true,
+  "gistManifestMembers": 5,
+  "manifestMatches": true,
+  "changedPackageMembers": [
+    "Tools/components.json",
+    "Tools/gist-sync-component.json",
+    "Tools/kano-gist-sync"
+  ],
+  "serviceAndCoreUnchanged": true
+}

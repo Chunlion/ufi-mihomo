@@ -136,4 +136,13 @@ test('real template persists through preparation, repeated saves, source changes
   assert.equal(failed.ok, false);
   assert.deepEqual(fs.readFileSync(config), beforeInvalid);
   assert.equal(fs.readFileSync(sourceFile, 'utf8'), 'KANO_CONFIG_SOURCE=template.yaml\n');
+  const imported = write(dir, 'Tools/imported-template.yaml', api.dump(original));
+  for (const target of [template, base, imported]) {
+    const before = fs.readFileSync(target), beforeUpload = upload;
+    const rejected = await api.write(target, { ...original, 'proxy-providers': 'oops' });
+    assert.equal(rejected.ok, false);
+    assert.match(rejected.content, /proxy-providers 必须是映射对象/);
+    assert.deepEqual(fs.readFileSync(target), before, target + ': invalid override must preserve the file');
+    assert.equal(upload, beforeUpload, target + ': invalid override must fail before staging');
+  }
 });

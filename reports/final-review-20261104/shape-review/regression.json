@@ -1,0 +1,3751 @@
+{
+  "date": "2026-11-04T11:42:59.295Z",
+  "platform": "linux",
+  "node": "v20.19.2",
+  "source": {
+    "path": "\u732b\u732bTProxy.js",
+    "baseCommit": "3e0a8f9aa22797b2ef7c0b890ac6fecf591e1147",
+    "bytes": 691884,
+    "sha256": "b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613"
+  },
+  "invocation": "node scripts/verify_plugin.js",
+  "concurrency": 1,
+  "totals": {
+    "passed": 852,
+    "failed": 0,
+    "notRun": 12
+  },
+  "results": [
+    {
+      "file": "tests/tproxy/run_tests.js",
+      "command": "node tests/tproxy/run_tests.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 103,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "\u7edf\u4e00\u63d2\u4ef6\u6587\u4ef6\u5b58\u5728",
+          "status": "PASS"
+        },
+        {
+          "name": "\u65e7 rc3 \u63d2\u4ef6\u6587\u4ef6\u5df2\u79fb\u9664",
+          "status": "PASS"
+        },
+        {
+          "name": "\u63d2\u4ef6 JavaScript \u8bed\u6cd5\u6709\u6548",
+          "status": "PASS"
+        },
+        {
+          "name": "\u63d2\u4ef6\u53d1\u5e03\u7248\u672c\u4e3a v9.1.0-beta.1",
+          "status": "PASS"
+        },
+        {
+          "name": "\u524d\u540e\u7aef\u517c\u5bb9\u7248\u672c\u56fa\u5b9a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u8981\u6c42\u521d\u59cb config.yaml \u5b58\u5728",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u524d\u6821\u9a8c Clash.Service \u8bed\u6cd5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u524d\u62d2\u7edd\u9519\u8bef\u9762\u677f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u66ff\u6362\u540e\u518d\u6b21\u6821\u9a8c\u9762\u677f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u5931\u8d25\u5305\u542b\u56de\u6eda\u786e\u8ba4",
+          "status": "PASS"
+        },
+        {
+          "name": "\u672a\u4fdd\u7559\u9519\u8bef\u7684 10 MiB \u7ec4\u4ef6\u5305\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u670d\u52a1\u5305\u88c5\u5668\u542f\u52a8\u524d\u6267\u884c detached TUN \u89c4\u5219\u517c\u5bb9\u6e05\u7406",
+          "status": "PASS"
+        },
+        {
+          "name": "\u670d\u52a1\u5305\u88c5\u5668\u542f\u52a8\u524d\u6267\u884c IPv6 NAT \u80fd\u529b\u964d\u7ea7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4fdd\u5b58\u7f51\u7edc\u8bbe\u7f6e\u524d\u68c0\u67e5 IPv6 NAT \u80fd\u529b",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u524d\u8f6e\u8f6c\u8fc7\u5927\u7684\u6838\u5fc3\u65e5\u5fd7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u524d\u68c0\u67e5\u8bbe\u5907\u53ef\u7528\u7a7a\u95f4",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5728\u7ebf\u4e0b\u8f7d\u5b89\u88c5\u5305\u524d\u68c0\u67e5\u8bbe\u5907\u53ef\u7528\u7a7a\u95f4",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u65f6\u8865\u5168\u7a7a\u63a7\u5236\u5bc6\u94a5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u65f6\u8865\u5168\u5916\u90e8\u66ff\u6362\u914d\u7f6e\u4e2d\u7684\u7a7a\u63a7\u5236\u5bc6\u94a5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8282\u70b9\u6765\u6e90\u66f4\u65b0\u9650\u5236\u5e76\u53d1\u6570",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7ec4\u4ef6\u5305\u670d\u52a1\u5305\u88c5\u5668\u540c\u6b65\u5305\u542b\u517c\u5bb9\u6e05\u7406",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7ec4\u4ef6\u5305\u652f\u6301\u7f3a\u5c11 IPv6 NAT \u7684\u8bbe\u5907",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u66f4\u65b0\u6e90\u56fa\u5b9a\u4e3a Zashboard",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u76ee\u5f55\u56fa\u5b9a\u4e3a WebUI/zashboard",
+          "status": "PASS"
+        },
+        {
+          "name": "\u56fa\u5b9a\u8fd0\u884c\u914d\u7f6e\u542f\u7528 unified-delay",
+          "status": "PASS"
+        },
+        {
+          "name": "\u56fa\u5b9a\u8fd0\u884c\u914d\u7f6e\u5220\u9664 external-ui-name",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u7f13\u5b58\u53c2\u6570\u4f4d\u4e8e Hash \u8def\u7531\u4e4b\u524d",
+          "status": "PASS"
+        },
+        {
+          "name": "\u65e7\u7684\u65e0\u6548\u7f13\u5b58\u53c2\u6570\u8def\u5f84\u5df2\u79fb\u9664",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6ca1\u6709 MetaCubeXD settings \u8def\u7531",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u6821\u9a8c\u8981\u6c42 Zashboard \u6807\u9898",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u6821\u9a8c\u62d2\u7edd MetaCubeXD",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u6821\u9a8c\u4ec5\u8981\u6c42\u8eab\u4efd\u548c\u5b9e\u9645\u5165\u53e3\u8d44\u6e90",
+          "status": "PASS"
+        },
+        {
+          "name": "\u65e7\u6258\u7ba1\u9762\u677f\u914d\u7f6e\u4f1a\u88ab\u4fee\u6b63",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u81ea\u5b9a\u4e49\u5b57\u6bb5\u4fdd\u7559\uff0c\u7f3a\u5931\u9879\u8865\u9ed8\u8ba4\u503c",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6258\u7ba1\u9762\u677f\u4e0d\u518d\u751f\u6210\u5d4c\u5957\u76ee\u5f55",
+          "status": "PASS"
+        },
+        {
+          "name": "\u81ea\u5b9a\u4e49\u9762\u677f\u8865\u5145\u7f3a\u5931\u7684 unified-delay",
+          "status": "PASS"
+        },
+        {
+          "name": "\u81ea\u5b9a\u4e49\u9762\u677f\u76ee\u5f55\u4e0e\u5730\u5740\u4fdd\u6301\u4e0d\u53d8",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7ef4\u62a4\u548c\u5378\u8f7d Shell \u901a\u8fc7 sh -n",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u9a8c\u6536\u5305\u542b\u9762\u677f HTTP \u68c0\u67e5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u9a8c\u6536\u8bf7\u6c42\u5b9e\u9645 /ui/ \u670d\u52a1\u5165\u53e3",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u4e0d\u53ef\u8bbf\u95ee\u4fdd\u7559\u6838\u5fc3\u542f\u52a8\u7ed3\u679c\u5e76\u62a5\u544a\u8b66\u544a",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN \u89c4\u5219\u5220\u9664\u53ea\u91cd\u5efa\u53d7\u652f\u6301\u5b57\u6bb5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4e0d\u628a ip rule \u5c55\u793a\u6ce8\u91ca\u56de\u653e\u5230\u5220\u9664\u547d\u4ee4",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u524d\u5148\u6e05\u7406 detached TUN \u89c4\u5219",
+          "status": "PASS"
+        },
+        {
+          "name": "detached \u6e05\u7406\u53ea\u5339\u914d\u53d7\u7ba1\u89c4\u5219\u5b57\u6bb5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u524d\u964d\u7ea7\u4e0d\u53d7\u652f\u6301\u7684 IPv6 DNS \u52ab\u6301",
+          "status": "PASS"
+        },
+        {
+          "name": "\u63a7\u5236\u5bc6\u94a5\u8865\u5168\u5931\u8d25\u65f6\u505c\u6b62\u542f\u52a8",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6bcf\u6b21\u542f\u52a8\u524d\u5f3a\u5236\u56fa\u5b9a Zashboard \u914d\u7f6e",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u914d\u7f6e\u65e0\u6cd5\u56fa\u5b9a\u65f6\u62d2\u7edd\u542f\u52a8",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u9a8c\u6536\u62d2\u7edd HTTP \u8fd4\u56de MetaCubeXD \u6216\u672a\u77e5\u9762\u677f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u4e8b\u52a1 Shell \u901a\u8fc7 sh -n",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u548c\u5185\u6838\u5347\u7ea7\u524d\u5f3a\u5236\u56fa\u5b9a Zashboard \u914d\u7f6e",
+          "status": "PASS"
+        },
+        {
+          "name": "\u91cd\u88c5\u540c\u65f6\u4fdd\u7559\u539f\u914d\u7f6e\u548c\u914d\u7f6e\u6765\u6e90\u6807\u8bb0",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8 preflight \u4fdd\u7559\u8fd4\u56de\u72b6\u6001\u5e76\u4fdd\u5b58\u8131\u654f\u65e5\u5fd7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8 controller \u4fdd\u7559\u8fd4\u56de\u72b6\u6001\u5e76\u4fdd\u5b58\u8131\u654f\u65e5\u5fd7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8 success \u4fdd\u7559\u8fd4\u56de\u72b6\u6001\u5e76\u4fdd\u5b58\u8131\u654f\u65e5\u5fd7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8 patch \u4fdd\u7559\u8fd4\u56de\u72b6\u6001\u5e76\u4fdd\u5b58\u8131\u654f\u65e5\u5fd7",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5305\u88c5\u5668\u8865\u4e01\u5931\u8d25\u4e0d\u8986\u76d6\u539f\u6587\u4ef6\u6216\u7ee7\u7eed\u542f\u52a8",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f\u6253\u5f00\u524d\u53ef\u901a\u8fc7\u56fa\u5b9a\u6e90\u4fee\u590d\u9519\u8bef\u9762\u677f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5728\u7ebf\u66f4\u65b0\u7ed3\u679c\u8eab\u4efd\u9519\u8bef\u65f6\u963b\u6b62\u52a0\u8f7d",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6b63\u5e38\u9762\u677f\u4f7f\u7528\u5355\u6b21\u5feb\u901f\u63a2\u9488",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5feb\u901f\u63a2\u9488\u901a\u8fc7\u65f6\u4e0d\u8bfb\u53d6\u548c\u91cd\u5199 YAML",
+          "status": "PASS"
+        },
+        {
+          "name": "\u65b0\u6807\u7b7e\u9875\u4e0d\u518d\u56e0\u9875\u9762\u5185\u5b58 PID \u4e3a\u7a7a\u800c\u70ed\u52a0\u8f7d\u914d\u7f6e",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542b [detached] \u7684 TUN \u89c4\u5219\u751f\u6210\u53ef\u6267\u884c\u5220\u9664\u8ba1\u5212",
+          "status": "PASS"
+        },
+        {
+          "name": "TProxy \u89c4\u5219\u540c\u6837\u5ffd\u7565\u5c55\u793a\u9644\u52a0\u5b57\u6bb5",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u515c\u5e95\u80fd\u5220\u9664\u5e26 [detached] \u7684 TUN \u89c4\u5219",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7f3a\u5c11 IPv6 NAT \u65f6\u4fdd\u7559 DNS \u52ab\u6301\u8bbe\u7f6e",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4e34\u65f6 ip6tables \u9519\u8bef\u4e0d\u4f1a\u5173\u95ed DNS \u52ab\u6301",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5378\u8f7d\u5305\u542b\u6700\u7ec8\u6e05\u6d01\u72b6\u6001",
+          "status": "PASS"
+        },
+        {
+          "name": "\u672c\u5730\u8ba2\u9605\u5141\u8bb8\u516c\u7f51 HTTPS \u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u672c\u5730\u8ba2\u9605\u5141\u8bb8\u516c\u7f51 HTTP \u5730\u5740\u5e76\u4f7f\u7528\u9ed8\u8ba4\u7aef\u53e3 80",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u4fdd\u7559 HTTPS \u9ed8\u8ba4\u7aef\u53e3\u548c HTTP \u81ea\u5b9a\u4e49\u7aef\u53e3",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u4ecd\u62d2\u7edd\u5176\u4ed6\u534f\u8bae\u548c URL \u8d26\u53f7\u4fe1\u606f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u672c\u5730\u8ba2\u9605\u62d2\u7edd\u5e38\u89c4\u548c\u6574\u6570\u5f62\u5f0f\u7684\u56de\u73af\u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u672c\u5730\u8f6c\u6362\u524d\u6821\u9a8c\u5168\u90e8\u8ba2\u9605\u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4fdd\u5b58\u8ba2\u9605\u524d\u6821\u9a8c\u542f\u7528\u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4efb\u610f\u591a\u4e2a\u8ba2\u9605\u6309\u987a\u5e8f\u751f\u6210 Provider",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6240\u6709 Provider \u4fdd\u7559\u5404\u81ea\u8ba2\u9605\u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6240\u6709 Provider \u4f7f\u7528\u72ec\u7acb\u7f13\u5b58\u6587\u4ef6",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u6587\u4ef6\u8fde\u7eed\u547d\u540d\u5168\u90e8\u542f\u7528\u6765\u6e90",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u6587\u4ef6\u4fdd\u7559\u7981\u7528\u6765\u6e90",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u6587\u4ef6\u53ef\u65e0\u635f\u8bfb\u56de\u5168\u90e8\u542f\u7528\u72b6\u6001",
+          "status": "PASS"
+        },
+        {
+          "name": "\u754c\u9762\u53ea\u63d0\u4f9b\u672c\u5730\u6a21\u677f\u6a21\u5f0f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7b56\u7565\u7ec4\u540c\u65f6\u5f15\u7528\u5168\u90e8 Provider",
+          "status": "PASS"
+        },
+        {
+          "name": "\u56fa\u5b9a\u914d\u7f6e\u8986\u76d6\u4e09\u79cd\u6a21\u5f0f\u548c\u53cc\u6808",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6240\u6709\u56fa\u5b9a\u914d\u7f6e\u4f7f\u7528\u540c\u4e00\u9762\u677f\u76ee\u5f55",
+          "status": "PASS"
+        },
+        {
+          "name": "\u56fa\u5b9a\u914d\u7f6e\u6df1\u5408\u5e76\u540e\u4e0d\u5171\u4eab\u53ef\u53d8\u5bf9\u8c61",
+          "status": "PASS"
+        },
+        {
+          "name": "\u751f\u6210\u6a21\u677f\u4e0e\u5168\u90e8\u8fd0\u884c\u914d\u7f6e\u5173\u95ed\u672a\u4f7f\u7528\u7684 Redir \u7aef\u53e3",
+          "status": "PASS"
+        },
+        {
+          "name": "TProxy IPv4 \u4f7f\u7528\u56fa\u5b9a\u7aef\u53e3\u5e76\u5173\u95ed TUN",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN IPv6 \u914d\u7f6e\u5b8c\u6574",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN \u534f\u8bae\u6808\u9009\u62e9\u8986\u76d6\u81ea\u52a8\u503c",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5173\u95ed\u63a5\u7ba1\u65f6\u505c\u7528 TUN \u548c TProxy",
+          "status": "PASS"
+        },
+        {
+          "name": "\u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u89c4\u5219\u4f4d\u4e8e\u89c4\u5219\u9996\u90e8",
+          "status": "PASS"
+        },
+        {
+          "name": "\u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u5199\u5165\u53ef\u56de\u6eda\u5143\u6570\u636e",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN \u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u4f7f\u7528 TUN \u6574\u5f62\u5206\u652f",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN \u8def\u7531\u6392\u9664\u4fdd\u7559\u666e\u901a\u79c1\u7f51\u5e76\u653e\u884c\u76ee\u6807\u79c1\u7f51",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN \u79c1\u7f51\u5b9a\u5411\u4ee3\u7406\u4e0d\u542f\u7528\u6838\u5fc3\u5168\u5c40 DNS \u52ab\u6301",
+          "status": "PASS"
+        },
+        {
+          "name": "\u4ece TUN \u5207\u56de TProxy \u6e05\u7406 TUN \u79c1\u7f51\u6574\u5f62",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605\u5730\u5740\u68c0\u67e5\u8bc6\u522b\u5341\u8fdb\u5236\u548c\u5341\u516d\u8fdb\u5236\u56de\u73af\u5730\u5740",
+          "status": "PASS"
+        },
+        {
+          "name": "\u542f\u52a8\u7ed3\u679c\u5fc5\u987b\u5305\u542b\u7a33\u5b9a\u8fdb\u7a0b\u548c\u6210\u529f\u6807\u8bb0",
+          "status": "PASS"
+        },
+        {
+          "name": "\u9762\u677f 404 \u4e0d\u4f1a\u88ab\u62a5\u544a\u4e3a\u542f\u52a8\u6210\u529f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5378\u8f7d\u4ec5\u5728\u6700\u7ec8\u590d\u67e5\u5e72\u51c0\u65f6\u6210\u529f",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5378\u8f7d\u53d1\u73b0\u6b8b\u7559\u65f6\u5931\u8d25",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/cleanup.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/cleanup.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 40,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "generated Shell parses / buildF50EmergencyScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50RecoveryEligibilityFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50LeaseFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ServiceLeaseGate",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ConfigTransactionFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50RedactFunction",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50PanelConfigCheck",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50HttpSubscriptionPatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50OriginalConfigFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50CurlLocator",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ServiceCurlPatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50OriginalServicePatchScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50StartScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ZashboardValidationFunction",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50MaintenanceFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ShellBase",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ProcessHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50NetworkHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50NetworkCompatHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50Tun6CompatFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50Ipv6DnsCompatFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50InspectHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50CleanupHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50ArtifactHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50InstallHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50RemovalHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50FinalProbeHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50PanelHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50StartHelpers",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50InspectScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50InstallScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildStatusSnapshotCommand",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50CleanupScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildF50FinalCheckScript",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildUninstallStages",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildOwnedCoreFunctions",
+          "status": "PASS"
+        },
+        {
+          "name": "generated Shell parses / buildApiCurl",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration recovery restores both files",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration recovery keeps committed files",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup preserves all diagnostic labels and result fields",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/commit_guard.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/commit_guard.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 18,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "credential guard inspects staged content: \"notes.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"with spaces.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"\u4e2d\u6587.js\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"reports/probe.log\"",
+          "status": "PASS"
+        },
+        {
+          "name": "credential guard inspects staged content: \"line\\\\nbreak.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"F50 config.yaml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"nested/F50\u4e2d\u6587.yml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"F50\\\\nprivate.yaml\"",
+          "status": "PASS"
+        },
+        {
+          "name": "private path guard: \"private-download/note.txt\"",
+          "status": "PASS"
+        },
+        {
+          "name": "guard ignores unstaged credentials and ordinary archive names",
+          "status": "PASS"
+        },
+        {
+          "name": "component package cannot skip inspection when Python is missing",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / access_token",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / AccessToken",
+          "status": "PASS"
+        },
+        {
+          "name": "guard refuses when staged content cannot be inspected",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=empty",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=AAAAAAAAAAAAAAAA",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=12345678-1234-1234-1234-123456789abc",
+          "status": "PASS"
+        },
+        {
+          "name": "component package guard / token=Abc_def-ghi_jkl-mno_pqr-stu_vwx-yza",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/compact.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/compact.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "pure compaction preserves all 11 generated shell groups byte for byte",
+          "status": "PASS"
+        },
+        {
+          "name": "compaction leaves tagged raw strings, escaped backslashes and regular expressions intact",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_lifecycle.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_lifecycle.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 0,
+      "failed": 0,
+      "notRun": 1,
+      "cases": [
+        {
+          "name": "real template persists through preparation, repeated saves, source changes and mode switches",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_recovery.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_recovery.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 26,
+      "failed": 0,
+      "notRun": 10,
+      "cases": [
+        {
+          "name": "Service preserves complete unmanaged nested values / template.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / template.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves complete unmanaged nested values / uploaded_config",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / uploaded_config",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves complete unmanaged nested values / subscription_original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / subscription_original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service keeps prior managed-field metadata through template recovery",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores explicit rule-provider proxy without replacing generated providers",
+          "status": "PASS"
+        },
+        {
+          "name": "Service still falls back from malformed sniffer/profile scalars",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves uploaded HTTP Provider identity and options / gist=false",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves uploaded HTTP Provider identity and options / gist=true",
+          "status": "PASS"
+        },
+        {
+          "name": "Service reads a CRLF source marker with the same meaning as JS",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a disabled default port when a real template uses mixed-port 7890",
+          "status": "PASS"
+        },
+        {
+          "name": "Service expands aliases before merging and applies YAML merge precedence",
+          "status": "PASS"
+        },
+        {
+          "name": "Service presents raw merge-key YAML to the Controller as an unambiguous mapping",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after normalization failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after controller failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after core validation failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / null",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / \"kept-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"kept-secret\", \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"\", \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / null, \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"\", \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "Service migrates a version 22 marker and a second application is unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "committed merge keys remain readable by the actual Controller snapshot",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "committed Kerronex flow mappings remain readable by the actual Controller snapshot",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_semantics.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_semantics.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 32,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "deep merge replaces arrays, retains explicit null and special keys, and does not share mutable values",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime retains unknown __proto__ fields at the root and inside merged mapping fields",
+          "status": "PASS"
+        },
+        {
+          "name": "user TUN fields survive every traffic mode / legacy=false",
+          "status": "PASS"
+        },
+        {
+          "name": "user TUN fields survive every traffic mode / legacy=true",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime preserves a user rule-provider download proxy and only supplies the missing default",
+          "status": "PASS"
+        },
+        {
+          "name": "a valid custom listener does not conflict with an automatically supplied default listener",
+          "status": "PASS"
+        },
+        {
+          "name": "repeated runtime shaping is idempotent including the recorded managed-field corrections",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid dns types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid tun types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid sniffer types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid profile types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "template binding retains provider custom fields and named group subsets",
+          "status": "PASS"
+        },
+        {
+          "name": "template binding preserves manual file and inline providers and their use references",
+          "status": "PASS"
+        },
+        {
+          "name": "removing a subscription does not bind its custom provider fields to another remaining source",
+          "status": "PASS"
+        },
+        {
+          "name": "providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=false",
+          "status": "PASS"
+        },
+        {
+          "name": "providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=true",
+          "status": "PASS"
+        },
+        {
+          "name": "existing duplicate use references retain their order and multiplicity",
+          "status": "PASS"
+        },
+        {
+          "name": "a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=false",
+          "status": "PASS"
+        },
+        {
+          "name": "a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=true",
+          "status": "PASS"
+        },
+        {
+          "name": "manual provider names colliding with managed names are remapped without overwriting another existing alias",
+          "status": "PASS"
+        },
+        {
+          "name": "group names retain significant whitespace together with their references",
+          "status": "PASS"
+        },
+        {
+          "name": "null proxies remains a valid empty list in template and runtime processing",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML serialization retains Unicode line separators in scalar values and keys",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge preserves merge precedence, aliases, flow collections and scalar types",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge rejects nonmapping roots, multiple documents and unsafe numeric values",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge rejects duplicate mapping keys before JSON can discard an earlier value",
+          "status": "PASS"
+        },
+        {
+          "name": "a stale correction marker is cleared once the conflicting value is gone",
+          "status": "PASS"
+        },
+        {
+          "name": "a conflicting default listener is closed and recorded, and stays recorded on the next shaping",
+          "status": "PASS"
+        },
+        {
+          "name": "switching an original config to IPv4 TUN drops the IPv6 address and records it",
+          "status": "PASS"
+        },
+        {
+          "name": "a group whose only provider disappeared falls back instead of keeping an empty use list",
+          "status": "PASS"
+        },
+        {
+          "name": "an unmatched custom http provider is dropped rather than recycled into a renumbered source",
+          "status": "PASS"
+        },
+        {
+          "name": "template writes reject non-container fields before the file is touched",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/controlled_keys.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/controlled_keys.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "controlled tun keys are identical across the four links",
+          "status": "PASS"
+        },
+        {
+          "name": "controlled dns keys are identical across the four links",
+          "status": "PASS"
+        },
+        {
+          "name": "restore exclusion list keeps the plugin metadata that Service must not overwrite",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/diagnostic_degrade.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/diagnostic_degrade.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 14,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "every emitted installation failure has a Chinese diagnostic",
+          "status": "PASS"
+        },
+        {
+          "name": "all probes healthy renders the diagnostic dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "a failing probe degrades that row instead of aborting the dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / early",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / late",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / nonzero",
+          "status": "PASS"
+        },
+        {
+          "name": "failed runtime preflight still checks the controller API independently",
+          "status": "PASS"
+        },
+        {
+          "name": "diagnostics reuse the version response from successful runtime preflight",
+          "status": "PASS"
+        },
+        {
+          "name": "every probe failing still renders one dialog with all failures listed",
+          "status": "PASS"
+        },
+        {
+          "name": "the main list stays compact and field details are collapsed",
+          "status": "PASS"
+        },
+        {
+          "name": "a probe failure is reported once in the summary, not as extra rows",
+          "status": "PASS"
+        },
+        {
+          "name": "a synchronous helper throw inside the panel probe is degraded, not propagated",
+          "status": "PASS"
+        },
+        {
+          "name": "provider anomalies reach the summary even when the request succeeds",
+          "status": "PASS"
+        },
+        {
+          "name": "f50HealthLayers classifies provider snapshots into problems",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/download_archive.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/download_archive.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "GitCode package succeeds without contacting other mirrors",
+          "status": "PASS"
+        },
+        {
+          "name": "GitCode failure (Load failed) falls back to Gitee",
+          "status": "PASS"
+        },
+        {
+          "name": "GitCode failure (ARCHIVE_VERIFY_FAILED=zip) falls back to Gitee",
+          "status": "PASS"
+        },
+        {
+          "name": "GitCode and Gitee failures fall back to GitHub",
+          "status": "PASS"
+        },
+        {
+          "name": "all download failures retain diagnostics and report failure",
+          "status": "PASS"
+        },
+        {
+          "name": "background downloads tolerate a failed log read without restarting the worker",
+          "status": "PASS"
+        },
+        {
+          "name": "unconfirmed background download retains the lease and never tries another source",
+          "status": "PASS"
+        },
+        {
+          "name": "device background worker verifies ZIP before replacement / true",
+          "status": "PASS"
+        },
+        {
+          "name": "device background worker verifies ZIP before replacement / false",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / F50_OPERATION_BUSY",
+          "status": "PASS"
+        },
+        {
+          "name": "lease failure stops package requests / F50_OPERATION_UNSAFE_PATH",
+          "status": "PASS"
+        },
+        {
+          "name": "online package failure replaces the previous installation diagnostic",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / online / false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / online / true",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / upload / false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation recovers only an idle writer mutex / upload / true",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / active_task",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / unknown_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / online / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / active_task",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / unknown_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state through real installation entry / upload / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "uncertain device state still blocks ordinary critical operations",
+          "status": "PASS"
+        },
+        {
+          "name": "busy device prevents package upload and cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "package upload and cleanup run after the device lease is acquired",
+          "status": "PASS"
+        },
+        {
+          "name": "failed upload replaces the previous diagnostic without deleting an unrelated file",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup failure retains the original installation error",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"<html>download failed</html>\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"PK\"",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid local package is rejected before upload / \"PK\\\\u0005\\\\u0006\"",
+          "status": "PASS"
+        },
+        {
+          "name": "local header check reads only four bytes and handles unreadable files",
+          "status": "PASS"
+        },
+        {
+          "name": "a new page cleans only the recorded upload after acquiring its lease / online",
+          "status": "PASS"
+        },
+        {
+          "name": "a new page cleans only the recorded upload after acquiring its lease / upload",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded path is recorded before installation; failed cleanup survives a new page",
+          "status": "PASS"
+        },
+        {
+          "name": "busy device retains recorded upload and never deletes it",
+          "status": "PASS"
+        },
+        {
+          "name": "failed stale upload cleanup blocks installation / online",
+          "status": "PASS"
+        },
+        {
+          "name": "failed stale upload cleanup blocks installation / upload",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid cleanup record cannot delete outside the upload directory / /data/clash/Proxy/config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid cleanup record cannot delete outside the upload directory / /fixture/../config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "verified cache is offered only by the installation entry / reuse=true",
+          "status": "PASS"
+        },
+        {
+          "name": "verified cache is offered only by the installation entry / reuse=false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / active",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / online / transport_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / active",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "installation lease recovery / upload / transport_lost",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/gist_sources.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/gist_sources.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "Gist refresh updates the airport links before the Gist link content",
+          "status": "PASS"
+        },
+        {
+          "name": "inline-only config requires only a managed Gist refresh / true",
+          "status": "PASS"
+        },
+        {
+          "name": "inline-only config requires only a managed Gist refresh / false",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed local download still attempts Gist without reporting full success / true",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed local download still attempts Gist without reporting full success / false",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist detection failure cannot turn a provider-only success into full success",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source saves, disabled-only and empty removal all use native merge",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist detection protects local edits and detects unsupported components",
+          "status": "PASS"
+        },
+        {
+          "name": "Manual source update releases frontend lease, fences source revision and checks real receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "confirmed exit from broken Gist keeps the current config and permits ordinary subscriptions",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/http_subscription.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/http_subscription.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "retained ARM64 patch source reproduces the embedded byte ranges",
+          "status": "PASS"
+        },
+        {
+          "name": "retained patch source rejects an unsupported controller",
+          "status": "PASS"
+        },
+        {
+          "name": "controller patch changes only the declared ranges and is idempotent",
+          "status": "PASS"
+        },
+        {
+          "name": "an unknown controller remains untouched for its normal executable probe",
+          "status": "PASS"
+        },
+        {
+          "name": "an unknown controller with the actual command interface needs no binary patch",
+          "status": "PASS"
+        },
+        {
+          "name": "a compatible unknown controller does not need a matching help command",
+          "status": "PASS"
+        },
+        {
+          "name": "the bundled ARMv7 payload does not block the ARM64 patch",
+          "status": "PASS"
+        },
+        {
+          "name": "an unknown partially patched controller is left untouched",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed decoder cannot replace the original controller",
+          "status": "PASS"
+        },
+        {
+          "name": "simultaneous patch processes use separate temporary files",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download accepts http://8.8.8.8/sub and pins port 80",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download accepts https://8.8.8.8/sub and pins port 443",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download accepts http://8.8.8.8:8080/sub and pins port 8080",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download accepts https://8.8.8.8:8443/sub and pins port 8443",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download accepts https://8.8.8.8/geoip-subscription and pins port 443",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects HTML and retains the existing provider",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects rules without nodes and retains the existing provider",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download rejects empty nodes and retains the existing provider",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download re-fetches on every call instead of reusing the previous result",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download retains URL validation for ftp://8.8.8.8/sub",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download retains URL validation for http://user:pass@8.8.8.8/sub",
+          "status": "PASS"
+        },
+        {
+          "name": "ARM64 download retains URL validation for http://127.0.0.1/sub",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/ipv6_dns.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/ipv6_dns.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 47,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "missing IPv6 NAT retains the saved flag and applies only owned IPv4 DNS rules",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN keeps private-target DNS exemptions and pauses the device bypass list",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 192.168.0.1 -j ACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 192.168.0.1 -j ACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 256.1.2.3",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 256.1.2.3",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4/33",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4/33",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4/24/0",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4/24/0",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tproxy address before restore / 1.2.3.4\\\\t-j\\\\tACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "DNS rejects malformed tun address before restore / 1.2.3.4\\\\t-j\\\\tACCEPT",
+          "status": "PASS"
+        },
+        {
+          "name": "available IPv6 NAT follows the existing controller path",
+          "status": "PASS"
+        },
+        {
+          "name": "transient IPv6 NAT follows the existing controller path",
+          "status": "PASS"
+        },
+        {
+          "name": "failure restores preferences and is reported: {\"backendRc\":23}",
+          "status": "PASS"
+        },
+        {
+          "name": "failure restores preferences and is reported: {\"restoreRc\":7}",
+          "status": "PASS"
+        },
+        {
+          "name": "failure restores preferences and is reported: {\"missingRule\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "boot recovers an interrupted options transaction before invoking the controller",
+          "status": "PASS"
+        },
+        {
+          "name": "policy verification checks IPv4 rules without rebuilding them",
+          "status": "PASS"
+        },
+        {
+          "name": "the settings probe preserves the requested DNS preference",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN6 validates the candidate and requests reload before rebuilding routing",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN6 rejects an invalid candidate without replacing the configuration",
+          "status": "PASS"
+        },
+        {
+          "name": "TUN6 does not report readiness when rebuilt routing verification fails",
+          "status": "PASS"
+        },
+        {
+          "name": "system restores the IPv6 TUN return route after startup and policy apply",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed restores the IPv6 TUN return route after startup and policy apply",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv6 TUN route verification detects a missing route without repairing it",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv6 TUN route failures prevent readiness",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv6 TUN route repair rejects an absent TUN address",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv6 TUN return-route repair leaves other stacks and modes unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: v1.19.30",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: v1.19.31",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: v1.19.32",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: v1.20.0",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: v1.9.99",
+          "status": "PASS"
+        },
+        {
+          "name": "mips version gate: Alpha-unknown",
+          "status": "PASS"
+        },
+        {
+          "name": "explicit mixed survives the legacy controller profile",
+          "status": "PASS"
+        },
+        {
+          "name": "explicit system survives the legacy controller profile",
+          "status": "PASS"
+        },
+        {
+          "name": "explicit gvisor survives the legacy controller profile",
+          "status": "PASS"
+        },
+        {
+          "name": "settings reject unsupported mips before any saved-state operation",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic v1.19.32 IPv6=on selects mips",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic v1.19.32 IPv6=off selects mips",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic v1.19.30 IPv6=on selects gvisor",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic v1.19.30 IPv6=off selects mixed",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic Alpha-unknown IPv6=on selects gvisor",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic mode stops when executing the core version probe fails",
+          "status": "PASS"
+        },
+        {
+          "name": "automatic settings resolve mips without changing the saved preference",
+          "status": "PASS"
+        },
+        {
+          "name": "settings do not treat a failed version read as an old kernel",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/menu_error_feedback.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/menu_error_feedback.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "\u72b6\u6001\u4e0e\u65e5\u5fd7: \u8bca\u65ad\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a\u800c\u4e0d\u662f\u9759\u9ed8\u5931\u8d25",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605 User-Agent: \u6743\u9650\u6821\u9a8c\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u8ba2\u9605 User-Agent: \u8bfb\u53d6\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u914d\u7f6e\u4e0e\u89c4\u5219: \u8bfb\u53d6\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u7f51\u7edc\u8bbe\u7f6e: \u6743\u9650\u6821\u9a8c\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u914d\u7f6e\u6587\u4ef6: \u6743\u9650\u6821\u9a8c\u629b\u9519\u65f6\u7ed9\u51fa\u63d0\u793a",
+          "status": "PASS"
+        },
+        {
+          "name": "\u6743\u9650\u6821\u9a8c\u5931\u8d25\u65f6\u4e0d\u5f39\u9519\u8bef\u63d0\u793a, \u4fdd\u6301\u539f\u6709\u9759\u9ed8\u8fd4\u56de",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5378\u8f7d\u540e\u53ea\u5728\u6210\u529f\u65f6\u91cd\u65b0\u8bfb\u53d6\u81ea\u542f\u72b6\u6001 / true",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5378\u8f7d\u540e\u53ea\u5728\u6210\u529f\u65f6\u91cd\u65b0\u8bfb\u53d6\u81ea\u542f\u72b6\u6001 / false",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u540e\u53ea\u5728\u786e\u8ba4\u5b8c\u6210\u65f6\u91cd\u65b0\u8bfb\u53d6\u81ea\u542f\u72b6\u6001 / true",
+          "status": "PASS"
+        },
+        {
+          "name": "\u5b89\u88c5\u540e\u53ea\u5728\u786e\u8ba4\u5b8c\u6210\u65f6\u91cd\u65b0\u8bfb\u53d6\u81ea\u542f\u72b6\u6001 / false",
+          "status": "PASS"
+        },
+        {
+          "name": "\u81ea\u542f\u6309\u94ae\u89e3\u9664\u5fd9\u788c\u65f6\u4fdd\u7559\u65b0\u72b6\u6001\u6587\u6848 / direct",
+          "status": "PASS"
+        },
+        {
+          "name": "\u81ea\u542f\u6309\u94ae\u89e3\u9664\u5fd9\u788c\u65f6\u4fdd\u7559\u65b0\u72b6\u6001\u6587\u6848 / disabled",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/optimization.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "single-file JS and generated operation scripts are syntactically valid",
+          "status": "PASS"
+        },
+        {
+          "name": "tproxy4: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "tproxy6: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "tun4: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "tun6: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "off4: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "off6: complete configuration equals original",
+          "status": "PASS"
+        },
+        {
+          "name": "start timeout: outer markers survive command substitution",
+          "status": "PASS"
+        },
+        {
+          "name": "start invalid configuration: outer markers survive command substitution",
+          "status": "PASS"
+        },
+        {
+          "name": "start panel verification warning: outer markers survive command substitution",
+          "status": "PASS"
+        },
+        {
+          "name": "start network application: outer markers survive command substitution",
+          "status": "PASS"
+        },
+        {
+          "name": "start success: outer markers survive command substitution",
+          "status": "PASS"
+        },
+        {
+          "name": "mode normalization, provider names, User-Agent and disabled sources retain their data",
+          "status": "PASS"
+        },
+        {
+          "name": "saved mode \"\\# KANO_SUB_CONVERT_MODE=provider\\\\r\\\\n\" / file: provider",
+          "status": "PASS"
+        },
+        {
+          "name": "saved mode \"\\# KANO_SUB_CONVERT_MODE=local\\\\n\" / http: local",
+          "status": "PASS"
+        },
+        {
+          "name": "saved mode \"\" / file,file: local",
+          "status": "PASS"
+        },
+        {
+          "name": "saved mode \"\" / http: provider",
+          "status": "PASS"
+        },
+        {
+          "name": "saved mode \"\" / : provider",
+          "status": "PASS"
+        },
+        {
+          "name": "curl selection falls back when a bundled executable cannot run",
+          "status": "PASS"
+        },
+        {
+          "name": "failed IPv6 DNS precheck stops service start; fallback markers and redaction survive",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML reads check parsing and detect replaced, missing or invalid components",
+          "status": "PASS"
+        },
+        {
+          "name": "managed YAML: idempotent panel fields, nonempty secret and original unified-delay",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/optimization_install.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_install.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 43,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "failed rollback retains the old backup and reports blocked cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "failed rollback rename retains the old configuration and the recovery directory",
+          "status": "PASS"
+        },
+        {
+          "name": "installation interruption preserves the old configuration and permits a complete retry",
+          "status": "PASS"
+        },
+        {
+          "name": "new installation",
+          "status": "PASS"
+        },
+        {
+          "name": "running upgrade",
+          "status": "PASS"
+        },
+        {
+          "name": "explicitly stopped upgrade",
+          "status": "PASS"
+        },
+        {
+          "name": "running upgrade with stale stop latch",
+          "status": "PASS"
+        },
+        {
+          "name": "old installation without explicit stop latch",
+          "status": "PASS"
+        },
+        {
+          "name": "first installation without subscriptions installs components and keeps the core stopped",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles empty HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles missing HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles trailing empty HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "installation preflight handles valid HTTP URL",
+          "status": "PASS"
+        },
+        {
+          "name": "low data space preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "panel postcheck failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "unsafe ZIP path preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing controller preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "unexecutable controller preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "controller without the protocol marker preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing fresh core preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "missing YAML component preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid YAML preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "start timeout preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid core config preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "network application failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "service patch failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "backup rename failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "candidate activation rename failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "panel HTTP failure reports a warning and retains successfully started components",
+          "status": "PASS"
+        },
+        {
+          "name": "successful installation with lockCleanupFailure reports finalization failure and permits only safe retry",
+          "status": "PASS"
+        },
+        {
+          "name": "successful installation with unknownLockEntry reports finalization failure and permits only safe retry",
+          "status": "PASS"
+        },
+        {
+          "name": "successful installation with stagingCleanupFailure reports finalization failure and permits only safe retry",
+          "status": "PASS"
+        },
+        {
+          "name": "repeated full update preserves private identity and exact settings bytes",
+          "status": "PASS"
+        },
+        {
+          "name": "upgrade preserves hidden custom provider and rule files referenced by the configuration",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"futureVersion\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/gist-sync-component.json\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/age\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"missing\":\"Tools/kano-gist-sync\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"runtimeProbeFailure\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "compatible package installs without release pins {\"legacy\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy online update retains installed GistSync and its settings",
+          "status": "PASS"
+        },
+        {
+          "name": "installation resumes only enabled automatic Gist false",
+          "status": "PASS"
+        },
+        {
+          "name": "installation resumes only enabled automatic Gist true",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/optimization_network.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_network.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 32,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"192.168.0.2 \\# old note\",null]",
+          "status": "PASS"
+        },
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"\",{\"192.168.0.2\":\"retained\"}]",
+          "status": "PASS"
+        },
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"192.168.0.2 \\# old note\",{\"192.168.0.2\":\"\"}]",
+          "status": "PASS"
+        },
+        {
+          "name": "a corrupted notes file degrades to empty instead of blocking the panel",
+          "status": "PASS"
+        },
+        {
+          "name": "editing and clearing notes leave bypass membership unchanged; adding an address is explicit",
+          "status": "PASS"
+        },
+        {
+          "name": "two open device editors preserve each other's notes and cleared values",
+          "status": "PASS"
+        },
+        {
+          "name": "saving an old network dialog preserves newer notes and merges inline edits",
+          "status": "PASS"
+        },
+        {
+          "name": "firewall/process ownership functions are unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "long private-route policy names retain their rules without mutating the input",
+          "status": "PASS"
+        },
+        {
+          "name": "deep proxy selections resolve and cycles still fail",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime entry rejects invalid modes and config list types",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv4 / IPv6 CIDR normalization and overlap detection retain their results",
+          "status": "PASS"
+        },
+        {
+          "name": "IPv6 private CIDR is rejected when IPv6 capture is disabled",
+          "status": "PASS"
+        },
+        {
+          "name": "private network tproxy/on, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "private network tproxy/off, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "private network tun/on, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "private network tun/off, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "private network off/on, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "private network off/off, repeated apply and disable restore",
+          "status": "PASS"
+        },
+        {
+          "name": "user overrides survive shaping while controlled keys stay fixed",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid tun mtu and conflicting local ports are rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist normalization reference matches the plugin for custom config fields",
+          "status": "PASS"
+        },
+        {
+          "name": "operation composition includes every transitive helper and reduces shell payload",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup plans refuse foreign route-table users",
+          "status": "PASS"
+        },
+        {
+          "name": "firewall cleanup ignores foreign rules and fake jumps inside comments",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall final probe reports clean",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall final probe reports residual",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall final probe reports unknown",
+          "status": "PASS"
+        },
+        {
+          "name": "UI controls and event entry points retain their IDs and handler counts",
+          "status": "PASS"
+        },
+        {
+          "name": "shared button action releases lock and restores button on success",
+          "status": "PASS"
+        },
+        {
+          "name": "shared button action releases lock and restores button on error",
+          "status": "PASS"
+        },
+        {
+          "name": "shared button action releases lock and restores button on cancel",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/optimization_subscription.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/optimization_subscription.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 85,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "combined provider/Gist update preserves the final outcome / false/true",
+          "status": "PASS"
+        },
+        {
+          "name": "combined provider/Gist update preserves the final outcome / true/false",
+          "status": "PASS"
+        },
+        {
+          "name": "combined provider/Gist update preserves the final outcome / true/true",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / provider / true",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / provider / false",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / local / true",
+          "status": "PASS"
+        },
+        {
+          "name": "applying the subscription template uses the save transaction / local / false",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription URLs retain path names and trailing query characters",
+          "status": "PASS"
+        },
+        {
+          "name": "template source imports retain URLs regardless of path names",
+          "status": "PASS"
+        },
+        {
+          "name": "provider update, runtime matches=true",
+          "status": "PASS"
+        },
+        {
+          "name": "provider update, runtime matches=false",
+          "status": "PASS"
+        },
+        {
+          "name": "local update, runtime matches=true",
+          "status": "PASS"
+        },
+        {
+          "name": "local update, runtime matches=false",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded_config retains its dedicated update path",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription_original retains its dedicated update path",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / success",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / download",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / stale",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded local provider downloads its saved subscription / other-provider",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_count_mismatch",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_update_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_snapshot_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "local refresh keeps observed cache state / provider_reload_missing",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded_config does not promise cache preservation for an unconfirmed download",
+          "status": "PASS"
+        },
+        {
+          "name": "template.yaml does not promise cache preservation for an unconfirmed download",
+          "status": "PASS"
+        },
+        {
+          "name": "a changed subscription address rebuilds the config instead of re-downloading the old one",
+          "status": "PASS"
+        },
+        {
+          "name": "mixed custom providers keep the local subscription name and configuration",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / legacy",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / empty-template",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription update retains its early routing / empty-custom",
+          "status": "PASS"
+        },
+        {
+          "name": "an unchanged address still updates the providers directly",
+          "status": "PASS"
+        },
+        {
+          "name": "template provider update rebuilds stale provider definitions",
+          "status": "PASS"
+        },
+        {
+          "name": "template local update rebuilds stale provider definitions",
+          "status": "PASS"
+        },
+        {
+          "name": "template provider rebuild is announced instead of replacing the config silently",
+          "status": "PASS"
+        },
+        {
+          "name": "template local rebuild is announced instead of replacing the config silently",
+          "status": "PASS"
+        },
+        {
+          "name": "restored uploaded_config / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored uploaded_config / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored template.yaml / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored template.yaml / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored subscription_original / template uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "restored subscription_original / original uses the subscription update path",
+          "status": "PASS"
+        },
+        {
+          "name": "equal node counts do not claim identical node contents",
+          "status": "PASS"
+        },
+        {
+          "name": "a missing pre-update snapshot falls back to the current node count",
+          "status": "PASS"
+        },
+        {
+          "name": "a custom configuration update says the saved address is not the one in use",
+          "status": "PASS"
+        },
+        {
+          "name": "template local refresh reports the provider and both mismatched counts",
+          "status": "PASS"
+        },
+        {
+          "name": "refreshing a subset keeps its existing provider filename",
+          "status": "PASS"
+        },
+        {
+          "name": "a configuration without providers cannot report a successful subscription refresh",
+          "status": "PASS"
+        },
+        {
+          "name": "Mihomo HTTP Provider API status 200",
+          "status": "PASS"
+        },
+        {
+          "name": "Mihomo HTTP Provider API status 390",
+          "status": "PASS"
+        },
+        {
+          "name": "Mihomo HTTP Provider API status 500",
+          "status": "PASS"
+        },
+        {
+          "name": "Mihomo HTTP Provider API status timeout",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"failAt\":\"template\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"failAt\":\"reload\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / provider / {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"failAt\":\"template\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"failAt\":\"reload\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "template application shares rollback and stopped-core behavior / local / {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "a pending HTTP update preserves the saved configuration without restarting for rollback",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source merge and explicit template application remain distinct / false",
+          "status": "PASS"
+        },
+        {
+          "name": "Gist source merge and explicit template application remain distinct / true",
+          "status": "PASS"
+        },
+        {
+          "name": "saving an enabled subscription retains its URL and ignores a disabled source",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / success",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / write",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / provider / prepare",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / success",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / write",
+          "status": "PASS"
+        },
+        {
+          "name": "first subscription save / local / prepare",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy original migration is explicit, backed up and rollback-safe {\"legacy\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy original migration is explicit, backed up and rollback-safe {\"legacy\":true,\"migrateLegacy\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy original migration is explicit, backed up and rollback-safe {\"legacy\":true,\"migrateLegacy\":true,\"failAt\":\"write\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy original migration is explicit, backed up and rollback-safe {\"legacy\":true,\"migrateLegacy\":true,\"failAt\":\"start\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "an original header with no URLs prevents automatic legacy-source migration",
+          "status": "PASS"
+        },
+        {
+          "name": "HTTP 390 fallback transaction / success",
+          "status": "PASS"
+        },
+        {
+          "name": "HTTP 390 fallback transaction / download",
+          "status": "PASS"
+        },
+        {
+          "name": "HTTP 390 fallback transaction / write",
+          "status": "PASS"
+        },
+        {
+          "name": "HTTP 390 fallback transaction / start",
+          "status": "PASS"
+        },
+        {
+          "name": "HTTP 390 fallback transaction / reload",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"disabled\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"custom\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"ruleMode\":\"original\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"convertMode\":\"provider\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription save protections {\"ruleMode\":\"original\",\"convertMode\":\"provider\"}",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/panel_open.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/panel_open.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "dialog sizing expands the host wrapper and respects a narrow parent",
+          "status": "PASS"
+        },
+        {
+          "name": "UFI toast sizing uses the page width instead of its shrinking toast container",
+          "status": "PASS"
+        },
+        {
+          "name": "panel settings open without subscription backend checks and retain access checks",
+          "status": "PASS"
+        },
+        {
+          "name": "read-only settings retain access checks without requiring the subscription backend",
+          "status": "PASS"
+        },
+        {
+          "name": "dashboard defaults preserve custom fields and explicit false values",
+          "status": "PASS"
+        },
+        {
+          "name": "opening a custom dashboard skips Zashboard file repair",
+          "status": "PASS"
+        },
+        {
+          "name": "repeated new windows open the validated URL synchronously without new checks",
+          "status": "PASS"
+        },
+        {
+          "name": "cold opening reserves the popup and shares an in-flight panel check",
+          "status": "PASS"
+        },
+        {
+          "name": "explicit panel refresh rechecks readiness and renews the URL",
+          "status": "PASS"
+        },
+        {
+          "name": "statusChanged prevents stale popup navigation, newer URL cached=false",
+          "status": "PASS"
+        },
+        {
+          "name": "statusChanged prevents stale popup navigation, newer URL cached=true",
+          "status": "PASS"
+        },
+        {
+          "name": "statusChanged makes the next new window revalidate",
+          "status": "PASS"
+        },
+        {
+          "name": "statusChanged prevents an older in-flight result from restoring the cache",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged prevents stale popup navigation, newer URL cached=false",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged prevents stale popup navigation, newer URL cached=true",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged makes the next new window revalidate",
+          "status": "PASS"
+        },
+        {
+          "name": "controllerChanged prevents an older in-flight result from restoring the cache",
+          "status": "PASS"
+        },
+        {
+          "name": "a failed readiness check closes the reserved popup and retains the error",
+          "status": "PASS"
+        },
+        {
+          "name": "unavailable controller is not cached as a verified address",
+          "status": "PASS"
+        },
+        {
+          "name": "fallback controller is not cached as a verified address",
+          "status": "PASS"
+        },
+        {
+          "name": "a blocked popup does not start panel checks",
+          "status": "PASS"
+        },
+        {
+          "name": "read-only panel checks remain available after a mutation was cancelled",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/real_templates.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/real_templates.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 0,
+      "failed": 0,
+      "notRun": 1,
+      "cases": [
+        {
+          "name": "pinned real Mihomo templates retain fields throughout configuration handling",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/release_consistency.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/release_consistency.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "core package update / version",
+          "status": "PASS"
+        },
+        {
+          "name": "core package update / metadata",
+          "status": "PASS"
+        },
+        {
+          "name": "the plugin release retains the bundled controller and wrapper protocol",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy sources migrate once; saved and custom configurations bypass migration",
+          "status": "PASS"
+        },
+        {
+          "name": "stopped upgrade",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid wrapper",
+          "status": "PASS"
+        },
+        {
+          "name": "lock cleanup failure",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/reliability.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/reliability.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 204,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "shell and JS redact sensitive keys and share links",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription IPv6 validation covers embedded private IPv4 and canonical spellings",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup waits for the xtables lock and leaves route arguments unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "ordinary settings read does not acquire a device lease / loadProviderUserAgent",
+          "status": "PASS"
+        },
+        {
+          "name": "ordinary settings read does not acquire a device lease / readCurrentSubRuleMode",
+          "status": "PASS"
+        },
+        {
+          "name": "ordinary settings read does not acquire a device lease / readConfigSource",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / stat",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / busy",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_absent",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_cancelled",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / release_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "writer failure releases its lock and preserves the caller trap / receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend lease is reclaimed; live, cancelled and ownerless leases still block",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend cannot replace the lease of a running device task",
+          "status": "PASS"
+        },
+        {
+          "name": "expired frontend reclaims only finished or provably dead receipts",
+          "status": "PASS"
+        },
+        {
+          "name": "API curl keeps sensitive values off argv and preserves request bytes",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML omits undefined object values and rejects nonfinite numbers",
+          "status": "PASS"
+        },
+        {
+          "name": "cancelled upload removes the returned file before reporting cancellation",
+          "status": "PASS"
+        },
+        {
+          "name": "service command quotes each argument without executing path contents",
+          "status": "PASS"
+        },
+        {
+          "name": "editor failure removes an upload without changing the destination",
+          "status": "PASS"
+        },
+        {
+          "name": "backup pruning handles spaces and matching source sidecars",
+          "status": "PASS"
+        },
+        {
+          "name": "failed template validation removes the original upload",
+          "status": "PASS"
+        },
+        {
+          "name": "export cleanup runs on the device after the browser handler has returned",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ../escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ..",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / /absolute",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / dir/../escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / dir\\\\escape",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / name\\\\tbad",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "configuration restore validates fallback ZIP listings before extraction / ./config.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "all final operation shells parse in sh and BusyBox ash",
+          "status": "PASS"
+        },
+        {
+          "name": "Service candidate failure at tun preserves the complete original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service candidate failure at original preserves the complete original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service candidate failure at audit5 preserves the complete original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service candidate failure at tun6 preserves the complete original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service candidate failure at dns preserves the complete original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service patch is idempotent and preserves file permissions",
+          "status": "PASS"
+        },
+        {
+          "name": "Service version 20 migrates before restoring the selected Gist TUN stack",
+          "status": "PASS"
+        },
+        {
+          "name": "packaged Service migration installs executable DNS address validation",
+          "status": "PASS"
+        },
+        {
+          "name": "panel identity and referenced resource <title>zashboard</title><script src=\"./assets/main.js\"></script>",
+          "status": "PASS"
+        },
+        {
+          "name": "panel identity and referenced resource <title>Zashboard</title><script src='/app.mjs?v=2'></script>",
+          "status": "PASS"
+        },
+        {
+          "name": "panel identity and referenced resource <title>zashboard</title><script src=\"missing.js\"></script>",
+          "status": "PASS"
+        },
+        {
+          "name": "panel identity and referenced resource <title>metacubexd</title><script src=\"main.js\"></script>",
+          "status": "PASS"
+        },
+        {
+          "name": "template/base pair commit commits both files",
+          "status": "PASS"
+        },
+        {
+          "name": "template/base pair commit rolls back both files",
+          "status": "PASS"
+        },
+        {
+          "name": "template regeneration candidate / success",
+          "status": "PASS"
+        },
+        {
+          "name": "template regeneration candidate / normalize",
+          "status": "PASS"
+        },
+        {
+          "name": "template regeneration candidate / override",
+          "status": "PASS"
+        },
+        {
+          "name": "template regeneration candidate / commit",
+          "status": "PASS"
+        },
+        {
+          "name": "override Worker entry point function main(config) { config.rules ",
+          "status": "PASS"
+        },
+        {
+          "name": "override Worker entry point module.exports ",
+          "status": "PASS"
+        },
+        {
+          "name": "override Worker entry point module.exports.default ",
+          "status": "PASS"
+        },
+        {
+          "name": "override Worker entry point exports.default ",
+          "status": "PASS"
+        },
+        {
+          "name": "override Worker entry point export default function main(config) { config.rules ",
+          "status": "PASS"
+        },
+        {
+          "name": "override validation blocks import, self and escaped spellings while accepting UTF-8 strings",
+          "status": "PASS"
+        },
+        {
+          "name": "override validation leaves rules and comments alone while still blocking execution escapes",
+          "status": "PASS"
+        },
+        {
+          "name": "export default arrow and object forms reach the override entry point",
+          "status": "PASS"
+        },
+        {
+          "name": "override never receives or replaces the controller secret",
+          "status": "PASS"
+        },
+        {
+          "name": "computed Worker prototype APIs cannot restore network or string execution",
+          "status": "PASS"
+        },
+        {
+          "name": "override rejects invalid result / function main() { throw new Error(\"override failure\"); }",
+          "status": "PASS"
+        },
+        {
+          "name": "override rejects invalid result / function main() { return []; }",
+          "status": "PASS"
+        },
+        {
+          "name": "override rejects invalid result / function main() { return {rules:\"bad\"}; }",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / function() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / async function() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / function*() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "override blocks computed dynamic constructors / async function*() {}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"active\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"reused\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"receipt\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"foreign\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"transaction\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"legacy\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"background\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"output\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"output\":true,\"receipt\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"complete\",\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"partial\",\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"pendingReceipt\":\"partial\",\"receipt\":false,\"active\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"snapshot\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"snapshot\":true,\"receipt\":false,\"preempt\":true,\"reclaim\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"unrelated\":true}",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / {\"background\":true,\"backgroundComm\":\"cp\"}",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases the network and retains interrupted subscription backups",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / armeabi-v7a/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / other/restored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/failed",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/unrestored",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery restores native network journals / arm64-v8a/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / running",
+          "status": "PASS"
+        },
+        {
+          "name": "manual recovery releases only an exited installer lock / unknown_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / missing pid file",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / reused pid",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / matching pid",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / false/worker",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / false/manager",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / true/worker",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / true/manager",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / running",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / legacy",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / initializing",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / self",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery scan identifies orphaned file writers by task ownership / false",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery scan identifies orphaned file writers by task ownership / true",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / active",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / retry_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / recovery_timeout",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / owned_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall busy lease recovery / normal",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / completed",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / cancelled_before",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / cancelled_during",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / missing_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / timeout",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / other_page_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / recovery_busy",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / unsafe_path",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / released_before_acquire",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / response_truncated",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / failed_response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / heartbeat_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / acquire_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / host_footer",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / nested_reply",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / string_reply",
+          "status": "PASS"
+        },
+        {
+          "name": "browser task ownership and receipt / wrong_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / stop",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / stop_throw",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall stops after a failed stage / boot",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall recovers a prior failed operation before running stages / false",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall recovers a prior failed operation before running stages / true",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / active_installer",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / unknown_install_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / foreign_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / pending_config_transaction",
+          "status": "PASS"
+        },
+        {
+          "name": "installation reclaims only idle abandoned leases / unfinished_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / idle",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_worker",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_frontend",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / active_installer",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / unknown_install_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / foreign_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / pending_config_transaction",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall reclaims only idle abandoned leases / unfinished_receipt",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall final probe detects an interrupted export without an installed core",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / clean",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / process",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / network",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / journal",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall removes abandoned backups only after runtime cleanup / installer",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall artifact cleanup preserves its own task registry",
+          "status": "PASS"
+        },
+        {
+          "name": "boot autostart probe ignores lines that are only commented leftovers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / broken/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / broken/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / missing/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / missing/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / empty/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / empty/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / skipped/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / skipped/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / running",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup releases only an exited installer lock / unknown_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "uninstall cleanup handles interrupted Gist and YAML transactions before native network recovery",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / normal",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / uninstall",
+          "status": "PASS"
+        },
+        {
+          "name": "boot cleanup preserves other plugins without requiring a working Gist binary / malformed",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / released_response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / still_owned",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / release_unknown",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / recovered",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease release reconciliation / recovered_during_release",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / false/0/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / false/7/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/7/direct",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/nested",
+          "status": "PASS"
+        },
+        {
+          "name": "device task receipt retains output until lease release / true/0/string",
+          "status": "PASS"
+        },
+        {
+          "name": "pending Gist activation blocks ordinary writes but permits explicit uninstall / false",
+          "status": "PASS"
+        },
+        {
+          "name": "pending Gist activation blocks ordinary writes but permits explicit uninstall / true",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / running",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / foreign_owner",
+          "status": "PASS"
+        },
+        {
+          "name": "browser lease preserves unfinished or invalid receipts / invalid_identity",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / old rescue owner false",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery registry / old rescue owner true",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / precheck_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / precheck_blocked",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / response_lost",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / partial",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / config_restore_failed",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / backup_retained",
+          "status": "PASS"
+        },
+        {
+          "name": "network recovery reports confirmed state / recovered",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/subscription_update.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/subscription_update.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 37,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "legacy config protection / custom provider refresh from uploaded_config, providerOK=true",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy config protection / custom provider refresh from uploaded_config, providerOK=false",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy config protection / custom provider refresh from subscription_original, providerOK=true",
+          "status": "PASS"
+        },
+        {
+          "name": "legacy config protection / custom provider refresh from subscription_original, providerOK=false",
+          "status": "PASS"
+        },
+        {
+          "name": "uploaded config in template mode only refreshes its providers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleared node DNS policy stays empty after save and reopen before applying",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting an edited node DNS entry clears its draft before saving",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting another node DNS entry preserves the current edit",
+          "status": "PASS"
+        },
+        {
+          "name": "empty saved node DNS policy imports the running policy only on request",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS edits preserve the rest of the template and survive runtime generation",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS supplies required node resolver defaults only when missing",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS imports full configuration, named section and domain mapping",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS saves only the base template, preserving its generation marker",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS does not write when reading the template fails",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS can create a base template from the current configuration",
+          "status": "PASS"
+        },
+        {
+          "name": "airport DNS paste errors are readable and temporary files are cleaned",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 302 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 403 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 404 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 500 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 200 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription failure 0 has a readable message and cleans its request",
+          "status": "PASS"
+        },
+        {
+          "name": "local subscription transport exceptions report an unconfirmed result",
+          "status": "PASS"
+        },
+        {
+          "name": "original config retains custom settings in tproxy mode",
+          "status": "PASS"
+        },
+        {
+          "name": "original config retains custom settings in tun mode",
+          "status": "PASS"
+        },
+        {
+          "name": "original config retains custom settings in off mode",
+          "status": "PASS"
+        },
+        {
+          "name": "template mode keeps user tunables while capture fields stay fixed",
+          "status": "PASS"
+        },
+        {
+          "name": "original config keeps its own mode instead of forcing rule",
+          "status": "PASS"
+        },
+        {
+          "name": "policy reapplication synchronizes core mode and stops on API failure",
+          "status": "PASS"
+        },
+        {
+          "name": "policy reapplication stops when the saved mode cannot be read",
+          "status": "PASS"
+        },
+        {
+          "name": "config save reports corrected capture keys only after a successful write",
+          "status": "PASS"
+        },
+        {
+          "name": "panel guard detects runtime delay settings that differ from the saved config",
+          "status": "PASS"
+        },
+        {
+          "name": "switching original config from IPv6 TUN to IPv4 keeps DNS settings and drops the IPv6 TUN address",
+          "status": "PASS"
+        },
+        {
+          "name": "first original config write and later network changes select preservation",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML validation rejects duplicate mapping keys",
+          "status": "PASS"
+        },
+        {
+          "name": "restored config validation failures include the core reason in diagnostics",
+          "status": "PASS"
+        },
+        {
+          "name": "service preserves original YAML after controller preparation and reloads it",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/tun_stack.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/tun_stack.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "check_tun_stack: auto + \u65b0\u7248\u5185\u6838 selected mips",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: auto + IPv4 \u65e7\u5185\u6838\u56de\u9000 mixed",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: auto + IPv6 \u65e7\u5185\u6838\u56de\u9000 gvisor",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: \u663e\u5f0f mixed \u4e0d\u63a2\u7248\u672c",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: \u663e\u5f0f mips \u5728\u65e7\u5185\u6838\u4e0a\u76f4\u63a5\u5931\u8d25",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: \u975e\u6cd5 stack \u62a5\u9519",
+          "status": "PASS"
+        },
+        {
+          "name": "check_tun_stack: \u975e TUN \u6a21\u5f0f\u4e0d\u9009\u6808",
+          "status": "PASS"
+        },
+        {
+          "name": "prepare_tun_stack: \u5355\u72ec\u8c03\u7528\u4e5f\u80fd\u5b9a\u4f4d CLASH_ROOT",
+          "status": "PASS"
+        },
+        {
+          "name": "finish_tun_stack: \u5931\u8d25\u9636\u6bb5\u6709\u72ec\u7acb\u9519\u8bef\u7801",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/yaml_bridge.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/yaml_bridge.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "JSON bridge isolates yq warnings and enables supported merge semantics",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge accepts warnings from yq without the newer merge flag",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge preserves yq parse errors and exit status",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge still rejects malformed JSON after a successful yq exit",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge accepts a compatible parser with a different version banner",
+          "status": "PASS"
+        },
+        {
+          "name": "JSON bridge works when the system timeout lacks kill-after support",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML parsing works when the controller is unavailable",
+          "status": "PASS"
+        },
+        {
+          "name": "timeout expiry and ordinary exit codes / fallback=false",
+          "status": "PASS"
+        },
+        {
+          "name": "timeout expiry and ordinary exit codes / fallback=true",
+          "status": "PASS"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "pluginSha256": "20606f65d461c941e1278f256e1183401f9608e879cc3a10070bd170ef0f82e5",
+  "upstreamCommit": "982bf8104b123c4b9cb9f36431bd4acdb33191da",
+  "fullSuite": {
+    "passed": 846,
+    "failed": 0,
+    "notRun": 12
+  },
+  "configurationSuite": {
+    "pass": 68,
+    "fail": 0,
+    "skip": 0
+  },
+  "corpus": {
+    "cases": 93,
+    "tapPass": 97,
+    "parsed": 88,
+    "invalidRejected": 5,
+    "categories": {
+      "standard": 75,
+      "Smart-only": 13
+    },
+    "stages": 4840,
+    "classifiedChanges": 13626,
+    "unclassifiedChanges": 0,
+    "coreChecks": 149,
+    "coreLimits": [
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:22.942618800+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T18:01:23.389849746+08:00\" level=error msg=\"not found rule-set: ChinaMax_Domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:24.098548267+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T18:01:24.535414815+08:00\" level=error msg=\"not found rule-set: ChinaMax_Domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Repcz/config_lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:34.123154851+08:00\" level=error msg=\"yaml: unmarshal errors:\\n  line 11: cannot unmarshal !!seq into map[string]interface {}\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:47.844653464+08:00\" level=error msg=\"proxy group[14]: 🚀 默认代理: '直连' not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/fuxie.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:49.314461336+08:00\" level=error msg=\"proxy group[14]: 🚀 默认代理: '直连' not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "external-resource-limited",
+        "detail": "time=\"2026-11-04T18:01:32.055424119+08:00\" level=error msg=\"rules[27] [GEOSITE,biliintl,哔哩东南亚] error: load GeoSite data error, list biliintl not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "external-resource-limited",
+        "detail": "time=\"2026-11-04T18:01:35.489326881+08:00\" level=error msg=\"rules[27] [GEOSITE,biliintl,哔哩东南亚] error: load GeoSite data error, list biliintl not found\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:51.332282342+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T18:01:51.333835754+08:00\" level=error msg=\"dns.fake-ip-filter[0] \\\"rule-set:fakeipfilter_domain\\\": not found rule-set: fakeipfilter_domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/qichiyuhub/proxychain.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "upstream-input-limited",
+        "detail": "time=\"2026-11-04T18:01:52.840706690+08:00\" level=error msg=\"The `global-client-fingerprint` configuration is removed, please set `client-fingerprint` directly on the proxy instead\"\ntime=\"2026-11-04T18:01:52.842129663+08:00\" level=error msg=\"dns.fake-ip-filter[0] \\\"rule-set:fakeipfilter_domain\\\": not found rule-set: fakeipfilter_domain\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "upstream-with-local-resources",
+        "status": "platform-path-limited",
+        "detail": "time=\"2026-11-04T18:01:37.811307438+08:00\" level=error msg=\"path is not subpath of home directory or SAFE_PATHS: /usr/share/openclash/ui \\n allowed paths: [/root/maomao-final-20261104/repository-results/core-inputs/THEYAMLS/General_Config/liandu2024/clash-fallback-std]\""
+      },
+      {
+        "sample": "THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml",
+        "stage": "processed-with-local-resources",
+        "status": "platform-path-limited",
+        "detail": "time=\"2026-11-04T18:01:39.586445253+08:00\" level=error msg=\"path is not subpath of home directory or SAFE_PATHS: /usr/share/openclash/ui \\n allowed paths: [/root/maomao-final-20261104/repository-results/core-inputs/THEYAMLS/General_Config/liandu2024/clash-fallback-std/processed]\""
+      }
+    ]
+  },
+  "deviceTemplates": {
+    "samples": 12,
+    "phasesPass": 36,
+    "phasesFail": 0,
+    "commits": 72,
+    "fieldComparisons": 72,
+    "idempotenceChecks": 36,
+    "controllerSnapshots": 36,
+    "androidCorePass": 24
+  },
+  "boundaries": [
+    "Public provider and rule resources are local fixtures for core checks.",
+    "Raw upstream YAMLs are preserved and compared during file commits; their core inputs are separate offline projections.",
+    "No live network mode switch is part of the final overwrite tests."
+  ]
+}

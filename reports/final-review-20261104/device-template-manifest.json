@@ -1,0 +1,66 @@
+{
+  "upstreamCommit": "982bf8104b123c4b9cb9f36431bd4acdb33191da",
+  "pluginSha256": "20606f65d461c941e1278f256e1183401f9608e879cc3a10070bd170ef0f82e5",
+  "samples": [
+    {
+      "id": "01",
+      "path": "THEYAMLS/General_Config/666OS/Lite_en.yaml",
+      "sha256": "9ecfb90866883b78749cc97dbb678d9624478e69f3fd7a53a6fc01bfab1f4bcf"
+    },
+    {
+      "id": "02",
+      "path": "THEYAMLS/General_Config/666OS/Pro_en.yaml",
+      "sha256": "3bce7b5363e2b2797fb7832eeb7e760c7e0ab5d4504f3eef93f5c225fa97124f"
+    },
+    {
+      "id": "03",
+      "path": "THEYAMLS/General_Config/666OS/Mini_en.yaml",
+      "sha256": "87c86b58db9fa61018121dace31bf19285947da76bb2d4105f7769d02d2bdaec"
+    },
+    {
+      "id": "04",
+      "path": "THEYAMLS/General_Config/HenryChiao/MihomoAIO.yaml",
+      "sha256": "0b256b6346b81d61cd7bafdcf5193a60a7b60910b9add689c1dbeba650f87364"
+    },
+    {
+      "id": "05",
+      "path": "THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml",
+      "sha256": "86b3b8bfd86316c3348331ea469e96fe3660429b292ea062b8ca1cf72d1e387d"
+    },
+    {
+      "id": "06",
+      "path": "THEYAMLS/General_Config/AIsouler/mihomoconfig.yaml",
+      "sha256": "0c596602d93ee66097af4d31bfcce69aa9bc309936ec3255e36e77ccacfb3738"
+    },
+    {
+      "id": "07",
+      "path": "THEYAMLS/General_Config/JohnsonRan/AIB.yaml",
+      "sha256": "b54dbe8739a7b941ddbd27cba7c189798793c16b2322fd0f46ccd64e35033b79"
+    },
+    {
+      "id": "08",
+      "path": "THEYAMLS/General_Config/ameyukisora/mihomo.yaml",
+      "sha256": "23095e6a70bcba64229df44975dbedfc43d9e0512b1a542c4685ff5c7555b9aa"
+    },
+    {
+      "id": "09",
+      "path": "THEYAMLS/General_Config/Kerronex/config.yaml",
+      "sha256": "2646f16d67cdb0af6e512945759453bbb1bba23d2fe37437fd668ac81eebf66f"
+    },
+    {
+      "id": "10",
+      "path": "THEYAMLS/General_Config/iKeLee/Clash_Sample.yaml",
+      "sha256": "5b6dfb1e0a22e13506e82bd9afac9db88aa803fac5869a347e7e30e3b841adf7"
+    },
+    {
+      "id": "11",
+      "path": "THEYAMLS/Official_Examples/Metacubex/rule-set_config.yaml",
+      "sha256": "0a0e5046257a8615a877b6c661b2ed92371362dac8e50a00eb4ae2976d126a37"
+    },
+    {
+      "id": "12",
+      "path": "THEYAMLS/General_Config/Accademia/BlackList-02-Min.AntiAD.yaml",
+      "sha256": "ed36ff1b385ede17e0064660afb02e7dca9c6a3a0b7f092c0de70d3b8040d0f1"
+    }
+  ]
+}

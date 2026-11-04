@@ -387,3 +387,79 @@ Git 变更：`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.
 `dist/` 仍是 2026-10-27 的交付包，本次未重建；要发布需按 `build_gist_sync.py` → `verify_plugin.js` → `report_plugin.js` → `package_plugin.py` 四步重跑。
 
 Git 变更：`猫猫TProxy.js`、`tproxy-yq.zip`、`tests/tproxy/{config_semantics,optimization,optimization_subscription,reliability,run_tests,subscription_update}.test.js`、已有 `WORKLOG.md` 追加本节。
+
+## 2026-11-04：最终文件覆写复验与交付
+
+本节记录最终源码和组件的复验，覆盖前文尚未执行的语料与配置专项测试。保留并一起验证另一会话的覆写修改。用户随后将实机测试收窄为文件覆写；最终专项没有切换设备网络模式、启动测试核心或调整路由。开机自启动不在审计和修改范围内。
+
+### 确认并修复的问题
+
+1. 含 YAML Merge Key 的原始上传文件可以被 Mihomo 接受，但实际 ARM64 Controller snapshot 无法读成配置映射，取不到控制密钥，后续请求返回 401。共享文件提交入口在保存前用现有 yq 展开 Anchor/Alias/Merge Key；字段值逐项保留，现有控制密钥保留逻辑不变。该修复已随并行会话的提交进入主 JS。
+2. 上游 `Kerronex/config.yaml` 的 flow-style alias 经 `explode(.)` 输出后仍可能成为非法 YAML，真实设备提交失败。在同一个 yq 调用补 `-P`，强制输出合法的 block style。先复现失败，再验证修复；组件内 `Scripts/Clash.ConfigCommit` 同步重建。
+
+没有增加锁、重试、框架或网络行为。确认无需删除仍有消费者的兼容与恢复代码；未为缩小体积继续清理。
+
+### 最终验证结果
+
+主 JS SHA256：`20606f65d461c941e1278f256e1183401f9608e879cc3a10070bd170ef0f82e5`。组件 SHA256：`2050a3a97e9e1a4699356806fa72e4eb28627a75eaac43570d8e148a5a08aeac`。逐项报告位于 `reports/final-review-20261104/`。
+
+| 验证 | 实际结果与边界 |
+| --- | --- |
+| `node --check 猫猫TProxy.js` | PASS |
+| 现有 `scripts/verify_plugin.js` 套件 | 846 PASS / 0 FAIL / 12 NOT RUN；可选配置与语料测试另按下列命令实际执行，不能将此处的 NOT RUN 改记为 PASS |
+| `node --test --test-concurrency=1 tests/tproxy/config_semantics.test.js tests/tproxy/config_lifecycle.test.js tests/tproxy/config_recovery.test.js` | 68 PASS / 0 FAIL / 0 SKIP；实际 yq 4.53.3、ARM64 Controller（QEMU）与真实核心，另有明确标注的命令/DOM模拟用例 |
+| `real_templates.test.js` 四分片 | 97 TAP PASS / 0 FAIL / 0 SKIP，包含 93 份输入与 4 个父项 |
+| 语料字段检查 | 4,840 个阶段，13,626 处有具体原因的差异，0 未归类差异；数组及顺序、深层对象、未知字段均纳入比较 |
+| Linux AMD64 Mihomo 1.19.33 | 75 份原始投影 + 74 份处理后投影，共 149 次实际 `-t`；原始通过的 69 份处理后全部通过，没有新增核心失败 |
+| F50 Android ARM64 Mihomo 1.19.33 | 精选 12 份上游配置，原始资源投影与插件处理后投影分别校验，24/24 PASS |
+| F50 共享文件提交入口 | 12 份 × 原文/原始投影/处理后投影共 36 阶段 PASS；72 次提交及字段比较、36 次字节幂等比较、36 次 Controller snapshot 可读 |
+| F50 实际页面文件覆写 | 含合并键、深层对象、数组、false/null、中文的正向保存 PASS；非法 YAML 拒绝且原文件字节不变 PASS；重复保存字节不变 PASS；恢复用户原配置 PASS |
+| 正式组件构建 | `python3 scripts/build_gist_sync.py` PASS；共享提交脚本与当前 JS 对应，清单校验 PASS；组件 Service 的原配置恢复函数与当前 JS 字节一致 |
+
+上游固定于 [MIHOMO_YAMLS 982bf810](https://github.com/HenryChiao/MIHOMO_YAMLS/tree/982bf8104b123c4b9cb9f36431bd4acdb33191da)。93 份输入中 88 份可解析（75 份标准配置、13 份 Smart-only），5 份错误 YAML/非映射输入被拒绝。标准配置中 Repcz 的 sequence 不适用规范化，故 74 份进入完整处理链。13 份 Smart-only 仅通过语义检查，不计作标准核心通过。
+
+6 份原始核心校验未通过：Ayanami geo-lite、qichiyuhub fuxie/proxychain 存在引用缺失，Repcz 为 sequence，Lanlan configfull_lite 缺离线 GeoSite 列表，liandu clash-fallback-std 使用 OpenClash 路径。除不进入处理链的 Repcz，其余 5 份处理后仍受同一限制；未豁免、改为 PASS 或擅改原模板。详细原因见四份 templates JSON 和 summary.json。
+
+核心校验使用本地 provider/rule-provider 资源投影，保留类型及引用关系；Linux 校验通过 seccomp 禁止公网网络。原始上游文本另走完整文件提交和字段比较。以上证明配置消费与保存，不证明公开订阅、HTTP Provider 下载或真实节点网络可用。
+
+实机精选包括 666OS 的 Lite/Pro/Mini、HenryChiao 的 MihomoAIO/MihomoProMax、AIsouler、JohnsonRan、ameyukisora、Kerronex、iKeLee、Metacubex rule-set 示例和 Accademia BlackList-02-Min.AntiAD；文件名、原文哈希和结果见 device-template-manifest.json 与 device-template-results.log。
+
+### 生命周期与断言复核
+
+原配置→解析→深度合并→模板规范化→六组合网络整形→保存→订阅处理→Controller prepare→Service 恢复→核心消费，按阶段对比字段。DNS、Provider、策略组引用、用户未知字段与来源标记均有断言；显式 false/null 不被默认值覆盖。网络组合只在配置 fixture 中验证，不代表 F50 的六种实际网络行为已通过。
+
+并行修改明确要求每次重算 `x-f50-overridden`。恢复测试原先要求过期纠正记录永久保留，已改为精确核对本次纠正记录；所有有效配置字段仍严格比较，持续存在的端口冲突记录单独断言。语料测试同步加入 IPv4 清除 inet6-address、空 rule-provider proxy 补 DIRECT 的具体差异原因，没有放宽未知字段、数组或引用检查。
+
+实机测试参考值曾在解析前排序 YAML，改变共享 Anchor 的合并优先级，导致原文比较误报；修正为先解析成 JSON 再排序，重新严格比较全部字段。Kerronex 的输出错误则独立确认为生产缺陷并按上述 `-P` 修复。失败前后记录均保留，没有通过修改原始样本或删除断言制造通过。
+
+### 设备最终状态与剩余边界
+
+- 实际页面中仍是一个猫猫TProxy，正文与最终仓库 JS 一致，其他插件保留。
+- 用户原配置已恢复，测试标记移除；DNS、Provider、控制密钥和其他有效字段恢复一致，仅依新约定清掉旧的 `x-f50-overridden`。核心 PID 30573 未因最终覆写专项变化，API 正常，F50 为 TProxy / IPv4。
+- 设备同步了本次 `Clash.ConfigCommit` 与两份组件清单，并核对现有 Gist 清单成员。最终阶段没有替换运行中的 Service；包内 Service 为恢复块版本 24，现场原 Service 仍为此前版本，不声称两者整文件一致。
+- 用户电脑 IP 已在绕过名单；电脑 Sparkle TUN 已恢复开启。此前继续关闭电脑 TUN 是操作判断错误。后续不再调整电脑网卡或 Sparkle。
+- 早先网络切换曾出现 Provider DNS 解析失败、核心启动失败和 TUN 不稳定；未证明其根因或修复，不记为 PASS。用户收窄测试范围后不再切换模式。因此结论是**覆写功能可以继续在当前 TProxy 基线上实测**，不能据此宣布 TUN 稳定或整个设备网络验收通过。
+
+| 最终问题 | 判断 |
+| --- | --- |
+| 是否适合开始/继续 F50 实机测试 | 文件覆写专项具备条件；当前 TProxy 基线已恢复。整机网络功能尚未全部验收 |
+| 是否还有覆写前必须修复的问题 | 本次确认的两个覆写缺陷均已修复并复验，未留下已知覆写失败 |
+| 哪些通过真实核心验证 | 上述 149 次 Linux 配置检查及 24 次 Android 配置检查；现场用户配置由原核心持续加载 |
+| 哪些仅有模拟或离线证据 | 安装升级主要为现有模拟用例；公网订阅/Provider 更新、Gist 远端同步不能由本地资源及 age/事务测试推定通过 |
+| 哪些仍需实机确认 | 内核接管、下游 IPv4/IPv6、TUN 连续运行、真实 DNS/节点/Provider 网络、正式安装升级及生产 Gist 同步 |
+| 已知可能影响实测的风险 | 上述未解决的 TUN/Provider DNS 现象；特定原始模板本身的缺失引用、平台路径和外部数据依赖 |
+
+### 复现与交付文件
+
+沿用前文真实工具环境；四分片及配置命令见上表。新增实机复现入口不修改 live 配置：
+
+```sh
+python3 tests/tproxy/prepare_device_templates.py \
+  --templates /path/to/MIHOMO_YAMLS \
+  --inputs /path/to/core-inputs \
+  --output /path/to/upstream-device.zip
+# 将该包解压至 F50 的 /data/local/tmp/maomao-upstream-overwrite-20261104 后：
+sh /data/local/tmp/maomao-upstream-overwrite-20261104/run.sh
+```
+
+本次提交文件：主 JS、组件 ZIP、完整 WORKLOG、必要的 config_lifecycle/config_recovery/real_templates 测试及 no_network.c、两份实机复现脚本、final-review 报告。交付 ZIP 同时带上本任务此前实际修改的 native 规范化源码/测试和配置语义测试，便于复核累计修复；不附私人配置、凭据、未修改的自启文件或历史 dist 包。现行根目录 JS 和组件均已应用修复，不要求用户从报告中自行拼补丁。

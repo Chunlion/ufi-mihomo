@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0-rc4",
+  "go": "go version go1.24.4 linux/amd64",
+  "plugin_sha256": "20606f65d461c941e1278f256e1183401f9608e879cc3a10070bd170ef0f82e5",
+  "package_sha256": "2050a3a97e9e1a4699356806fa72e4eb28627a75eaac43570d8e148a5a08aeac",
+  "native_sha256": {
+    "arm64": "7f331051f03125eb505ac1da532d9898f3afe75745de9e903eaed623b0885ac7",
+    "amd64": "c0d226340f9f012b79d43d7b9dc1445ef0bc789b81994d4ce7a0839d16d854b1"
+  },
+  "manifest": {
+    "version": "1.0.0-rc4",
+    "protocol": 1,
+    "platform": "linux-arm64",
+    "age_included": true,
+    "files": {
+      "Scripts/Clash.ConfigCommit": "2a28870bce8f04a54f39660d16822e381c0cae50d07349e080ca3657cccdca1c",
+      "Scripts/Clash.GistSync": "444eae754ee39f26a8413308b2ea47542b71fab1c09ae9ddd746f7ced9fef7c5",
+      "Tools/age": "41b072352f4561018949623c674d16ef704019b9108a9bbdbd21292efebfc94f",
+      "Tools/age.LICENSE": "afbdb4e07a359499db587ae632815809b1fc1670a92d5449af112ce9a67833a2",
+      "Tools/kano-gist-sync": "7f331051f03125eb505ac1da532d9898f3afe75745de9e903eaed623b0885ac7"
+    }
+  }
+}

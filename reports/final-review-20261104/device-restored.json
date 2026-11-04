@@ -1,0 +1,15 @@
+{
+  "effectiveFieldsRestored": true,
+  "changedRootFields": [
+    "x-f50-overridden"
+  ],
+  "testMarkerRemoved": true,
+  "secretPreserved": true,
+  "dnsPreserved": true,
+  "providersPreserved": true,
+  "apiNormal": true,
+  "device": {
+    "success": true,
+    "content": "30573\ntraffic_mode=tproxy\nipv6=off\nORIGINAL_FILE_RESTORED=1"
+  }
+}

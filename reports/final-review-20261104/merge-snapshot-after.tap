@@ -1,0 +1,185 @@
+TAP version 13
+# Subtest: Service preserves complete unmanaged nested values / template.yaml
+ok 1 - Service preserves complete unmanaged nested values / template.yaml # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.82547
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / template.yaml
+ok 2 - Service preserves explicit null sniffer/profile / template.yaml # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.110169
+  ...
+# Subtest: Service preserves complete unmanaged nested values / uploaded_config
+ok 3 - Service preserves complete unmanaged nested values / uploaded_config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057414
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / uploaded_config
+ok 4 - Service preserves explicit null sniffer/profile / uploaded_config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067122
+  ...
+# Subtest: Service preserves complete unmanaged nested values / subscription_original
+ok 5 - Service preserves complete unmanaged nested values / subscription_original # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058565
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / subscription_original
+ok 6 - Service preserves explicit null sniffer/profile / subscription_original # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056721
+  ...
+# Subtest: Service keeps prior managed-field metadata through template recovery
+ok 7 - Service keeps prior managed-field metadata through template recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.091111
+  ...
+# Subtest: Service restores explicit rule-provider proxy without replacing generated providers
+ok 8 - Service restores explicit rule-provider proxy without replacing generated providers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049211
+  ...
+# Subtest: Service still falls back from malformed sniffer/profile scalars
+ok 9 - Service still falls back from malformed sniffer/profile scalars # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.092386
+  ...
+# Subtest: Service preserves uploaded HTTP Provider identity and options / gist=false
+ok 10 - Service preserves uploaded HTTP Provider identity and options / gist=false # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.157585
+  ...
+# Subtest: Service preserves uploaded HTTP Provider identity and options / gist=true
+ok 11 - Service preserves uploaded HTTP Provider identity and options / gist=true # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069635
+  ...
+# Subtest: Service reads a CRLF source marker with the same meaning as JS
+ok 12 - Service reads a CRLF source marker with the same meaning as JS # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.053542
+  ...
+# Subtest: Service retains a disabled default port when a real template uses mixed-port 7890
+ok 13 - Service retains a disabled default port when a real template uses mixed-port 7890 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042089
+  ...
+# Subtest: Service expands aliases before merging and applies YAML merge precedence
+ok 14 - Service expands aliases before merging and applies YAML merge precedence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082636
+  ...
+# Subtest: Service presents raw merge-key YAML to the Controller as an unambiguous mapping
+ok 15 - Service presents raw merge-key YAML to the Controller as an unambiguous mapping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.108876
+  ...
+# Subtest: Service restores the original bytes after normalization failure
+ok 16 - Service restores the original bytes after normalization failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.124927
+  ...
+# Subtest: Service restores the original bytes after controller failure
+ok 17 - Service restores the original bytes after controller failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.051963
+  ...
+# Subtest: Service restores the original bytes after core validation failure
+ok 18 - Service restores the original bytes after core validation failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.139817
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / ""
+ok 19 - Service retains a nonempty secret and supplies the default otherwise / "" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06372
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / null
+ok 20 - Service retains a nonempty secret and supplies the default otherwise / null # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073342
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / "kept-secret"
+ok 21 - Service retains a nonempty secret and supplies the default otherwise / "kept-secret" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039253
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "kept-secret", "incoming-secret"
+ok 22 - YAML commit preserves the first available nonempty secret / "kept-secret", "incoming-secret" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029838
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "", "incoming-secret"
+ok 23 - YAML commit preserves the first available nonempty secret / "", "incoming-secret" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030929
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / null, "incoming-secret"
+ok 24 - YAML commit preserves the first available nonempty secret / null, "incoming-secret" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031063
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "", ""
+ok 25 - YAML commit preserves the first available nonempty secret / "", "" # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029062
+  ...
+# Subtest: Service migrates a version 22 marker and a second application is unchanged
+ok 26 - Service migrates a version 22 marker and a second application is unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028951
+  ...
+# Subtest: committed merge keys remain readable by the actual Controller snapshot
+ok 27 - committed merge keys remain readable by the actual Controller snapshot
+  ---
+  duration_ms: 144.921465
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml
+ok 28 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058549
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config
+ok 29 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039289
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original
+ok 30 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038441
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist
+ok 31 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034842
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml
+ok 32 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034556
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config
+ok 33 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.099071
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original
+ok 34 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037879
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist
+ok 35 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048464
+  ...
+1..35
+# tests 35
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 34
+# todo 0
+# duration_ms 296.061028

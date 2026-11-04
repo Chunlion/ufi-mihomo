@@ -1,0 +1,9 @@
+{
+  "sharedCommitUpdated": true,
+  "manifestEntries": 5,
+  "allManifestEntriesMatch": true,
+  "core": {
+    "success": true,
+    "content": "Mihomo Meta v1.19.33 android arm64 with go1.26.10 Wed Oct 21 16:43:19 UTC 2026\n30573\ntraffic_mode=tproxy\nipv6=off\nFINAL_COMPONENT_CHECK=1"
+  }
+}

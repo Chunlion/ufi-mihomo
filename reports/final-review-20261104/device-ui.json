@@ -1,0 +1,53 @@
+{
+  "pluginSha256": "20606f65d461c941e1278f256e1183401f9608e879cc3a10070bd170ef0f82e5",
+  "status": "PASS",
+  "positive": {
+    "anchorAliasMergePreserved": true,
+    "deepObjectsArraysNullFalsePreserved": true,
+    "dnsPreserved": true,
+    "providersPreserved": true,
+    "secretPreserved": true,
+    "changedRootFields": [
+      "x-f50-overridden",
+      "x-maomao-file-review"
+    ]
+  },
+  "invalidYaml": {
+    "rejected": true,
+    "originalFileByteIdentical": true,
+    "corePidBefore": 30573,
+    "corePidAfter": 30573
+  },
+  "repeatedSave": {
+    "fileByteIdentical": true,
+    "apiNormal": true,
+    "corePid": 30573
+  },
+  "beforeFix": {
+    "mergeKeySnapshotStatus": "invalid",
+    "configError": "configuration is not a YAML mapping",
+    "uploadReloadHttp": 204,
+    "followingModePatchHttp": 401,
+    "followingPatchHadAuthorizationHeader": false,
+    "rollbackRestoredOriginal": true
+  },
+  "afterFix": {
+    "sameMergeInputSaved": true,
+    "apiNormal": true
+  },
+  "restoration": {
+    "effectiveFieldsRestored": true,
+    "changedRootFields": [
+      "x-f50-overridden"
+    ],
+    "testMarkerRemoved": true,
+    "secretPreserved": true,
+    "dnsPreserved": true,
+    "providersPreserved": true,
+    "apiNormal": true,
+    "device": {
+      "success": true,
+      "content": "30573\ntraffic_mode=tproxy\nipv6=off\nORIGINAL_FILE_RESTORED=1"
+    }
+  }
+}

@@ -463,3 +463,30 @@ sh /data/local/tmp/maomao-upstream-overwrite-20261104/run.sh
 ```
 
 本次提交文件：主 JS、组件 ZIP、完整 WORKLOG、必要的 config_lifecycle/config_recovery/real_templates 测试及 no_network.c、两份实机复现脚本、final-review 报告。交付 ZIP 同时带上本任务此前实际修改的 native 规范化源码/测试和配置语义测试，便于复核累计修复；不附私人配置、凭据、未修改的自启文件或历史 dist 包。现行根目录 JS 和组件均已应用修复，不要求用户从报告中自行拼补丁。
+
+## 2026-11-04：配置加载追加复查
+
+对 `24f5cc2` 的当前工作区重新检查。生产 JS 和组件哈希与上一节一致；设备页面只有一个主插件，正文与仓库一致，API 正常。本轮未再改生产代码，保留修复 flow-style 输出的 `-P`，未操作电脑网卡、Sparkle、F50 网络模式或开机自启动。
+
+发现并补齐两处测试覆盖空档：
+
+- 原整批真实核心校验只检查原始配置与模板输出；现在同样校验经过整形的上传保留分支，为每份配置增加独立核心输入目录。
+- 原来对“原始核心校验已失败”的样本只记录处理后结果，可能掩盖另一种失败；现在对六份已知限制逐一匹配具体错误，任何其他样本失败或错误原因改变都会使测试失败。没有将核心拒绝的配置记为通过。
+
+| 本轮实际执行 | 结果 |
+| --- | --- |
+| `node --check 猫猫TProxy.js` | PASS |
+| 原配置专项命令，三份 config 测试 | 68 PASS / 0 FAIL / 0 SKIP |
+| 加强后的 `real_templates.test.js`，四分片 | 97 PASS / 0 FAIL / 0 SKIP，实际检查 93 份 YAML |
+| 逐阶段字段比较 | 4,840 阶段、13,626 处有原因的差异、0 未归类差异；与前轮逐字段报告完全一致 |
+| Linux Mihomo 1.19.33 配置检查 | 223 次：75 份原始输入投影、74 份模板输出投影、74 份上传输出投影；各分支通过 69 份。原始通过的 69 份，两种输出全部通过；16 次未通过均精确匹配六份已知输入/资源/路径限制，0 新失败 |
+| F50 临时目录原有脚本复跑 | 12 份配置、36 阶段、72 次提交及字段比较、36 次重复处理/Controller snapshot、24 次 Android 核心检查全部 PASS |
+| F50 现场不变性 | 实际运行配置、来源文件、核心 PID、网络模式与复查前一致，API 正常；没有覆盖用户配置 |
+
+六份限制重新对照原始文件确认：Ayanami geo-lite 的 DNS 引用了未定义的 ChinaMax_Domain；fuxie 的多个组引用未定义的“直连”；proxychain 的 DNS 引用未定义的 fakeipfilter_domain；Repcz 的 Subscribe 是数组；Lanlan 需要现有离线 GeoSite 缺少的 biliintl；liandu 使用 `/usr/share/openclash/ui`。另有五份错误 YAML/非映射输入被拒绝，十三份 Smart-only 不计作标准核心通过。不能宣称上游所有文件均可直接加载，也没有为凑 PASS 改写这些模板。
+
+本轮核心检查仍使用本地 Provider/规则资源；不推定真实订阅、DNS 或节点网络通过。未发现新的覆写代码缺陷，当前有效配置的模板、上传、保存、恢复和重复处理检查通过；此前 TUN 网络故障结论不变。
+
+复现继续使用前节工具环境和四分片/配置命令。新增证据位于 `reports/final-review-20261104/recheck-expanded/`：summary.json 保存全部 223 次核心结果及字段比较统计，source-limits.json 保存原文核对，device.json 保存本轮实机结果，各 TAP 保存实际测试输出。重复字段差异与原报告完全一致，交付直接引用前节四份逐字段 JSON。
+
+本轮实际修改：`tests/tproxy/real_templates.test.js`、本 WORKLOG 和上述复查报告。未再次修改主 JS 或组件包。

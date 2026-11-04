@@ -1,0 +1,136 @@
+TAP version 13
+# Subtest: pinned real Mihomo templates retain fields throughout configuration handling
+    # Subtest: THEYAMLS/General_Config/666OS/OneTouch_Config.yaml
+    ok 1 - THEYAMLS/General_Config/666OS/OneTouch_Config.yaml
+      ---
+      duration_ms: 1719.770291
+      ...
+    # Subtest: THEYAMLS/General_Config/Accademia/BlackList-01.yaml
+    ok 2 - THEYAMLS/General_Config/Accademia/BlackList-01.yaml
+      ---
+      duration_ms: 10121.558054
+      ...
+    # Subtest: THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml
+    ok 3 - THEYAMLS/General_Config/Accademia/[Desktop]-WhiteList-02-Min.AntiAD.yaml
+      ---
+      duration_ms: 11298.823197
+      ...
+    # Subtest: THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml
+    ok 4 - THEYAMLS/General_Config/Accademia/[Mobile]-WhiteList-03-Non.AntiAD.yaml
+      ---
+      duration_ms: 11335.679262
+      ...
+    # Subtest: THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml
+    ok 5 - THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config.yaml
+      ---
+      duration_ms: 2064.727036
+      ...
+    # Subtest: THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml
+    ok 6 - THEYAMLS/General_Config/From_clash_by_hako/region-dual-provider.yaml
+      ---
+      duration_ms: 1863.579521
+      ...
+    # Subtest: THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml
+    ok 7 - THEYAMLS/General_Config/HenryChiao/MihomoProMax.yaml
+      ---
+      duration_ms: 3298.138572
+      ...
+    # Subtest: THEYAMLS/General_Config/Kerronex/config.yaml
+    ok 8 - THEYAMLS/General_Config/Kerronex/config.yaml
+      ---
+      duration_ms: 5898.742137
+      ...
+    # Subtest: THEYAMLS/General_Config/Mitchell/config.yaml
+    ok 9 - THEYAMLS/General_Config/Mitchell/config.yaml
+      ---
+      duration_ms: 2739.778692
+      ...
+    # Subtest: THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml
+    ok 10 - THEYAMLS/General_Config/Pililink/base-clash-ruleset.yaml
+      ---
+      duration_ms: 1939.154388
+      ...
+    # Subtest: THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml
+    ok 11 - THEYAMLS/General_Config/SHICHUNHUI88/Clash-Airport.yaml
+      ---
+      duration_ms: 3942.630948
+      ...
+    # Subtest: THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml
+    ok 12 - THEYAMLS/General_Config/Sgraqwq/Proxy-override.yaml
+      ---
+      duration_ms: 2774.021721
+      ...
+    # Subtest: THEYAMLS/General_Config/Yiteei/fake-ip_config.yaml
+    ok 13 - THEYAMLS/General_Config/Yiteei/fake-ip_config.yaml
+      ---
+      duration_ms: 8.688835
+      ...
+    # Subtest: THEYAMLS/General_Config/bgpeer/Clashmi.yaml
+    ok 14 - THEYAMLS/General_Config/bgpeer/Clashmi.yaml
+      ---
+      duration_ms: 2752.290959
+      ...
+    # Subtest: THEYAMLS/General_Config/iKeLee/backup.yaml
+    ok 15 - THEYAMLS/General_Config/iKeLee/backup.yaml
+      ---
+      duration_ms: 1376.734253
+      ...
+    # Subtest: THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml
+    ok 16 - THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml
+      ---
+      duration_ms: 2120.022927
+      ...
+    # upstream core result: platform-path-limited; processed: platform-path-limited
+    # upstream core result: platform-path-limited; uploaded: platform-path-limited
+    # Subtest: THEYAMLS/General_Config/lvbibir/mihomo.yaml
+    ok 17 - THEYAMLS/General_Config/lvbibir/mihomo.yaml
+      ---
+      duration_ms: 1750.803984
+      ...
+    # Subtest: THEYAMLS/General_Config/sfssup/mihomo.yaml
+    ok 18 - THEYAMLS/General_Config/sfssup/mihomo.yaml
+      ---
+      duration_ms: 3578.462238
+      ...
+    # Subtest: THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml
+    ok 19 - THEYAMLS/Mobile_Modules/AkashaProxy/config.yaml
+      ---
+      duration_ms: 3836.970669
+      ...
+    # Subtest: THEYAMLS/Official_Examples/Metacubex/geox_config.yaml
+    ok 20 - THEYAMLS/Official_Examples/Metacubex/geox_config.yaml
+      ---
+      duration_ms: 1647.747132
+      ...
+    # Subtest: THEYAMLS/Smart_Mode/HenryChiao/MihomoSmartAIO.yaml
+    ok 21 - THEYAMLS/Smart_Mode/HenryChiao/MihomoSmartAIO.yaml
+      ---
+      duration_ms: 52.626953
+      ...
+    # Smart-only: no standard Mihomo compatibility claim
+    # Subtest: THEYAMLS/Smart_Mode/echs-top/mihomo_smart.yaml
+    ok 22 - THEYAMLS/Smart_Mode/echs-top/mihomo_smart.yaml
+      ---
+      duration_ms: 35.386154
+      ...
+    # Smart-only: no standard Mihomo compatibility claim
+    # Subtest: THEYAMLS/Smart_Mode/liandu2024/clash-fallback-smart-std.yaml
+    ok 23 - THEYAMLS/Smart_Mode/liandu2024/clash-fallback-smart-std.yaml
+      ---
+      duration_ms: 30.186753
+      ...
+    # Smart-only: no standard Mihomo compatibility claim
+    1..23
+ok 1 - pinned real Mihomo templates retain fields throughout configuration handling
+  ---
+  duration_ms: 76566.779366
+  ...
+1..1
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 76747.161787

@@ -1,0 +1,56 @@
+[
+  {
+    "sample": "Ayanami0-configs/Ayanami0_config_geo-lite.yaml",
+    "sourceEvidence": {
+      "ChinaMax_Domain_defined": false,
+      "dns_policy_reference": true
+    }
+  },
+  {
+    "sample": "qichiyuhub/fuxie.yaml",
+    "sourceEvidence": {
+      "direct_target_defined": false,
+      "referencing_groups": [
+        "🚀 默认代理",
+        "📹 YouTube",
+        "🍀 Google",
+        "🤖 AI",
+        "👨🏿‍💻 GitHub",
+        "🐬 OneDrive",
+        "🪟 Microsoft",
+        "🎵 TikTok",
+        "📲 Telegram",
+        "🎥 NETFLIX",
+        "💶 Wallet",
+        "🎮 Steam",
+        "🍎 Apple",
+        "🐟 漏网之鱼"
+      ]
+    }
+  },
+  {
+    "sample": "qichiyuhub/proxychain.yaml",
+    "sourceEvidence": {
+      "fakeipfilter_domain_defined": false,
+      "dns_reference": true
+    }
+  },
+  {
+    "sample": "Repcz/config_lite.yaml",
+    "sourceEvidence": {
+      "Subscribe_type": "list"
+    }
+  },
+  {
+    "sample": "Lanlan13-14/configfull_lite.yaml",
+    "sourceEvidence": {
+      "geosite_biliintl_referenced": true
+    }
+  },
+  {
+    "sample": "liandu2024/clash-fallback-std.yaml",
+    "sourceEvidence": {
+      "external-ui": "/usr/share/openclash/ui"
+    }
+  }
+]

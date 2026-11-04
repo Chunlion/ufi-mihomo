@@ -1,0 +1,350 @@
+TAP version 13
+# Subtest: real template persists through preparation, repeated saves, source changes and mode switches
+ok 1 - real template persists through preparation, repeated saves, source changes and mode switches
+  ---
+  duration_ms: 2257.034078
+  ...
+# Subtest: Service preserves complete unmanaged nested values / template.yaml
+ok 2 - Service preserves complete unmanaged nested values / template.yaml
+  ---
+  duration_ms: 111.643247
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / template.yaml
+ok 3 - Service preserves explicit null sniffer/profile / template.yaml
+  ---
+  duration_ms: 93.335351
+  ...
+# Subtest: Service preserves complete unmanaged nested values / uploaded_config
+ok 4 - Service preserves complete unmanaged nested values / uploaded_config
+  ---
+  duration_ms: 98.907817
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / uploaded_config
+ok 5 - Service preserves explicit null sniffer/profile / uploaded_config
+  ---
+  duration_ms: 89.558581
+  ...
+# Subtest: Service preserves complete unmanaged nested values / subscription_original
+ok 6 - Service preserves complete unmanaged nested values / subscription_original
+  ---
+  duration_ms: 95.321015
+  ...
+# Subtest: Service preserves explicit null sniffer/profile / subscription_original
+ok 7 - Service preserves explicit null sniffer/profile / subscription_original
+  ---
+  duration_ms: 89.652552
+  ...
+# Subtest: Service keeps prior managed-field metadata through template recovery
+ok 8 - Service keeps prior managed-field metadata through template recovery
+  ---
+  duration_ms: 93.784979
+  ...
+# Subtest: Service restores explicit rule-provider proxy without replacing generated providers
+ok 9 - Service restores explicit rule-provider proxy without replacing generated providers
+  ---
+  duration_ms: 185.325835
+  ...
+# Subtest: Service still falls back from malformed sniffer/profile scalars
+ok 10 - Service still falls back from malformed sniffer/profile scalars
+  ---
+  duration_ms: 47.62342
+  ...
+# Subtest: Service preserves uploaded HTTP Provider identity and options / gist=false
+ok 11 - Service preserves uploaded HTTP Provider identity and options / gist=false
+  ---
+  duration_ms: 202.409949
+  ...
+# Subtest: Service preserves uploaded HTTP Provider identity and options / gist=true
+ok 12 - Service preserves uploaded HTTP Provider identity and options / gist=true
+  ---
+  duration_ms: 212.697139
+  ...
+# Subtest: Service reads a CRLF source marker with the same meaning as JS
+ok 13 - Service reads a CRLF source marker with the same meaning as JS
+  ---
+  duration_ms: 51.098773
+  ...
+# Subtest: Service retains a disabled default port when a real template uses mixed-port 7890
+ok 14 - Service retains a disabled default port when a real template uses mixed-port 7890
+  ---
+  duration_ms: 48.696849
+  ...
+# Subtest: Service expands aliases before merging and applies YAML merge precedence
+ok 15 - Service expands aliases before merging and applies YAML merge precedence
+  ---
+  duration_ms: 43.083714
+  ...
+# Subtest: Service presents raw merge-key YAML to the Controller as an unambiguous mapping
+ok 16 - Service presents raw merge-key YAML to the Controller as an unambiguous mapping
+  ---
+  duration_ms: 42.407553
+  ...
+# Subtest: Service restores the original bytes after normalization failure
+ok 17 - Service restores the original bytes after normalization failure
+  ---
+  duration_ms: 12.314154
+  ...
+# Subtest: Service restores the original bytes after controller failure
+ok 18 - Service restores the original bytes after controller failure
+  ---
+  duration_ms: 12.828965
+  ...
+# Subtest: Service restores the original bytes after core validation failure
+ok 19 - Service restores the original bytes after core validation failure
+  ---
+  duration_ms: 24.837485
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / ""
+ok 20 - Service retains a nonempty secret and supplies the default otherwise / ""
+  ---
+  duration_ms: 49.240777
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / null
+ok 21 - Service retains a nonempty secret and supplies the default otherwise / null
+  ---
+  duration_ms: 48.755484
+  ...
+# Subtest: Service retains a nonempty secret and supplies the default otherwise / "kept-secret"
+ok 22 - Service retains a nonempty secret and supplies the default otherwise / "kept-secret"
+  ---
+  duration_ms: 48.086756
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "kept-secret", "incoming-secret"
+ok 23 - YAML commit preserves the first available nonempty secret / "kept-secret", "incoming-secret"
+  ---
+  duration_ms: 41.148413
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "", "incoming-secret"
+ok 24 - YAML commit preserves the first available nonempty secret / "", "incoming-secret"
+  ---
+  duration_ms: 37.797278
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / null, "incoming-secret"
+ok 25 - YAML commit preserves the first available nonempty secret / null, "incoming-secret"
+  ---
+  duration_ms: 39.022225
+  ...
+# Subtest: YAML commit preserves the first available nonempty secret / "", ""
+ok 26 - YAML commit preserves the first available nonempty secret / "", ""
+  ---
+  duration_ms: 35.775795
+  ...
+# Subtest: Service migrates a version 22 marker and a second application is unchanged
+ok 27 - Service migrates a version 22 marker and a second application is unchanged
+  ---
+  duration_ms: 84.796887
+  ...
+# Subtest: committed merge keys remain readable by the actual Controller snapshot
+ok 28 - committed merge keys remain readable by the actual Controller snapshot
+  ---
+  duration_ms: 140.815529
+  ...
+# Subtest: committed Kerronex flow mappings remain readable by the actual Controller snapshot
+ok 29 - committed Kerronex flow mappings remain readable by the actual Controller snapshot
+  ---
+  duration_ms: 170.478479
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml
+ok 30 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml
+  ---
+  duration_ms: 3966.618778
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config
+ok 31 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config
+  ---
+  duration_ms: 1970.418991
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original
+ok 32 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original
+  ---
+  duration_ms: 1376.716726
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist
+ok 33 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist
+  ---
+  duration_ms: 1807.199923
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml
+ok 34 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml
+  ---
+  duration_ms: 5700.023408
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config
+ok 35 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config
+  ---
+  duration_ms: 2492.795422
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original
+ok 36 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original
+  ---
+  duration_ms: 1962.122138
+  ...
+# Subtest: actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist
+ok 37 - actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist
+  ---
+  duration_ms: 2475.286621
+  ...
+# Subtest: deep merge replaces arrays, retains explicit null and special keys, and does not share mutable values
+ok 38 - deep merge replaces arrays, retains explicit null and special keys, and does not share mutable values
+  ---
+  duration_ms: 3.27613
+  ...
+# Subtest: runtime retains unknown __proto__ fields at the root and inside merged mapping fields
+ok 39 - runtime retains unknown __proto__ fields at the root and inside merged mapping fields
+  ---
+  duration_ms: 0.425383
+  ...
+# Subtest: user TUN fields survive every traffic mode / legacy=false
+ok 40 - user TUN fields survive every traffic mode / legacy=false
+  ---
+  duration_ms: 1.869291
+  ...
+# Subtest: user TUN fields survive every traffic mode / legacy=true
+ok 41 - user TUN fields survive every traffic mode / legacy=true
+  ---
+  duration_ms: 0.499562
+  ...
+# Subtest: runtime preserves a user rule-provider download proxy and only supplies the missing default
+ok 42 - runtime preserves a user rule-provider download proxy and only supplies the missing default
+  ---
+  duration_ms: 0.252955
+  ...
+# Subtest: a valid custom listener does not conflict with an automatically supplied default listener
+ok 43 - a valid custom listener does not conflict with an automatically supplied default listener
+  ---
+  duration_ms: 1.331176
+  ...
+# Subtest: repeated runtime shaping is idempotent including the recorded managed-field corrections
+ok 44 - repeated runtime shaping is idempotent including the recorded managed-field corrections
+  ---
+  duration_ms: 0.94772
+  ...
+# Subtest: invalid dns types are not silently replaced by defaults
+ok 45 - invalid dns types are not silently replaced by defaults
+  ---
+  duration_ms: 0.185064
+  ...
+# Subtest: invalid tun types are not silently replaced by defaults
+ok 46 - invalid tun types are not silently replaced by defaults
+  ---
+  duration_ms: 0.160883
+  ...
+# Subtest: invalid sniffer types are not silently replaced by defaults
+ok 47 - invalid sniffer types are not silently replaced by defaults
+  ---
+  duration_ms: 0.190879
+  ...
+# Subtest: invalid profile types are not silently replaced by defaults
+ok 48 - invalid profile types are not silently replaced by defaults
+  ---
+  duration_ms: 0.115423
+  ...
+# Subtest: template binding retains provider custom fields and named group subsets
+ok 49 - template binding retains provider custom fields and named group subsets
+  ---
+  duration_ms: 1.999896
+  ...
+# Subtest: template binding preserves manual file and inline providers and their use references
+ok 50 - template binding preserves manual file and inline providers and their use references
+  ---
+  duration_ms: 0.497776
+  ...
+# Subtest: removing a subscription does not bind its custom provider fields to another remaining source
+ok 51 - removing a subscription does not bind its custom provider fields to another remaining source
+  ---
+  duration_ms: 0.287225
+  ...
+# Subtest: providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=false
+ok 52 - providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=false
+  ---
+  duration_ms: 0.806723
+  ...
+# Subtest: providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=true
+ok 53 - providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=true
+  ---
+  duration_ms: 0.887987
+  ...
+# Subtest: existing duplicate use references retain their order and multiplicity
+ok 54 - existing duplicate use references retain their order and multiplicity
+  ---
+  duration_ms: 0.200845
+  ...
+# Subtest: a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=false
+ok 55 - a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=false
+  ---
+  duration_ms: 0.389472
+  ...
+# Subtest: a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=true
+ok 56 - a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=true
+  ---
+  duration_ms: 0.234191
+  ...
+# Subtest: manual provider names colliding with managed names are remapped without overwriting another existing alias
+ok 57 - manual provider names colliding with managed names are remapped without overwriting another existing alias
+  ---
+  duration_ms: 0.337916
+  ...
+# Subtest: group names retain significant whitespace together with their references
+ok 58 - group names retain significant whitespace together with their references
+  ---
+  duration_ms: 0.234827
+  ...
+# Subtest: null proxies remains a valid empty list in template and runtime processing
+ok 59 - null proxies remains a valid empty list in template and runtime processing
+  ---
+  duration_ms: 0.248147
+  ...
+# Subtest: YAML serialization retains Unicode line separators in scalar values and keys
+ok 60 - YAML serialization retains Unicode line separators in scalar values and keys
+  ---
+  duration_ms: 5.247171
+  ...
+# Subtest: actual YAML bridge preserves merge precedence, aliases, flow collections and scalar types
+ok 61 - actual YAML bridge preserves merge precedence, aliases, flow collections and scalar types
+  ---
+  duration_ms: 25.181457
+  ...
+# Subtest: actual YAML bridge rejects nonmapping roots, multiple documents and unsafe numeric values
+ok 62 - actual YAML bridge rejects nonmapping roots, multiple documents and unsafe numeric values
+  ---
+  duration_ms: 70.377571
+  ...
+# Subtest: actual YAML bridge rejects duplicate mapping keys before JSON can discard an earlier value
+ok 63 - actual YAML bridge rejects duplicate mapping keys before JSON can discard an earlier value
+  ---
+  duration_ms: 23.467293
+  ...
+# Subtest: a stale correction marker is cleared once the conflicting value is gone
+ok 64 - a stale correction marker is cleared once the conflicting value is gone
+  ---
+  duration_ms: 0.320812
+  ...
+# Subtest: a conflicting default listener is closed and recorded, and stays recorded on the next shaping
+ok 65 - a conflicting default listener is closed and recorded, and stays recorded on the next shaping
+  ---
+  duration_ms: 0.426246
+  ...
+# Subtest: switching an original config to IPv4 TUN drops the IPv6 address and records it
+ok 66 - switching an original config to IPv4 TUN drops the IPv6 address and records it
+  ---
+  duration_ms: 0.263095
+  ...
+# Subtest: a group whose only provider disappeared falls back instead of keeping an empty use list
+ok 67 - a group whose only provider disappeared falls back instead of keeping an empty use list
+  ---
+  duration_ms: 0.36825
+  ...
+# Subtest: an unmatched custom http provider is dropped rather than recycled into a renumbered source
+ok 68 - an unmatched custom http provider is dropped rather than recycled into a renumbered source
+  ---
+  duration_ms: 0.173214
+  ...
+1..68
+# tests 68
+# suites 0
+# pass 68
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 26902.307195

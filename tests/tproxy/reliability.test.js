@@ -389,14 +389,16 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
   const dir = temp();
   try {
     const controlled = '["enable","device","auto-route","auto-redirect","strict-route","dns-hijack","stack"]';
-    const legacy = service.replace('# KANO_ORIGINAL_CONFIG_PRESERVATION=21', '# KANO_ORIGINAL_CONFIG_PRESERVATION=20')
+    // 降到真正过期的版本号，否则 patch 会认为已是最新、不重建，被测的"迁移"根本没发生。
+    const marker = (service.match(/# KANO_ORIGINAL_CONFIG_PRESERVATION=(\d+)/) || [])[1];
+    const legacy = service.replace(`# KANO_ORIGINAL_CONFIG_PRESERVATION=${marker}`, '# KANO_ORIGINAL_CONFIG_PRESERVATION=20')
       .split(controlled).join(controlled.replace(',"stack"', ''));
     const file = write(dir, 'Clash.Service', legacy);
     const patch = shell(api.patch(quote(file)));
     assert.equal(patch.status, 0, patch.stdout + patch.stderr);
     const migrated = fs.readFileSync(file, 'utf8');
     assert.equal((migrated.match(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=/gm) || []).length, 1);
-    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=22$/m);
+    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=24$/m);
     assert.notEqual(migrated, legacy);
     write(dir, 'Tools/config_source.conf', 'KANO_CONFIG_SOURCE=uploaded_config\n');
     fs.symlinkSync(process.env.F50_TEST_YQ, path.join(dir, 'Tools/yq_linux_arm64'));
@@ -404,7 +406,7 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
     const runtime = write(dir, 'runtime.yaml', 'tun: {enable: true, stack: mixed}\n');
     const core = write(dir, 'Proxy/Clash.Core', '#!/bin/sh\nexit 0\n');
     fs.chmodSync(core, 0o755);
-    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=22', '\nF50_OPERATION_LOCK=', migrated);
+    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=24', '\nF50_OPERATION_LOCK=', migrated);
     const restored = shell(helpers + `\nf50_save_original_config start || exit 1
 cp ${quote(runtime)} "$CLASH_ROOT/Proxy/config.yaml" || exit 1
 f50_restore_original_config || exit 1

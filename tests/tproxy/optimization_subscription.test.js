@@ -431,7 +431,8 @@ test('a configuration without providers cannot report a successful subscription 
 for (const status of [200, 390, 500, 'timeout']) {
   test(`Mihomo HTTP Provider API status ${status}`, async () => {
     const calls = [];
-    const refresh = run(slice('const forceUpdateProvidersFromConfig', 'const convertSubscriptionsLocally') + 'forceUpdateProvidersFromConfig', {
+    const refresh = run(slice('const isManagedProviderEntry', 'const normalizeSubUrl')
+      + slice('const forceUpdateProvidersFromConfig', 'const convertSubscriptionsLocally') + 'forceUpdateProvidersFromConfig', {
       ...subContext, buildControllerInfo: async () => ({}), getCorePid: async () => '123',
       mapWithConcurrency: async (items, limit, worker) => { assert.equal(limit, 2); return Promise.all(items.map(worker)); },
       buildProviderUpdateResult: (providers, meta) => ({ providers, failed: providers.filter(p => !p.ok).length, ...meta }),
@@ -444,7 +445,7 @@ for (const status of [200, 390, 500, 'timeout']) {
         return { success: status === 200, statusCode: status, responseText: status === 200 ? '{"proxies":[{"name":"Node"}]}' : `{"message":"HTTP ${status}"}` };
       },
     });
-    const updated = await refresh({ config: { 'proxy-providers': { Provider1: { type: 'http' } } } });
+    const updated = await refresh({ config: { 'proxy-providers': { Provider1: { type: 'http', path: './proxies/Provider1.yaml' } } } });
     assert.equal(updated.failed, status === 200 ? 0 : 1);
     assert.equal(updated.via, 'http');
     // 更新前后的节点数量分别来自两次快照。

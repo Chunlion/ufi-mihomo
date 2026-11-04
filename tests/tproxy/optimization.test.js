@@ -86,7 +86,7 @@ for (const [saved, types, expected] of [
       hostRunShellWithRoot: async () => ({ success: true, content: saved + (types.length ? '\nKANO_CONFIG_PRESENT=1' : '') }),
       f50ShellReply: value => value,
       runShellWithRoot: async () => { throw Error('read must not acquire a lease'); },
-      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(types.map((type, i) => [`Provider${i + 1}`, { type }])) } }),
+      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': Object.fromEntries(types.map((type, i) => [`Provider${i + 1}`, { type, path: `./proxies/Provider${i + 1}.yaml` }])) } }),
     });
     assert.equal(await read(), expected);
   });

@@ -314,7 +314,7 @@ check(templateSource.includes("'redir-port': 0") && Object.values(profiles).ever
 const kprSource = slice('const F50_COMPAT_VERSION', 'const F50_ORIGINAL_TUN_KEYS')
   + slice('const CONTROLLED_TOP_KEYS', 'function buildF50EmergencyScript')
   + slice('function createPrivateRouteLogic()', '// SPDX-License-Identifier: AGPL-3.0-or-later');
-const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack }).KPR;
+const kpr = runBlock(`${kprSource}; this.KPR = createPrivateRouteLogic();`, { F50_FIXED_PROFILES: profiles, f50TunStack: profileApi.f50TunStack, f50IsPlainObject: profileApi.f50IsPlainObject }).KPR;
 const baseConfig = {
   proxies: [],
   'proxy-groups': [{ name: 'Proxy', type: 'select', proxies: ['DIRECT'] }],

@@ -6115,8 +6115,9 @@ ${buildF50YamlCommitBody(withBase)}
     return config;
   };
 
-  const applyOverrideSafetyFields = (config, preservedSecret = '') =>
-    applyRequiredF50Fields(config, { preservedSecret });
+  // preserveConfig 必须跟随模板来源：手写模板没写 unified-delay 就是没写，覆写不该补默认值。
+  const applyOverrideSafetyFields = (config, preservedSecret = '', { preserveConfig = false } = {}) =>
+    applyRequiredF50Fields(config, { preservedSecret, preserveConfig });
 
   const normalizeManagedProxyGroups = (config, providerNames = [], renamedProviders = null) => {
     if (config['proxy-groups'] != null && !Array.isArray(config['proxy-groups'])) {
@@ -6555,11 +6556,16 @@ ${buildF50YamlCommitBody(withBase)}
 
   const normalizeOverrideJs = (code = '') => String(code || '')
     .replace(/export\s+default\s+function\s+main\s*\(/g, 'function main(')
-    .replace(/export\s+default\s+function\s*\(/g, 'function main(');
+    .replace(/export\s+default\s+function\s*\(/g, 'function main(')
+    // 其余 `export default (config) => ...` / `export default {...}` 统一转成 CommonJS 形式。
+    .replace(/\bexport\s+default\s+/g, 'module.exports = ');
 
+  // 静态层只拦"能在 Worker 内重新获得执行能力"的写法。浏览器/网络能力（fetch、WebSocket、
+  // importScripts、document、location 等）由 Worker 运行时逐个 defineProperty 成 undefined，
+  // 静态层再拦它们只会误伤正常内容：规则里的 `.top` 域名、注释里的 document/fetch 都会被判违规。
   const validateOverrideJsSafety = (code = '') => {
     const safeCode = normalizeOverrideJs(code);
-    const blockedPattern = /\b(eval|Function|fetch|XMLHttpRequest|WebSocket|EventSource|WebTransport|Worker|SharedWorker|import|importScripts|self|document|window|globalThis|localStorage|sessionStorage|indexedDB|caches|navigator|location|history|opener|parent|top|frames|runShellWithRoot|KANO_baseURL|common_headers|constructor|__proto__|prototype)\b/;
+    const blockedPattern = /\b(eval|Function|WebAssembly|import|importScripts|self|globalThis|constructor|__proto__|prototype|runShellWithRoot|KANO_baseURL|common_headers)\b/;
     if (safeCode.length > 20000) {
       throw new Error('JS 覆写内容过长；请精简后保存');
     }
@@ -6569,7 +6575,7 @@ ${buildF50YamlCommitBody(withBase)}
         return value <= 0x10ffff ? String.fromCodePoint(value) : match;
       });
     if (blockedPattern.test(decoded)) {
-      throw new Error('JS 覆写包含被禁止的浏览器、网络、动态执行或原型访问能力；已拒绝保存');
+      throw new Error('JS 覆写包含被禁止的动态执行、动态导入或原型访问写法；已拒绝保存');
     }
     return safeCode;
   };
@@ -6644,6 +6650,7 @@ ${buildF50YamlCommitBody(withBase)}
             'if (typeof main === "function") fn = main;\\n' +
             'else if (typeof module.exports === "function") fn = module.exports;\\n' +
             'else if (module.exports && typeof module.exports.default === "function") fn = module.exports.default;\\n' +
+            'else if (module.exports && typeof module.exports.main === "function") fn = module.exports.main;\\n' +
             'else if (typeof exports.default === "function") fn = exports.default;\\n' +
             'if (!fn) return config;\\n' +
             'const out = fn(config);\\n' +
@@ -6787,24 +6794,24 @@ fi`, 20000);
 
     let outputObj = read.value;
     const preservedSecret = typeof read.value.secret == 'string' ? read.value.secret : '';
+    const generated = await yamlHasGeneratedMarker(templatePath);
+    if (generated === null) {
+      createToast('无法读取 template.yaml 生成标记；操作已中止，原文件未改写。', 'red', 9000);
+      return false;
+    }
     try {
       if (hasUiOverride) outputObj = applyUiRuleOverridesToConfig(outputObj, ruleOverrideConfig);
       if (saved) {
         const code = await readJsOverrideText();
         outputObj = await runJsOverrideOnConfig(code, outputObj);
       }
-      applyOverrideSafetyFields(outputObj, preservedSecret);
+      applyOverrideSafetyFields(outputObj, preservedSecret, { preserveConfig: !generated });
       assertYamlRootMap(outputObj, 'template.yaml 覆写结果');
     } catch (e) {
       createToast(`覆写执行失败<br>${safeTextToHtml(e.message || e)}`, 'red', 9000);
       return false;
     }
 
-    const generated = await yamlHasGeneratedMarker(templatePath);
-    if (generated === null) {
-      createToast('无法读取 template.yaml 生成标记；操作已中止，原文件未改写。', 'red', 9000);
-      return false;
-    }
     const write = await writeYamlObjectAtomic(templatePath, outputObj, {
       label: 'template.yaml',
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',

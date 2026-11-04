@@ -89,9 +89,10 @@ func parseOptions(text string) map[string]string {
 
 // 网络层里改了会直接断链的键：iptables 的 TPROXY 端口、DNS 劫持端口，以及 TUN 路由参数。
 // 其余键（enhanced-mode、nameserver、fake-ip-*、sniffer、profile、端口等）一律跟随来源配置。
+// 必须与插件的 CONTROLLED_TUN_KEYS 逐字一致，tests/tproxy/controlled_keys.test.js 守着这条。
 var controlledNetworkKeys = map[string][]string{
 	"dns": {"enable", "listen"},
-	"tun": {"enable", "device", "auto-route", "auto-redirect", "strict-route", "dns-hijack"},
+	"tun": {"enable", "device", "auto-route", "auto-redirect", "strict-route", "dns-hijack", "stack"},
 }
 
 // applySourceNetwork 用来源配置覆盖网络层，再把断链键从内置 profile 回填。

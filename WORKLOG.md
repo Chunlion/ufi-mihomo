@@ -531,3 +531,60 @@ sh /data/local/tmp/maomao-upstream-overwrite-20261104/run.sh
 `node scripts/verify_plugin.js`（WSL，bsdtar 垫片）→ **848 passed / 0 failed / 12 not run**；`reliability.test.js` 204（新增 2 条覆盖误伤与 `export default` 写法）。
 
 Git 变更：`猫猫TProxy.js`、`tests/tproxy/reliability.test.js`、已有 `WORKLOG.md` 追加本节。
+
+## 2026-11-04（续二）：四链受控键一致性 + 模板写入校验 + 组件重编
+
+上两轮修了整形与 JS 覆写入口；这一轮把"四处受控键必须一致"从文档约定变成可执行断言，并补上模板写入前的类型校验。
+
+### 先证伪：差分测试守不住这件事
+
+`TestNormalizationDifferential` 的参考实现 `tests/gist-sync/baseline-normalizer.js` 自己写着"与 normalize.go 的 applySourceNetwork 对应"，受控键同样是 6 个——它是 **Go 的镜像**，两边一起错就一起"通过"。实测：
+
+- 给 `normalize.go` 的受控 tun 键补 `stack` 后，60 组差分**全绿**（因为 `mode=="tun"` 分支里 `obj(out["tun"])["stack"] = stack` 无条件覆盖，补与不补结果相同）；
+- 给差分用例的 config 加 `mtu:1400`、`auto-detect-interface:false`、`inet6-address` 后，差分**仍然全绿**（现有样例根本没覆盖这几个键的"用户值 vs profile 值"差异）。
+
+结论：Go 缺 `stack` 没有运行时症状，是契约债；要靠直接比对键集合来守。
+
+### 1. 新增 `tests/tproxy/controlled_keys.test.js`
+
+从四个来源提取并断言相等：插件常量（`vm` 执行常量段，避免漏判别名与多行定义）、`normalize.go` 的 `controlledNetworkKeys`、`baseline-normalizer.js` 的 `controlled`、**包内** `Scripts/Clash.Service` 的 `omit([...])`。另外断言 `F50_RESTORE_EXCLUDED_KEYS` 覆盖所有顶层受控键、`dns/tun/sniffer/profile`，并且**不含** `x-f50-overridden`（它必须随用户原配置保留，否则 Service 会丢掉纠正记录）。
+
+上线时立刻红了一条：Go 缺 `stack`。这正是要抓的。
+
+### 2. Go 受控键补 `stack`
+
+- `normalize.go`：`controlledNetworkKeys["tun"]` 加 `stack`，注释指向新的契约测试。
+- `baseline-normalizer.js` 同步加（否则契约过、差分过、镜像不同步，下次又漂）。
+- `normalize_test.go` 新增 `TestControlledTunStack`：**不依赖参考实现**，直接断言 tun 模式下 `stack` 必须等于 `options.tun_stack`（用 `system` 做反例，确认用户值被覆盖）、tproxy/off 模式下不能残留 `tun.stack`。
+
+### 3. 模板写入前校验顶层容器类型
+
+`runJsOverrideOnConfig` 只校验 `rules`/`proxy-groups`，`proxy-providers: "oops"` 能写进 `template.yaml`，要等下一次 `ensureTemplateForF50` 才报错——那时模板已经被覆盖一次。
+
+新增 `assertTemplateShapeForWrite`：只查顶层容器类型（`proxies`/`proxy-groups`/`rules` 允许缺失/null/数组；`dns`/`tun`/`sniffer`/`profile`/`proxy-providers`/`rule-providers` 允许缺失/null/映射），挂在 `kprBaseWriteYamlObjectAtomic` 里 `yamlPath !== CLASH_CONFIG` 的分支——一次覆盖 `template.yaml`、`template.base.yaml` 和导入模板三条路径，config.yaml 仍走既有整形。子键语义不在这里判，交给核心 `-t`。
+
+### 4. 重编组件并走完发布链
+
+`python3 scripts/build_gist_sync.py`（`sync_gist_plugin.js` 本次未改动主插件，构建前后 sha 都是 `b92619b7…`）：
+
+| 项 | 值 |
+| --- | --- |
+| 组件版本 / 协议 | 1.0.0-rc4 / 1 |
+| native arm64 sha256 | `22ad066357699bbe…` |
+| native amd64 sha256 | `1d2f2a121ee2c2b6…` |
+| 包 sha256 | `17e945fae65a3a5f…` |
+
+随后 `verify_plugin.js` → `report_plugin.js` → `package_plugin.py` 依次通过，交付包重建为 394999 字节 / 39 个文件。
+
+### 验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `node scripts/verify_plugin.js` | **852 passed / 0 failed / 12 not run**（新增契约 3 条 + shape 1 条） |
+| `go test -run 'TestControlledTunStack|TestNormalization'` | PASS（含 60 组差分） |
+| `node scripts/report_plugin.js` | install 脚本 95372 字节，较基线省 **25296**（阈值 25000） |
+| `python3 scripts/package_plugin.py` | 交付包 394999 字节，内容逐字节校验通过 |
+
+仍未运行：`real_templates`（需要 `MIHOMO_YAMLS` 语料），新加的 shape 校验可能误拦真实模板，有语料时必须补跑这一项。
+
+Git 变更：`猫猫TProxy.js`、`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.go`、`tests/gist-sync/baseline-normalizer.js`、`tests/tproxy/controlled_keys.test.js`（新增）、`tests/tproxy/config_semantics.test.js`、`tproxy-yq.zip`、`reports/v9.0.0-{regression,size}.json`、`dist/` 交付包、已有 `WORKLOG.md` 追加本节。

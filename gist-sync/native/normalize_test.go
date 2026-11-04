@@ -133,6 +133,37 @@ func TestNormalizationLocalPorts(t *testing.T) {
 	}
 }
 
+// stack 是受控键：tun 模式下必须等于 options.tun_stack，tproxy/off 模式下不能残留用户值。
+// 这条不依赖 tests/gist-sync/normalize-reference.js，避免参考实现与生产代码一起漂移。
+func TestControlledTunStack(t *testing.T) {
+	base := func() map[string]any {
+		return map[string]any{
+			"tun":   map[string]any{"enable": true, "stack": "system"},
+			"rules": []any{"MATCH,DIRECT"},
+		}
+	}
+	for _, mode := range []string{"tun"} {
+		for _, stack := range []string{"mixed", "gvisor", "system", "mips"} {
+			got, err := normalizeConfig(base(), map[string]string{"traffic_mode": mode, "ipv6": "off", "tun_stack": stack}, nil)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", mode, stack, err)
+			}
+			if v := fmt.Sprint(obj(got["tun"])["stack"]); v != stack {
+				t.Fatalf("%s/%s: 用户 stack 未被覆盖，得到 %s", mode, stack, v)
+			}
+		}
+	}
+	for _, mode := range []string{"tproxy", "off"} {
+		got, err := normalizeConfig(base(), map[string]string{"traffic_mode": mode, "ipv6": "off"}, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if v, ok := obj(got["tun"])["stack"]; ok {
+			t.Fatalf("%s: 不应保留 tun.stack，得到 %v", mode, v)
+		}
+	}
+}
+
 func TestJSONGuards(t *testing.T) {
 	for _, s := range []string{`{"a":1,"a":2}`, `{} {}`, `{"n":9007199254740992}`, `{"n":NaN}`} {
 		if _, e := parseJSON([]byte(s)); e == nil {

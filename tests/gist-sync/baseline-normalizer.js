@@ -241,7 +241,7 @@ function createPrivateRouteLogic() {
       const base = f50IsPlainObject(out[key]) ? clone(out[key]) : {};
       out[key] = { ...base, ...clone(source[key]) };
       const controlled = key === 'dns' ? ['enable', 'listen']
-        : key === 'tun' ? ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack'] : [];
+        : key === 'tun' ? ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack', 'stack'] : [];
       for (const k of controlled) {
         if (own(base, k)) out[key][k] = clone(base[k]);
         else delete out[key][k];

@@ -21,11 +21,15 @@ const api = vm.runInNewContext(
   + slice('const yamlScalar =', '// yq is an advanced-feature dependency')
   + slice('const providerNameFor', 'const readConfigSource')
   + slice('const buildManagedProxyProviders', 'const buildF50TemplateObject')
-  + '\n({ runtime:createPrivateRouteLogic().runtime, merge:f50DeepMerge, profiles:F50_FIXED_PROFILES, normalize:normalizeManagedTemplateObject, dump:dumpConfigYaml })', {
+  + '\n({ runtime:createPrivateRouteLogic().runtime, merge:f50DeepMerge, profiles:F50_FIXED_PROFILES, normalize:normalizeManagedTemplateObject, dump:dumpConfigYaml, shape:assertTemplateShapeForWrite })', {
     ZASHBOARD_UI_DIR: 'WebUI/zashboard', ZASHBOARD_UI_URL: 'https://example.test/dashboard.zip',
     currentProviderUserAgent: 'test-agent', isHttpUrl: value => /^https?:\/\//.test(value),
     CLASH_SAFE_REJECT_DOMAIN_FILE: '/policy/reject', CLASH_SAFE_DIRECT_DOMAIN_FILE: '/policy/direct-domain',
     CLASH_SAFE_DIRECT_IP_FILE: '/policy/direct-ip', CLASH_SAFE_PROXY_DOMAIN_FILE: '/policy/proxy',
+    assertYamlRootMap: (value, label = '配置') => {
+      if (!value || typeof value != 'object' || Array.isArray(value)) throw new Error(`${label} 必须是映射对象`);
+      return value;
+    },
   });
 const base = () => ({ proxies: [], 'proxy-groups': [{ name: 'Choose', type: 'select', proxies: ['DIRECT'] }], rules: ['MATCH,Choose'] });
 const sources = [{ url: 'https://one.example.test/sub' }, { url: 'https://two.example.test/sub' }];
@@ -377,4 +381,19 @@ test('an unmatched custom http provider is dropped rather than recycled into a r
   assert.equal(Object.hasOwn(result['proxy-providers'], 'Custom'), false);
   assert.equal(result['proxy-providers'].Provider1.url, sources[0].url);
   assert.equal(result['proxy-providers'].Provider1.override, undefined);
+});
+
+test('template writes reject non-container fields before the file is touched', () => {
+  const valid = { proxies: null, 'proxy-groups': [], rules: ['MATCH,DIRECT'], dns: null, tun: { enable: false },
+    'proxy-providers': {}, 'rule-providers': null, 'x-future': 'kept' };
+  assert.doesNotThrow(() => api.shape(valid));
+  for (const [key, value, pattern] of [
+    ['proxies', 'oops', /proxies 必须是数组/],
+    ['rules', {}, /rules 必须是数组/],
+    ['dns', [], /dns 必须是映射对象/],
+    ['tun', 'system', /tun 必须是映射对象/],
+    ['proxy-providers', 'oops', /proxy-providers 必须是映射对象/],
+    ['rule-providers', 0, /rule-providers 必须是映射对象/],
+  ]) assert.throws(() => api.shape({ ...valid, [key]: value }), pattern, key);
+  assert.throws(() => api.shape([]), /必须是映射对象/);
 });

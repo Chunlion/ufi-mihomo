@@ -212,3 +212,131 @@ F50 恢复 TProxy、IPv6 关闭、tun_stack=auto、规则模式，只有一个�
 验证：WSL 原生完整测试 `go test ./... -count=1` 通过；新增 global/direct 应用与回滚、五个事务失败阶段、收尾恢复、禁用及空列表、并发编辑保护、64 层选择链与环检测、200 字符策略名的回归用例。末次无配置变更分支调整后，定向测试通过。
 
 已用 Go 1.24.4 重建 ARM64/AMD64 程序及完整组件包，打包校验通过。本轮没有部署到 F50，没有修改电脑网络；这些结果为本地隔离验证，不替代实机验证，也未关闭上一节记录的实机失败项。
+
+## 2026-11-04：实机测试前最终独立复审（本轮结论）
+
+### 结论与交付使用
+
+**本轮范围内可以开始 F50 实机测试；四项确认的 Gist 配置缺陷已修复，没有剩余的本轮必修阻塞。** 这不是全部设备功能已通过验收。正式组件安装/升级、核心启停、真实流量下的模式切换和公网订阅/Gist 下载仍须验证。
+
+以实际附件 `maomao-tproxy-independent-review-2026-11-04.zip` 为 JS 基线；磁盘没有请求正文所写的 `(1).zip`。该附件仅有 JS、boot_readiness.test.js、WORKLOG，未含组件包、配置专项测试或逐项原始报告。文档中的历史结论不计作本轮结果。本轮没有审查或修改自启实现、boot 脚本、kano_boot_guard.sh 或 Service 的开机入口；附件的自启测试文件不纳入本轮交付。
+
+**继续使用原附件的猫猫TProxy.js，配套使用本次更新的 tproxy-yq.zip。JS 本轮未修改，因此不重复打包。** 本机仓库的 JS 仍为原有版本，没有用附件覆盖用户工作区；本轮 Git 仅提交下列 native 源码、定向用例、组件 ZIP 和本节日志。缺失的上一轮配置测试从本机已有独立目录取回，已检查断言并重新运行，作为复现材料随 ZIP 提供，不将其改称本轮新实现。
+
+### 确认的问题与修复
+
+上一轮主要修复了 JS 与 Service 的配置处理，但组件内 GistSync 的 Go 规范化器仍使用旧规则。真实调用链是 `candidate → normalizeConfig → 核心校验 → 提交`，不是只存在于未使用代码中的差异。
+
+| 问题 | 修复后行为 | 复现证据 |
+| --- | --- | --- |
+| HTTP Rule Provider 明确指定的 proxy 被强制改为 DIRECT | 仅在缺失 proxy 时补 DIRECT，保留显式值 | 新增 24 个模式/IPv6/字段边界子用例中的 6 项；修复前全部失败，修复后通过 |
+| 只指定 mixed-port:7890 的有效配置与自动补齐的 HTTP 7890 冲突 | 关闭冲突的缺省监听器；保留显式端口及显式冲突检查 | 同上，6 项 |
+| 合法的 proxies/proxy-groups/rules:null 被拒绝 | 保留显式 null，遍历时视为空集合；错误的非 null 类型仍拒绝 | 同上，6 项；断言字段存在、值、幂等性及输入未修改 |
+| sniffer/profile:null 被替换成默认对象 | 保留显式 null，不改变缺失字段的默认行为 | 同上，6 项；断言字段存在而非仅检查取值为 nil |
+
+生产 Go 改动为 20 行新增、2 行删除，没有新锁、重试、抽象或依赖。测试新增于已有 normalize_test.go。固定默认控制密钥、现有密钥保留逻辑、Controller/Service 协议、Mihomo 版本和网络接管方式未改。
+
+组件只更新三个成员：`Tools/kano-gist-sync`、`Tools/gist-sync-component.json`、`Tools/components.json`。ARM64 二进制由上述源码使用 Go 1.24.4 构建，组件版本保持 1.0.0-rc4、协议保持 1；两处清单中的文件哈希已更新并核对。Service、Controller、age、yq、Mihomo 核心、模板和其他成员逐字节相同。ZIP CRC 检查通过。
+
+### 上一轮修改的独立复核
+
+以下实现经读取实际代码与专项执行确认，本轮无需重复修改：
+
+- 数组整体替换的深合并、未知字段/原型名字段保留、Unicode YAML 标量转义、重复键拒绝及 Anchor/Alias/Merge Key 显式键优先。
+- Provider 绑定保留独立别名、filter/override/header/health-check 和手动 file/inline 定义，策略组 use 的子集、顺序及重复项保持；本地缓存转换不等于删除原始 HTTP 定义。
+- 受管 DNS/TUN 子键与用户参数的边界、null sniffer/profile、端口缺省冲突、模板/上传/历史订阅/Gist 来源恢复以及保存密钥的现有实现。
+- Service 版本迁移、重复补丁幂等、无效配置回滚和来源标记同步。未找到应为追求体积而删除的确定无用生产代码，不进行体积重构。
+- Gist 的 parseJSON 已逐键拒绝重复 JSON 键；不能仅因其 yq 表达式不同就重复增加一套校验。原有配置和错误恢复机制保留。
+
+### 本轮实际测试结果
+
+| 项目与命令 | 结果 | 边界 |
+| --- | --- | --- |
+| `node --check 猫猫TProxy.js` | PASS | 检查实际附件 JS，未修改 JS |
+| `node scripts/verify_plugin.js`，测试工具与历史 Git 对象补齐后，使用名称筛选尝试排除 boot/autostart | **838 PASS / 3 FAIL / 10 SKIP** | 三项失败均是排除范围的自启测试夹具引用缺失常量；没有据此审计或修复自启。不得把此结果写成全套 PASS。10 个可选配置测试在专项命令另行执行 |
+| `node --test --test-concurrency=1 tests/tproxy/config_semantics.test.js tests/tproxy/config_lifecycle.test.js tests/tproxy/config_recovery.test.js`，真实 yq、Controller、Mihomo 1.19.32 | **61 PASS / 0 FAIL / 0 SKIP** | 生命周期保存、来源切换、失败恢复与真实 Controller 集成均实际执行 |
+| `node --test tests/tproxy/config_recovery.test.js`，Mihomo 1.19.33、真实 ARM64 Controller 经 QEMU | **34 PASS / 0 FAIL / 0 SKIP** | 包含两份真实配置、template/uploaded/legacy/Gist 分支；HTTP 下载正文由本地 fixture 提供，不是公网请求 |
+| 4 分片 `node --test tests/tproxy/real_templates.test.js` | **97 PASS / 0 FAIL / 0 SKIP** | 93 个样本子测试 + 4 个父测试；分类排除不是标准核心通过 |
+| 真实 Mihomo 1.19.32 原始/处理后配置检查 | **149 次；69/69 原始可通过样本处理后仍通过** | 75 原始 + 74 处理后；原始失败详见下节 |
+| 使用已导出的同批配置重新执行 Mihomo 1.19.33 `-t` | **149 次；69/69 原始可通过样本处理后仍通过** | 与组件同版本的官方 Linux AMD64 核心；没有改包内 Android 核心 |
+| `go test -json -count=1 -skip '(?i)boot\|daemon' ./...`，gist-sync/native | **252 PASS / 0 FAIL / 1 SKIP** | 统计包含父测试与子测试；唯一 SKIP 是原有 TestRealF50Hardware 占位用例。其常量跳过不会因手动设备测试而变成 PASS |
+| `go test -run TestFinalReviewConfigBoundaries -count=1` | PASS，24 子用例 | 最终断言含 null 字段存在性、重复处理与输入不变 |
+| 使用更新后 Gist 二进制/清单的安装及发布定向测试 | **50 PASS / 0 FAIL / 0 SKIP** | 43 项安装模拟 + 7 项发布一致性；不是设备整包安装 |
+| F50 上执行 ARM64 定向测试二进制 `-test.run TestFinalReviewConfigBoundaries -test.v` | **24 子用例 PASS** | 在真实 Android ARM64 执行修复后的规范化函数；不是一次公网 Gist 同步 |
+| F50 临时目录的六模式配置生命周期 | **12 个完整周期 PASS** | 每模式两轮真实 Controller prepare、Service 配置恢复、Android Mihomo 校验、全字段比较；未启动测试核心或下发接管规则 |
+| F50 当前运行配置的核心 `-t`、API、面板、显式代理 | PASS：API 200、面板 200、代理 204 | 这是设备原有运行环境；未将新组件整包安装 |
+| 包内 Service 与本次 JS 生成的相关 Shell `sh -n`、ZIP 成员/清单一致性、最终 Git Diff | PASS | 不包含自启功能审计 |
+
+已查明的执行失败：首次缺少历史 Git 对象使测试夹具无法装载，补齐对象后相应用例通过；首次 Go 全套缺少真正的 AMD64 age/age-keygen，补齐已有官方组件后通过；一次核心路径被宿主转义为不存在路径，纠正路径后 34 项通过。设备首个 TUN 配置夹具没有正确配置 Service 的栈修正调用及明确栈选择，补齐既有调用序列后六模式字段检查通过。这些是执行准备/夹具问题，不改生产断言来制造 PASS。最终留下的三项全套 FAIL 属于明确排除范围，不作本轮自启功能结论。
+
+### Mihomo 真实模板覆盖
+
+来源：HenryChiao/MIHOMO_YAMLS 固定 `982bf8104b123c4b9cb9f36431bd4acdb33191da`。目录逐路径检查共 93 份 THEYAMLS：88 份可解析，其中 75 份标准候选、13 份 Smart-only；其余 5 份为已确认的上游非法 YAML/非映射输入。13 份 Smart 仅检查语义读写，**未声称通过标准 Mihomo**。Overwrite 的 71 个 YAML 包装片段、80 个 Shell conf、101 个 INI 按格式排除，未伪装成独立模板通过。
+
+75 个标准候选中，一份 `Repcz/config_lite.yaml` 的 Subscribe 是 sequence，规范化必须拒绝，未生成处理后配置。其余 74 份实际执行模板规范化及两种保留分支的生命周期；43 份模板中的 88 个空/非法订阅占位符仅在测试副本填入不同 fixture.invalid URL。不能将它们称为真实订阅下载成功。
+
+核心原始 75 次检查中 69 PASS，6 次失败；处理后 74 次检查中 69 PASS，5 次失败。两版核心的结果一致：
+
+- `Ayanami0_config_geo-lite.yaml`、`qichiyuhub/fuxie.yaml`、`qichiyuhub/proxychain.yaml`：原始输入引用问题，处理后仍未通过。
+- `Repcz/config_lite.yaml`：前述错误 Provider 类型，拒绝规范化，只有原始核心失败。
+- `Lanlan13-14/configfull_lite.yaml`：离线资源限制。
+- `liandu2024/clash-fallback-std.yaml`：OpenClash 的绝对 UI 路径超出宿主运行目录。
+
+核心检查使用实际 yq v4.53.3、官方核心及本地 Provider/规则 fixture、包内 GeoIP/GeoSite 与 MaxMind 测试 MMDB；通过 seccomp 禁止 IPv4/IPv6 外联。Provider 的 type/path/url 被明确投影为本地文件，其他参数保留。因此验证配置消费能力，**不验证公网 Provider、订阅服务器或 IP 定位准确性**。包内 ARM64 yq 在设备生命周期实际执行，不把其余批量 AMD64 yq 检查称为 ARM64 原程序全量运行。
+
+### 配置生命周期与模拟边界
+
+本轮重新得到 4,840 个阶段比较、12,448 个有明确路径/预期值原因的变化记录，非预期差异 0。原始解析、深合并及输入不变、模板规范化、必需字段、网络整形、重复处理、实际写回再读取均有检查。模式序列为 `tproxy4 → tun6 → off4 → tproxy6 → tun4 → off6 → tproxy4`，包括数组顺序、DNS/节点 DNS 策略、Provider/组引用和未知字段。
+
+批量 Service 的 888 个阶段以 Controller 输出 fixture 驱动，实际执行生产生成 Shell/真实 yq；并非 888 次真实 Controller。真实 Controller 集成另外执行两份代表配置及四种来源分支。F50 上还执行六模式各两轮真实 Controller、配置恢复及 Android v1.19.33 校验。Service 的既有 TUN 栈校正属于调用链的一部分，不能省略后把中间态 mixed 误报为最终配置漂移。
+
+GistSync 原有 120 种模式组合差分用例的参考是历史 baseline-normalizer 快照，不能证明它与本次附件新增行为一致。本轮因此新增四组有独立预期值的定向用例，修复前失败、修复后通过。Go 套件确实使用真实 age 加解密，但下载、Controller/Service 状态和错误注入多数为 fixture，不能等同于生产 Gist 服务已验证。
+
+### F50 设备结果与待验证项目
+
+已通过设备的临时目录执行验证；正式配置、options、来源标记、Service、Gist 程序与测试前备份逐字节一致。当前核心持续运行，最终 TProxy/IPv4/DNS 劫持设置保留。备份位于 `/data/local/tmp/maomao-final-review-20261104/`，含敏感配置，仅留在设备；未下载到交付包。设备上没有安装本次新组件或替换主插件。
+
+| 功能 | 本轮实际覆盖 | 仍需设备业务验证 |
+| --- | --- | --- |
+| 安装/升级 | 43 项既有安装模拟测试、组件完整性与清单 | 冷安装、运行/停止状态升级、整包激活 |
+| 配置生成/上传/模板 | 真实模板、实际文件保存、来源切换、设备临时配置消费 | UI 上传/应用到正式运行环境 |
+| 订阅及 HTTP Provider 更新 | 现有模拟测试、真实 Controller 本地下载正文与缓存更新 | 真实订阅传输、远程 HTTP Provider 更新 |
+| 本地 Provider 转换 | 真实 Controller 转换及新正文进入缓存的断言 | 目标订阅格式和实际网络返回 |
+| DNS/节点 DNS 策略 | 字段级保存、核心消费、Controller 恢复 | 真正 DNS 请求、下游 DNS 劫持与节点域名解析 |
+| TProxy/TUN/off、IPv4/IPv6 | 六组合配置整形、幂等、真实设备核心加载 | 内核能力、iptables/ip6tables、路由、TUN 接口和下游转发 |
+| Gist + age | 真正 age 本地加解密、修复后规范化、事务 fixture、ARM64 定向用例 | 生产 Gist 下载、用户密钥解密、真实提交及后续调度 |
+| 核心启动/停止/重启/恢复 | 原有模拟用例、配置恢复链、当前核心仍运行 | 新组件正式运行后的启停/重启及网络恢复 |
+| 控制 API/面板 | 当前设备 API 200、面板 200、代理 204 | 安装新组件后复查及下游终端访问 |
+
+不能把此前 WORKLOG 中的设备失败或历史 PASS 直接归到本次版本。本轮未重测历史的 TUN system 下游超时、IPv6 下游超时、订阅 EOF；原因尚不能由配置 `-t` 判定。它们是实机测试需优先重现的既有未决现象，不构成本轮已证明而未修复的代码缺陷。
+
+### 复现与文件变化
+
+运行目录需要本仓库、原附件 JS 和本次 native/组件更新。上游固定 SHA、yq 4.53.3、Mihomo 1.19.32/1.19.33、QEMU、原包 ARM64 Controller/Geo 数据、真实 age 工具需自行准备；交付不重复携带这些外部工具和私有设备备份。
+
+```sh
+# 在仓库中，F50_TEST_YQ 等路径均需是 Linux 绝对路径。
+export F50_TEST_YQ=/path/to/yq-v4.53.3
+export F50_TEMPLATE_REPO=/path/to/MIHOMO_YAMLS
+export F50_TEST_QEMU=/path/to/qemu-aarch64
+export F50_TEST_CONTROLLER=/path/to/clashctl_arm64
+export F50_TEST_MIHOMO=/path/to/mihomo-v1.19.33
+export F50_TEST_GEODATA_DIR=/path/to/geodata
+export F50_TEST_NO_NETWORK=/path/to/no-network
+export F50_TEMPLATE_CORE_INPUTS=/path/to/core-inputs
+export GOMAXPROCS=1
+node --check 猫猫TProxy.js
+gcc -O2 -Wall tests/tproxy/no_network.c -o "$F50_TEST_NO_NETWORK"
+# N 分别为 0、1、2、3，报告文件分别留存。
+F50_TEMPLATE_SHARD=$N/4 F50_TEMPLATE_REPORT=/path/to/templates-$N.json \
+  node --test tests/tproxy/real_templates.test.js
+node --test --test-concurrency=1 tests/tproxy/config_semantics.test.js \
+  tests/tproxy/config_lifecycle.test.js tests/tproxy/config_recovery.test.js
+cd gist-sync/native
+go test -run 'TestFinalReviewConfigBoundaries|TestNormalization' -count=1
+go test -json -count=1 -skip '(?i)boot|daemon' ./...
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+  '-ldflags=-s -w -buildid= -X main.version=1.0.0-rc4' -o kano-gist-sync .
+```
+
+Git 变更：`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.go`、`tproxy-yq.zip`、已有 `WORKLOG.md` 追加本节。交付 ZIP 另外补齐必要的既有配置测试和逐样本字段/核心报告，便于复核，不包含未修改的主 JS、独立 Service、自启文件、工具二进制、语料仓库或私人配置。

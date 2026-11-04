@@ -180,3 +180,57 @@ func TestNormalizationLongPrivatePolicy(t *testing.T) {
 		t.Fatal("policy supported by the frontend was rejected", e)
 	}
 }
+
+func TestFinalReviewConfigBoundaries(t *testing.T) {
+	for _, mode := range []string{"tproxy", "tun", "off"} {
+		for _, ipv6 := range []string{"off", "on"} {
+			for _, tc := range []struct {
+				name   string
+				config map[string]any
+				check  func(*testing.T, map[string]any)
+			}{
+				{"explicit_rule_proxy", map[string]any{"rule-providers": map[string]any{"custom": map[string]any{"type": "http", "proxy": "Proxy"}}}, func(t *testing.T, got map[string]any) {
+					if obj(obj(got["rule-providers"])["custom"])["proxy"] != "Proxy" {
+						t.Fatal("explicit download proxy was overwritten")
+					}
+				}},
+				{"default_port_conflict", map[string]any{"mixed-port": 7890}, func(t *testing.T, got map[string]any) {
+					if numeric(got["port"]) != 0 || numeric(got["mixed-port"]) != 7890 {
+						t.Fatal("implicit listener must yield to the explicit listener")
+					}
+				}},
+				{"null_collections", map[string]any{"proxies": nil, "proxy-groups": nil, "rules": nil}, func(t *testing.T, got map[string]any) {
+					for _, k := range []string{"proxies", "proxy-groups", "rules"} {
+						if !has(got, k) || got[k] != nil {
+							t.Fatalf("%s null changed", k)
+						}
+					}
+				}},
+				{"null_maps", map[string]any{"sniffer": nil, "profile": nil}, func(t *testing.T, got map[string]any) {
+					for _, k := range []string{"sniffer", "profile"} {
+						if !has(got, k) || got[k] != nil {
+							t.Fatalf("%s null changed", k)
+						}
+					}
+				}},
+			} {
+				t.Run(mode+"/"+ipv6+"/"+tc.name, func(t *testing.T) {
+					before := canonical(tc.config)
+					options := map[string]string{"traffic_mode": mode, "ipv6": ipv6}
+					got, err := normalizeConfig(tc.config, options, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					tc.check(t, got)
+					again, err := normalizeConfig(got, options, nil)
+					if err != nil || !same(got, again) {
+						t.Fatalf("not idempotent: %v", err)
+					}
+					if canonical(tc.config) != before {
+						t.Fatal("input mutated")
+					}
+				})
+			}
+		}
+	}
+}

@@ -555,7 +555,7 @@ trap 'exit 130' HUP INT TERM
 ${yqExecutableCheckCmd()}
 YAML_MERGE_FLAG=
 if "$YQ" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then YAML_MERGE_FLAG=--yaml-fix-merge-anchor-to-spec; fi
-"$YQ" e $YAML_MERGE_FLAG -e 'select(tag == "!!map") | select([.. | select(tag == "!!map") | keys | select(length != (unique | length))] | length == 0) | explode(.)' "$STAGE" > "$NORMALIZED" 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
+"$YQ" e $YAML_MERGE_FLAG -e -P 'select(tag == "!!map") | select([.. | select(tag == "!!map") | keys | select(length != (unique | length))] | length == 0) | explode(.)' "$STAGE" > "$NORMALIZED" 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
 chmod 600 "$NORMALIZED" && mv -f "$NORMALIZED" "$STAGE" || exit 1
 if [ "$PROTECT_SECRET" = 1 ]; then
   old_secret=

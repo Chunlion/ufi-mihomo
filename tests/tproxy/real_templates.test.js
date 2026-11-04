@@ -31,6 +31,14 @@ const badInputs = new Map([
   ['THEYAMLS/General_Config/Yiteei/fake-ip_config.yaml', /顶层必须是映射对象|no matches found/],
   ['THEYAMLS/General_Config/Yiteei/redir-host_config.yaml', /顶层必须是映射对象|no matches found/],
 ]);
+const coreInputLimits = new Map([
+  ['THEYAMLS/General_Config/Ayanami0-configs/Ayanami0_config_geo-lite.yaml', /not found rule-set: ChinaMax_Domain/],
+  ['THEYAMLS/General_Config/qichiyuhub/fuxie.yaml', /直连.*not found/],
+  ['THEYAMLS/General_Config/qichiyuhub/proxychain.yaml', /not found rule-set: fakeipfilter_domain/],
+  ['THEYAMLS/General_Config/Repcz/config_lite.yaml', /cannot unmarshal !!seq into map\[string\]interface/],
+  ['THEYAMLS/General_Config/Lanlan13-14/configfull_lite.yaml', /list biliintl not found/],
+  ['THEYAMLS/General_Config/liandu2024/clash-fallback-std.yaml', /path is not subpath.*\/usr\/share\/openclash\/ui/],
+]);
 const controlledTop = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
 const controlledTun = ['enable', 'device', 'auto-route', 'auto-redirect', 'strict-route', 'dns-hijack', 'stack'];
 const removedTop = ['external-ui-name', 'external-controller-tls', 'external-controller-unix', 'external-controller-pipe', 'interface-name', 'routing-mark'];
@@ -283,7 +291,7 @@ function coreHarness(directory, api) {
     [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(resources, name))).digest('hex')]));
   return (sample, config, stage) => {
     const work = process.env.F50_TEMPLATE_CORE_INPUTS
-      ? path.join(process.env.F50_TEMPLATE_CORE_INPUTS, sample.replace(/\.ya?ml$/i, ''), ...(stage.startsWith('upstream') ? [] : ['processed']))
+      ? path.join(process.env.F50_TEMPLATE_CORE_INPUTS, sample.replace(/\.ya?ml$/i, ''), ...(stage.startsWith('upstream') ? [] : [stage.startsWith('uploaded') ? 'uploaded' : 'processed']))
       : path.join(directory, 'core', crypto.createHash('sha256').update(sample + stage).digest('hex').slice(0, 16));
     fs.mkdirSync(path.join(work, 'fixtures'), { recursive: true });
     for (const name of Object.keys(report.resourceHashes)) if (!fs.existsSync(path.join(work, name))) fs.symlinkSync(path.resolve(resources, name), path.join(work, name));
@@ -317,6 +325,10 @@ function coreHarness(directory, api) {
     const detail = output.split('\n').filter(line => /level=(error|fatal)|panic:/.test(line)).map(line => line.replace(/https?:\/\/[^\s"']+/g, '<external-url>')).join('\n');
     const outcome = { sample, stage, status, exit: result.status, detail, adaptations };
     report.core.push(outcome);
+    if (status !== 'pass') {
+      assert.ok(coreInputLimits.has(sample), `${sample}: ${stage}: unexpected core failure: ${detail}`);
+      assert.match(detail, coreInputLimits.get(sample), `${sample}: ${stage}: core failure no longer matches the recorded input limitation`);
+    }
     return outcome;
   };
 }
@@ -399,7 +411,7 @@ test('pinned real Mihomo templates retain fields throughout configuration handli
       catch (error) { throw new Error(`${relative}: template normalization: ${error.message}`); }
       checkNormalization(relative, configured, normalized, candidates);
       checkStage(relative, 'normalize/repeated', normalized, clone(api.normalize(normalized, sources, { generated: false }).config));
-      let finalTemplate;
+      let finalTemplate, finalUpload;
       for (const preserved of [false, true]) {
         let value = preserved ? clone(original) : clone(normalized);
         const beforeRequired = clone(value);
@@ -422,15 +434,18 @@ test('pinned real Mihomo templates retain fields throughout configuration handli
           serviceRoundTrip(api, directory, relative, value, 'uploaded_config');
           serviceRoundTrip(api, directory, relative, value, 'subscription_original');
           serviceRoundTrip(api, directory, relative, value, 'uploaded_config', true);
+          finalUpload = value;
         } else {
           serviceRoundTrip(api, directory, relative, value, 'template.yaml');
           finalTemplate = value;
         }
       }
       if (coreCheck) {
-        const result = coreCheck(relative, finalTemplate, 'processed-with-local-resources');
-        if (originalCore.status === 'pass') assert.equal(result.status, 'pass', `${relative}: plugin introduced core validation failure: ${result.detail}`);
-        else caseTest.diagnostic(`upstream core result: ${originalCore.status}; processed: ${result.status}`);
+        for (const [stage, config] of [['processed', finalTemplate], ['uploaded', finalUpload]]) {
+          const result = coreCheck(relative, config, `${stage}-with-local-resources`);
+          if (originalCore.status === 'pass') assert.equal(result.status, 'pass', `${relative}: ${stage} introduced core validation failure: ${result.detail}`);
+          else caseTest.diagnostic(`upstream core result: ${originalCore.status}; ${stage}: ${result.status}`);
+        }
       }
     });
   }

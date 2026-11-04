@@ -1,19 +1,19 @@
 {
-  "date": "2026-11-01T09:24:52.277Z",
+  "date": "2026-11-04T11:35:14.358Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "b50bc14126d59b28d3bf6049043297af066ccd2c",
-    "bytes": 665450,
-    "sha256": "c22b94d141987f6cd1d946f2a3fe06a5fce737ed46007e93d3f56bbf8a4378c9"
+    "baseCommit": "a09db8b35e8d9f620c653124b34a3ef21965aad8",
+    "bytes": 691884,
+    "sha256": "b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 741,
+    "passed": 852,
     "failed": 0,
-    "notRun": 0
+    "notRun": 12
   },
   "results": [
     {
@@ -721,13 +721,353 @@
       ]
     },
     {
+      "file": "tests/tproxy/config_lifecycle.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_lifecycle.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/config_lifecycle.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/config_lifecycle.test.js.stderr.log",
+      "passed": 0,
+      "failed": 0,
+      "notRun": 1,
+      "cases": [
+        {
+          "name": "real template persists through preparation, repeated saves, source changes and mode switches",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_recovery.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_recovery.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/config_recovery.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/config_recovery.test.js.stderr.log",
+      "passed": 26,
+      "failed": 0,
+      "notRun": 10,
+      "cases": [
+        {
+          "name": "Service preserves complete unmanaged nested values / template.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / template.yaml",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves complete unmanaged nested values / uploaded_config",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / uploaded_config",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves complete unmanaged nested values / subscription_original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves explicit null sniffer/profile / subscription_original",
+          "status": "PASS"
+        },
+        {
+          "name": "Service keeps prior managed-field metadata through template recovery",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores explicit rule-provider proxy without replacing generated providers",
+          "status": "PASS"
+        },
+        {
+          "name": "Service still falls back from malformed sniffer/profile scalars",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves uploaded HTTP Provider identity and options / gist=false",
+          "status": "PASS"
+        },
+        {
+          "name": "Service preserves uploaded HTTP Provider identity and options / gist=true",
+          "status": "PASS"
+        },
+        {
+          "name": "Service reads a CRLF source marker with the same meaning as JS",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a disabled default port when a real template uses mixed-port 7890",
+          "status": "PASS"
+        },
+        {
+          "name": "Service expands aliases before merging and applies YAML merge precedence",
+          "status": "PASS"
+        },
+        {
+          "name": "Service presents raw merge-key YAML to the Controller as an unambiguous mapping",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after normalization failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after controller failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service restores the original bytes after core validation failure",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / null",
+          "status": "PASS"
+        },
+        {
+          "name": "Service retains a nonempty secret and supplies the default otherwise / \"kept-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"kept-secret\", \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"\", \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / null, \"incoming-secret\"",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML commit preserves the first available nonempty secret / \"\", \"\"",
+          "status": "PASS"
+        },
+        {
+          "name": "Service migrates a version 22 marker and a second application is unchanged",
+          "status": "PASS"
+        },
+        {
+          "name": "committed merge keys remain readable by the actual Controller snapshot",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "committed Kerronex flow mappings remain readable by the actual Controller snapshot",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / template.yaml",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / uploaded_config",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / subscription_original",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/Official_Examples/Metacubex/rule-set_config / gist",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / template.yaml",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / uploaded_config",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / subscription_original",
+          "status": "NOT_RUN"
+        },
+        {
+          "name": "actual ARM64 Controller and Service preserve real configuration / THEYAMLS/General_Config/HenryChiao/MihomoAIO / gist",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_semantics.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_semantics.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/config_semantics.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/config_semantics.test.js.stderr.log",
+      "passed": 32,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "deep merge replaces arrays, retains explicit null and special keys, and does not share mutable values",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime retains unknown __proto__ fields at the root and inside merged mapping fields",
+          "status": "PASS"
+        },
+        {
+          "name": "user TUN fields survive every traffic mode / legacy=false",
+          "status": "PASS"
+        },
+        {
+          "name": "user TUN fields survive every traffic mode / legacy=true",
+          "status": "PASS"
+        },
+        {
+          "name": "runtime preserves a user rule-provider download proxy and only supplies the missing default",
+          "status": "PASS"
+        },
+        {
+          "name": "a valid custom listener does not conflict with an automatically supplied default listener",
+          "status": "PASS"
+        },
+        {
+          "name": "repeated runtime shaping is idempotent including the recorded managed-field corrections",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid dns types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid tun types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid sniffer types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "invalid profile types are not silently replaced by defaults",
+          "status": "PASS"
+        },
+        {
+          "name": "template binding retains provider custom fields and named group subsets",
+          "status": "PASS"
+        },
+        {
+          "name": "template binding preserves manual file and inline providers and their use references",
+          "status": "PASS"
+        },
+        {
+          "name": "removing a subscription does not bind its custom provider fields to another remaining source",
+          "status": "PASS"
+        },
+        {
+          "name": "providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=false",
+          "status": "PASS"
+        },
+        {
+          "name": "providers sharing a URL retain separate overrides through template, runtime and repeated normalization / local=true",
+          "status": "PASS"
+        },
+        {
+          "name": "existing duplicate use references retain their order and multiplicity",
+          "status": "PASS"
+        },
+        {
+          "name": "a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=false",
+          "status": "PASS"
+        },
+        {
+          "name": "a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=true",
+          "status": "PASS"
+        },
+        {
+          "name": "manual provider names colliding with managed names are remapped without overwriting another existing alias",
+          "status": "PASS"
+        },
+        {
+          "name": "group names retain significant whitespace together with their references",
+          "status": "PASS"
+        },
+        {
+          "name": "null proxies remains a valid empty list in template and runtime processing",
+          "status": "PASS"
+        },
+        {
+          "name": "YAML serialization retains Unicode line separators in scalar values and keys",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge preserves merge precedence, aliases, flow collections and scalar types",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge rejects nonmapping roots, multiple documents and unsafe numeric values",
+          "status": "PASS"
+        },
+        {
+          "name": "actual YAML bridge rejects duplicate mapping keys before JSON can discard an earlier value",
+          "status": "PASS"
+        },
+        {
+          "name": "a stale correction marker is cleared once the conflicting value is gone",
+          "status": "PASS"
+        },
+        {
+          "name": "a conflicting default listener is closed and recorded, and stays recorded on the next shaping",
+          "status": "PASS"
+        },
+        {
+          "name": "switching an original config to IPv4 TUN drops the IPv6 address and records it",
+          "status": "PASS"
+        },
+        {
+          "name": "a group whose only provider disappeared falls back instead of keeping an empty use list",
+          "status": "PASS"
+        },
+        {
+          "name": "an unmatched custom http provider is dropped rather than recycled into a renumbered source",
+          "status": "PASS"
+        },
+        {
+          "name": "template writes reject non-container fields before the file is touched",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/controlled_keys.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/controlled_keys.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/controlled_keys.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/controlled_keys.test.js.stderr.log",
+      "passed": 3,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "controlled tun keys are identical across the four links",
+          "status": "PASS"
+        },
+        {
+          "name": "controlled dns keys are identical across the four links",
+          "status": "PASS"
+        },
+        {
+          "name": "restore exclusion list keeps the plugin metadata that Service must not overwrite",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
       "file": "tests/tproxy/diagnostic_degrade.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/diagnostic_degrade.test.js",
       "status": "PASS",
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
-      "passed": 9,
+      "passed": 14,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -741,6 +1081,26 @@
         },
         {
           "name": "a failing probe degrades that row instead of aborting the dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / early",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / late",
+          "status": "PASS"
+        },
+        {
+          "name": "stale-process failures remain visible without blocking dialog opening / nonzero",
+          "status": "PASS"
+        },
+        {
+          "name": "failed runtime preflight still checks the controller API independently",
+          "status": "PASS"
+        },
+        {
+          "name": "diagnostics reuse the version response from successful runtime preflight",
           "status": "PASS"
         },
         {
@@ -1518,12 +1878,16 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_install.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_install.test.js.stderr.log",
-      "passed": 39,
+      "passed": 43,
       "failed": 0,
       "notRun": 0,
       "cases": [
         {
           "name": "failed rollback retains the old backup and reports blocked cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "failed rollback rename retains the old configuration and the recovery directory",
           "status": "PASS"
         },
         {
@@ -1623,6 +1987,14 @@
           "status": "PASS"
         },
         {
+          "name": "backup rename failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
+          "name": "candidate activation rename failure preserves failure code and old installation",
+          "status": "PASS"
+        },
+        {
           "name": "panel HTTP failure reports a warning and retains successfully started components",
           "status": "PASS"
         },
@@ -1640,6 +2012,10 @@
         },
         {
           "name": "repeated full update preserves private identity and exact settings bytes",
+          "status": "PASS"
+        },
+        {
+          "name": "upgrade preserves hidden custom provider and rule files referenced by the configuration",
           "status": "PASS"
         },
         {
@@ -1687,10 +2063,38 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_network.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_network.test.js.stderr.log",
-      "passed": 25,
+      "passed": 32,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"192.168.0.2 \\# old note\",null]",
+          "status": "PASS"
+        },
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"\",{\"192.168.0.2\":\"retained\"}]",
+          "status": "PASS"
+        },
+        {
+          "name": "device notes survive migration, bypass removal and clearing / [\"192.168.0.2 \\# old note\",{\"192.168.0.2\":\"\"}]",
+          "status": "PASS"
+        },
+        {
+          "name": "a corrupted notes file degrades to empty instead of blocking the panel",
+          "status": "PASS"
+        },
+        {
+          "name": "editing and clearing notes leave bypass membership unchanged; adding an address is explicit",
+          "status": "PASS"
+        },
+        {
+          "name": "two open device editors preserve each other's notes and cleared values",
+          "status": "PASS"
+        },
+        {
+          "name": "saving an old network dialog preserves newer notes and merges inline edits",
+          "status": "PASS"
+        },
         {
           "name": "firewall/process ownership functions are unchanged",
           "status": "PASS"
@@ -1800,7 +2204,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/optimization_subscription.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/optimization_subscription.test.js.stderr.log",
-      "passed": 83,
+      "passed": 85,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -2005,6 +2409,10 @@
           "status": "PASS"
         },
         {
+          "name": "Mihomo HTTP Provider API status timeout",
+          "status": "PASS"
+        },
+        {
           "name": "template application shares rollback and stopped-core behavior / provider / {}",
           "status": "PASS"
         },
@@ -2034,6 +2442,10 @@
         },
         {
           "name": "template application shares rollback and stopped-core behavior / local / {\"running\":false}",
+          "status": "PASS"
+        },
+        {
+          "name": "a pending HTTP update preserves the saved configuration without restarting for rollback",
           "status": "PASS"
         },
         {
@@ -2145,10 +2557,26 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/panel_open.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/panel_open.test.js.stderr.log",
-      "passed": 18,
+      "passed": 22,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "dialog sizing expands the host wrapper and respects a narrow parent",
+          "status": "PASS"
+        },
+        {
+          "name": "UFI toast sizing uses the page width instead of its shrinking toast container",
+          "status": "PASS"
+        },
+        {
+          "name": "panel settings open without subscription backend checks and retain access checks",
+          "status": "PASS"
+        },
+        {
+          "name": "read-only settings retain access checks without requiring the subscription backend",
+          "status": "PASS"
+        },
         {
           "name": "dashboard defaults preserve custom fields and explicit false values",
           "status": "PASS"
@@ -2224,6 +2652,23 @@
       ]
     },
     {
+      "file": "tests/tproxy/real_templates.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/real_templates.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/real_templates.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/real_templates.test.js.stderr.log",
+      "passed": 0,
+      "failed": 0,
+      "notRun": 1,
+      "cases": [
+        {
+          "name": "pinned real Mihomo templates retain fields throughout configuration handling",
+          "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
       "file": "tests/tproxy/release_consistency.test.js",
       "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/release_consistency.test.js",
       "status": "PASS",
@@ -2271,10 +2716,22 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/reliability.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/reliability.test.js.stderr.log",
-      "passed": 176,
+      "passed": 204,
       "failed": 0,
       "notRun": 0,
       "cases": [
+        {
+          "name": "shell and JS redact sensitive keys and share links",
+          "status": "PASS"
+        },
+        {
+          "name": "subscription IPv6 validation covers embedded private IPv4 and canonical spellings",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup waits for the xtables lock and leaves route arguments unchanged",
+          "status": "PASS"
+        },
         {
           "name": "ordinary settings read does not acquire a device lease / loadProviderUserAgent",
           "status": "PASS"
@@ -2496,6 +2953,22 @@
           "status": "PASS"
         },
         {
+          "name": "override validation leaves rules and comments alone while still blocking execution escapes",
+          "status": "PASS"
+        },
+        {
+          "name": "export default arrow and object forms reach the override entry point",
+          "status": "PASS"
+        },
+        {
+          "name": "override never receives or replaces the controller secret",
+          "status": "PASS"
+        },
+        {
+          "name": "computed Worker prototype APIs cannot restore network or string execution",
+          "status": "PASS"
+        },
+        {
           "name": "override rejects invalid result / function main() { throw new Error(\"override failure\"); }",
           "status": "PASS"
         },
@@ -2633,6 +3106,54 @@
         },
         {
           "name": "manual recovery releases only an exited installer lock / unknown_entry",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / missing pid file",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / reused pid",
+          "status": "PASS"
+        },
+        {
+          "name": "installer lock residue is reclaimed unless the recorded process still matches / matching pid",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / false/worker",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / false/manager",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / true/worker",
+          "status": "PASS"
+        },
+        {
+          "name": "recovery preserves an initializing installer lock / true/manager",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / exited",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / running",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / legacy",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / initializing",
+          "status": "PASS"
+        },
+        {
+          "name": "manual install lock cleanup handles extra files without deleting active locks / self",
           "status": "PASS"
         },
         {
@@ -2849,6 +3370,42 @@
         },
         {
           "name": "uninstall artifact cleanup preserves its own task registry",
+          "status": "PASS"
+        },
+        {
+          "name": "boot autostart probe ignores lines that are only commented leftovers",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / broken/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / broken/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / missing/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / missing/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / empty/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / empty/missing",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / skipped/present",
+          "status": "PASS"
+        },
+        {
+          "name": "cleanup falls back to the native controller when the Service cannot recover / skipped/missing",
           "status": "PASS"
         },
         {
@@ -3121,7 +3678,7 @@
           "status": "PASS"
         },
         {
-          "name": "switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses",
+          "name": "switching original config from IPv6 TUN to IPv4 keeps DNS settings and drops the IPv6 TUN address",
           "status": "PASS"
         },
         {

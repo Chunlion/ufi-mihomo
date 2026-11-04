@@ -5726,6 +5726,21 @@ exit "$kano_task_rc"`;
   const isPlainYamlObject = (value) =>
     !!value && typeof value == 'object' && !Array.isArray(value);
 
+  // 写模板前只校验顶层容器类型：JS 覆写返回错类型时当场失败，而不是把 template.yaml 写坏、
+  // 等下一次 ensureTemplateForF50 才报错（那时用户的模板已经被覆盖一次）。子键语义交给核心 -t。
+  const TEMPLATE_ARRAY_KEYS = ['proxies', 'proxy-groups', 'rules'];
+  const TEMPLATE_MAPPING_KEYS = ['dns', 'tun', 'sniffer', 'profile', 'proxy-providers', 'rule-providers'];
+  const assertTemplateShapeForWrite = (config, label = 'template.yaml') => {
+    assertYamlRootMap(config, label);
+    for (const key of TEMPLATE_ARRAY_KEYS) {
+      if (config[key] != null && !Array.isArray(config[key])) throw new Error(`${label} 的 ${key} 必须是数组`);
+    }
+    for (const key of TEMPLATE_MAPPING_KEYS) {
+      if (config[key] != null && !isPlainYamlObject(config[key])) throw new Error(`${label} 的 ${key} 必须是映射对象`);
+    }
+    return config;
+  };
+
   const dumpYamlValue = (value, indent = 0) => {
     const pad = ' '.repeat(indent);
     if (Array.isArray(value)) {
@@ -5980,6 +5995,7 @@ ${buildF50YamlCommitBody(withBase)}
   } = {}) => {
     try {
       assertYamlRootMap(objectValue, label);
+      if (yamlPath !== CLASH_CONFIG) assertTemplateShapeForWrite(objectValue, label);
       f50AssertSafeJsonNumbers(objectValue);
     } catch (e) {
       return { ok: false, content: e.message || String(e), shell: null };

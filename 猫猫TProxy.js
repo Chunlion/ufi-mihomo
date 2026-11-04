@@ -61,6 +61,8 @@ for (const profile of Object.values(F50_FIXED_PROFILES)) {
 const F50_COMPAT_VERSION = '8.0.0-compat.2.3';
 const F50_ORIGINAL_MANAGED_KEYS = ['bind-address', 'allow-lan', 'external-controller', 'tproxy-port'];
 const F50_ORIGINAL_DNS_KEYS = ['enable', 'listen'];
+// 仅剩测试切片边界用途：运行期已改用 CONTROLLED_TUN_KEYS（inet6-address/mtu 等交回用户）。
+// tests/tproxy/run_tests.js 用这个符号截取整形代码段，删掉会让 slice 失败。
 const F50_ORIGINAL_TUN_KEYS = [...new Set(Object.values(PROFILE_DELTA).flatMap((profile) => Object.keys(profile.tun)))];
 // 只保留删掉就断链的键：iptables 的 TPROXY/DNS 劫持端口、面板 API 端口、LAN 可达性。
 // 其余（mode/ipv6/端口/external-ui/dns 解析参数/sniffer/profile）全部可由用户自定义。
@@ -71,7 +73,7 @@ const CONTROLLED_TUN_KEYS = ['enable', 'device', 'auto-route', 'auto-redirect', 
 const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
   ...CONTROLLED_TOP_KEYS,
   'external-ui-name', 'external-controller-tls', 'external-controller-unix', 'external-controller-pipe',
-  'interface-name', 'routing-mark', 'secret', 'x-f50-profile', 'x-f50-overridden', 'x-f50-gist-sync',
+  'interface-name', 'routing-mark', 'secret', 'x-f50-profile', 'x-f50-gist-sync',
   'x-f50-provider-sources', 'x-kano-private-route',
   'proxies', 'proxy-groups', 'rules', 'proxy-providers', 'rule-providers',
   'dns', 'tun', 'sniffer', 'profile',
@@ -551,7 +553,10 @@ trap finish_yaml_commit EXIT
 trap 'exit 130' HUP INT TERM
 [ -s "$STAGE" ] && [ ! -L "$STAGE" ] && [ ! -L "$TARGET" ] && [ ! -L "$SOURCE_FILE" ] || { echo F50_ERROR=yaml_path_invalid; exit 1; }
 ${yqExecutableCheckCmd()}
-"$YQ" e -e 'tag == "!!map"' "$STAGE" >/dev/null 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
+YAML_MERGE_FLAG=
+if "$YQ" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then YAML_MERGE_FLAG=--yaml-fix-merge-anchor-to-spec; fi
+"$YQ" e $YAML_MERGE_FLAG -e 'select(tag == "!!map") | select([.. | select(tag == "!!map") | keys | select(length != (unique | length))] | length == 0) | explode(.)' "$STAGE" > "$NORMALIZED" 2>"$PARSE_OUT" || { echo F50_ERROR=yaml_stage_parse_failed; exit 1; }
+chmod 600 "$NORMALIZED" && mv -f "$NORMALIZED" "$STAGE" || exit 1
 if [ "$PROTECT_SECRET" = 1 ]; then
   old_secret=
   if [ -s "$TARGET" ]; then old_secret=$("$YQ" e -r '.secret // ""' "$TARGET" 2>"$PARSE_OUT") || { echo F50_ERROR=live_secret_read_failed; exit 1; }; fi
@@ -561,7 +566,7 @@ if [ "$PROTECT_SECRET" = 1 ]; then
     unset F50_LIVE_CONFIG
   else
     export F50_FIXED_SECRET=${shellQuote(F50_DEFAULT_SECRET)}
-    "$YQ" e '.secret = strenv(F50_FIXED_SECRET)' "$STAGE" > "$NORMALIZED" || exit 1
+    "$YQ" e '.secret = ((.secret | select(. != "")) // strenv(F50_FIXED_SECRET))' "$STAGE" > "$NORMALIZED" || exit 1
     unset F50_FIXED_SECRET
   fi
   unset old_secret
@@ -792,50 +797,56 @@ NEW=''
 }
 // 模板/生成模式以控制器重建后的配置为底，按与 JS 整形相同的受控边界恢复用户自定义项
 // （日志级别、嗅探、profile、本地代理端口与非受控 dns 子键），订阅生成的节点与规则不被反向覆盖。
-// 用户可能在设备上手改配置：非 map 的 dns/tun/sniffer/profile 一律丢弃，由控制器生成的值兜底，
+// 用户可能在设备上手改配置：dns/tun/sniffer/profile 的非法类型由控制器生成的值兜底；
+// sniffer/profile 的显式 null 是核心接受的值，恢复时保留。
 // 否则 yq 合并直接报错，会把整个启动拖成 F50_ERROR=original_config_merge_failed。
 // 注释放在 JS 侧而非生成的脚本里：设备脚本每多一行都是安装包体积。
-function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=22
+function buildF50OriginalConfigFunctions() { return `# KANO_ORIGINAL_CONFIG_PRESERVATION=24
 ${buildF50RedactFunction()}
 f50_save_original_config() {
   case "$1" in start|restart|prepare|boot) ;; *) return 0 ;; esac
   F50_CONFIG_RELOAD_REQUIRED=0
-  F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | head -n 1)
+  F50_CONFIG_SOURCE=$(sed -n 's/^KANO_CONFIG_SOURCE=//p' "$CLASH_ROOT/Tools/config_source.conf" 2>/dev/null | tr -d '\\r' | head -n 1)
   export F50_CONFIG_SOURCE
   F50_SUB_CONVERT_MODE=$(sed -n 's/^# KANO_SUB_CONVERT_MODE=//p' "$CLASH_ROOT/Proxy/subscription_urls.txt" 2>/dev/null | tr -d '\\r' | head -n 1)
   F50_PRESERVE_HTTP_PROVIDER=0
   [ "$F50_CONFIG_SOURCE:$F50_SUB_CONVERT_MODE" != template.yaml:provider ] || F50_PRESERVE_HTTP_PROVIDER=1
   export F50_PRESERVE_HTTP_PROVIDER
+  F50_YQ_MERGE_FLAG=
+  if "$CLASH_ROOT/Tools/yq_linux_arm64" --help 2>/dev/null | grep -q -- '--yaml-fix-merge-anchor-to-spec'; then F50_YQ_MERGE_FLAG=--yaml-fix-merge-anchor-to-spec; fi
   F50_ORIGINAL_CONFIG="$CLASH_ROOT/Proxy/config.yaml.original.$$"
   F50_ORIGINAL_CANDIDATE="$F50_ORIGINAL_CONFIG.new"
   umask 077
   cp "$CLASH_ROOT/Proxy/config.yaml" "$F50_ORIGINAL_CONFIG" || { rm -f "$F50_ORIGINAL_CONFIG"; return 1; }
   export F50_ORIGINAL_CONFIG
   trap 'rc=$?; trap - EXIT; if [ -s "$F50_ORIGINAL_CONFIG" ]; then mv -f "$F50_ORIGINAL_CONFIG" "$CLASH_ROOT/Proxy/config.yaml" || rc=1; fi; rm -f "$F50_ORIGINAL_CANDIDATE"; exit "$rc"' EXIT
+  "$CLASH_ROOT/Tools/yq_linux_arm64" eval $F50_YQ_MERGE_FLAG -e -P -o=yaml -I=2 'select(tag == "!!map") | select([.. | select(tag == "!!map") | keys | select(length != (unique | length))] | length == 0) | explode(.)' "$F50_ORIGINAL_CONFIG" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_normalize_failed; return 1; }
+  mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || { echo F50_ERROR=original_config_normalize_failed; return 1; }
 }
 f50_restore_original_config() {
   [ -n "$F50_ORIGINAL_CONFIG" ] || return 0
-  "$CLASH_ROOT/Tools/yq_linux_arm64" eval -P -o=yaml -I=2 '
-    . as $runtime | load(strenv(F50_ORIGINAL_CONFIG)) as $original |
-    ($original."x-f50-gist-sync" == true and strenv(F50_CONFIG_SOURCE) == "uploaded_config") as $gist |
-    ($original | with_entries(select((.value | tag) == "!!map" or (.key | test("^(dns|tun|sniffer|profile)$") | not)))) as $original |
+  "$CLASH_ROOT/Tools/yq_linux_arm64" eval $F50_YQ_MERGE_FLAG -P -o=yaml -I=2 '
+    explode(.) as $runtime | (load(strenv(F50_ORIGINAL_CONFIG)) | explode(.)) as $original |
+    (strenv(F50_CONFIG_SOURCE) == "uploaded_config") as $uploaded |
+    ($original | with_entries(select((.value | tag) == "!!map" or ((.key == "sniffer" or .key == "profile") and .value == null) or (.key | test("^(dns|tun|sniffer|profile)$") | not)))) as $original |
     (($original + ($runtime | pick(${JSON.stringify([...F50_ORIGINAL_MANAGED_KEYS, 'secret', 'x-f50-profile', 'proxy-providers', 'x-f50-provider-sources'])}) |
-      ((select($gist) | pick(${JSON.stringify([...CONTROLLED_TOP_KEYS, 'secret', 'x-f50-profile'])})), select($gist | not))) |
+      ((select($uploaded) | pick(${JSON.stringify([...CONTROLLED_TOP_KEYS, 'secret', 'x-f50-profile'])})), select($uploaded | not))) |
     .dns = (($original.dns // $runtime.dns) * ($runtime.dns | pick(${JSON.stringify(F50_ORIGINAL_DNS_KEYS)}))) |
-    ((select($gist) | .tun = ((($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(CONTROLLED_TUN_KEYS)})))),
-      (select($gist | not) | .tun = ((($original.tun // {}) | omit(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)})) * ($runtime.tun | pick(${JSON.stringify(F50_ORIGINAL_TUN_KEYS)}))))) |
+    .tun = (($runtime.tun // {}) + (($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)}))) |
     del(."external-controller-tls", ."external-controller-unix", ."external-controller-pipe", ."external-ui-name", ."interface-name", ."routing-mark") |
-    select(strenv(F50_CONFIG_SOURCE) == "subscription_original" or $gist)),
+    select(strenv(F50_CONFIG_SOURCE) == "subscription_original" or $uploaded)),
     (($original | omit(${JSON.stringify(F50_RESTORE_EXCLUDED_KEYS)})) as $user |
-    ($runtime * $user) |
-    .dns = ((.dns // {}) * (($original.dns // {}) | omit(${JSON.stringify(CONTROLLED_DNS_KEYS)}))) |
-    .tun = ((.tun // {}) * (($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)}))) |
-    .sniffer = ((.sniffer // {}) * ($original.sniffer // {})) |
-    .profile = ((.profile // {}) * ($original.profile // {})) |
+    ($runtime + $user) |
+    .dns = ((.dns // {}) + (($original.dns // {}) | omit(${JSON.stringify(CONTROLLED_DNS_KEYS)}))) |
+    .tun = ((.tun // {}) + (($original.tun // {}) | omit(${JSON.stringify(CONTROLLED_TUN_KEYS)}))) |
+    .sniffer = ((.sniffer // {}) + ($original.sniffer // {})) |
+    .profile = ((.profile // {}) + ($original.profile // {})) |
+    . += ($original | pick(["sniffer", "profile"]) | with_entries(select(.value == null))) |
+    . += (pick(["rule-providers"]) | with_entries(select((.value | tag) == "!!map") | .value |= with_entries(.key as $key | .value += (($original."rule-providers"[$key] // {}) | pick(["proxy"]))))) |
     (select(strenv(F50_PRESERVE_HTTP_PROVIDER) != "1"),
       (select(strenv(F50_PRESERVE_HTTP_PROVIDER) == "1") | ."proxy-providers" = $original."proxy-providers" | del(."x-f50-provider-sources"))) |
-    select(strenv(F50_CONFIG_SOURCE) != "subscription_original" and ($gist | not)))) |
-    .secret = ($original.secret // .secret)
+    select(strenv(F50_CONFIG_SOURCE) != "subscription_original" and ($uploaded | not)))) |
+    .secret = (($original.secret | select(. != "")) // (.secret | select(. != "")) // "${F50_DEFAULT_SECRET}")
   ' "$CLASH_ROOT/Proxy/config.yaml" > "$F50_ORIGINAL_CANDIDATE" || { echo F50_ERROR=original_config_merge_failed; return 1; }
   F50_CONFIG_TEST_OUTPUT=$("$CLASH_ROOT/Proxy/Clash.Core" -t -d "$CLASH_ROOT/Proxy" -f "$F50_ORIGINAL_CANDIDATE" 2>&1)
   F50_CONFIG_TEST_RC=$?
@@ -848,8 +859,8 @@ f50_restore_original_config() {
   if cmp -s "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" 2>/dev/null; then
     rm -f "$F50_ORIGINAL_CANDIDATE" || return 1
   else
-    runtime_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval -o=json -I=0 'sort_keys(..)' "$CLASH_ROOT/Proxy/config.yaml") || return 1
-    restored_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval -o=json -I=0 'sort_keys(..)' "$F50_ORIGINAL_CANDIDATE") || return 1
+    runtime_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval $F50_YQ_MERGE_FLAG -o=json -I=0 'sort_keys(..)' "$CLASH_ROOT/Proxy/config.yaml") || return 1
+    restored_json=$("$CLASH_ROOT/Tools/yq_linux_arm64" eval $F50_YQ_MERGE_FLAG -o=json -I=0 'sort_keys(..)' "$F50_ORIGINAL_CANDIDATE") || return 1
     mv -f "$F50_ORIGINAL_CANDIDATE" "$CLASH_ROOT/Proxy/config.yaml" || return 1
     [ "$runtime_json" = "$restored_json" ] || F50_CONFIG_RELOAD_REQUIRED=1
     unset runtime_json restored_json
@@ -942,7 +953,7 @@ disable_unsupported_ipv6_dns_hijack() {
 F50_SERVICE_TARGET=${service}
 [ -f "$F50_SERVICE_TARGET" ] && [ ! -L "$F50_SERVICE_TARGET" ] || { echo F50_ERROR=service_patch_unsafe; exit 1; }
 # All patch segments carry their final marker and the script still parses: nothing to rebuild.
-if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=22' "$F50_SERVICE_TARGET" &&
+if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=24' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_CURL_ABSOLUTE=1' "$F50_SERVICE_TARGET" && grep -qx '# KANO_TUN_IPV6_RETURN=3' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_IPV6_DNS_SPLIT=4' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
   echo F50_SERVICE_PATCH_COMMITTED=1
@@ -986,14 +997,14 @@ ${patchSetup.replace(/^/gm, '  ')}
   ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish.replace(/^/gm, '  ')}
 fi
-if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=22' "$SERVICE"; then
+if ! grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=24' "$SERVICE"; then
 TMP="$SERVICE.original.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(functions)} > "$FUNCTIONS" || exit 1
 panel_guarded=$(grep -Ec '^  # KANO_PANEL_WRITE_GUARD=[12]$' "$SERVICE" || true)
 panel_skip=$(grep -c '^  # KANO_PANEL_WRITE_GUARD=2$' "$SERVICE" || true)
 awk -v functions="$FUNCTIONS" -v panel_guarded="$panel_guarded" -v panel_skip="$panel_skip" -v panel_check=${shellQuote(buildF50PanelConfigCheck())} '
-  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9]|2[01])$/ { skipping=1 }
+  /^# KANO_ORIGINAL_CONFIG_PRESERVATION=([123456789]|1[0-9]|2[0-3])$/ { skipping=1 }
   skipping && $0 != "action=$1" { next }
   $0 == "action=$1" { skipping=0 }
   $0 == "f50_save_original_config \\"$action\\" || exit 1" || $0 == "f50_restore_original_config || exit 1" { next }
@@ -3111,9 +3122,7 @@ function createPrivateRouteLogic() {
     return out;
   }
   const mergePlain = (base, delta) => {
-    const out = clone(base || {});
-    for (const [key, value] of Object.entries(delta || {})) out[key] = clone(value);
-    return out;
+    return { ...clone(base || {}), ...clone(delta || {}) };
   };
   // dns/tun 按子键合并：受控子键取 profile，其余保留用户值；用户未写的键仍由 profile 补齐。
   function mergeDnsValue(profileDns, userDns) {
@@ -3136,9 +3145,19 @@ function createPrivateRouteLogic() {
     }
     return merged;
   }
-  // 本地代理端口可自由指定，但不能互相重复或占用受管端口。
-  function checkLocalPorts(out, profile) {
-    const ports = ['port', 'socks-port', 'mixed-port']
+  // 用户只写了一个端口时，插件补齐的另外两个默认监听器若撞车就关掉，并记入 overridden 让面板可见。
+  // 判断基准取 profile 默认值而不是当前值：上一轮已经写成 0 的键要能继续得到同一条记录，否则整形不幂等。
+  function checkLocalPorts(out, profile, source, overridden) {
+    const keys = ['port', 'socks-port', 'mixed-port'];
+    for (const key of keys) {
+      if (own(source, key) && Number(source[key]) !== 0) continue;
+      const clash = keys.some(other => other !== key && own(source, other)
+        && Number(source[other]) > 0 && Number(source[other]) === Number(profile[key]));
+      if (!clash) continue;
+      out[key] = 0;
+      overridden.push(key + ' 与已指定的监听端口冲突，已关闭');
+    }
+    const ports = keys
       .map((key) => Number(out[key])).filter((port) => Number.isInteger(port) && port > 0);
     const reserved = new Set([
       Number(profile['tproxy-port']) || 0,
@@ -3153,17 +3172,22 @@ function createPrivateRouteLogic() {
 
   function runtime(config, options = {}, connected = [], preserveConfig = false, feature = fromOptions(options)) {
   const source = strip(config);
+  for (const key of ['dns', 'tun', 'sniffer', 'profile']) {
+    if (source[key] != null && !f50IsPlainObject(source[key])) throw new Error(key + ' must be a mapping');
+  }
   const mode = options.traffic_mode || 'tproxy';
   if (!['tproxy', 'tun', 'off'].includes(mode)) throw new Error('Invalid traffic mode');
   const profile = F50_FIXED_PROFILES[mode + (options.ipv6 === 'on' ? '6' : '4')];
     const out = clone(preserveConfig ? source : profile);
+    // 被强制纠正的用户设置，供界面提示；Mihomo 忽略 x- 前缀键。
+    const overridden = [];
     if (preserveConfig) {
       for (const key of F50_ORIGINAL_MANAGED_KEYS) out[key] = clone(profile[key]);
       out.dns = clone(source.dns || profile.dns);
-      out.tun = clone(source.tun || {});
+      out.tun = mergePlain(profile.tun, source.tun);
       if (!f50IsPlainObject(out.dns) || !f50IsPlainObject(out.tun)) throw new Error('dns and tun must be mappings');
       for (const key of F50_ORIGINAL_DNS_KEYS) out.dns[key] = clone(profile.dns[key]);
-      for (const key of F50_ORIGINAL_TUN_KEYS) {
+      for (const key of CONTROLLED_TUN_KEYS) {
         if (own(profile.tun, key)) out.tun[key] = clone(profile.tun[key]);
         else delete out.tun[key];
       }
@@ -3175,26 +3199,32 @@ function createPrivateRouteLogic() {
         if (key === META) continue;
         if (key === 'dns') { out.dns = mergeDnsValue(out.dns, source.dns); continue; }
         if (key === 'tun') { out.tun = mergeTunValue(out.tun, source.tun); continue; }
-        if (key === 'sniffer' || key === 'profile') { out[key] = mergePlain(out[key], source[key]); continue; }
+        if (key === 'sniffer' || key === 'profile') { out[key] = source[key] === null ? null : mergePlain(out[key], source[key]); continue; }
         if (CONTROLLED_TOP_KEYS.includes(key) || key === 'external-ui-name') continue;
-        out[key] = clone(source[key]);
+        Object.defineProperty(out, key, { value: clone(source[key]), enumerable: true, writable: true, configurable: true });
       }
-      checkLocalPorts(out, profile);
+      checkLocalPorts(out, profile, source, overridden);
     }
   if (mode === 'tun') out.tun.stack = f50TunStack(options);
-  if (own(out,'proxies') && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
+  // IPv6 关闭时不能保留 TUN 的 v6 地址：preserve 模式下它与"用户手填"无法区分，
+  // 但值可能来自上一轮 tun6 由固定 profile 写入，留着会和已撤销的 ip6tables 接管不一致。
+  if (mode === 'tun' && options.ipv6 !== 'on' && f50IsPlainObject(out.tun) && own(out.tun, 'inet6-address')) {
+    delete out.tun['inet6-address'];
+    overridden.push('tun.inet6-address（IPv6 已关闭）');
+  }
+  if (out.proxies != null && !Array.isArray(out.proxies)) throw new Error('proxies must be a list');
   if (!own(out,'proxies')) out.proxies = [];
-  if (own(out,'proxy-groups') && !Array.isArray(out['proxy-groups'])) throw new Error('proxy-groups must be a list');
+  if (out['proxy-groups'] != null && !Array.isArray(out['proxy-groups'])) throw new Error('proxy-groups must be a list');
   if (!own(out,'proxy-groups')) out['proxy-groups'] = [];
-  if (own(out,'rules') && !Array.isArray(out.rules)) throw new Error('rules must be a list');
+  if (out.rules != null && !Array.isArray(out.rules)) throw new Error('rules must be a list');
   if (!own(out,'rules')) out.rules = ['MATCH,DIRECT'];
-  for (const key of ['proxies','proxy-groups']) for(const node of out[key]) {
+  for (const key of ['proxies','proxy-groups']) for(const node of out[key] || []) {
     if(node && typeof node==='object'){delete node['interface-name'];delete node['routing-mark'];}
   }
   for(const key of ['proxy-providers','rule-providers']) for(const provider of Object.values(out[key]||{})) {
     if(provider && typeof provider==='object'){
       if(provider.override){delete provider.override['interface-name'];delete provider.override['routing-mark'];}
-      if(!preserveConfig && key==='rule-providers' && provider.type==='http')provider.proxy='DIRECT';
+      if(!preserveConfig && key==='rule-providers' && provider.type==='http' && !String(provider.proxy ?? '').trim())provider.proxy='DIRECT';
     }
   }
   for (const name of ['cn_domain', 'private_domain', 'add_direct_domain']) {
@@ -3207,8 +3237,6 @@ function createPrivateRouteLogic() {
     }
   }
   out['x-f50-profile'] = F50_COMPAT_VERSION;
-  // 记录被强制纠正的用户设置，供界面提示；Mihomo 忽略 x- 前缀键。
-  const overridden = [];
   for (const key of CONTROLLED_TOP_KEYS) {
     if (own(source, key) && !equal(source[key], out[key])) overridden.push(key);
   }
@@ -3219,6 +3247,7 @@ function createPrivateRouteLogic() {
     if (own(source.tun || {}, key) && !equal(source.tun[key], (out.tun || {})[key])) overridden.push('tun.' + key);
   }
   if (overridden.length) out['x-f50-overridden'] = overridden;
+  // 没有纠正项时必须清掉旧标记，否则上一轮的值会一直留在配置里让面板误报。
   else if (own(out, 'x-f50-overridden')) delete out['x-f50-overridden'];
   // Kernel routing belongs to clashctl; TUN still needs its matching route exclusions.
   if (!feature.enabled || mode === 'off') return out;
@@ -5187,6 +5216,10 @@ exit "$kano_task_rc"`;
 
   const providerNameFor = (index = 0) => `Provider${index + 1}`;
 
+  // 受管订阅槽位：名字与缓存路径必须成对匹配，手工 provider 不能混进订阅更新/模式判定。
+  const isManagedProviderEntry = (name = '', provider = null) =>
+    /^Provider[1-9]\d*$/.test(name) && !!provider && provider.path === `./proxies/${name}.yaml`;
+
   const normalizeSubUrl = (value = '') =>
     String(value).trim();
 
@@ -5309,7 +5342,9 @@ exit "$kano_task_rc"`;
     if (!/^KANO_CONFIG_PRESENT=1$/m.test(text)) return SUB_CONVERT_MODE_PROVIDER;
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) throw new Error(read.message || '读取历史订阅模式失败，未修改配置');
-    const types = Object.values(read.value['proxy-providers'] || {}).map((provider) => provider?.type);
+    const types = Object.entries(read.value['proxy-providers'] || {})
+      .filter(([name, provider]) => isManagedProviderEntry(name, provider))
+      .map(([, provider]) => provider.type);
     return types.length > 0 && types.every((type) => type === 'file')
       ? SUB_CONVERT_MODE_LOCAL : SUB_CONVERT_MODE_PROVIDER;
   };
@@ -5525,7 +5560,7 @@ exit "$kano_task_rc"`;
     sources = [],
     { forceDefault = false, showToast = false, templatePath = CLASH_TEMPLATE, backup = true } = {},
   ) => {
-    // 该路径生成的 provider 不含 url/header（emptyProviderUrls），无需加载订阅 UA。
+    // 此阶段将受管 ProviderN 绑定为本地缓存；保留已有字段，写运行配置时再加载订阅 UA。
     const cleanSources = normalizeSubSourceList(sources);
     const storage = await ensurePolicyStorage();
     if (!storage.ok) {
@@ -5675,7 +5710,7 @@ exit "$kano_task_rc"`;
     if (value === null || value === undefined) return 'null';
     if (typeof value == 'number' && !Number.isFinite(value)) throw new TypeError('YAML 不支持 NaN 或 Infinity');
     if (typeof value == 'number' || typeof value == 'boolean') return String(value);
-    return JSON.stringify(String(value));
+    return JSON.stringify(String(value)).replace(/[\u0085\u2028\u2029]/g, char => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
   };
 
   const yamlKey = (key = '') => {
@@ -5685,7 +5720,7 @@ exit "$kano_task_rc"`;
     const dateLike = /^\d{4}-\d{1,2}-\d{1,2}(?:[Tt ].*)?$/.test(text);
     return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(text) && !reserved && !numericLike && !dateLike
       ? text
-      : JSON.stringify(text);
+      : yamlScalar(text);
   };
 
   const isPlainYamlObject = (value) =>
@@ -5788,7 +5823,7 @@ exit "$kano_task_rc"`;
         set -- e${await yqMergeAnchorFlagCmd()}
         yaml_read_stderr="$KANO_YQ_TMP/yq_json_read.$$.err"
         trap 'rm -f "$yaml_read_stderr"' EXIT
-        if f50_limit 15 "$YQ" "$@" -o=json '.' "$FILE" 2>"$yaml_read_stderr"; then
+        if f50_limit 15 "$YQ" "$@" -e -o=json 'select([.. | select(tag == "!!map") | keys | select(length != (unique | length))] | length == 0)' "$FILE" 2>"$yaml_read_stderr"; then
           :
         else
           yaml_read_rc=$?
@@ -6083,8 +6118,8 @@ ${buildF50YamlCommitBody(withBase)}
   const applyOverrideSafetyFields = (config, preservedSecret = '') =>
     applyRequiredF50Fields(config, { preservedSecret });
 
-  const normalizeManagedProxyGroups = (config, providerNames = []) => {
-    if (Object.prototype.hasOwnProperty.call(config, 'proxy-groups') && !Array.isArray(config['proxy-groups'])) {
+  const normalizeManagedProxyGroups = (config, providerNames = [], renamedProviders = null) => {
+    if (config['proxy-groups'] != null && !Array.isArray(config['proxy-groups'])) {
       throw new Error('proxy-groups 必须是数组');
     }
     let groups = Array.isArray(config['proxy-groups']) ? cloneJsonValue(config['proxy-groups']) : [];
@@ -6111,17 +6146,26 @@ ${buildF50YamlCommitBody(withBase)}
     const names = new Set();
     groups.forEach((group, index) => {
       if (!isPlainYamlObject(group)) throw new Error(`proxy-groups[${index}] 必须是映射对象`);
-      const name = String(group.name || '').trim();
-      if (!name) throw new Error(`proxy-groups[${index}] 缺少非空 name`);
+      const name = String(group.name || '');
+      if (!name.trim()) throw new Error(`proxy-groups[${index}] 缺少非空 name`);
       if (names.has(name)) throw new Error(`proxy-groups 存在重复组名：${name}`);
       names.add(name);
       group.name = name;
-      if (
-        Object.prototype.hasOwnProperty.call(group, 'use') ||
-        group['include-all'] === true ||
-        Object.prototype.hasOwnProperty.call(group, 'filter')
-      ) {
-        group.use = providerNames.slice();
+      if (Object.prototype.hasOwnProperty.call(group, 'use')) {
+        if (!Array.isArray(group.use) || group.use.some(name => typeof name !== 'string')) {
+          throw new Error(`proxy-groups[${index}].use 必须是字符串数组`);
+        }
+        // 引用的 provider 被合并或删除时映射为空数组，原样保留（删掉的槽位就不该再被引用）。
+        // 只有在整个 use 被清空、组又没有 proxies 时才会被核心以 "use or proxies missing" 拒绝，
+        // 那时回落到当前全部 provider，比让整份配置校验失败好。
+        group.use = group.use.flatMap(name => {
+          const mapped = renamedProviders && Object.prototype.hasOwnProperty.call(renamedProviders, name)
+            ? renamedProviders[name] : null;
+          if (mapped) return mapped;
+          return providerNames.includes(name) ? [name] : providerNames;
+        });
+        if (!group.use.length && providerNames.length
+          && !(Array.isArray(group.proxies) && group.proxies.length)) group.use = providerNames.slice();
       }
     });
     config['proxy-groups'] = groups;
@@ -6129,13 +6173,8 @@ ${buildF50YamlCommitBody(withBase)}
   };
 
   const MANAGED_RULE_SET_PATTERN = /^RULE-SET\s*,\s*kano_(reject_domain|direct_domain|direct_ip|proxy_domain)\s*,/;
-  const UNSUPPORTED_CATEGORY_GEOIP_RULE = /^GEOIP\s*,\s*(private|netflix|telegram|google)\s*,/i;
-
-  const removeUnsupportedCategoryGeoipRules = (rules = []) =>
-    rules.filter((rule) => !UNSUPPORTED_CATEGORY_GEOIP_RULE.test(String(rule).trim()));
-
   const removeLegacyManagedRulePrefix = (rules = [], proxyGroup = 'Proxy') => {
-    let output = removeUnsupportedCategoryGeoipRules(rules);
+    let output = rules.slice();
     const expected = buildManagedFallbackRules(proxyGroup);
     const legacyProxy = buildManagedFallbackRules('Proxy');
     const prefixMatches = output.length >= expected.length && output.slice(0, expected.length).every((rule, index) => {
@@ -6149,12 +6188,12 @@ ${buildF50YamlCommitBody(withBase)}
   };
 
   const applyManagedRules = (config, { generated = false, proxyGroup = 'Proxy' } = {}) => {
-    if (Object.prototype.hasOwnProperty.call(config, 'rules') && !Array.isArray(config.rules)) {
+    if (config.rules != null && !Array.isArray(config.rules)) {
       throw new Error('rules 必须是数组');
     }
     const rules = Array.isArray(config.rules) ? config.rules.slice() : [];
     if (rules.length == 0 || generated) {
-      if (Object.prototype.hasOwnProperty.call(config, 'rule-providers') && !isPlainYamlObject(config['rule-providers'])) {
+      if (config['rule-providers'] != null && !isPlainYamlObject(config['rule-providers'])) {
         throw new Error('rule-providers 必须是映射对象');
       }
       config['rule-providers'] = {
@@ -6164,7 +6203,7 @@ ${buildF50YamlCommitBody(withBase)}
       config.rules = buildManagedFallbackRules(proxyGroup);
       return;
     }
-    if (Object.prototype.hasOwnProperty.call(config, 'rule-providers')) {
+    if (config['rule-providers'] != null) {
       if (!isPlainYamlObject(config['rule-providers'])) throw new Error('rule-providers 必须是映射对象');
       const providers = { ...config['rule-providers'] };
       delete providers.kano_reject_domain;
@@ -6204,7 +6243,7 @@ ${buildF50YamlCommitBody(withBase)}
       if (provider.type == 'file' && !String(provider.path || '').trim()) {
         throw new Error(`proxy-provider ${name} 缺少本地 path`);
       }
-      if (!['http', 'file'].includes(provider.type)) {
+      if (!['http', 'file', 'inline'].includes(provider.type)) {
         throw new Error(`proxy-provider ${name} 类型不支持：${provider.type || '<empty>'}`);
       }
     });
@@ -6212,15 +6251,15 @@ ${buildF50YamlCommitBody(withBase)}
     const names = new Set();
     config['proxy-groups'].forEach((group, index) => {
       if (!isPlainYamlObject(group)) throw new Error(`proxy-groups[${index}] 必须是映射对象`);
-      const name = String(group.name || '').trim();
-      if (!name) throw new Error(`proxy-groups[${index}] 缺少 name`);
+      const name = String(group.name || '');
+      if (!name.trim()) throw new Error(`proxy-groups[${index}] 缺少 name`);
       if (names.has(name)) throw new Error(`proxy-groups 存在重复组名：${name}`);
       names.add(name);
     });
     if (!Array.isArray(config.rules)) throw new Error('rules 必须是数组');
     if (config.rules.length == 0) throw new Error('rules 为空，拒绝生成无规则配置');
-    if (!Array.isArray(config.proxies)) throw new Error('proxies 必须是数组');
-    if (Object.prototype.hasOwnProperty.call(config, 'rule-providers') && !isPlainYamlObject(config['rule-providers'])) {
+    if (config.proxies != null && !Array.isArray(config.proxies)) throw new Error('proxies 必须是数组');
+    if (config['rule-providers'] != null && !isPlainYamlObject(config['rule-providers'])) {
       throw new Error('rule-providers 必须是映射对象');
     }
     return true;
@@ -6238,14 +6277,86 @@ ${buildF50YamlCommitBody(withBase)}
     delete config['Proxy-Providers'];
     delete config['proxy-Providers'];
     delete config['Proxy-providers'];
-    config['proxy-providers'] = buildManagedProxyProviders(sources, {
-      emptyUrls: emptyProviderUrls,
-      localFiles: localProviderFiles,
+    const originalProviders = config['proxy-providers'] == null ? {} : config['proxy-providers'];
+    if (!isPlainYamlObject(originalProviders)) throw new Error('proxy-providers 必须是映射对象');
+    const cleanSources = normalizeSubSourceList(sources);
+    const managedFile = ([name, provider]) => provider && provider.type === 'file'
+      && /^Provider[1-9]\d*$/.test(name) && provider.path === `./proxies/${name}.yaml`;
+    const entries = Object.entries(originalProviders);
+    const managedSlot = (name) => /^Provider[1-9]\d*$/.test(name);
+    const candidates = entries.filter(entry => entry[1] && entry[1].type === 'http' || managedFile(entry));
+    const used = new Set(), bindings = new Map();
+    // 中间模板的受管 file 已有稳定身份，不能被同 URL 的 HTTP 别名替换。
+    for (const source of cleanSources) {
+      const matched = candidates.find(entry => managedFile(entry) && entry[0] === source.name);
+      if (matched) { bindings.set(source.name, matched); used.add(matched[0]); }
+    }
+    // 其余先按 URL 匹配全部来源，避免删掉首个订阅后错用它的覆写。
+    for (const source of cleanSources) {
+      if (bindings.has(source.name)) continue;
+      const matches = candidates.filter(([name, provider]) => !used.has(name) && provider.type === 'http' && provider.url === source.url);
+      const matched = matches.find(([name]) => name === source.name) || matches[0];
+      if (matched) { bindings.set(source.name, matched); used.add(matched[0]); }
+    }
+    // 只有受管槽位（ProviderN）能按位置回收给剩余来源。用户自建的其它 http provider 不参与，
+    // 否则旧订阅留下的 override/filter 会被静默套到另一个订阅上。
+    for (const source of cleanSources) {
+      if (bindings.has(source.name)) continue;
+      const matched = candidates.find(([name, provider]) => !used.has(name) && managedSlot(name) && !cleanSources.some(source => provider.url === source.url));
+      if (matched) { bindings.set(source.name, matched); used.add(matched[0]); }
+    }
+    const renamedProviders = Object.fromEntries(candidates.map(([name]) => [name, []]));
+    for (const [name, bound] of bindings) renamedProviders[bound[0]] = [name];
+    const aliases = candidates.filter(([name, provider]) => !used.has(name) && provider.type === 'http'
+      && cleanSources.some(source => provider.url === source.url));
+    // 未绑定也不是别名的槽位直接丢弃：它对应已删除的订阅，留着会继续去下载那个地址。
+    const manual = entries.filter(entry => !candidates.includes(entry)).filter(([name, provider]) => {
+      const cache = provider && provider.type === 'file' && /^\.\/proxies\/(Provider[1-9]\d*)\.yaml$/.exec(provider.path || '');
+      if (!cache || !Object.prototype.hasOwnProperty.call(renamedProviders, cache[1])) return true;
+      const target = renamedProviders[cache[1]][0];
+      if (!target) { renamedProviders[name] = []; return false; }
+      provider.path = `./proxies/${target}.yaml`;
+      return true;
     });
-    const groupResult = normalizeManagedProxyGroups(config, providerNames);
+    const providers = {};
+    for (const [name, provider] of manual) {
+      let target = name;
+      while (providerNames.includes(target) || Object.prototype.hasOwnProperty.call(providers, target)
+        || target !== name && Object.prototype.hasOwnProperty.call(originalProviders, target)) target += '_alias';
+      Object.defineProperty(providers, target, { value: provider, enumerable: true, writable: true, configurable: true });
+      if (target !== name) renamedProviders[name] = [target];
+    }
+    const defaults = buildManagedProxyProviders(cleanSources, { emptyUrls: emptyProviderUrls, localFiles: localProviderFiles });
+    for (const source of cleanSources) {
+      const bound = bindings.get(source.name), previous = bound ? bound[1] : {};
+      const provider = { ...defaults[source.name], ...cloneJsonValue(previous), type: defaults[source.name].type, path: defaults[source.name].path };
+      if (provider.type === 'http') {
+        provider.url = source.url;
+        if (provider.header != null && !isPlainYamlObject(provider.header)) throw new Error(`proxy-provider ${source.name}.header 必须是映射对象`);
+        provider.header = { ...(provider.header || {}), 'User-Agent': defaults[source.name].header['User-Agent'] };
+      } else delete provider.url;
+      providers[source.name] = provider;
+      if (bound) renamedProviders[bound[0]] = [source.name];
+    }
+    for (const [name, previous] of aliases) {
+      let target = name;
+      while (Object.prototype.hasOwnProperty.call(providers, target)
+        || target !== name && Object.prototype.hasOwnProperty.call(originalProviders, target)) target += '_alias';
+      const provider = cloneJsonValue(previous);
+      if (localProviderFiles) {
+        const source = cleanSources.find(source => source.url === provider.url);
+        provider.type = 'file';
+        provider.path = `./proxies/${source.name}.yaml`;
+        delete provider.url;
+      }
+      Object.defineProperty(providers, target, { value: provider, enumerable: true, writable: true, configurable: true });
+      renamedProviders[name] = [target];
+    }
+    config['proxy-providers'] = providers;
+    const groupResult = normalizeManagedProxyGroups(config, Object.keys(providers), renamedProviders);
     applyManagedRules(config, { generated, proxyGroup: groupResult.proxyGroup });
     validateManagedConfigObject(config, {
-      expectedProviderCount: providerNames.length,
+      expectedProviderCount: providerNames.length + manual.length + aliases.length,
       requireProviderUrls: !emptyProviderUrls,
     });
     return {
@@ -7461,7 +7572,8 @@ KANO_WRITE_CHECK_EOF
   const read = config ? {ok:true,value:config} : await readYamlObject(CLASH_CONFIG,'config.yaml');
   if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'config_read_failed',message:read.message || 'config read failed'}]);
   const defs = read.value['proxy-providers'] || {};
-  const names = Object.keys(defs).filter(name=>!providerNames || providerNames.includes(name));
+  // 只更新受管订阅槽位：手工 file/inline provider 不是订阅，PUT 到它只会多出一条失败记录。
+  const names = Object.keys(defs).filter(name => isManagedProviderEntry(name, defs[name]) && (!providerNames || providerNames.includes(name)));
   if (!names.length) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'provider_missing',message:'当前配置没有可更新的节点来源'}]);
   if (refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(name=>names.includes(name))) {
     const refreshed=await f50Command('refresh-remote-providers',100000);
@@ -8790,10 +8902,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       applyRequiredF50Fields(config, { preserveConfig: values.config_source === 'subscription_original' });
 
       const preserveUserRules = ['subscription_original', 'uploaded_config'].includes(values.config_source);
-      if (!preserveUserRules && Array.isArray(config.rules)) {
-        config.rules = removeUnsupportedCategoryGeoipRules(config.rules);
-      }
-      if (Object.prototype.hasOwnProperty.call(config, 'rule-providers')) {
+      if (config['rule-providers'] != null) {
         if (!isPlainYamlObject(config['rule-providers'])) throw new Error('rule-providers 必须是映射对象');
         const managedPaths = {
           kano_reject_domain: CLASH_SAFE_REJECT_DOMAIN_FILE,
@@ -11077,8 +11186,9 @@ EOF_F50_RESTORE_MEMBERS
   if (!read.ok) issues.push(read.message || '无法读取运行配置');
   if (!meta.success || !String(meta.content || '').includes('SUBSCRIPTION_META_READ')) issues.push('无法读取订阅标记');
   const modeLineOk = data.mode === cleanMode, convertModeOk = data.convert === cleanConvertMode;
-  const providerCount = Object.keys(providers).length;
-  const providerUrlCount = Object.values(providers).filter(p => p && /^https?:\/\//.test(String(p.url || ''))).length;
+  const managedProviders = Object.entries(providers).filter(([name, provider]) => isManagedProviderEntry(name, provider));
+  const providerCount = managedProviders.length;
+  const providerUrlCount = managedProviders.filter(([, provider]) => /^https?:\/\//.test(String(provider.url || ''))).length;
   const rulesCount = Array.isArray(config.rules) ? config.rules.length : 0;
   const proxyGroupsCount = Array.isArray(config['proxy-groups']) ? config['proxy-groups'].length : 0;
   let missingUrls = 0, providerShapeErrors = 0;

@@ -157,7 +157,7 @@ function airportDialogHarness(initialPolicy = {}, runtimePolicy = airportPolicy)
     CLASH_CONFIG: '/data/clash/Proxy/config.yaml', readAirportDnsTemplate: api.read, readYamlObject: read,
     isPlainYamlObject: value => value !== null && typeof value === 'object' && !Array.isArray(value),
     updateAirportDnsTemplate: api.update, extractAirportDnsPolicy: api.extract, saveAirportDnsPolicy: api.save,
-    createToast() {}, safeTextToHtml: String, document: { createElement: element },
+    createToast() {}, fitDialogWidth() {}, safeTextToHtml: String, document: { createElement: element },
     createFixedToast: () => {
       elements = new Map();
       return { close() {}, el: { querySelector(id) {
@@ -371,9 +371,11 @@ test('template mode keeps user tunables while capture fields stay fixed', () => 
   assert.equal(result['log-level'], 'debug');
   assert.equal(result.sniffer.enable, false);
   assert.equal(result['unified-delay'], false);
-  assert.equal(result['rule-providers'].cn_domain.proxy, 'DIRECT');
+  assert.equal(result['rule-providers'].cn_domain.proxy, originalConfig['rule-providers'].cn_domain.proxy);
   assert.deepEqual(plain(result.dns['proxy-server-nameserver-policy']), originalConfig.dns['proxy-server-nameserver-policy']);
   const updated = plain(originalConfig);
+  delete updated['rule-providers'].cn_domain.proxy;
+  assert.equal(configApi.runtime(updated)['rule-providers'].cn_domain.proxy, 'DIRECT');
   updated.dns['proxy-server-nameserver-policy'] = { 'new.example.com': ['dns-new.example.com:1066'] };
   assert.deepEqual(plain(configApi.runtime(updated).dns['proxy-server-nameserver-policy']), updated.dns['proxy-server-nameserver-policy']);
   delete updated.dns['proxy-server-nameserver-policy'];
@@ -474,14 +476,22 @@ test('panel guard detects runtime delay settings that differ from the saved conf
   }
 });
 
-test('switching original config from IPv6 TUN to IPv4 keeps DNS settings and clears IPv6 TUN addresses', () => {
-  const v6 = configApi.runtime(originalConfig, { traffic_mode: 'tun', ipv6: 'on' }, [], true);
+test('switching original config from IPv6 TUN to IPv4 keeps DNS settings and drops the IPv6 TUN address', () => {
+  const original = plain(originalConfig);
+  original.tun['inet6-address'] = ['fdfe:1234::1/126'];
+  const v6 = configApi.runtime(original, { traffic_mode: 'tun', ipv6: 'on' }, [], true);
   assert.equal(v6.dns.ipv6, true);
   assert.equal(v6.dns.listen, '[::]:1053');
-  assert.ok(v6.tun['inet6-address']);
+  assert.deepEqual(plain(v6.tun['inet6-address']), original.tun['inet6-address']);
+  // IPv6 关闭后 TUN 不能继续持有 v6 地址：它和已撤销的 ip6tables 接管对不上，且与用户手填无法区分。
   const v4 = configApi.runtime(v6, { traffic_mode: 'tun', ipv6: 'off' }, [], true);
   assert.equal(v4.tun['inet6-address'], undefined);
+  assert.ok(v4['x-f50-overridden'].includes('tun.inet6-address（IPv6 已关闭）'));
   assert.deepEqual(plain(v4.dns.nameserver), originalConfig.dns.nameserver);
+  const defaults = configApi.runtime(originalConfig, { traffic_mode: 'tun', ipv6: 'on' }, [], true);
+  assert.deepEqual(plain(defaults.tun['inet6-address']), plain(configApi.profiles.tun6.tun['inet6-address']));
+  assert.equal(defaults.tun['auto-detect-interface'], configApi.profiles.tun6.tun['auto-detect-interface']);
+  assert.equal(defaults.tun.mtu, originalConfig.tun.mtu);
 });
 
 test('first original config write and later network changes select preservation', async () => {

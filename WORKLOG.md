@@ -340,3 +340,50 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
 ```
 
 Git 变更：`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.go`、`tproxy-yq.zip`、已有 `WORKLOG.md` 追加本节。交付 ZIP 另外补齐必要的既有配置测试和逐样本字段/核心报告，便于复核，不包含未修改的主 JS、独立 Service、自启文件、工具二进制、语料仓库或私人配置。
+
+## 2026-11-04：覆写链路审计与缺陷修复
+
+对未提交的覆写相关改动（配置整形、模板/上传 provider 绑定、Service 恢复 yq）做代码审计后，修复了 5 个实际缺陷；审计结论与逐条证据见本节。
+
+### 修复项
+
+| 问题 | 修复 | 回归用例 |
+| --- | --- | --- |
+| 组的 `use` 引用被删除的 provider 时展开成空数组，核心以 ``proxy group[0]: G: `use` or `proxies` missing`` 拒绝整份配置 | 映射为空时保留空数组语义；仅当整组 `use` 为空且没有 `proxies` 时才回落到全部 provider | `a group whose only provider disappeared falls back...` |
+| 绑定第三段不看名字，旧订阅遗留的任意 http provider 会按位置被新订阅接管，`override`/`filter` 一起搬过去 | 只有受管槽位（`^Provider\d+$`）能按位置回收 | `an unmatched custom http provider is dropped rather than recycled...` |
+| `x-f50-overridden` 不再清理，上一轮的纠正记录永久留在配置里，面板每次"配置自检"都误报 | 无纠正项时删除该键（`docs/2026-10-21-配置覆写优化实施.md:99` 的原始约定） | `a stale correction marker is cleared...` |
+| IPv6 TUN 切 IPv4 不再清除 `inet6-address`，preserve 模式里它与用户手填无法区分，值却来自上一轮 tun6 的固定 profile | `ipv6 !== 'on'` 时删除并记入 `x-f50-overridden` | `switching an original config to IPv4 TUN drops the IPv6 address...` |
+| 端口冲突置零静默发生，与其它强制纠正的可观测性不一致 | 写入 `x-f50-overridden`，判定基准改用 profile 默认值以保持整形幂等 | `a conflicting default listener is closed and recorded...` |
+
+另外三处口径修正：`f50_save_original_config` 的 yq 规范化失败补 `F50_ERROR=original_config_normalize_failed`（原先 `return 1` 无码，设备上只表现为服务起不来）；`readSavedSubConvertMode`、`forceUpdateProvidersFromConfig` 与诊断统计统一走新增的 `isManagedProviderEntry`（名字 + 缓存路径成对匹配），手工 file/inline provider 不再被当成订阅更新；rule-provider 的 `proxy` 按 trim 非空判断，`proxy: null`/空串也会补 `DIRECT`。
+
+保留块版本 23 → 24（Service 文本有变，必须重打，否则已装设备不会更新），`tproxy-yq.zip` 已用 `refresh_package_service.{js,py}` 同步。
+
+### 审计中确认**不改**的项
+
+- **`$uploaded` 取代 `$gist`**：所有 `uploaded_config` 改走"用户配置打底"分支。插件已不再写 `x-f50-gist-sync`（该键在 `applyRequiredF50Fields` 前被删除），属预期迁移，回退会破坏 Gist 之外的其它自定义配置语义。
+- **`x-f50-overridden` 不进 `F50_RESTORE_EXCLUDED_KEYS`**：加回去会让 Service 分支 2 用控制器输出覆盖它，`config_recovery` 的"保留 prior metadata"断言当场变红。标记由 JS 每次整形重算，Service 只负责原样带过。
+- **`rules: null` 两路差异**：模板规范化会补受管兜底规则（空规则模板无法使用），`runtime()` 保留 null 交给核心 `-t` 判定。两者输入来源不同，不强行统一。
+- **Go 侧 `controlledNetworkKeys.tun` 缺 `stack`**：与 `docs/2026-10-21-配置覆写边界分析.md §7.3`「四处键集合必须一致」冲突，但修它要重编 ARM64 组件、重跑 120 组差分并更新两处清单哈希，单独一轮处理，本轮不动二进制。
+- **`-P` + `explode` 改写 live `config.yaml`**：手写锚点的配置会被展开（实测 300 节点 19.8 KB → 86.7 KB）。这一步同时承担"重复键拒绝"的守卫，去掉等于放行非法 YAML，保留。
+- **`F50_ORIGINAL_TUN_KEYS` 现在是死常量**：仍被 `run_tests.js` 当切片边界使用，已在源码注明，避免误删。
+
+### 验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `node scripts/verify_plugin.js`（WSL，bsdtar 垫片 + 真实 yq 4.53.3） | **846 passed / 0 failed / 11 not run** |
+| `node --test tests/tproxy/config_semantics.test.js` | 31 passed（新增 5 条） |
+| `node tests/tproxy/run_tests.js` | 103 passed / 0 failed |
+| `optimization_network` 体积断言 | install 脚本较基线省 **25277** 字节（阈值 25000） |
+| 真实 mihomo 校验 `use: []` 组 | 复现 ``use or proxies missing``，修复后组不再为空 |
+
+`real_templates`（需 `MIHOMO_YAMLS` 语料）与 10 项可选配置测试在本次环境未运行，`not run` 计数为 11。
+
+被判为**测试锁定缺陷**而调整的两处断言：`repeated runtime shaping is idempotent`（原断言把 `x-f50-overridden` 也算进幂等比较，等于要求标志永不清除）、`provider setup / Service version 20 migrates`（用 `=21` 硬编码降级，版本升到 24 后降级失效，patch 认为已是最新，"迁移"根本没发生）。两处均改为表达原意，未放宽断言。
+
+### 未做
+
+`dist/` 仍是 2026-10-27 的交付包，本次未重建；要发布需按 `build_gist_sync.py` → `verify_plugin.js` → `report_plugin.js` → `package_plugin.py` 四步重跑。
+
+Git 变更：`猫猫TProxy.js`、`tproxy-yq.zip`、`tests/tproxy/{config_semantics,optimization,optimization_subscription,reliability,run_tests,subscription_update}.test.js`、已有 `WORKLOG.md` 追加本节。

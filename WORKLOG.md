@@ -490,3 +490,44 @@ sh /data/local/tmp/maomao-upstream-overwrite-20261104/run.sh
 复现继续使用前节工具环境和四分片/配置命令。新增证据位于 `reports/final-review-20261104/recheck-expanded/`：summary.json 保存全部 223 次核心结果及字段比较统计，source-limits.json 保存原文核对，device.json 保存本轮实机结果，各 TAP 保存实际测试输出。重复字段差异与原报告完全一致，交付直接引用前节四份逐字段 JSON。
 
 本轮实际修改：`tests/tproxy/real_templates.test.js`、本 WORKLOG 和上述复查报告。未再次修改主 JS 或组件包。
+
+## 2026-11-04（续）：JS 覆写入口的第二轮检查
+
+上一轮修的是配置整形与 Service 恢复；本轮针对**用户直接输入的覆写入口**（JS 覆写脚本、`export default` 写法、YAML 序列化）做边界测试，修了 3 处。
+
+### 1. 静态黑名单误伤正常规则（已修）
+
+`validateOverrideJsSafety` 原有 30 多个关键词，其中 `top`、`parent`、`document`、`window`、`location`、`fetch`、`Worker` 等既拦不住真正的逃逸，又会把用户正常内容判成违规：
+
+| 输入 | 修复前 | 原因 |
+| --- | --- | --- |
+| `config.rules.unshift('DOMAIN-SUFFIX,my.top,DIRECT')` | 拒绝保存 | `top` 是真实 TLD，`\btop\b` 命中 |
+| `'DOMAIN-SUFFIX,parent.example.com,...'` | 拒绝保存 | `parent` 是常见子域名 |
+| `// use document/fetch carefully` | 拒绝保存 | 注释里出现英文词 |
+
+这些能力**本来就不靠静态层守**：Worker 源码已把 `fetch`/`XMLHttpRequest`/`WebSocket`/`importScripts`/`indexedDB`/`caches`/`navigator`/`location`/`Worker` 等逐个 `defineProperty` 成 `configurable: false` 的 `undefined`，`document`/`window`/`history` 在 Worker 里根本不存在。静态层现在只保留「能在 Worker 内重新获得执行能力」的词：`eval|Function|WebAssembly|import|importScripts|self|globalThis|constructor|__proto__|prototype` 与三个宿主注入名，并新增 `WebAssembly`（原先可用它执行任意 wasm 字节码）。
+
+拦截能力经用例复核未降级：`({}).constructor`、`(async()=>{}).constructor`、`Object["\x63onstructor"]`、`\u0073elf.fetch`、动态 `import()` 仍全部拒绝，`reliability.test.js` 里"computed Worker prototype APIs"那条断言的 8 项 `undefined` 仍成立。
+
+### 2. `export default` 只支持函数声明（已修）
+
+`normalizeOverrideJs` 只处理 `export default function main(` 和 `export default function (`。桌面端常见的 `export default (config) => {...}` 会原样留在代码里，`new Function` 直接语法错误，用户看到英文堆栈。
+
+现在补一条兜底 `export default` → `module.exports =`，并在 runner 里加 `module.exports.main` 分支（覆盖 `export default { main }` 写法）。三种写法都已加入用例。
+
+### 3. 应用覆写会悄悄给手写模板补 `unified-delay`（已修）
+
+`applyJsOverrideToTemplate` 调 `applyOverrideSafetyFields` 时没有传 `preserveConfig`，默认 `false`，于是"手写模板（无 generated 标记）没写 `unified-delay`"会被强制补成 `true`——与同文件里 `ensureTemplateForF50` 的 `preserveConfig: !generated` 相反。现在把 `yamlHasGeneratedMarker` 的读取提前，按模板来源传 `preserveConfig`。
+
+### 检查过、确认不改的
+
+- **YAML 序列化**：用真实 yq 4.53.3 对 60 个边界字符串（`#`、`: `、`- `、`*&!%`、制表符、CR/LF/NEL/LS/PS、控制字符、DEL、BOM、emoji、组合字符、RTL、零宽、`0x1f`、`2024-01-02`、`.inf`、5 KB 长串）+ 21 个边界 key（数字、`1:30`、`__proto__`、空串、300 字符）+ 7 种结构做 round-trip，**仅 1 例失败**：孤立 Unicode 代理项（`'\ud800'`）会让 yq 报 `invalid Unicode character escape code`。它不可能从 yq 读回的数据产生，只能由用户在 JS 里手写，当前作为"覆写失败"暴露，不改。
+- **规则覆写**：`applyUiRuleOverridesToConfig` 的 prepend/append 顺序、按文本去重、幂等（同一份覆盖应用两次结果一致）都正确；删除旧规则依赖"每次从 `template.base.yaml` 重建"，该前提在 `prepareTemplateFromBase` 里成立。
+- **JS 覆写写坏模板**：`runJsOverrideOnConfig` 只校验 `rules`/`proxy-groups`，`proxy-providers` 写成字符串能进 template.yaml；但下次 `ensureTemplateForF50` 会拒绝并保留 base，重跑即自愈，不额外加校验。
+- **性能**：3000 节点 + 3000 规则的模板，JS 侧规范化 3.1 ms、整形 5.1 ms，不构成瓶颈（真正的开销在设备端 yq）。
+
+### 验证
+
+`node scripts/verify_plugin.js`（WSL，bsdtar 垫片）→ **848 passed / 0 failed / 12 not run**；`reliability.test.js` 204（新增 2 条覆盖误伤与 `export default` 写法）。
+
+Git 变更：`猫猫TProxy.js`、`tests/tproxy/reliability.test.js`、已有 `WORKLOG.md` 追加本节。

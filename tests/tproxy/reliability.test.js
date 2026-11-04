@@ -526,6 +526,25 @@ test('override validation blocks import, self and escaped spellings while accept
   for (const code of ['import("https://example.invalid/code.js")', 'self.fetch("x")', '\\u0073elf.fetch("x")', 'Object["\\x63onstructor"]']) assert.throws(() => api.validate(code), /被禁止/);
   assert.equal(api.validate('function main(config) { config.name="\\u4e2d"; return config; }').includes('\\u4e2d'), true);
 });
+test('override validation leaves rules and comments alone while still blocking execution escapes', () => {
+  const api = overrideApi();
+  // 浏览器/网络能力由 Worker 运行时置 undefined，静态层再拦这些词只会误伤规则里的 .top 域名和注释。
+  for (const code of [
+    'function main(config) { config.rules = ["DOMAIN-SUFFIX,my.top,DIRECT"]; return config; }',
+    'function main(config) { config.rules = ["DOMAIN-SUFFIX,parent.example.com,DIRECT"]; return config; }',
+    '// document / fetch / Worker 只在 Worker 运行时封锁，注释不应影响保存\nfunction main(config) { return config; }',
+  ]) api.validate(code);
+  for (const code of ['function main(c){ return WebAssembly; }', 'function main(c){ return eval("1"); }',
+    'function main(c){ return (()=>{}).constructor("return 1")(); }']) {
+    assert.throws(() => api.validate(code), /被禁止/);
+  }
+});
+test('export default arrow and object forms reach the override entry point', async () => {
+  assert.deepEqual(plain(await overrideApi().apply('export default (config) => ({...config, rules:["MATCH,DIRECT"]});', { rules: [] })),
+    { rules: ['MATCH,DIRECT'] });
+  assert.deepEqual(plain(await overrideApi().apply('export default { main: (config) => ({...config, rules:["MATCH,DIRECT"]}) };', { rules: [] })),
+    { rules: ['MATCH,DIRECT'] });
+});
 test('override never receives or replaces the controller secret', async () => {
   const config = { secret: 'fixture-private', rules: [] };
   const result = await overrideApi().apply('function main(config) { config.rules = [String(config.secret)]; config.secret = "changed"; return config; }', config);

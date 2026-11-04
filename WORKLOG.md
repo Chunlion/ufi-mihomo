@@ -361,7 +361,7 @@ Git 变更：`gist-sync/native/normalize.go`、`gist-sync/native/normalize_test.
 
 ### 审计中确认**不改**的项
 
-- **`$uploaded` 取代 `$gist`**：所有 `uploaded_config` 改走"用户配置打底"分支。插件已不再写 `x-f50-gist-sync`（该键在 `applyRequiredF50Fields` 前被删除），属预期迁移，回退会破坏 Gist 之外的其它自定义配置语义。
+- **`$uploaded` 取代 `$gist`**：所有 `uploaded_config` 改走"用户配置打底"分支。插件侧已没有 `x-f50-gist-sync: true` 的写入点（只在退出 Gist 管理时删除该键、在 `f50GistManaged` 里兼容读取），继续要求它为真会让非 Gist 的自定义配置走错分支，属预期迁移，回退会破坏其它自定义配置语义。
 - **`x-f50-overridden` 不进 `F50_RESTORE_EXCLUDED_KEYS`**：加回去会让 Service 分支 2 用控制器输出覆盖它，`config_recovery` 的"保留 prior metadata"断言当场变红。标记由 JS 每次整形重算，Service 只负责原样带过。
 - **`rules: null` 两路差异**：模板规范化会补受管兜底规则（空规则模板无法使用），`runtime()` 保留 null 交给核心 `-t` 判定。两者输入来源不同，不强行统一。
 - **Go 侧 `controlledNetworkKeys.tun` 缺 `stack`**：与 `docs/2026-10-21-配置覆写边界分析.md §7.3`「四处键集合必须一致」冲突，但修它要重编 ARM64 组件、重跑 120 组差分并更新两处清单哈希，单独一轮处理，本轮不动二进制。

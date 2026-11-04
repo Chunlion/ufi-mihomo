@@ -98,6 +98,10 @@ var controlledNetworkKeys = map[string][]string{
 // 除 controlledNetworkKeys 之外的字段全部尊重用户配置，不再由插件强制还原。
 func applySourceNetwork(out, source map[string]any) map[string]any {
 	for _, k := range []string{"dns", "tun", "sniffer", "profile"} {
+		if has(source, k) && source[k] == nil && (k == "sniffer" || k == "profile") {
+			out[k] = nil
+			continue
+		}
 		user := obj(source[k])
 		if user == nil {
 			continue
@@ -202,6 +206,16 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 		out[k] = clone(v)
 	}
 	applySourceNetwork(out, source)
+	for _, name := range []string{"port", "socks-port", "mixed-port"} {
+		if has(source, name) {
+			continue
+		}
+		for _, other := range []string{"port", "socks-port", "mixed-port"} {
+			if has(source, other) && numeric(source[other]) > 0 && numeric(source[other]) == numeric(out[name]) {
+				out[name] = 0
+			}
+		}
+	}
 	ports := map[int]bool{numeric(out["tproxy-port"]): true}
 	for _, listen := range []any{obj(out["dns"])["listen"], out["external-controller"]} {
 		parts := strings.Split(fmt.Sprint(listen), ":")
@@ -236,6 +250,9 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 	}
 	for _, k := range []string{"proxies", "proxy-groups", "rules"} {
 		if has(out, k) {
+			if out[k] == nil {
+				continue
+			}
 			if _, e := array(out[k]); e != nil {
 				return nil, e
 			}
@@ -246,7 +263,8 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 		}
 	}
 	for _, k := range []string{"proxies", "proxy-groups"} {
-		for _, v := range out[k].([]any) {
+		nodes, _ := out[k].([]any)
+		for _, v := range nodes {
 			if m := obj(v); m != nil {
 				delete(m, "interface-name")
 				delete(m, "routing-mark")
@@ -266,7 +284,7 @@ func normalizeConfig(config map[string]any, options map[string]string, connected
 				delete(o, "interface-name")
 				delete(o, "routing-mark")
 			}
-			if k == "rule-providers" && p["type"] == "http" {
+			if k == "rule-providers" && p["type"] == "http" && !has(p, "proxy") {
 				p["proxy"] = "DIRECT"
 			}
 		}

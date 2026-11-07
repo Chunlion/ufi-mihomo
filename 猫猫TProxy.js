@@ -5172,10 +5172,17 @@ exit "$kano_task_rc"`;
 
   const runBinaryHelperJson = async (command, args = [], timeout = 15 * 1000, run = runShellWithRoot) => {
     const commandArgs = [command, ...args].map((value) => shellQuote(String(value))).join(' ');
-    const res = await run(
-      `[ -x ${shellQuote(KANO_HELPER_PATH)} ] || exit 127; ${shellQuote(KANO_HELPER_PATH)} ${commandArgs}`,
-      timeout,
-    );
+    let res;
+    // 只读探测通道失败时按「helper 不可用」处理：异常若直接冒泡，readBinarySnapshot 就设不了
+    // 负缓存，每次开诊断都会为一个不存在的 helper 多跑一次 shell。
+    try {
+      res = await run(
+        `[ -x ${shellQuote(KANO_HELPER_PATH)} ] || exit 127; ${shellQuote(KANO_HELPER_PATH)} ${commandArgs}`,
+        timeout,
+      );
+    } catch (_) {
+      return null;
+    }
     if (!res.success) return null;
     return parseBinaryHelperJsonOutput(res.content || '');
   };

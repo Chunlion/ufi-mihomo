@@ -10470,6 +10470,8 @@ EOF_F50_RESTORE_MEMBERS
             echo "PACKED: $name"
             return 0
           fi
+          # 源文件缺失时按名称兜底：mac_bypass.txt 是 tproxy 模式下 device_bypass 的派生镜像，
+          # 从未保存过网络设置的设备上本来就不存在，不能因此判导出失败。
           case "$name" in
             config.yaml)
               echo "MISSING_REQUIRED: $name"
@@ -10487,7 +10489,7 @@ EOF_F50_RESTORE_MEMBERS
             override.js)
               printf '%s' ${shellQuote(defaultOverrideJsForBackup)} > "$PKG_DIR/$name" || return 1
               ;;
-            sub_user_agent.conf|device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
+            sub_user_agent.conf|mac_bypass.txt|device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
               : > "$PKG_DIR/$name" || return 1
               ;;
             rule_override.json|rule_override_applied.json)

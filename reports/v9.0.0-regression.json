@@ -1,17 +1,17 @@
 {
-  "date": "2026-11-07T15:48:07.067Z",
+  "date": "2026-11-07T15:56:55.873Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "ec6ddb8521ddfbd6800a06c4838bbec3b4e6db45",
-    "bytes": 693093,
-    "sha256": "081d5d39de21271c991d02141438076fc01132879a621961d8425ef037a35198"
+    "baseCommit": "7ef5911fce2be7dd02117f7742c1a62f16fb7e63",
+    "bytes": 693328,
+    "sha256": "86b3fb9decb4e70263d1d9a266cc7ec48e98ea79f4d5f80822888a28daac29c9"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 857,
+    "passed": 860,
     "failed": 0,
     "notRun": 12
   },
@@ -734,6 +734,31 @@
         {
           "name": "real template persists through preparation, repeated saves, source changes and mode switches",
           "status": "NOT_RUN"
+        }
+      ]
+    },
+    {
+      "file": "tests/tproxy/config_package.test.js",
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/tproxy/config_package.test.js",
+      "status": "PASS",
+      "exitCode": 0,
+      "stdout": "reports/gist-sync/regression/config_package.test.js.stdout.log",
+      "stderr": "reports/gist-sync/regression/config_package.test.js.stderr.log",
+      "passed": 3,
+      "failed": 0,
+      "notRun": 0,
+      "cases": [
+        {
+          "name": "a missing mac_bypass.txt is defaulted instead of failing the export",
+          "status": "PASS"
+        },
+        {
+          "name": "optional list keeps mac_bypass.txt next to device_bypass.txt",
+          "status": "PASS"
+        },
+        {
+          "name": "config.yaml stays a hard requirement",
+          "status": "PASS"
         }
       ]
     },

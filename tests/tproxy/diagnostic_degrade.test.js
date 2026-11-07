@@ -122,6 +122,7 @@ test('diagnostics read through the lease-free probe channel', async () => {
 
 for (const failure of ['rejected', 'unsuccessful']) test('real diagnostic queries fail without blocking the next write / ' + failure, async () => {
   const calls = [], toasts = [];
+  const toolboxBin = '/data/clash/toolbox/bin';
   let writing = false;
   const h = harness({
     hostRunShellWithRoot: async script => {
@@ -138,7 +139,7 @@ for (const failure of ['rejected', 'unsuccessful']) test('real diagnostic querie
       if (script.includes('KANO_POLICY_')) return { success: true, content: 'KANO_POLICY_options=traffic_mode=tproxy' };
       return { data: { success: true, content: 'exists=1\nsize=2048' } };
     },
-    KANO_INSTALL_TOOLBOX_BIN: '/data/clash/toolbox/bin',
+    KANO_INSTALL_TOOLBOX_BIN: toolboxBin,
     CLASH_SERVICE: '/data/clash/Scripts/Clash.Service',
     BOOT_FILE: '/sdcard/ufi_tools_boot.sh',
     BOOT_ASYNC_LINE: 'boot-async', BOOT_SERVICE_LINE: 'boot-service',
@@ -167,7 +168,7 @@ for (const failure of ['rejected', 'unsuccessful']) test('real diagnostic querie
   assert.match(h.dialogs[0].html, /日志读取失败：query timed out/);
   assert.equal(h.api.uncertain(), false);
   assert.deepEqual(toasts, []);
-  assert.ok(calls.every(call => call.script.includes("export PATH='/data/clash/toolbox/bin'")));
+  assert.ok(calls.every(call => call.script.includes(`export PATH='${toolboxBin}'`)), '诊断与写通道使用同一 PATH 前缀');
   assert.ok(calls.every(call => !/f50_lease_acquire |f50_writer_enter|F50_TASK_FINISHED=/.test(call.script)));
   writing = true;
   const result = await h.api.write('echo write-ok', 5000);
@@ -183,6 +184,18 @@ test('optional snapshot failure falls back to the config file probe', async () =
   await h.api.run();
   assert.match(h.dialogs[0].html, /config.yaml 2.0 KB/);
   assert.doesNotMatch(h.dialogs[0].html, /配置文件：helper unavailable/);
+});
+
+test('a throwing helper probe reads as unavailable, so the negative cache still applies', async () => {
+  // 只读通道失败若直接冒泡，readBinarySnapshot 就设不了 binarySnapshotUnavailableUntil，
+  // 每次开诊断都会为一个不存在的 helper 多跑一次 shell。
+  const api = vm.runInNewContext(
+    slice('  const runBinaryHelperJson =', '  const readBinarySnapshot =') + '\n({run: runBinaryHelperJson})',
+    { shellQuote: value => `'${value}'`, KANO_HELPER_PATH: '/data/clash/Tools/f50-helper', parseBinaryHelperJsonOutput: () => ({ ok: true }) },
+  );
+  assert.equal(await api.run('snapshot', [], 1000, async () => { throw new Error('probe failed'); }), null);
+  assert.equal(await api.run('snapshot', [], 1000, async () => ({ success: false, content: 'exit 127' })), null);
+  assert.deepEqual(await api.run('snapshot', [], 1000, async () => ({ success: true, content: '{"ok":true}' })), { ok: true });
 });
 
 test('a failing probe degrades that row instead of aborting the dialog', async () => {

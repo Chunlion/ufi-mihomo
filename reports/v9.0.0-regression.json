@@ -1,17 +1,17 @@
 {
-  "date": "2026-11-04T11:35:14.358Z",
+  "date": "2026-11-07T15:48:07.067Z",
   "platform": "linux",
   "node": "v20.19.2",
   "source": {
     "path": "猫猫TProxy.js",
-    "baseCommit": "a09db8b35e8d9f620c653124b34a3ef21965aad8",
-    "bytes": 691884,
-    "sha256": "b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613"
+    "baseCommit": "ec6ddb8521ddfbd6800a06c4838bbec3b4e6db45",
+    "bytes": 693093,
+    "sha256": "081d5d39de21271c991d02141438076fc01132879a621961d8425ef037a35198"
   },
   "invocation": "node scripts/verify_plugin.js",
   "concurrency": 1,
   "totals": {
-    "passed": 852,
+    "passed": 857,
     "failed": 0,
     "notRun": 12
   },
@@ -1067,7 +1067,7 @@
       "exitCode": 0,
       "stdout": "reports/gist-sync/regression/diagnostic_degrade.test.js.stdout.log",
       "stderr": "reports/gist-sync/regression/diagnostic_degrade.test.js.stderr.log",
-      "passed": 14,
+      "passed": 19,
       "failed": 0,
       "notRun": 0,
       "cases": [
@@ -1077,6 +1077,26 @@
         },
         {
           "name": "all probes healthy renders the diagnostic dialog",
+          "status": "PASS"
+        },
+        {
+          "name": "diagnostics read through the lease-free probe channel",
+          "status": "PASS"
+        },
+        {
+          "name": "real diagnostic queries fail without blocking the next write / rejected",
+          "status": "PASS"
+        },
+        {
+          "name": "real diagnostic queries fail without blocking the next write / unsuccessful",
+          "status": "PASS"
+        },
+        {
+          "name": "optional snapshot failure falls back to the config file probe",
+          "status": "PASS"
+        },
+        {
+          "name": "a throwing helper probe reads as unavailable, so the negative cache still applies",
           "status": "PASS"
         },
         {

@@ -4310,6 +4310,13 @@ exit "$kano_task_rc"`;
       }
     }
   };
+  // 只读查询失败只降级对应项，不进入写任务回执检查或封锁后续操作。
+  const probeShell = async (script = '', timeout) => {
+    const command = `if [ -d '${KANO_INSTALL_TOOLBOX_BIN}' ]; then export PATH='${KANO_INSTALL_TOOLBOX_BIN}':"$PATH"; fi\n${script}`;
+    const result = f50ShellReply(await hostRunShellWithRoot.call(globalThis, command, timeout));
+    if (!result.success) throw new Error(result.content || '无法读取设备状态；请重试');
+    return result;
+  };
 
 
 
@@ -4711,11 +4718,11 @@ exit "$kano_task_rc"`;
     return apiResult && apiResult.success ? 'healthy' : 'running_api_unavailable';
   };
 
-  const runtimePreflight = async ({ freshController = true } = {}) => {
+  const runtimePreflight = async ({ freshController = true, run = runShellWithRoot } = {}) => {
     // Basic preflight must stay non-invasive. In particular, never run `Clash.Core -t`
     // from page/status refresh: on some F50 builds a slow config-test process can outlive
     // the UFI root-shell request and then be mistaken for the real proxy core.
-    const shellResult = await runShellWithRoot(`
+    const shellResult = await run(`
       set +e
       SERVICE=${shellQuote(CLASH_SERVICE)}
       CORE=${shellQuote(CLASH_CORE)}
@@ -4764,8 +4771,8 @@ exit "$kano_task_rc"`;
     };
   };
 
-  const inspectBootIntegration = async () => {
-    const result = await runShellWithRoot(`
+  const inspectBootIntegration = async (run = runShellWithRoot) => {
+    const result = await run(`
       BOOT=${shellQuote(BOOT_FILE)}
       if [ ! -f "$BOOT" ]; then
         echo "BOOT_STATE=disabled"
@@ -5163,9 +5170,9 @@ exit "$kano_task_rc"`;
     return null;
   };
 
-  const runBinaryHelperJson = async (command, args = [], timeout = 15 * 1000) => {
+  const runBinaryHelperJson = async (command, args = [], timeout = 15 * 1000, run = runShellWithRoot) => {
     const commandArgs = [command, ...args].map((value) => shellQuote(String(value))).join(' ');
-    const res = await runShellWithRoot(
+    const res = await run(
       `[ -x ${shellQuote(KANO_HELPER_PATH)} ] || exit 127; ${shellQuote(KANO_HELPER_PATH)} ${commandArgs}`,
       timeout,
     );
@@ -5174,7 +5181,7 @@ exit "$kano_task_rc"`;
   };
 
 
-  const readBinarySnapshot = async ({ fresh = false } = {}) => {
+  const readBinarySnapshot = async ({ fresh = false, run = runShellWithRoot } = {}) => {
     const now = Date.now();
     if (!fresh && binarySnapshotCache && binarySnapshotExpiresAt > now) return binarySnapshotCache;
     // Missing/failed optional helper is negative-cached briefly so a clean install does not
@@ -5184,7 +5191,7 @@ exit "$kano_task_rc"`;
     const loadPromise = runBinaryHelperJson('snapshot', [
       '--config', CLASH_CONFIG,
       '--options', CLASH_POLICY_OPTIONS_FILE,
-    ]);
+    ], 15 * 1000, run);
     binarySnapshotLoadPromise = loadPromise;
     try {
       const snapshot = await loadPromise;
@@ -7968,12 +7975,12 @@ KANO_WRITE_CHECK_EOF
   let runtimePreflightCache = null;
   let runtimePreflightCacheExpiresAt = 0;
   let runtimePreflightLoadPromise = null;
-  const checkInstallState = async ({ fresh = false } = {}) => {
+  const checkInstallState = async ({ fresh = false, run = runShellWithRoot } = {}) => {
     if (!fresh && runtimePreflightCache && runtimePreflightCacheExpiresAt > Date.now()) {
       return runtimePreflightCache;
     }
     if (!fresh && runtimePreflightLoadPromise) return runtimePreflightLoadPromise;
-    const loadPromise = runtimePreflight();
+    const loadPromise = runtimePreflight({ run });
     runtimePreflightLoadPromise = loadPromise;
     try {
       const state = await loadPromise;
@@ -8663,7 +8670,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       installEl.innerHTML = '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>';
     }
     // 日志单独一路，不参与诊断聚合：谁先回来谁先显示。
-    runShellWithRoot(`
+    probeShell(`
         START_LOG=${shellQuote('/data/kano_clash_start.log')}
         RUN_LOG=${shellQuote(LOG_FILE)}
         echo "[Clash.Service 启动输出]"
@@ -8678,16 +8685,16 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     });
     const controllerInfoPromise = buildControllerInfo();
     const pidPromise = getCorePid();
-    const runtimeStatePromise = settle('运行状态', checkInstallState({ fresh: true }), { state: 'unknown', message: '读取失败' });
-    const bootStatePromise = inspectBootIntegration();
-    const configPromise = readBinarySnapshot().then((snapshot) => {
+    const runtimeStatePromise = settle('运行状态', checkInstallState({ fresh: true, run: probeShell }), { state: 'unknown', message: '读取失败' });
+    const bootStatePromise = inspectBootIntegration(probeShell);
+    const configPromise = readBinarySnapshot({ run: probeShell }).catch(() => null).then((snapshot) => {
       if (snapshot) {
         return {
           success: true,
           content: `exists=${snapshot.configExists === true ? 1 : 0}\nsize=${Number(snapshot.configSize) || 0}`,
         };
       }
-      return runShellWithRoot(`
+      return probeShell(`
           if [ -f ${shellQuote(CLASH_CONFIG)} ]; then
             size="$(wc -c < ${shellQuote(CLASH_CONFIG)} 2>/dev/null | tr -d ' ')"
             echo "exists=1"
@@ -8698,7 +8705,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           fi
           `);
     });
-    const processPromise = pidPromise.then((pid) => runShellWithRoot(`
+    const processPromise = pidPromise.then((pid) => probeShell(`
         PID=${shellQuote(String(pid || ''))}
         CORE=${shellQuote(CLASH_CORE)}
         echo "PID=$PID"
@@ -8737,11 +8744,14 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         fi
         `, 8 * 1000));
     // 遍历 /proc 找遗留测试进程最慢，单独一路，回来后再补进详细信息。
-    const stalePromise = settle('遗留测试进程', pidPromise.then((pid) => (pid ? runShellWithRoot(`
+    const stalePromise = settle('遗留测试进程', pidPromise.then((pid) => (pid ? probeShell(`
         CORE=${shellQuote(CLASH_CORE)}
         stale=""
         for p in /proc/[0-9]*; do
           [ -r "$p/cmdline" ] || continue
+          # 先按 comm 内建读数粗筛，只对候选进程 fork readlink/tr：全量 fork 在慢设备上会拖过超时。
+          IFS= read -r name < "$p/comm" 2>/dev/null || continue
+          case "$name" in Clash.Core|mihomo) ;; *) continue ;; esac
           exe="$(readlink "$p/exe" 2>/dev/null)"
           case "$exe" in "$CORE"|*/Clash.Core|*/mihomo) ;; *) continue ;; esac
           c="$(tr '\\0' ' ' < "$p/cmdline" 2>/dev/null)"
@@ -8750,7 +8760,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           esac
         done
         echo "STALE_TEST_PIDS=$stale"
-        `, 8 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' }))).then((res) => {
+        `, 15 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' }))).then((res) => {
       if (!res?.success) throw new Error(res?.content || '读取失败');
       return res;
     }), { success: false, content: '' });
@@ -8767,7 +8777,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const providerPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
       pid ? callMihomoApi('/providers/proxies', 'GET', null, info, 5, { corePid: pid }) : noCore);
     const panelPromise = Promise.resolve().then(() =>
-      runShellWithRoot(buildF50ShellBase() + buildF50PanelHelpers() + '\nf50_verify_zashboard_endpoint', 12000));
+      probeShell(buildF50ShellBase() + buildF50PanelHelpers() + '\nf50_verify_zashboard_endpoint', 12000));
     const [
       runtimeState,
       bootState,
@@ -8787,7 +8797,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       settle('控制地址', controllerInfoPromise, {
         raw: '', apiBase: '未读取', externalController: '', secretSet: false, usingFallbackController: false,
       }),
-      settle('网络设置', readPolicyState(), { options: {} }),
+      settle('网络设置', readPolicyState(probeShell), { options: {} }),
       settle('配置文件', configPromise, { success: false, content: '' }),
       settle('核心进程详情', processPromise, { success: false, content: '' }),
       settle('控制 API', versionPromise, { success: false, statusCode: 0, message: '未读取' }),
@@ -9055,8 +9065,8 @@ btn_disabled.onclick = async () => {
  options.dns_port=String(F50_PORTS.dns);options.tproxy_port=String(F50_PORTS.tproxy);return options;
 };
 
-  const readPolicyState = async () => {
-    const res = await runShellWithRoot(`
+  const readPolicyState = async (run = runShellWithRoot) => {
+    const res = await run(`
         set -e
         emit_policy_file() {
           name="$1"

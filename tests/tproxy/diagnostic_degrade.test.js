@@ -22,7 +22,7 @@ test('every emitted installation failure has a Chinese diagnostic', () => {
   for (const code of codes) assert.match(labels[code] || '', /[\u4e00-\u9fff]/, code);
 });
 
-function harness(overrides = {}) {
+function harness(overrides = {}, realShell = false) {
   const dialogs = [];
   // 诊断现在是「先开窗、后填充」：showInfoDialog 立即拿到骨架，各区块随后写 innerHTML/textContent。
   // 这里把骨架和填充结果合成回一份 HTML，保持原有断言按内容顺序切片的方式。
@@ -78,8 +78,21 @@ function harness(overrides = {}) {
     console: { error() {} },
     ...overrides,
   };
-  const code = slice('  const showStatusDiagnostic = async () => {', '  const sanitizeConfigForTProxy =');
-  return { dialogs, api: vm.runInNewContext(code + '\n({run: showStatusDiagnostic})', base) };
+  // 诊断只读探测走独立通道（不拿租约、不产生任务收据）；未单独注入时沿用同一个桩，
+  // 既有用例仍可按脚本内容分流。
+  if (!overrides.probeShell) base.probeShell = (script, timeout) => base.runShellWithRoot(script, timeout);
+  const shellCode = realShell ? [
+    'let activeCriticalOperation = null; let taskCommandSequence = 0;',
+    slice('    let transientShellOperation =', '  const shellQuote ='),
+    slice('  const parseRuntimePreflightResult =', '  const downloadCoreArchive ='),
+    slice('  let runtimePreflightCache =', '  const ensureInstalled ='),
+    slice('  const readPolicyState =', '  const updateModeBadge ='),
+  ].join('\n') : '';
+  const code = shellCode + slice('  const showStatusDiagnostic = async () => {', '  const sanitizeConfigForTProxy =');
+  const exports = realShell
+    ? '({run: showStatusDiagnostic, write: runShellWithRoot, uncertain: () => deviceTaskUncertain})'
+    : '({run: showStatusDiagnostic})';
+  return { dialogs, api: vm.runInNewContext(code + '\n' + exports, base) };
 }
 
 test('all probes healthy renders the diagnostic dialog', async () => {
@@ -89,6 +102,87 @@ test('all probes healthy renders the diagnostic dialog', async () => {
   assert.equal(h.dialogs[0].id, 'mm_status_diagnostic');
   assert.match(h.dialogs[0].html, /TProxy/);
   assert.doesNotMatch(h.dialogs[0].html, /读取降级/);
+});
+
+test('diagnostics read through the lease-free probe channel', async () => {
+  const leased = [];
+  const h = harness({
+    // 租约通道一旦被诊断用到就会置 deviceTaskUncertain 并误报“请执行恢复网络”，
+    // 所以这里直接让它失败：诊断必须全部走 probeShell。
+    runShellWithRoot: async script => { leased.push(script); throw new Error('lease channel must not be used'); },
+    probeShell: async script => ({
+      success: true,
+      content: script.includes('STALE_TEST_PIDS=') ? 'STALE_TEST_PIDS=' : 'exists=1\nsize=2048',
+    }),
+  });
+  await h.api.run();
+  assert.deepEqual(leased, [], 'diagnostics must not use the leased shell channel');
+  assert.doesNotMatch(h.dialogs[0].html, /读取降级/);
+});
+
+for (const failure of ['rejected', 'unsuccessful']) test('real diagnostic queries fail without blocking the next write / ' + failure, async () => {
+  const calls = [], toasts = [];
+  let writing = false;
+  const h = harness({
+    hostRunShellWithRoot: async script => {
+      calls.push({ script, writing });
+      if (script.includes('f50_lease_acquire ')) return { success: true, content: 'F50_LEASE_ACQUIRED=1' };
+      if (script.includes('f50_lease_release ')) return { success: true, content: 'F50_LEASE_RELEASED=1' };
+      const request = script.match(/F50_TASK_NOT_STARTED=(mm_[A-Za-z0-9_.-]+)/);
+      if (request) return { success: true, content: 'write-ok\nF50_TASK_FINISHED=' + request[1] + ':0\n' };
+      if (script.includes('STALE_TEST_PIDS=') || script.includes('BOOT_STATE=') || script.includes('START_LOG=')) {
+        if (failure === 'rejected') throw new Error('query timed out');
+        return { success: false, content: 'query timed out' };
+      }
+      if (script.includes('PREFLIGHT_STATE=')) return { success: true, content: 'PREFLIGHT_STATE=running_api_unavailable\nCORE_PID=1234' };
+      if (script.includes('KANO_POLICY_')) return { success: true, content: 'KANO_POLICY_options=traffic_mode=tproxy' };
+      return { data: { success: true, content: 'exists=1\nsize=2048' } };
+    },
+    KANO_INSTALL_TOOLBOX_BIN: '/data/clash/toolbox/bin',
+    CLASH_SERVICE: '/data/clash/Scripts/Clash.Service',
+    BOOT_FILE: '/sdcard/ufi_tools_boot.sh',
+    BOOT_ASYNC_LINE: 'boot-async', BOOT_SERVICE_LINE: 'boot-service',
+    BOOT_POLICY_TOOLS_LINE: 'boot-policy', BOOT_INOTIFY_LINE: 'boot-inotify',
+    LEGACY_BOOT_INOTIFY_LINE: 'legacy-inotify', LEGACY_BOOT_SERVICE_LINE: 'legacy-service',
+    LEGACY_BOOT_FIX_WRAPPER_LINE: 'legacy-wrapper', CLASH_SERVICE_WRAPPER_VERSION: 'test',
+    CLASH_POLICY_SCRIPT: '/data/clash/policy.sh', CLASH_DIR: '/data/clash',
+    CLASH_POLICY_OPTIONS_FILE: '/data/clash/options', CLASH_DEVICE_BYPASS_FILE: '/data/clash/devices',
+    CLASH_DEVICE_NOTES_FILE: '/data/clash/notes', CLASH_DIRECT_DOMAIN_FILE: '/data/clash/direct-domain',
+    CLASH_DIRECT_IP_FILE: '/data/clash/direct-ip', CLASH_PROXY_DOMAIN_FILE: '/data/clash/proxy-domain',
+    CLASH_REJECT_DOMAIN_FILE: '/data/clash/reject-domain',
+    buildOwnedCoreFunctions: () => '', buildF50LeaseFunctions: () => '', buildF50GistFence: () => '',
+    parseKeyValueOutput: content => Object.fromEntries(content.split('\n').filter(line => line.includes('=')).map(line => {
+      const i = line.indexOf('='); return [line.slice(0, i), line.slice(i + 1)];
+    })),
+    parsePolicyOptionsText: () => ({ traffic_mode: 'tproxy', ipv6: 'on' }),
+    parseDeviceBypassLine: () => ({ address: '' }), readDeviceBypassNotes: () => [],
+    createRandomString: () => 'test', setInterval, clearInterval,
+    operationCancelled: () => new Error('operation cancelled'),
+    f50Diagnostic: () => ({}), syncCriticalOperationStatus() {},
+    safeTextToHtml: String, createToast: message => toasts.push(message),
+  }, true);
+  await h.api.run();
+  assert.match(h.dialogs[0].html, /遗留测试进程：query timed out/);
+  assert.match(h.dialogs[0].html, /开机自启：query timed out/);
+  assert.match(h.dialogs[0].html, /日志读取失败：query timed out/);
+  assert.equal(h.api.uncertain(), false);
+  assert.deepEqual(toasts, []);
+  assert.ok(calls.every(call => call.script.includes("export PATH='/data/clash/toolbox/bin'")));
+  assert.ok(calls.every(call => !/f50_lease_acquire |f50_writer_enter|F50_TASK_FINISHED=/.test(call.script)));
+  writing = true;
+  const result = await h.api.write('echo write-ok', 5000);
+  assert.equal(result.success, true);
+  assert.equal(result.deviceCompleted, true);
+  assert.match(result.content, /write-ok/);
+  assert.equal(h.api.uncertain(), false);
+  assert.ok(calls.some(call => call.writing && call.script.includes('f50_lease_release ')));
+});
+
+test('optional snapshot failure falls back to the config file probe', async () => {
+  const h = harness({ readBinarySnapshot: async () => { throw new Error('helper unavailable'); } });
+  await h.api.run();
+  assert.match(h.dialogs[0].html, /config.yaml 2.0 KB/);
+  assert.doesNotMatch(h.dialogs[0].html, /配置文件：helper unavailable/);
 });
 
 test('a failing probe degrades that row instead of aborting the dialog', async () => {

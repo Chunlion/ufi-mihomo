@@ -143,6 +143,9 @@ const gateOf = (text) => {
     const got = payload.split('\n').filter((l) => l.trim());
     assert(JSON.stringify(got) === JSON.stringify(orig), `尾钩以前内容与原文件逐行一致 (${got.length} vs ${orig.length})`);
     assert(sbx.exists('data/f50_boot_fix/boot_manager.sh'), '管理器已安装');
+    const list = sbx.runShell('"/data/f50_boot_fix/boot_manager.sh" --list');
+    assert(/^LIST_MODE=entries$/m.test(list.stdout), '管理器正确剥离尾钩，保持逐条解析');
+    assert(/^LIST_COUNT=4$/m.test(list.stdout), '启动指令列表只包含四条插件指令');
   });
 
   await test('T2 重复点「安装/修复」：结果完全幂等，不会叠加', async () => {
@@ -334,6 +337,8 @@ const gateOf = (text) => {
       'my_func() {',
       `  touch ${S}/probe/m3`,
       '}',
+      '',
+      '  ',
       'my_func',
       '',
     ].join('\n');
@@ -355,6 +360,7 @@ const gateOf = (text) => {
     const content = [
       `MYDIR=${S}/probe`,
       'MYNAME=v1',
+      '',
       'touch "$MYDIR/$MYNAME"',
       `touch ${S}/probe/v_after`,
       '',

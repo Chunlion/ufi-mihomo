@@ -1,7 +1,7 @@
 //<script>
 (() => {
   const ROOT_ID = 'f50_boot_fix_standalone';
-  const MANAGER_VERSION = '3.1.1';
+  const MANAGER_VERSION = '3.2.0-beta.1';
   const BOOT_FILE = '/sdcard/ufi_tools_boot.sh';
   const FIX_DIR = '/data/f50_boot_fix';
   const FIX_SCRIPT = `${FIX_DIR}/boot_manager.sh`;
@@ -25,14 +25,27 @@
   const shellQuote = (value) =>
     "'" + String(value).replace(/'/g, "'\\''") + "'";
 
+  // 剥离增强尾钩、统计尾钩行数：管理器与安装/卸载脚本共用同一份 awk，避免多处拷贝漂移。
+  const gateStripAwk = (crStrip) => `awk -v b=${shellQuote(BOOT_BEGIN)} -v e=${shellQuote(BOOT_END)} '
+  $0 == b { depth++; next }
+  $0 == e { if (depth > 0) depth--; next }
+  depth > 0 { next }
+  ${crStrip ? '{ sub(/\\r$/, ""); print }' : '{ print }'}
+  END { if (depth > 0) exit 3 }
+'`;
+  const gateCountAwk = () => `awk -v b="$BEGIN" -v e="$END" '
+  $0 == b { inside=1 }
+  inside && NF { count++ }
+  $0 == e { inside=0 }
+  END { print count + 0 }
+'`;
+
   const rejectIfManagerActiveCmd = () => `
       active_lock=${shellQuote(MANAGER_LOCK_DIR)}
       active_tag=$(cat "$active_lock/tag" 2>/dev/null || true)
       active_boot=\${active_tag%.*}
       active_pid=\${active_tag##*.}
       current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
-      [ -n "$current_boot" ] || current_boot=$(grep '^btime ' /proc/stat 2>/dev/null | awk '{print $2}')
-      [ -n "$current_boot" ] || current_boot=unknown
       case "$active_pid" in
         "" | *[!0-9]*) active_pid= ;;
       esac
@@ -52,8 +65,8 @@
     }[ch]));
 
   const guardHost = () => {
-    if (typeof runShellWithRoot === 'function' && typeof createToast === 'function') return true;
-    const message = 'F50 开机自启修复：宿主接口缺失（runShellWithRoot/createToast），请刷新页面后重试。';
+    if (typeof runShellWithRoot === 'function') return true;
+    const message = 'F50 开机自启修复：宿主接口缺失（runShellWithRoot），请刷新页面后重试。';
     if (typeof createToast === 'function') createToast(message, 'red', 8000);
     else alert(message);
     return false;
@@ -106,7 +119,8 @@
     'RETRY_FAILED=1',
     'RETRY_DELAY=15',
     'MAX_ENTRIES=300',
-    'WATCH_INTERVAL=10',
+    '# /sdcard 经 sdcardfs/FUSE 挂载，inotify 事件不可靠；快照监督保持轮询，只降频。',
+    'WATCH_INTERVAL=60',
     'NATIVE_GRACE_UPTIME=180',
     '',
     'HAVE_LOCK=0',
@@ -179,7 +193,6 @@
     '',
     'resolve_boot_id() {',
     '  BOOT_ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)',
-    '  [ -n "$BOOT_ID" ] || BOOT_ID=$(grep "^btime " /proc/stat 2>/dev/null | awk "{print \\$2}")',
     '  [ -n "$BOOT_ID" ] || BOOT_ID=unknown',
     '}',
     '',
@@ -197,8 +210,8 @@
     '    ng_up=$(uptime_seconds)',
     '    case "$ng_up" in "" | *[!0-9]*) ng_up=0 ;; esac',
     '    [ "$ng_up" -lt "$NATIVE_GRACE_UPTIME" ] || return 1',
-    '    # /proc/uptime 极端情况下不可读时也不能永久挂住 service.d。',
-    '    [ "$ng_waited" -lt 150 ] || return 1',
+    '    # /proc/uptime 读不到时按已等待秒数兜底，上限同样由 NATIVE_GRACE_UPTIME 决定。',
+    '    [ "$ng_waited" -lt "$NATIVE_GRACE_UPTIME" ] || return 1',
     '    sleep 2',
     '    ng_waited=$((ng_waited + 2))',
     '    resolve_boot_id',
@@ -253,7 +266,7 @@
     '  return 0',
     '}',
     '',
-    '# 等系统真正可用：开机秒数 + sys.boot_completed + 启动文件所在分区已挂载。',
+    '# 等系统真正可用：开机秒数 + sys.boot_completed。启动文件的存在性由 wait_for_boot_file 单点负责。',
     'wait_until_ready() {',
     '  READY_STATE=ok',
     '  have_getprop=0',
@@ -272,22 +285,15 @@
     '    if [ "$have_getprop" = "1" ]; then',
     '      [ "$(getprop sys.boot_completed 2>/dev/null)" = "1" ] || boot_done=0',
     '    fi',
-    '    file_ready=0',
-    '    [ -f "$BOOT_FILE" ] && file_ready=1',
-    '    if [ "$up" -ge "$MIN_UPTIME" ] && [ "$boot_done" = "1" ] && [ "$file_ready" = "1" ]; then',
+    '    if [ "$up" -ge "$MIN_UPTIME" ] && [ "$boot_done" = "1" ]; then',
     '      READY_UPTIME="$up"',
     '      return 0',
     '    fi',
-    '    if [ "$elapsed" -ge "$MAX_WAIT" ] && [ "$file_ready" = "1" ]; then',
+    '    if [ "$elapsed" -ge "$MAX_WAIT" ]; then',
     '      READY_STATE=timeout',
     '      READY_UPTIME="$up"',
     '      log_line "warning: 等待系统就绪超时(${MAX_WAIT}s)，仍继续执行 uptime=${up}s"',
     '      return 0',
-    '    fi',
-    '    if [ "$elapsed" -ge "$FILE_MAX_WAIT" ]; then',
-    '      READY_STATE=nofile',
-    '      READY_UPTIME="$up"',
-    '      return 1',
     '    fi',
     '    sleep 2',
     '  done',
@@ -306,13 +312,7 @@
     '# 抽取增强尾钩以外的全部内容 = 各插件真正的启动指令。',
     '# 增强尾钩标记不闭合时返回 3，由调用方退回整体重放，绝不吞掉任何一行。',
     'extract_payload() {',
-    '  awk -v b="$BEGIN_MARK" -v e="$END_MARK" \'',
-    '    $0 == b { depth++; next }',
-    '    $0 == e { if (depth > 0) depth--; next }',
-    '    depth > 0 { next }',
-    '    { sub(/\\r$/, ""); print }',
-    '    END { if (depth > 0) exit 3 }',
-    "  ' \"$BOOT_FILE\" > \"$PAYLOAD\" 2>/dev/null",
+    `  ${gateStripAwk(true)} "$BOOT_FILE" > "$PAYLOAD" 2>/dev/null`,
     '}',
     '',
     '# /sdcard 在部分固件的物理冷启动中会被旧模板覆盖。这里把完整的托管启动文件',
@@ -331,22 +331,7 @@
     '}',
     '',
     'files_equal() {',
-    '  fe_a="$1"',
-    '  fe_b="$2"',
-    '  [ -f "$fe_a" ] && [ -f "$fe_b" ] || return 1',
-    '  if command -v cmp >/dev/null 2>&1; then',
-    '    cmp -s "$fe_a" "$fe_b"',
-    '    return $?',
-    '  fi',
-    '  if command -v cksum >/dev/null 2>&1; then',
-    '    fe_ac=$(cksum < "$fe_a" 2>/dev/null) || return 1',
-    '    fe_bc=$(cksum < "$fe_b" 2>/dev/null) || return 1',
-    '    [ -n "$fe_ac" ] && [ "$fe_ac" = "$fe_bc" ]',
-    '    return $?',
-    '  fi',
-    '  fe_ac=$(cat "$fe_a" && printf ".") || return 1',
-    '  fe_bc=$(cat "$fe_b" && printf ".") || return 1',
-    '  [ "$fe_ac" = "$fe_bc" ]',
+    '  cmp -s "$1" "$2"',
     '}',
     '',
     'save_boot_snapshot() {',
@@ -387,7 +372,12 @@
     '  files_equal "$BOOT_FILE" "$SNAPSHOT_FILE" && return 0',
     '  rb_original="$WORK_DIR/boot.before_restore"',
     '  rb_new="$WORK_DIR/boot.restored"',
-    '  cat "$BOOT_FILE" > "$rb_original" 2>/dev/null || return 1',
+    '  # 冷启动把启动文件整个删空时也允许恢复：原内容按空文件落档，快照照样写回。',
+    '  if [ -f "$BOOT_FILE" ]; then',
+    '    cat "$BOOT_FILE" > "$rb_original" 2>/dev/null || return 1',
+    '  else',
+    '    : > "$rb_original" 2>/dev/null || return 1',
+    '  fi',
     '  cat "$SNAPSHOT_FILE" > "$rb_new" 2>/dev/null || return 1',
     '  files_equal "$SNAPSHOT_FILE" "$rb_new" || return 1',
     '  rb_mode=$(stat -c %a "$BOOT_FILE" 2>/dev/null || true)',
@@ -430,41 +420,14 @@
     '  exit 0',
     '}',
     '',
-    'entry_has_code() {',
-    '  awk \'NF && $0 !~ /^[[:space:]]*#/ { found=1; exit } END { exit(found ? 0 : 1) }\' "$1" 2>/dev/null',
-    '}',
-    '',
     'entry_label() {',
     '  awk \'NF && $0 !~ /^[[:space:]]*#/ { sub(/^[[:space:]]+/, ""); print substr($0, 1, 200); exit }\' "$1" 2>/dev/null',
     '}',
     '',
-    '# 只是「定义东西」的片段（函数定义、纯赋值）必须和后面用到它的指令待在一起，',
-    '# 否则隔离执行会让 my_func() {...} 和随后的 my_func 分家，调用直接 127。',
-    '# 返回 0 表示「这一段只有定义，先别断开」。',
-    'entry_defines_only() {',
-    '  awk \'',
-    '    /^[[:space:]]*$/ { next }',
-    '    /^[[:space:]]*#/ { next }',
-    '    { n++; last = $0; if (n == 1) { first = $0 } }',
-    '    $0 !~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^;&|]*$/ { not_assign = 1 }',
-    '    END {',
-    '      if (n == 0) { exit 1 }',
-    '      # 情况一：整段就是一个函数定义',
-    '      if (last ~ /^[[:space:]]*\\}[[:space:]]*;?[[:space:]]*$/) {',
-    '        if (first ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*\\)/) { exit 0 }',
-    '        if (first ~ /^[[:space:]]*function[[:space:]]/) { exit 0 }',
-    '      }',
-    '      # 情况二：整段全是变量赋值',
-    '      if (not_assign != 1) { exit 0 }',
-    '      exit 1',
-    '    }',
-    '  \' "$1" 2>/dev/null',
-    '}',
-    '',
-    '# sh -n 对「没写结束符的 heredoc」是放行的（dash/mksh/busybox 实测都返回 0），',
-    '# 所以必须自己盯着 heredoc 是否闭合，否则会把 heredoc 正文切成一条条指令去执行。',
-    '# 返回 0 表示「还有 heredoc 没闭合」。判断偏保守：宁可多等，也不会切错。',
-    'heredoc_open() {',
+    '# 候选段一次性分类：heredoc（未闭合，继续并行）/ empty（只有空行注释，丢弃缓冲）/',
+    '# defines（纯函数或纯赋值，先不断开）/ code（完整指令，立即落地）。',
+    '# 原 heredoc_open + entry_has_code + entry_defines_only 三次进程合并为一次。',
+    'classify_candidate() {',
     '  awk \'',
     '    pending > 0 {',
     '      l = $0',
@@ -473,7 +436,10 @@
     '      next',
     '    }',
     '    /^[ \\t]*#/ { next }',
+    '    /^[[:space:]]*$/ { next }',
     '    {',
+    '      n++; last = $0; if (n == 1) { first = $0 }',
+    '      if ($0 !~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^;&|]*$/) { not_assign = 1 }',
     '      rest = $0',
     '      while ((p = index(rest, "<<")) > 0) {',
     '        rest = substr(rest, p + 2)',
@@ -496,8 +462,17 @@
     '        strip[pending] = st',
     '      }',
     '    }',
-    '    END { exit(pending > 0 ? 0 : 1) }',
-    '  \' "$1" 2>/dev/null',
+    '    END {',
+    '      if (pending > 0) { print "heredoc"; exit }',
+    '      if (n == 0) { print "empty"; exit }',
+    '      if (last ~ /^[[:space:]]*\\}[[:space:]]*;?[[:space:]]*$/) {',
+    '        if (first ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*\\)/) { print "defines"; exit }',
+    '        if (first ~ /^[[:space:]]*function[[:space:]]/) { print "defines"; exit }',
+    '      }',
+    '      if (not_assign != 1) { print "defines"; exit }',
+    '      print "code"',
+    '    }',
+    '  \'',
     '}',
     '',
     '# 按「能被 sh -n 解析」为界把启动指令切成一条条独立单元。',
@@ -520,27 +495,36 @@
     '      buf="$buf',
     '$line"',
     '    fi',
-    '    printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
-    '    sh -n "$cand" 2>/dev/null || continue',
-    '    heredoc_open "$cand" && continue',
-    '    if entry_has_code "$cand"; then',
-    '      # 只有定义没有调用 -> 先不断开，把后面的行并进来',
-    '      entry_defines_only "$cand" && continue',
-    '      emit_entry "$cand" || return $?',
-    '    fi',
-    '    buf=""',
-    '  done < "$PAYLOAD"',
-    '  # 收尾：文件最后一段（比如只定义了函数）也要落地，不能当成残渣丢掉',
-    '  if [ -n "$buf" ]; then',
-    '    printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
-    '    if sh -n "$cand" 2>/dev/null && ! heredoc_open "$cand"; then',
-    '      if entry_has_code "$cand"; then',
+    '    printf "%s\\n" "$buf" | sh -n 2>/dev/null || continue',
+    '    cls=$(printf "%s\\n" "$buf" | classify_candidate)',
+    '    case "$cls" in',
+    '      heredoc | defines) continue ;;',
+    '      empty) buf="" ;;',
+    '      code)',
+    '        printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
     '        emit_entry "$cand" || return $?',
-    '      fi',
-    '    else',
+    '        buf=""',
+    '        ;;',
+    '    esac',
+    '  done < "$PAYLOAD"',
+    '  # 收尾：文件最后一段（比如只定义了函数）也要落地，不能当成残渣丢掉；',
+    '  # 语法不完整或 heredoc 未闭合同样退回整体重放。',
+    '  if [ -n "$buf" ]; then',
+    '    if ! printf "%s\\n" "$buf" | sh -n 2>/dev/null; then',
     '      rm -f "$cand" 2>/dev/null || true',
     '      return 3',
     '    fi',
+    '    cls=$(printf "%s\\n" "$buf" | classify_candidate)',
+    '    case "$cls" in',
+    '      code | defines)',
+    '        printf "%s\\n" "$buf" > "$cand" 2>/dev/null || return 1',
+    '        emit_entry "$cand" || return $?',
+    '        ;;',
+    '      heredoc)',
+    '        rm -f "$cand" 2>/dev/null || true',
+    '        return 3',
+    '        ;;',
+    '    esac',
     '  fi',
     '  rm -f "$cand" 2>/dev/null || true',
     '  return 0',
@@ -741,6 +725,12 @@
     'log_line "==== 管理器启动 v$MANAGER_VERSION mode=$MODE trigger=$TRIGGER boot=$BOOT_ID ===="',
     '',
     'prepare_work work || { log_line "error: 无法创建工作目录"; exit 1; }',
+    '# 冷启动会先用旧模板重建 /sdcard。恢复必须在等待与就绪判定之前完成：',
+    '# 启动文件被整个删空时，等待循环永远等不到文件，快照就永远落不了地。',
+    'RESTORED_SNAPSHOT=0',
+    'if [ "$MODE" = "boot" ]; then',
+    '  restore_boot_snapshot || log_line "warning: 冷启动持久快照恢复失败，保留当前启动文件"',
+    'fi',
     'if ! wait_for_boot_file; then',
     '  log_line "error: 等待 $BOOT_FILE 出现超时(${FILE_MAX_WAIT}s)，本次放弃"',
     '  : > "$STATE_FILE" 2>/dev/null || true',
@@ -755,34 +745,6 @@
     '  exit 1',
     'fi',
     '',
-    '# service.d 可能比 UFI 原生启动更早进入等待；这里再次检查尾钩标记，避免竞态双启动。',
-    'case "$TRIGGER" in',
-    '  service.d*)',
-    '    if native_tail_completed; then',
-    '      : > "$STATE_FILE" 2>/dev/null || true',
-    '      state_line "VERSION=$MANAGER_VERSION"',
-    '      state_line "BOOT_ID=$BOOT_ID"',
-    '      state_line "MODE=$MODE"',
-    '      state_line "TRIGGER=$TRIGGER"',
-    '      state_line "RUN_MODE=native-complete"',
-    '      state_line "ENTRIES=0"',
-    '      state_line "DONE=1"',
-    '      log_line "skip: 等待期间 UFI 原生启动已到达尾钩，不再重放"',
-    '      save_boot_snapshot native-tail-after-wait || true',
-    '      start_watcher',
-    '      printf "%s\\n" "$BOOT_ID" > "$MARKER_FILE" 2>/dev/null || true',
-    '      exit 0',
-    '    fi',
-    '    ;;',
-    'esac',
-    '',
-    '# 冷启动会先用旧模板重建 /sdcard。恢复必须在 45 秒就绪等待之前完成，',
-    '# 否则页面和其它启动消费者会在窗口期内看到空文件。插件命令仍在系统就绪后执行。',
-    'RESTORED_SNAPSHOT=0',
-    'if [ "$MODE" = "boot" ]; then',
-    '  restore_boot_snapshot || log_line "warning: 冷启动持久快照恢复失败，保留当前启动文件"',
-    'fi',
-    '',
     'LAST_BOOT_ID=$(cat "$MARKER_FILE" 2>/dev/null)',
     'if [ "$FORCE" != "1" ] && [ "$RESTORED_SNAPSHOT" != "1" ] && [ "$BOOT_ID" != "unknown" ] && [ "$BOOT_ID" = "$LAST_BOOT_ID" ]; then',
     '  log_line "skip: 本次开机($BOOT_ID)已完成过插件自启"',
@@ -794,19 +756,7 @@
     'READY_STATE=ok',
     'READY_UPTIME=$(uptime_seconds)',
     'if [ "$MODE" != "now" ]; then',
-    '  if ! wait_until_ready; then',
-    '    log_line "error: 等待 $BOOT_FILE 出现超时(${FILE_MAX_WAIT}s)，本次放弃"',
-    '    : > "$STATE_FILE" 2>/dev/null || true',
-    '    state_line "VERSION=$MANAGER_VERSION"',
-    '    state_line "BOOT_ID=$BOOT_ID"',
-    '    state_line "MODE=$MODE"',
-    '    state_line "TRIGGER=$TRIGGER"',
-    '    state_line "READY=nofile"',
-    '    state_line "ENTRIES=0"',
-    '    state_line "DONE=1"',
-    '    trim_file "$LOG_FILE" 400 250',
-    '    exit 1',
-    '  fi',
+    '  wait_until_ready',
     'fi',
     '',
     '# 最后一次竞态检查：故障转移等待期间若 UFI 原生脚本刚好完成，则立即退出，绝不双跑。',
@@ -895,7 +845,6 @@
     `  NATIVE_DIR=${shellQuote(FIX_DIR)}`,
     '  if [ -x "$FIX" ]; then',
     '    current_boot=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)',
-    '    [ -n "$current_boot" ] || current_boot=$(grep "^btime " /proc/stat 2>/dev/null | awk "{print \\$2}")',
     '    if [ -n "$current_boot" ]; then',
     '      mkdir -p "$NATIVE_DIR" 2>/dev/null || true',
     '      if printf "%s\\n" "$current_boot" > "$NATIVE_TAIL.tmp.$$" 2>/dev/null; then',
@@ -930,10 +879,14 @@
     'exit "$last_rc"',
   ].join('\n');
 
+  // root 授权在一次会话内不会中途收回；首次确认后直接复用，避免每次点击连跑两遍 whoami。
+  let rootConfirmed = false;
   const checkRoot = async () => {
+    if (rootConfirmed) return true;
     try {
       const result = await runShellWithRoot('whoami', 5000);
-      return !!(result.success && String(result.content || '').includes('root'));
+      rootConfirmed = !!(result.success && String(result.content || '').includes('root'));
+      return rootConfirmed;
     } catch (e) {
       console.error('[f50_boot_fix] runShellWithRoot 调用失败', e);
       return false;
@@ -945,7 +898,8 @@
       const result = await runShellWithRoot(script, timeout);
       return {
         success: !!(result && result.success),
-        content: String((result && result.content) || ''),
+        // 部分宿主会把设备输出按 CRLF 回传；统一成 LF，section/parseKeyed 才能稳定命中。
+        content: String((result && result.content) || '').replace(/\r\n/g, '\n'),
       };
     } catch (e) {
       console.error('[f50_boot_fix] shell 执行失败', e);
@@ -985,8 +939,6 @@
       # 版本号直接从脚本文件里读，绝不执行来路不明的管理器：
       # 旧版管理器不认识 --version/--list，会被当成一次真正的开机重放跑起来。
       mgr_ver=$(sed -n 's/^MANAGER_VERSION=//p' "$FIX" 2>/dev/null | head -n 1)
-      mgr_current=0
-      [ "$mgr_ver" = ${shellQuote(MANAGER_VERSION)} ] && mgr_current=1
       tail_last=0
       [ "$last_line" = "$END" ] && tail_last=1
       installed=0
@@ -997,12 +949,10 @@
       echo "TAIL_LAST=$tail_last"
       echo "GATE_COUNT=$begin_count/$end_count/$manager_count"
       echo "MANAGER_VERSION=$mgr_ver"
-      echo "MANAGER_CURRENT=$mgr_current"
       if [ -f ${shellQuote(SERVICE_D_HOOK)} ]; then echo "SERVICE_D=1"; else echo "SERVICE_D=0"; fi
-      echo "BOOT_LINES=$(grep -c -v -e '^[[:space:]]*$' "$BOOT" 2>/dev/null || true)"
       echo "F50_META_END"
       echo "F50_LIST_BEGIN"
-      if [ "$mgr_current" = "1" ]; then
+      if [ "$mgr_ver" = ${shellQuote(MANAGER_VERSION)} ]; then
         "$FIX" --list 2>/dev/null
       fi
       echo "F50_LIST_END"
@@ -1083,7 +1033,6 @@ F50_BOOT_FIX_EOF
       fi
       cat "$BOOT_ORIG" > "$ROLLING_BACKUP"
       chmod 600 "$ROLLING_BACKUP" 2>/dev/null || true
-      boot_size_before=$(wc -c < "$BOOT_ORIG" 2>/dev/null | tr -d ' ' || true)
 
       # ---------- 3. 先统一换行符，再比对门标记 ----------
       # 文件里只要混进 CRLF，门标记就会「看起来不存在」，从而被重复安装一遍。
@@ -1098,13 +1047,7 @@ F50_BOOT_FIX_EOF
       fi
 
       # ---------- 4. 提取各插件的启动指令 ----------
-      if ! awk -v b="$BEGIN" -v e="$END" '
-        $0 == b { depth++; next }
-        $0 == e { if (depth > 0) depth--; next }
-        depth > 0 { next }
-        { print }
-        END { if (depth > 0) exit 3 }
-      ' "$SRC" > "$PAYLOAD"; then
+      if ! ${gateStripAwk(false)} "$SRC" > "$PAYLOAD"; then
         echo "F50_ABORT: 启动指令提取失败（增强尾钩标记不闭合），已中止且未改动原文件；备份：$MANAGER_BACKUP"
         exit 1
       fi
@@ -1117,13 +1060,7 @@ F50_BOOT_FIX_EOF
       payload_code_lines=$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
       [ -n "$payload_code_lines" ] || payload_code_lines=0
       if [ ! -f "$RECOVERY_MARKER" ] && [ "$payload_code_lines" = "0" ] && [ -f "$MANAGER_BACKUP" ]; then
-        if awk -v b="$BEGIN" -v e="$END" '
-          $0 == b { depth++; next }
-          $0 == e { if (depth > 0) depth--; next }
-          depth > 0 { next }
-          { print }
-          END { if (depth > 0) exit 3 }
-        ' "$MANAGER_BACKUP" > "$BACKUP_PAYLOAD"; then
+        if ${gateStripAwk(false)} "$MANAGER_BACKUP" > "$BACKUP_PAYLOAD"; then
           backup_code_lines=$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' "$BACKUP_PAYLOAD" 2>/dev/null || true)
           [ -n "$backup_code_lines" ] || backup_code_lines=0
           if [ "$backup_code_lines" -gt 0 ]; then
@@ -1136,12 +1073,7 @@ F50_BOOT_FIX_EOF
       # ---------- 5. 无损校验：提取出来的行数必须和预期完全一致 ----------
       src_lines=$(awk 'NF { count++ } END { print count + 0 }' "$SRC" 2>/dev/null || true)
       pay_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
-      gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
-        $0 == b { inside=1 }
-        inside && NF { count++ }
-        $0 == e { inside=0 }
-        END { print count + 0 }
-      ' "$SRC" 2>/dev/null || true)
+      gate_lines=$(${gateCountAwk()} "$SRC" 2>/dev/null || true)
       [ -n "$src_lines" ] || src_lines=0
       [ -n "$pay_lines" ] || pay_lines=0
       [ -n "$gate_lines" ] || gate_lines=0
@@ -1203,13 +1135,7 @@ F50_BOOT_GATE_EOF
       chmod "$boot_mode" "$BOOT_NEW" 2>/dev/null || true
       # 处理期间别的插件可能刚好往同一个文件追加了自己的自启行，写回去会把它吞掉。
       boot_size_now=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
-      boot_changed=0
-      if command -v cmp >/dev/null 2>&1; then
-        cmp -s "$BOOT" "$BOOT_ORIG" || boot_changed=1
-      elif [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
-        boot_changed=1
-      fi
-      if [ "$boot_changed" = "1" ]; then
+      if ! cmp -s "$BOOT" "$BOOT_ORIG"; then
         echo "F50_ABORT: 启动文件在处理过程中被其它插件改动，已中止且未改动原文件，请重新点击一次；备份：$MANAGER_BACKUP"
         exit 1
       fi
@@ -1236,7 +1162,6 @@ F50_SERVICE_D_EOF
 
       "$FIX" --sync >/dev/null 2>&1 || true
 
-      echo "F50_ENTRY_HINT=$("$FIX" --list 2>/dev/null | grep -c '^LIST|' || true)"
       echo "F50_BOOT_FIX_INSTALLED"
     `, 30000);
 
@@ -1244,12 +1169,12 @@ F50_SERVICE_D_EOF
       toast(`安装失败：${escapeHtml(result.content || '未知错误')}`, 'red', 9000);
       return false;
     }
-    const entries = parseKeyed(result.content, 'F50_ENTRY_HINT') || '?';
     const extra = result.content.includes('F50_EXTRA_TRIGGER=1') ? '（已加装 service.d 备用触发点）' : '';
     const warn = result.content.includes('F50_WARN:')
       ? `<br>${escapeHtml((result.content.match(/F50_WARN:[^\n]*/) || [''])[0])}`
       : '';
-    toast(`开机自启增强已安装：UFI 原生顺序不变，${escapeHtml(entries)} 条启动指令可隔离重试${extra}${warn}`, 'green', 7000);
+    // 条目数不再单独跑一次 --list；随后的状态刷新会展示完整清单。
+    toast(`开机自启增强已安装：UFI 原生顺序不变，启动指令可隔离重试${extra}${warn}`, 'green', 7000);
     return true;
   };
 
@@ -1287,24 +1212,13 @@ ${rejectIfManagerActiveCmd()}
         exit 1
       fi
       if [ "$begin_count" != "0" ]; then
-        if ! awk -v b="$BEGIN" -v e="$END" '
-          $0 == b { depth++; next }
-          $0 == e { if (depth > 0) depth--; next }
-          depth > 0 { next }
-          { print }
-          END { if (depth > 0) exit 3 }
-        ' "$SRC" > "$PAYLOAD"; then
+        if ! ${gateStripAwk(false)} "$SRC" > "$PAYLOAD"; then
           echo "F50_ABORT: 提取失败，未改动启动文件；备份：$MANAGER_BACKUP"
           exit 1
         fi
         src_lines=$(awk 'NF { count++ } END { print count + 0 }' "$SRC" 2>/dev/null || true)
         pay_lines=$(awk 'NF { count++ } END { print count + 0 }' "$PAYLOAD" 2>/dev/null || true)
-        gate_lines=$(awk -v b="$BEGIN" -v e="$END" '
-          $0 == b { inside=1 }
-          inside && NF { count++ }
-          $0 == e { inside=0 }
-          END { print count + 0 }
-        ' "$SRC" 2>/dev/null || true)
+        gate_lines=$(${gateCountAwk()} "$SRC" 2>/dev/null || true)
         [ -n "$src_lines" ] || src_lines=0
         [ -n "$pay_lines" ] || pay_lines=0
         [ -n "$gate_lines" ] || gate_lines=0
@@ -1314,23 +1228,13 @@ ${rejectIfManagerActiveCmd()}
           echo "F50_ABORT: 提取结果异常($pay_lines/$expect_lines)，未改动启动文件；备份：$MANAGER_BACKUP"
           exit 1
         fi
-        awk 'f || NF { f=1; print }' "$PAYLOAD" > "$BOOT_NEW"
+        sed '/[^[:space:]]/,$!d' "$PAYLOAD" > "$BOOT_NEW"
         boot_mode=$(stat -c %a "$BOOT" 2>/dev/null || true)
         case "$boot_mode" in
           "" | *[!0-7]*) boot_mode=755 ;;
         esac
         chmod "$boot_mode" "$BOOT_NEW" 2>/dev/null || true
-        boot_changed=0
-        if command -v cmp >/dev/null 2>&1; then
-          cmp -s "$BOOT" "$BOOT_ORIG" || boot_changed=1
-        else
-          boot_size_before=$(wc -c < "$BOOT_ORIG" 2>/dev/null | tr -d ' ' || true)
-          boot_size_now=$(wc -c < "$BOOT" 2>/dev/null | tr -d ' ' || true)
-          if [ -n "$boot_size_before" ] && [ -n "$boot_size_now" ] && [ "$boot_size_before" != "$boot_size_now" ]; then
-            boot_changed=1
-          fi
-        fi
-        if [ "$boot_changed" = "1" ]; then
+        if ! cmp -s "$BOOT" "$BOOT_ORIG"; then
           echo "F50_ABORT: 启动文件在卸载过程中被其它插件改动，已中止且未改动原文件，请重新点击一次；备份：$MANAGER_BACKUP"
           exit 1
         fi

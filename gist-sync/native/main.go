@@ -178,7 +178,7 @@ func main() {
 		result = map[string]any{"ok": err == nil, "code": code(err), "completedAt": time.Now().UTC()}
 	}
 	if err != nil {
-		if _, ok := result.(map[string]any); !ok {
+		if m, ok := result.(map[string]any); !ok || m == nil {
 			result = map[string]any{"ok": false, "code": code(err), "result": result}
 		}
 	}

@@ -28,9 +28,14 @@ func TestMain(m *testing.M) {
 			os.Exit(fakeCore(root))
 		}
 		action := os.Args[1]
-		if action == "worker" || action == "daemon" || action == "subscription-daemon" || action == "subscription-fetch" {
+		if action == "worker" || action == "daemon" || action == "subscription-daemon" || action == "subscription-fetch" || action == "subscription-status" {
 			base := filepath.Dir(root)
 			a := &App{Root: root, Dev: base + "/dev", Boot: base + "/public/ufi_tools_boot.sh", Upload: base + "/uploads"}
+			if action == "subscription-status" {
+				makeApp = func() *App { return a }
+				main()
+				return
+			}
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 			defer cancel()
 			a.HTTPClient = doFunc(func(r *http.Request) (*http.Response, error) {

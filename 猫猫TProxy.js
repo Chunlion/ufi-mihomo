@@ -3984,6 +3984,7 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
     subscription_empty:'订阅没有可用节点。',
     subscription_managed_by_gist:'当前配置由 Gist 管理，使用 Gist 自动同步。',
     subscription_no_local_sources:'没有可后台更新的订阅；请先保存并启用订阅链接。',
+    subscription_settings_invalid:'自动更新与备用节点设置无法读取，订阅链接仍可编辑。',
     subscription_core_managed:'订阅由核心按间隔自动更新，无需后台下载。',
     invalid_sync_interval:'自动更新间隔无效，请重新选择。',
     request_json_invalid:'订阅设置请求无效，请重试。',
@@ -12427,12 +12428,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
         try {
           createToast('正在处理订阅…', 'yellow');
-          if (!hasSubscriptionUrl && !gist) {
-            // Clear through the dedicated path so the legacy sidecars are purged and the message stays
-            // accurate; the options in this dialog are still saved afterwards.
+          if (!hasSubscriptionUrl && !gist && (!optionsEl || optionsEl.disabled)) {
             const success = await clearSubSourceFile();
-            if (!success) return;
-            if (!optionsEl || optionsEl.disabled) { close(); return; }
+            if (success) close();
+            return;
           }
           const success = await saveSubSources(
             sources,
@@ -12450,6 +12449,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           );
 
           if (success) {
+            // Invalid options must not clear the saved sources or legacy files.
+            if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile())) return;
             close();
           }
         } catch (e) {

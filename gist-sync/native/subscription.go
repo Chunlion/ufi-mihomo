@@ -158,15 +158,13 @@ func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (out ma
 	if e = l.Check(); e != nil {
 		return nil, e
 	}
-	// The boot hook stays only while some scheduler needs it; saving with automatic updates off
-	// must not add an autostart a user never enabled for a Gist schedule that is off as well.
-	keepBoot := s.Auto
-	if !keepBoot {
-		gist, err := a.readSettings()
-		// An unreadable Gist setting says nothing about autostart, so leave the hook untouched.
-		keepBoot = err != nil || (gist.Auto && !gist.Deleted)
+	// An unreadable Gist setting cannot decide whether its existing boot hook is still needed.
+	if s.Auto {
+		e = a.editBoot(true)
+	} else if gist, err := a.readSettings(); err == nil {
+		e = a.editBoot(gist.Auto && !gist.Deleted)
 	}
-	if e = a.editBoot(keepBoot); e != nil {
+	if e != nil {
 		return nil, e
 	}
 	if e = writeJSON(a.subscriptionSettingsPath(), s); e != nil {

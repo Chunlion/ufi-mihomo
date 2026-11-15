@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -35,6 +36,51 @@ func TestSubscriptionSettingsAndStoppedCore(t *testing.T) {
 	writeJSON(a.subscriptionSettingsPath(), SubscriptionSettings{IntervalHours: 2})
 	if _, e = a.subscriptionSettings(); code(e) != "invalid_sync_interval" {
 		t.Fatal(e)
+	}
+}
+func TestSubscriptionCLIReportsUnreadableSettings(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("CLI requires root")
+	}
+	a := processFixture(t)
+	mustWrite(t, a.subscriptionSettingsPath(), []byte("{broken"), 0600)
+	output, err := exec.Command(a.Root+"/Tools/kano-gist-sync", "subscription-status").Output()
+	if err == nil {
+		t.Fatal("invalid settings returned success")
+	}
+	v, err := parseJSON(output)
+	reply := obj(v)
+	if err != nil || reply == nil || reply["ok"] != false || reply["code"] != "subscription_settings_invalid" {
+		t.Fatalf("missing public error: %s (%v)", output, err)
+	}
+}
+func TestSubscriptionDisabledPreservesBootWithUnreadableGist(t *testing.T) {
+	for _, hooked := range []bool{false, true} {
+		t.Run(fmt.Sprint(hooked), func(t *testing.T) {
+			a := fixture(t)
+			mustWrite(t, a.Boot, []byte("#!/bin/sh\necho existing\n"), 0644)
+			if hooked {
+				if e := a.editBoot(true); e != nil {
+					t.Fatal(e)
+				}
+			}
+			before, e := os.ReadFile(a.Boot)
+			if e != nil {
+				t.Fatal(e)
+			}
+			mustWrite(t, a.settingsPath(), []byte("{broken"), 0600)
+			request := a.Root + "/subscription-options.json"
+			if e = writeJSON(request, map[string]any{"auto": false, "intervalHours": 24}); e != nil {
+				t.Fatal(e)
+			}
+			if _, e = a.saveSubscriptionSettings(context.Background(), request); e != nil {
+				t.Fatal(e)
+			}
+			after, e := os.ReadFile(a.Boot)
+			if e != nil || string(after) != string(before) {
+				t.Fatalf("boot script changed: %v", e)
+			}
+		})
 	}
 }
 func TestSubscriptionCachesRestoreFailedBatch(t *testing.T) {

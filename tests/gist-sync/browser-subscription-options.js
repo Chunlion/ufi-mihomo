@@ -2,7 +2,7 @@ const fs=await import('node:fs/promises');
 const source=await fs.readFile('C:/Users/Cuty/Desktop/Github/Tproxy-F50/猫猫TProxy.js','utf8');
 const part=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)+start.length));
 const fixture=`
-let settings={ok:true,configured:true,auto:true,intervalHours:24,rescueConfigured:false},saved=null,custom=false,missing=false;
+let settings={ok:true,configured:true,auto:true,intervalHours:24,rescueConfigured:false},saved=null,custom=false,missing=false,failSave=false,clearCalls=0;
 const SUB_RULE_MODE_TEMPLATE='template',SUB_CONVERT_MODE_PROVIDER='provider',SUB_CONVERT_MODE_LOCAL='local';
 const loadSubscriptionPreferences=async()=>missing?null:settings;
 const readCurrentSubSources=async()=>[{url:'https://example.test/sub',enabled:true}],readSavedSubConvertMode=async()=>'provider',readCurrentSubRuleMode=async()=>'template',readConfigSource=async()=>custom?'uploaded_config':'template.yaml';
@@ -10,15 +10,15 @@ const f50GistManaged=async()=>null,operationStage=()=>{},operationFinish=()=>{},
 const setText=(e,text)=>{if(e)e.textContent=text;},resetChildren=e=>e.replaceChildren(),askConfirm=async()=>true;
 const safeTextToHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),f50GistMessage=String;
 const acquireCriticalOperation=()=>({}),releaseCriticalOperation=async()=>{},setButtonBusy=(e,busy)=>{e.disabled=busy;};
-const saveSubSources=async(sources,rule,mode,options)=>{saved={sources,rule,mode,options};if(options.subscriptionOptions){const p=options.subscriptionOptions;settings={...settings,auto:p.auto,intervalHours:p.intervalHours,rescueConfigured:p.rescueText?true:p.clearRescue?false:settings.rescueConfigured};}return true;};
-const clearSubSourceFile=async()=>true;
+const saveSubSources=async(sources,rule,mode,options)=>{saved={sources,rule,mode,options};if(failSave)return false;if(options.subscriptionOptions){const p=options.subscriptionOptions;settings={...settings,auto:p.auto,intervalHours:p.intervalHours,rescueConfigured:p.rescueText?true:p.clearRescue?false:settings.rescueConfigured};}return true;};
+const clearSubSourceFile=async()=>{clearCalls++;return true;};
 `;
 const viewport=page.viewportSize();
 try{
   await page.evaluate(code=>{window.subscriptionFixture=new Function(code)();},fixture
     +part('const fitDialogWidth =','const askConfirm =')
     +part('const importSub = async','const subBtn =')
-    +'return {open:()=>importSub(),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true};');
+    +'return {open:()=>importSub(),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls};');
   await page.evaluate(()=>window.subscriptionFixture.open());
   await expect(page.locator('#mm_sub_options summary')).toHaveText(['自动更新','备用节点']);
   await page.locator('#mm_sub_options summary').nth(0).click();
@@ -41,6 +41,14 @@ try{
   await expect(page.locator('#mm_sub_convert_mode')).toBeEnabled();
   await page.locator('#mm_sub_convert_mode').selectOption('provider');
   await page.locator('#mm_sub_submit_btn').click();
+  await page.evaluate(()=>window.subscriptionFixture.open());
+  await page.locator('#mm_sub_clear_btn').click();
+  await page.evaluate(()=>window.subscriptionFixture.fail(true));
+  await page.locator('#mm_sub_submit_btn').click();
+  expect(await page.evaluate(()=>window.subscriptionFixture.clears())).toEqual(0);
+  await page.evaluate(()=>window.subscriptionFixture.fail(false));
+  await page.locator('#mm_sub_submit_btn').click();
+  expect(await page.evaluate(()=>window.subscriptionFixture.clears())).toEqual(1);
   await page.evaluate(()=>{window.subscriptionFixture.custom();return window.subscriptionFixture.open();});
   await expect(page.locator('#mm_subscription_auto')).toBeDisabled();
   await page.locator('#mm_sub_replace_custom').check();
@@ -49,7 +57,7 @@ try{
   await page.evaluate(()=>{window.subscriptionFixture.missing();return window.subscriptionFixture.open();});
   await expect(page.locator('#mm_subscription_auto')).toBeDisabled();
   await expect(page.locator('#mm_sub_submit_btn')).toBeEnabled();
-  return {category:'MOCK',menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true};
+  return {category:'MOCK',menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true};
 }finally{
   await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();delete window.subscriptionFixture;});
   if(viewport)await page.setViewportSize(viewport);

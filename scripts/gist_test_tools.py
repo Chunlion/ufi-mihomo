@@ -32,6 +32,8 @@ def main():
     if os.name=='nt':command=['wsl','-d','Debian','--',*command]
     subprocess.run(command,cwd=ROOT,check=True)
     report={p.relative_to(CACHE).as_posix():{'sha256':sha(p.read_bytes()),'bytes':p.stat().st_size} for p in [CACHE/'mihomo-linux-amd64',target,directory/'age',directory/'age-keygen']}
+    # reports/ is generated output and no longer tracked, so the directory may not exist yet.
+    (ROOT/'reports/gist-sync').mkdir(parents=True,exist_ok=True)
     (ROOT/'reports/gist-sync/test-tools.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

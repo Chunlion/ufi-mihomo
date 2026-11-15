@@ -47,6 +47,9 @@ const metrics = { baseline: 'd89be0133be57d17fd667e4e6f48f239d626e5e5', pureComm
   sourceBaseCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   format: compact(original.replace(/\n/g, '\r\n')).sizes, final: Buffer.byteLength(source), sha256: hash(source),
   functionsBefore: functions(original), functionsAfter: functions(source), modules, shell };
-fs.writeFileSync(require('node:path').join(root, 'reports/v9.0.0-size.json'), JSON.stringify(metrics, null, 2) + '\n');
+const sizePath = require('node:path').join(root, 'reports/v9.0.0-size.json');
+// reports/ is generated output and no longer tracked, so the directory may not exist yet.
+require('node:fs').mkdirSync(require('node:path').dirname(sizePath), { recursive: true });
+fs.writeFileSync(sizePath, JSON.stringify(metrics, null, 2) + '\n');
 console.log(JSON.stringify({ format: metrics.format, final: metrics.final, functions: [metrics.functionsBefore, metrics.functionsAfter], modules,
   shell: shell.map(({ name, before, after, saved }) => ({ name, before, after, saved })) }));

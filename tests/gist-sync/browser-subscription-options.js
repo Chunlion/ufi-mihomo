@@ -2,9 +2,10 @@ const fs=await import('node:fs/promises');
 const source=await fs.readFile('C:/Users/Cuty/Desktop/Github/Tproxy-F50/猫猫TProxy.js','utf8');
 const part=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)+start.length));
 const fixture=`
-let settings={ok:true,configured:true,auto:true,intervalHours:24,rescueConfigured:false},saved=null,custom=false,missing=false,failSave=false,clearCalls=0;
+let settings={ok:true,configured:true,auto:true,intervalHours:24,rescueConfigured:false},saved=null,custom=false,missing=false,failSave=false,clearCalls=0,noNodes=false;
 const SUB_RULE_MODE_TEMPLATE='template',SUB_CONVERT_MODE_PROVIDER='provider',SUB_CONVERT_MODE_LOCAL='local';
 const loadSubscriptionPreferences=async()=>missing?null:settings;
+const readExistingSubscriptionNodes=async()=>noNodes?[]:[{provider:'Fixture subscription',node:{name:'Selected',type:'socks5',server:'example.test',port:1080,password:'FIXTURE_PRIVATE'}}];
 const readCurrentSubSources=async()=>[{url:'https://example.test/sub',enabled:true}],readSavedSubConvertMode=async()=>'provider',readCurrentSubRuleMode=async()=>'template',readConfigSource=async()=>custom?'uploaded_config':'template.yaml';
 const f50GistManaged=async()=>null,operationStage=()=>{},operationFinish=()=>{},createToast=()=>{};
 const setText=(e,text)=>{if(e)e.textContent=text;},resetChildren=e=>e.replaceChildren(),askConfirm=async()=>true;
@@ -18,7 +19,7 @@ try{
   await page.evaluate(code=>{window.subscriptionFixture=new Function(code)();},fixture
     +part('const fitDialogWidth =','const askConfirm =')
     +part('const importSub = async','const subBtn =')
-    +'return {open:()=>importSub(),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls};');
+    +'return {open:()=>importSub(),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls,empty:()=>noNodes=true};');
   await page.evaluate(()=>window.subscriptionFixture.open());
   await expect(page.locator('#mm_sub_options summary')).toHaveText(['自动更新','备用节点']);
   await page.locator('#mm_sub_options summary').nth(0).click();
@@ -35,6 +36,17 @@ try{
   await page.locator('#mm_sub_options summary').nth(1).click();
   await expect(page.locator('#mm_subscription_rescue')).toHaveValue('');
   await expect(page.locator('#mm_subscription_rescue_status')).toHaveText('已保存备用节点');
+  await page.locator('#mm_subscription_nodes_load').click();
+  await expect(page.locator('#mm_subscription_node option')).toHaveCount(2);
+  await page.locator('#mm_subscription_node').selectOption('1');
+  await expect(page.locator('#mm_subscription_rescue')).toHaveValue('');
+  await expect(page.locator('#mm_sub_input_toast')).not.toContainText('FIXTURE_PRIVATE');
+  await page.locator('#mm_sub_submit_btn').click();
+  const selected=await page.evaluate(()=>window.subscriptionFixture.saved());
+  expect(JSON.parse(selected.options.subscriptionOptions.rescueText).name).toEqual('Selected');
+  expect(selected.mode).toEqual('local');
+  await page.evaluate(()=>window.subscriptionFixture.open());
+  await page.locator('#mm_sub_options summary').nth(1).click();
   await page.setViewportSize({width:390,height:844});
   await expect.poll(async()=>{const b=await page.locator('#mm_sub_input_toast .kano-dialog').boundingBox();return b&&b.width>100&&b.x>=0&&b.x+b.width<=391;}).toBeTruthy();
   await page.locator('#mm_subscription_rescue_clear').check();
@@ -49,6 +61,12 @@ try{
   await page.evaluate(()=>window.subscriptionFixture.fail(false));
   await page.locator('#mm_sub_submit_btn').click();
   expect(await page.evaluate(()=>window.subscriptionFixture.clears())).toEqual(1);
+  await page.evaluate(()=>{window.subscriptionFixture.empty();return window.subscriptionFixture.open();});
+  await page.locator('#mm_sub_options summary').nth(1).click();
+  await page.locator('#mm_subscription_nodes_load').click();
+  await expect(page.locator('#mm_subscription_nodes_status')).toContainText('没有可用的节点缓存');
+  await expect(page.locator('#mm_subscription_rescue')).toBeEnabled();
+  await page.locator('#mm_sub_close_btn').click();
   await page.evaluate(()=>{window.subscriptionFixture.custom();return window.subscriptionFixture.open();});
   await expect(page.locator('#mm_subscription_auto')).toBeDisabled();
   await page.locator('#mm_sub_replace_custom').check();
@@ -57,7 +75,7 @@ try{
   await page.evaluate(()=>{window.subscriptionFixture.missing();return window.subscriptionFixture.open();});
   await expect(page.locator('#mm_subscription_auto')).toBeDisabled();
   await expect(page.locator('#mm_sub_submit_btn')).toBeEnabled();
-  return {category:'MOCK',menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true};
+  return {category:'MOCK',menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true,existingNodeSelection:true,credentialsNotDisplayed:true,emptyCacheManualInput:true};
 }finally{
   await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();delete window.subscriptionFixture;});
   if(viewport)await page.setViewportSize(viewport);

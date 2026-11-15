@@ -35,6 +35,43 @@ test('a failed preference read cannot silently overwrite stored settings', async
   await assert.rejects(load(), /subscription_settings_invalid/);
 });
 
+test('existing nodes are read from configuration, cached providers and inline payloads without core API calls', async () => {
+  const calls = [];
+  const defaultHash = require('node:crypto').createHash('md5').update('https://example.test/sub').digest('hex');
+  const node = name => ({ name, type: 'socks5', server: 'example.test', port: 1080, password: 'FIXTURE_PRIVATE' });
+  const files = {
+    '/device/Proxy/config.yaml': { proxies: [node('Configured'), { name: 'DIRECT', type: 'direct' }, { ...node('Chained'), 'dialer-proxy': 'Other' }],
+      'proxy-providers': {
+        Airport: { type: 'http', path: './proxies/airport.yaml' },
+        Default: { type: 'http', url: 'https://example.test/sub' },
+        Absolute: { type: 'file', path: '/device/cache/provider.yaml' },
+        Inline: { type: 'inline', payload: [node('Inline')] },
+        Missing: { type: 'http', path: './proxies/missing.yaml', payload: [node('Fallback')] },
+      } },
+    '/device/Proxy/proxies/airport.yaml': { proxies: [node('Cached')] },
+    ['/device/Proxy/proxies/' + defaultHash]: { proxies: [node('Default')] },
+    '/device/cache/provider.yaml': { proxies: [node('Absolute')] },
+  };
+  const read = subscriptionApi('readExistingSubscriptionNodes', {
+    CLASH_DIR: '/device', CLASH_CONFIG: '/device/Proxy/config.yaml',
+    CryptoJS: { MD5: value => require('node:crypto').createHash('md5').update(value).digest('hex') },
+    readYamlObject: async path => { calls.push(path); return { ok: !!files[path], value: files[path] }; },
+  });
+  const nodes = await read();
+  assert.deepEqual(Array.from(nodes, item => [item.provider, item.node.name]), [['配置内节点', 'Configured'], ['Airport', 'Cached'], ['Default', 'Default'], ['Absolute', 'Absolute'], ['Inline', 'Inline'], ['Missing', 'Fallback']]);
+  assert.equal(nodes[1].node.password, 'FIXTURE_PRIVATE');
+  assert.deepEqual(calls, ['/device/Proxy/config.yaml', '/device/Proxy/proxies/airport.yaml', '/device/Proxy/proxies/' + defaultHash, '/device/cache/provider.yaml', '/device/Proxy/proxies/missing.yaml']);
+});
+
+test('missing subscription caches return an empty node list and unreadable configuration reports an error', async () => {
+  const read = ok => subscriptionApi('readExistingSubscriptionNodes', {
+    CLASH_DIR: '/device', CLASH_CONFIG: '/device/Proxy/config.yaml',
+    readYamlObject: async path => ({ ok: ok && path.endsWith('/config.yaml'), value: { 'proxy-providers': { Airport: { type: 'http', path: './proxies/airport.yaml' } } } }),
+  });
+  assert.equal((await read(true)()).length, 0);
+  await assert.rejects(read(false)(), /无法读取现有配置中的节点/);
+});
+
 test('rescue local downloads use the device lease and preserve the fetch result contract', async () => {
   const calls = [], toasts = [];
   const convert = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')

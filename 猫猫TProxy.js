@@ -5267,6 +5267,29 @@ exit "$kano_task_rc"`;
     return settings;
   };
 
+  const readExistingSubscriptionNodes = async () => {
+    const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+    if (!config.ok) throw Error('无法读取现有配置中的节点');
+    const available = [];
+    const append = (provider, nodes) => {
+      for (const node of Array.isArray(nodes) ? nodes : []) {
+        if (node?.name && node.type && node.server && !node['dialer-proxy']) available.push({ provider, node });
+      }
+    };
+    append('配置内节点', config.value.proxies);
+    for (const [name, provider] of Object.entries(config.value['proxy-providers'] || {})) {
+      let nodes = provider.payload;
+      // Mihomo stores an HTTP provider without an explicit path under proxies/<URL MD5>.
+      const path = provider.path || (provider.type === 'http' && provider.url ? 'proxies/' + CryptoJS.MD5(provider.url).toString() : '');
+      if (provider.type !== 'inline' && path) {
+        const cached = await readYamlObject(path.startsWith('/') ? path : `${CLASH_DIR}/Proxy/${path.replace(/^\.\//, '')}`, '订阅节点缓存');
+        if (cached.ok) nodes = cached.value.proxies;
+      }
+      append(name, nodes);
+    }
+    return available;
+  };
+
   // 受管订阅槽位：名字与缓存路径必须成对匹配，手工 provider 不能混进订阅更新/模式判定。
   const isManagedProviderEntry = (name = '', provider = null) =>
     /^Provider[1-9]\d*$/.test(name) && !!provider && provider.path === `./proxies/${name}.yaml`;
@@ -12274,6 +12297,11 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                       <details style="margin:8px 0;font-size:.64rem;">
                         <summary>备用节点</summary>
                         <div id="mm_subscription_rescue_status" style="margin:10px 0 6px;"></div>
+                        <button id="mm_subscription_nodes_load" type="button" style="font-size:.64rem;margin-bottom:8px;">读取现有订阅节点</button>
+                        <select id="mm_subscription_node" aria-label="从现有订阅选择备用节点" style="box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:8px;margin-bottom:6px;border-radius:8px;background:#111827;color:#dbeafe;">
+                          <option value="">手动填写或保留已保存节点</option>
+                        </select>
+                        <div id="mm_subscription_nodes_status" role="status" style="margin-bottom:8px;opacity:.78;line-height:1.55;">可从已缓存的订阅节点中选择一个，保存为独立备用副本。</div>
                         <textarea id="mm_subscription_rescue" rows="4" spellcheck="false" autocomplete="off" aria-label="备用节点 YAML 或分享链接" placeholder="单个节点 YAML 或分享链接；留空保留已保存节点" style="box-sizing:border-box;width:100%;padding:8px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;"></textarea>
                         <label style="display:block;margin:8px 0;"><input id="mm_subscription_rescue_clear" type="checkbox"> 删除已保存的备用节点</label>
                         <div style="opacity:.78;line-height:1.55;">启用后使用设备本地转换，直连失败时通过备用节点下载。</div>
@@ -12300,6 +12328,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       convertModeSelect.value = currentConvertMode;
       const optionsEl = el.querySelector('#mm_sub_options');
       const option = name => el.querySelector('#mm_subscription_' + name);
+      let rescueCandidates = [];
       if (optionsEl) {
         option('auto').checked = preferences?.configured ? preferences.auto : currentConvertMode === SUB_CONVERT_MODE_PROVIDER;
         option('interval').value = String(preferences?.intervalHours || 24);
@@ -12313,11 +12342,26 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           setText(el.querySelector('#mm_sub_options_hint'), !preferences
             ? (preferencesError || '请先更新组件，再设置自动更新和备用节点。')
             : customUnchanged ? '当前为自定义配置；勾选“将所选订阅配置应用到当前自定义配置”后可设置自动更新和备用节点。' : '');
-          const rescue = !optionsEl.disabled && (option('rescue').value.trim() || (preferences.rescueConfigured && !option('rescue_clear').checked));
+          const rescue = !optionsEl.disabled && (option('node').value || option('rescue').value.trim() || (preferences.rescueConfigured && !option('rescue_clear').checked));
           convertModeSelect.disabled = !!rescue;
           if (rescue) convertModeSelect.value = SUB_CONVERT_MODE_LOCAL;
         };
-        option('rescue').oninput = syncOptions;
+        option('rescue').oninput = () => { option('node').value = ''; syncOptions(); };
+        option('node').onchange = () => { if (option('node').value) option('rescue').value = ''; syncOptions(); };
+        option('nodes_load').onclick = async () => {
+          setButtonBusy(option('nodes_load'), true, '读取中…');
+          try {
+            rescueCandidates = await readExistingSubscriptionNodes();
+            resetChildren(option('node'));
+            option('node').add(new Option('手动填写或保留已保存节点', ''));
+            rescueCandidates.forEach((item, index) => option('node').add(new Option(item.provider + ' · ' + item.node.name, String(index + 1))));
+            option('nodes_status').textContent = rescueCandidates.length
+              ? '可选 ' + rescueCandidates.length + ' 个节点；订阅更新后如需更换备用，请重新选择并保存。'
+              : '没有可用的节点缓存，请先更新订阅，或粘贴单个节点。';
+            syncOptions();
+          } catch (_) { option('nodes_status').textContent = '读取现有节点失败，请检查配置或更新订阅后重试。'; }
+          finally { setButtonBusy(option('nodes_load'), false, '读取现有订阅节点'); }
+        };
         option('rescue_clear').onchange = syncOptions;
         const replaceCustom = el.querySelector('#mm_sub_replace_custom');
         if (replaceCustom) replaceCustom.onchange = syncOptions;
@@ -12440,7 +12484,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked,
               subscriptionOptions: optionsEl && !optionsEl.disabled ? {
                 auto: option('auto').checked, intervalHours: Number(option('interval').value),
-                rescueText: option('rescue').value.trim(), clearRescue: option('rescue_clear').checked,
+                rescueText: option('node').value ? JSON.stringify(rescueCandidates[Number(option('node').value) - 1].node) : option('rescue').value.trim(),
+                clearRescue: option('rescue_clear').checked,
               } : null,
               // Nothing to migrate while clearing; the legacy guard stays quiet then.
               migrateLegacy: hasSubscriptionUrl

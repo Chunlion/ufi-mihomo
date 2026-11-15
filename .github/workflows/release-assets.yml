@@ -1,0 +1,40 @@
+name: Release assets
+
+# Re-pack an existing release from the repository state instead of uploading 64 MB from a
+# contributor's uplink. The guard only publishes the plugin/component pair that
+# dist/v9.0.0-delivery.json already certifies, so a release can never carry an unverified build.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to fill
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check the delivery manifest matches this commit
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          plugin = next(pathlib.Path('.').glob('*TProxy.js'))
+          source = plugin.read_bytes()
+          delivery = json.loads(pathlib.Path('dist/v9.0.0-delivery.json').read_text())
+          assert hashlib.sha256(source).hexdigest() == delivery['source']['sha256'], 'plugin differs from the delivery manifest'
+          assert len(source) == delivery['source']['bytes'], 'plugin size differs from the delivery manifest'
+          assert delivery['totals']['failed'] == 0 and delivery['totals']['passed'] > 0, 'delivery manifest has failing tests'
+          print('verified', plugin.name, delivery['source']['baseCommit'], delivery['totals'])
+          PY
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" "$(ls *TProxy.js)#TProxy.js" tproxy-yq.zip --clobber

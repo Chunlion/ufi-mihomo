@@ -3,7 +3,7 @@
 const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process');
 const h=require('../tests/tproxy/optimization_harness');
 const {shellApi,slice,run}=h;
-const baseline=cp.execFileSync('git',['show','b21155e:猫猫TProxy.js'],{encoding:'utf8',maxBuffer:2*1024*1024}).replace(/\r\n/g,'\n');
+const baseline=cp.execFileSync('git',['show','c2d916b76b770ca0735eeacbb997ec66956b8c52:猫猫TProxy.js'],{encoding:'utf8',maxBuffer:2*1024*1024}).replace(/\r\n/g,'\n');
 const hash=v=>crypto.createHash('sha256').update(typeof v==='string'?v:JSON.stringify(v)).digest('hex');
 const api=shellApi(),old=shellApi(h.original),operations={},network={};
 for(const name of ['scan','artifact_paths','remove_artifacts']){const get=x=>slice('f50_'+name+'() {','\n}\n',x);network[name]={before:hash(get(old.maintenance())),after:hash(get(api.maintenance()))};}

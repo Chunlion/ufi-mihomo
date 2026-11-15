@@ -5,7 +5,7 @@ const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const { parse, visit, compact } = require('./compact_plugin');
 const { shellApi, original, source, root } = require('../tests/tproxy/optimization_harness');
-const baseline = execFileSync('git', ['show', 'e5e8568:猫猫TProxy.js'], { cwd: root, encoding: 'utf8' });
+const baseline = execFileSync('git', ['show', '4ea5df5d34052e84c7e3407eaf25822741e1ed6c:猫猫TProxy.js'], { cwd: root, encoding: 'utf8' });
 function definitions(text) {
   const out = new Map();
   visit(parse(text), node => {
@@ -43,7 +43,7 @@ const before = outputs(original), after = outputs(source);
 const hash = text => crypto.createHash('sha256').update(text).digest('hex');
 const shell = Object.keys(before).map(name => ({ name, before: Buffer.byteLength(before[name]), after: Buffer.byteLength(after[name]), saved: Buffer.byteLength(before[name]) - Buffer.byteLength(after[name]), beforeSHA256: hash(before[name]), afterSHA256: hash(after[name]) }));
 const functions = text => { let count = 0; visit(parse(text), node => { if (['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) count++; }); return count; };
-const metrics = { baseline: 'd89be0133be57d17fd667e4e6f48f239d626e5e5', pureCommit: 'e5e8568',
+const metrics = { baseline: '6811caf1c7d1891d616fdeccc2cb2eb16d69ab69', pureCommit: '4ea5df5',
   sourceBaseCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   format: compact(original.replace(/\n/g, '\r\n')).sizes, final: Buffer.byteLength(source), sha256: hash(source),
   functionsBefore: functions(original), functionsAfter: functions(source), modules, shell };

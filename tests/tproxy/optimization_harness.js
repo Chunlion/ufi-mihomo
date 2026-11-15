@@ -7,7 +7,7 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
-const baselineRef = process.env.F50_BASELINE_REF || 'd89be0133be57d17fd667e4e6f48f239d626e5e5';
+const baselineRef = process.env.F50_BASELINE_REF || '6811caf1c7d1891d616fdeccc2cb2eb16d69ab69';
 const baseline = spawnSync('git', ['show', `${baselineRef}:猫猫TProxy.js`], { cwd: root, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 });
 assert.equal(baseline.status, 0, baseline.stderr);
 const original = baseline.stdout.replace(/\r\n/g, '\n');

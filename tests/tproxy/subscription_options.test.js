@@ -36,12 +36,12 @@ test('a failed preference read cannot silently overwrite stored settings', async
 });
 
 test('rescue local downloads use the device lease and preserve the fetch result contract', async () => {
-  const calls = [];
+  const calls = [], toasts = [];
   const convert = subscriptionApi(slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
     + slice('const formatSubscriptionDownloadError', 'const mergeLocalConversionReloadResult') + 'convertSubscriptionsLocally', {
     validateLocalSubscriptionUrl: () => ({ ok: true }), ensureCompatBackend: async () => true,
     createRandomString: () => 'fixture', stageTextBesideTarget: async () => ({ ok: true, stagePath: '/staged/request.json' }),
-    loadProviderUserAgent: async () => 'FixtureAgent',
+    loadProviderUserAgent: async () => 'FixtureAgent', createToast: (message, color) => toasts.push([message, color]),
     runShellWithRoot: async () => ({ success: true, content: '' }),
     f50GistExec: async (args, timeout, input, run) => {
       if (args[0] === 'subscription-status') return { ok: true, rescueConfigured: true };
@@ -53,4 +53,5 @@ test('rescue local downloads use the device lease and preserve the fetch result 
   const r = await convert([{ url: 'https://example.com/sub' }]);
   assert.equal(r.committed, true); assert.equal(r.providers[0].proxyCount, 3);
   assert.equal(calls[0].args[0], 'subscription-fetch'); assert.equal(typeof calls[0].run, 'function');
+  assert.deepEqual(toasts[0], ['直连下载失败；已通过备用节点更新订阅', 'yellow']);
 });

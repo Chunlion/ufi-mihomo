@@ -613,3 +613,35 @@ Git 变更：`猫猫TProxy.js`、`gist-sync/native/normalize.go`、`gist-sync/na
 主插件 SHA256 为 `b92619b77f014633a230edb5e5bfd8bdd3d5975574e73063e0f9743fc21ba613`，组件 SHA256 为 `17e945fae65a3a5f1ade64377a5703a6e89bce4d1ddda41e3a871f0a85292440`。报告位于 `reports/final-review-20261104/shape-review/`；summary.json 保存新增 162 次校验和全部核心结果，component.json 保存独立重编及包差异证据，TAP/Go JSONL 保存实际输出。
 
 本轮修改：`tests/tproxy/real_templates.test.js`、`tests/tproxy/config_lifecycle.test.js`、本 WORKLOG、复查报告、重打的 dist 精简交付 ZIP 及其 delivery.json。没有需要新增生产修复的已知问题；此次必要优化是补齐测试入口，避免把未经过新校验的语料测试误当成通过证据。
+
+## 2026-11-15：订阅自动更新与备用节点复核（issue #1 / #2）
+
+两个 issue 当天由 `e03b04b`（新增调度与备用下载）、`02a0d9e`（修回滚与 CI）、`fa63015`（启动核心恢复调度）实现并关闭。本节记录逐项核对结果与本轮补修。
+
+### 核对结论
+
+| 目标 | 现状 | 处理 |
+| --- | --- | --- |
+| 订阅链接自动更新（issue #1） | 开关 + 1/6/12/24 小时间隔，HTTP Provider 走 `interval`，本地转换走后台任务 | 补齐“仅 http provider 时后台任务报错”的空转提示 |
+| 备用节点（issue #2） | 单节点 YAML/分享链接，核心校验，直连失败回退，缓存保留 | 补“本次由备用节点完成”的提示；设置读取失败不再锁死订阅设置 |
+| 四个模块展开记忆（issue #2） | `localStorage` 按标题记录 | 无需改动 |
+
+发现的逻辑缺口：后台任务在只有 http provider 时返回 `subscription_no_local_sources`，而这个组合正是默认配置，用户会每 24 小时看到一条“失败”状态；下载类失败按整段间隔（最长 24 小时）才重试；设置文件缺失时守护进程按默认 `auto=true` 继续空转；Gist 设置损坏会连带阻断订阅调度启动；清空订阅时因选项区启用而跳过 `clearSubSourceFile()`，旧版 sidecar 不再清理；设置文件损坏会连带打不开订阅设置、也无法应用模板。
+
+### 本轮修改
+
+- `subscription.go`：`updateLocalSubscriptions` 区分 `subscription_core_managed`（http provider 由核心刷新）与真正无订阅；守护进程在设置文件缺失时退出；下载类失败改为 5 分钟重试；`saveSubscriptionSettings` 仅在仍需调度时保留开机钩子（Gist 设置不可读时不动现有钩子）。
+- `daemon.go`/`main.go`：两个调度器互不阻塞，Gist 启动失败不再阻断订阅调度。
+- `plugin-gist.js`：补 `subscription_core_managed`、`invalid_sync_interval`、`request_json_invalid`、`blocked_download_destination`、`download_incomplete`、`scheduler_start_unconfirmed` 文案，收起“手动订阅”旧措辞。
+- `猫猫TProxy.js`：订阅设置与模板生成在设置读取失败时降级而非中断；清空订阅恢复走 `clearSubSourceFile()` 并继续保存选项；备用节点回退成功时提示；间隔说明与“最近检查”文案对齐实际机制。
+
+### 验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `go test -race ./...`（含新增 2 项） | PASS |
+| `node scripts/verify_plugin.js` | 879 passed / 0 failed / 12 not run |
+| `node scripts/report_plugin.js` | install 脚本 95625 字节，较基线省 25043（阈值 25000） |
+| `python3 scripts/package_plugin.py` | 交付包 405963 字节 / 41 文件，逐字节校验通过 |
+
+主插件 SHA256 `96b2f0bfc71d258b5e0cc6e7fe54168aef78e82901ab8003e954bd8542a149da`，组件包 SHA256 `a2e1c0cbc70cd547d538444f1d68ac7626b8f2e8c4da1d66d423ae572efcaabc`。未做设备复验；安装脚本体积余量已降到 43 字节，后续新增 installer 文本需先腾出空间。

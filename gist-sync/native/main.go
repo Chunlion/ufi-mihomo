@@ -126,9 +126,10 @@ func main() {
 	case "daemon":
 		err = a.daemon(ctx)
 	case "start-daemon":
+		// The two schedulers are independent: a broken Gist setting must not keep subscription updates down.
 		err = a.startDaemon(ctx)
-		if err == nil {
-			err = a.startSubscriptionDaemon(ctx)
+		if e := a.startSubscriptionDaemon(ctx); e != nil && err == nil {
+			err = e
 		}
 	case "stop-jobs":
 		err = a.stopOtherJobs(ctx)

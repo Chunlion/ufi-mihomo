@@ -284,8 +284,10 @@ func (a *App) boot(ctx context.Context) error {
 			return re
 		}
 	}
-	if e := a.startDaemon(ctx); e != nil {
-		return e
+	// Both schedulers are independent: a broken Gist setting must not keep subscription updates down.
+	e := a.startDaemon(ctx)
+	if se := a.startSubscriptionDaemon(ctx); se != nil && e == nil {
+		e = se
 	}
-	return a.startSubscriptionDaemon(ctx)
+	return e
 }

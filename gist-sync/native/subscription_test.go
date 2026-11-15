@@ -281,3 +281,38 @@ func TestSubscriptionAutoRefreshAndSingleton(t *testing.T) {
 		t.Fatal("disabled scheduler remained alive")
 	}
 }
+
+func TestSubscriptionAutoRefreshLeavesCoreManagedProviders(t *testing.T) {
+	a := processFixture(t)
+	ctx := context.Background()
+	m, e := a.readYAML(ctx, a.cfg())
+	if e != nil {
+		t.Fatal(e)
+	}
+	// HTTP providers carry their own interval, so the background job has nothing to download.
+	m["proxy-providers"] = map[string]any{"Provider1": map[string]any{"type": "http", "path": "./proxies/Provider1.yaml", "url": "https://example.com/http"}}
+	writeJSON(a.cfg(), m)
+	mustWrite(t, a.sourcesPath(), []byte("# KANO_SUB_CONVERT_MODE=provider\nhttps://example.com/http Provider1\n"), 0600)
+	startFakeCore(t, a)
+	if e = a.updateLocalSubscriptions(ctx); code(e) != "subscription_core_managed" {
+		t.Fatal(code(e), e)
+	}
+}
+
+func TestSubscriptionDaemonStopsWithoutSettings(t *testing.T) {
+	a := processFixture(t)
+	if exists(a.subscriptionSettingsPath()) {
+		t.Fatal("fixture unexpectedly saved subscription settings")
+	}
+	done := make(chan error, 1)
+	go func() { done <- a.subscriptionDaemon(context.Background()) }()
+	select {
+	case e := <-done:
+		if e != nil {
+			t.Fatal(e)
+		}
+	case <-time.After(5 * time.Second):
+		_ = os.Remove(a.runtime() + "/subscription-daemon.json")
+		t.Fatal("scheduler kept running without a settings file")
+	}
+}

@@ -158,7 +158,15 @@ func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (out ma
 	if e = l.Check(); e != nil {
 		return nil, e
 	}
-	if e = a.editBoot(true); e != nil {
+	// The boot hook stays only while some scheduler needs it; saving with automatic updates off
+	// must not add an autostart a user never enabled for a Gist schedule that is off as well.
+	keepBoot := s.Auto
+	if !keepBoot {
+		gist, err := a.readSettings()
+		// An unreadable Gist setting says nothing about autostart, so leave the hook untouched.
+		keepBoot = err != nil || (gist.Auto && !gist.Deleted)
+	}
+	if e = a.editBoot(keepBoot); e != nil {
 		return nil, e
 	}
 	if e = writeJSON(a.subscriptionSettingsPath(), s); e != nil {
@@ -472,6 +480,7 @@ func (a *App) updateLocalSubscriptions(ctx context.Context) (err error) {
 		request.UserAgent = strings.Trim(value, "\"'")
 	}
 	defs := obj(config["proxy-providers"])
+	coreManaged := 0
 	for _, line := range strings.Split(string(b), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 || strings.HasPrefix(fields[0], "#") {
@@ -481,9 +490,16 @@ func (a *App) updateLocalSubscriptions(ctx context.Context) (err error) {
 		p := obj(defs[name])
 		if str(p["type"]) == "file" && str(p["path"]) == "./proxies/"+name+".yaml" {
 			request.Sources = append(request.Sources, SubscriptionSource{Name: name, URL: fields[0]})
+		} else if str(p["type"]) == "http" && str(p["url"]) != "" {
+			coreManaged++
 		}
 	}
 	if len(request.Sources) == 0 {
+		// HTTP providers carry their own interval, so the core already refreshes them; only
+		// file providers need this job to download. Report that instead of a failure.
+		if coreManaged > 0 {
+			return fail("subscription_core_managed")
+		}
 		return fail("subscription_no_local_sources")
 	}
 	work, e := a.newWork("subscription-auto-")
@@ -572,7 +588,7 @@ func (a *App) subscriptionDaemon(ctx context.Context) error {
 		if e != nil {
 			return e
 		}
-		if !s.Auto {
+		if !s.Auto || !exists(a.subscriptionSettingsPath()) {
 			return nil
 		}
 		var st SubscriptionState
@@ -584,7 +600,8 @@ func (a *App) subscriptionDaemon(ctx context.Context) error {
 		if st.CheckedAt.After(base) {
 			base = st.CheckedAt
 			switch st.Code {
-			case "auto_paused_core_stopped", "operation_busy", "installation_busy", "busy":
+			case "auto_paused_core_stopped", "operation_busy", "installation_busy", "busy",
+				"subscription_download_failed", "download_incomplete", "timeout":
 				interval = 5 * time.Minute
 			}
 		}

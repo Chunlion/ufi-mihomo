@@ -16,3 +16,6 @@ dist/
 .playwright-cli/
 debug.log
 .tmp-*
+
+# Release asset, not repository content (64 MB). Builds fetch it via scripts/build_gist_sync.py.
+/tproxy-yq.zip

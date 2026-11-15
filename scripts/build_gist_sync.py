@@ -25,8 +25,19 @@ def age_files():
     if sha(binary)!=spec['binary_sha256'] or sha(license)!=spec['license_sha256']:raise ValueError('Pinned age binary or license mismatch')
     return binary,license
 
+def package_source():
+    """The 64 MB component package ships as a release asset; fetch it when the checkout has none."""
+    if PACKAGE.is_file():return PACKAGE
+    url=os.environ.get('F50_PACKAGE_URL','https://github.com/Chunlion/ufi-mihomo/releases/latest/download/tproxy-yq.zip')
+    with urllib.request.urlopen(url,timeout=300) as response,tempfile.NamedTemporaryFile(dir=ROOT,prefix='.package-',suffix='.zip',delete=False) as tmp:
+        shutil.copyfileobj(response,tmp);temporary=Path(tmp.name)
+    os.replace(temporary,PACKAGE)
+    print(f'downloaded component package from {url}')
+    return PACKAGE
+
 def main():
     BUILD.mkdir(parents=True,exist_ok=True)
+    package_source()
     subprocess.run(['node','scripts/sync_gist_plugin.js'],cwd=ROOT,check=True)
     release=json.loads((ROOT/'gist-sync/release.json').read_text(encoding='utf-8'))
     native=ROOT/'gist-sync/native'

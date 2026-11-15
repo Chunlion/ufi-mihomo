@@ -308,6 +308,7 @@ for (const [statusCode, detail, expected] of [
   const download = vm.runInNewContext(slice('const formatSubscriptionDownloadError =', 'const mergeLocalConversionReloadResult =') + 'convertSubscriptionsLocally', {
     normalizeSubSourceList: value => value, validateLocalSubscriptionUrl: () => ({ ok: true }),
     ensureCompatBackend: async () => true, loadProviderUserAgent: async () => 'clash.meta',
+    loadSubscriptionPreferences: async () => null,
     createRandomString: () => 'example', operationStage() {}, shellQuote: value => `'${value}'`,
     stageTextBesideTarget: async () => ({ ok: true, stagePath: '/data/request.stage' }),
     f50Command: async () => ({ success: false, content: 'F50_FETCH_RESULT=' + JSON.stringify({ ok: false, committed: false,
@@ -327,6 +328,7 @@ test('local subscription transport exceptions report an unconfirmed result', asy
   const download = vm.runInNewContext(slice('const formatSubscriptionDownloadError =', 'const mergeLocalConversionReloadResult =') + 'convertSubscriptionsLocally', {
     normalizeSubSourceList: value => value, validateLocalSubscriptionUrl: () => ({ ok: true }),
     ensureCompatBackend: async () => true, loadProviderUserAgent: async () => 'clash.meta',
+    loadSubscriptionPreferences: async () => null,
     createRandomString: () => 'example', operationStage() {}, shellQuote: value => `'${value}'`,
     stageTextBesideTarget: async () => ({ ok: true, stagePath: '/data/request.stage' }),
     f50Command: async () => { throw new Error('Unexpected end of JSON input'); },

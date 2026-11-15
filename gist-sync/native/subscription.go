@@ -81,12 +81,17 @@ func (a *App) subscriptionStatus() (map[string]any, error) {
 	running := readJSON(a.runtime()+"/subscription-daemon.json", &daemon) == nil && daemon.Alive()
 	return map[string]any{"ok": true, "configured": exists(a.subscriptionSettingsPath()), "auto": s.Auto, "intervalHours": s.IntervalHours, "rescueConfigured": len(s.Rescue) > 0, "rescueName": str(s.Rescue["name"]), "state": st, "schedulerRunning": running}, nil
 }
-func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (map[string]any, error) {
+func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (out map[string]any, err error) {
 	l, e := a.acquireLease(ctx, true)
 	if e != nil {
 		return nil, e
 	}
-	defer l.Release()
+	defer func() {
+		if e := l.Release(); err == nil && e != nil {
+			out = nil
+			err = e
+		}
+	}()
 	var req struct {
 		Auto          bool   `json:"auto"`
 		IntervalHours int    `json:"intervalHours"`
@@ -121,11 +126,9 @@ func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (map[st
 		if e = atomicWrite(input, []byte(req.RescueText), 0600); e != nil {
 			return nil, e
 		}
-		if !strings.Contains(req.RescueText, "://") {
-			if node, err := a.readYAML(ctx, input); err == nil && node["proxies"] == nil && str(node["type"]) != "" {
-				if e = writeJSON(input, map[string]any{"proxies": []any{node}}); e != nil {
-					return nil, e
-				}
+		if node, err := a.readYAML(ctx, input); err == nil && node["proxies"] == nil && str(node["type"]) != "" {
+			if e = writeJSON(input, map[string]any{"proxies": []any{node}}); e != nil {
+				return nil, e
 			}
 		}
 		nodes, _, e := a.convertSubscription(ctx, input, work+"/node.yaml")
@@ -161,17 +164,8 @@ func (a *App) saveSubscriptionSettings(ctx context.Context, path string) (map[st
 	if e = writeJSON(a.subscriptionSettingsPath(), s); e != nil {
 		return nil, e
 	}
-	if s.Auto {
-		if e = a.startSubscriptionDaemon(ctx); e != nil {
-			return nil, e
-		}
-	} else {
-		var daemon processRecord
-		if readJSON(a.runtime()+"/subscription-daemon.json", &daemon) == nil && daemon.Alive() {
-			if e = a.stopRecord(ctx, daemon); e != nil {
-				return nil, e
-			}
-		}
+	if e = a.startSubscriptionDaemon(ctx); e != nil {
+		return nil, e
 	}
 	return a.subscriptionStatus()
 }
@@ -210,7 +204,7 @@ func (a *App) rescueClient(ctx context.Context, work string, node map[string]any
 		return nil, nil, e
 	}
 	// A distinct executable path keeps corePID and recovery from mistaking this helper for the main core.
-	binary := work + "/rescue-core"
+	binary := work + "/Clash.Rescue"
 	if e = os.Link(a.Root+"/Proxy/Clash.Core", binary); e != nil {
 		return nil, nil, e
 	}
@@ -322,7 +316,7 @@ func (a *App) fetchSubscriptions(ctx context.Context, path string) (result Subsc
 		return result, fail("subscription_download_failed")
 	}
 	for _, p := range result.Providers {
-		if p.StatusCode >= 300 && p.StatusCode < 500 {
+		if p.StatusCode >= 300 && p.StatusCode < 500 && p.StatusCode != 403 && p.StatusCode != 408 && p.StatusCode != 429 {
 			return result, fail("subscription_download_rejected")
 		}
 	}
@@ -439,12 +433,16 @@ func (a *App) commitSubscriptionCaches(l *Lease, sources []SubscriptionSource, c
 	return nil
 }
 
-func (a *App) updateLocalSubscriptions(ctx context.Context) error {
+func (a *App) updateLocalSubscriptions(ctx context.Context) (err error) {
 	l, e := a.acquireLease(ctx, false)
 	if e != nil {
 		return e
 	}
-	defer l.Release()
+	defer func() {
+		if e := l.Release(); err == nil && e != nil {
+			err = e
+		}
+	}()
 	pid, e := a.corePID()
 	if e != nil {
 		return e
@@ -534,10 +532,13 @@ func (a *App) startSubscriptionDaemon(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
+	var r processRecord
 	if !s.Auto || !exists(a.subscriptionSettingsPath()) {
+		if readJSON(a.runtime()+"/subscription-daemon.json", &r) == nil && r.Alive() {
+			return a.stopRecord(ctx, r)
+		}
 		return nil
 	}
-	var r processRecord
 	if readJSON(a.runtime()+"/subscription-daemon.json", &r) == nil && r.Alive() {
 		return nil
 	}

@@ -8,7 +8,7 @@ const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, con
 const F50_MIPS_MIN_VERSION = '1.19.31';
 // 以下生成脚本共享的清单/表达式统一在此维护，改一处即全量生效。
 const F50_PROTECTED_JOURNALS = 'download.transaction.json rp-filter.json legacy-policy.json';
-const F50_MANAGED_COMMS = 'Clash.Core|rescue-core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|sh|ash|bash|dash|mksh|toybox|busybox|timeout|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64';
+const F50_MANAGED_COMMS = 'Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|sh|ash|bash|dash|mksh|toybox|busybox|timeout|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64';
 const F50_ROOT_FALLBACK = '${CLASH_ROOT:-${F50_ROOT:-/data/clash}}';
 const F50_PANEL_DIR_REL = 'WebUI/zashboard';
 // Proxy/ 下属于用户数据的条目：显式保留清单与通配排除共用，新增文件只改这里。
@@ -2705,8 +2705,12 @@ else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
   exit 1
 fi
-# Each scheduler checks its own saved enable flag.
-if [ -x "$F50_ROOT/Tools/kano-gist-sync" ]; then
+resume_schedule=0
+for schedule_file in "$F50_ROOT/Tools/gist-sync/settings.conf" "$F50_ROOT/Tools/subscription-settings.json"; do
+  [ -s "$schedule_file" ] || continue
+  if "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$schedule_file" >/dev/null 2>&1; then resume_schedule=1; break; fi
+done
+if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ "$resume_schedule" = 1 ]; then
   CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_INSTALL_WARNING=gist_scheduler_resume_failed
 fi
 # Component completion is independent of recovery-marker and lock cleanup.
@@ -7720,7 +7724,7 @@ KANO_WRITE_CHECK_EOF
     const settings = await loadSubscriptionPreferences();
     if (settings?.rescueConfigured) {
       const reply = await f50GistExec(['subscription-fetch', staged.stagePath], 300000, '', runShellWithRoot);
-      if (!reply.ok) throw Error(f50GistMessage(reply.code));
+      if (!reply.ok) throw Object.assign(Error(f50GistMessage(reply.code)), { name: 'SubscriptionDownloadError' });
       r = { success: true, content: 'F50_FETCH_RESULT=' + JSON.stringify(reply) };
     } else r = await f50Command('fetch-batch', 100000, [staged.stagePath]);
     const line = String(r.content || '').split(/\r?\n/).find(s => s.startsWith('F50_FETCH_RESULT='));
@@ -7736,7 +7740,7 @@ KANO_WRITE_CHECK_EOF
     });
     return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : (results.find(provider => !provider.ok)?.message || formatSubscriptionDownloadError({}, r.content))});
   } catch (error) {
-    const message = error?.message ? sanitizeSubscriptionSecrets(error.message) : '订阅下载失败：无法确认下载结果；请检查设备连接后重试';
+    const message = error?.name === 'SubscriptionDownloadError' ? error.message : '订阅下载失败：无法确认下载结果；请检查设备连接后重试';
     return buildProviderUpdateResult(clean.map(source => ({ type: 'proxy-provider', name: source.name, ok: false, attempts: 1,
       statusCode: 0, message, errorType: 'local_download_failed' })), { ok: false, via: 'local', committed: false, message });
   } finally {
@@ -11631,9 +11635,9 @@ EOF_F50_RESTORE_MEMBERS
       return await migrateLegacySubscriptionSources({ showToast: true });
     };
 
-    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, applyTemplate = false, migrateLegacy = false, onProviderUpdate = null } = {}) => {
+    const saveSubSources = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, { applyToCustom = false, applyTemplate = false, migrateLegacy = false, onProviderUpdate = null, subscriptionOptions = null } = {}) => {
   const cleanMode = normalizeSubRuleModeValue(mode);
-  const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
+  let cleanConvertMode = normalizeSubConvertModeValue(convertMode);
   let storedSources, cleanSources;
   try { ({ stored: storedSources, enabled: cleanSources } = validateSubscriptionMode(sources, cleanMode)); }
   catch (error) { operationFinish(false, error.message); createToast(safeTextToHtml(error.message), 'red', 9000); return false; }
@@ -11656,13 +11660,14 @@ EOF_F50_RESTORE_MEMBERS
     const gist = await f50GistManaged();
     if (gist) return await f50GistUpdateSources(gist, storedSources);
   }
-  if (!storedSources.length) { operationFinish(false, '请输入有效的订阅链接'); return false; }
+  if (!storedSources.length && !subscriptionOptions) { operationFinish(false, '请输入有效的订阅链接'); return false; }
   const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
   if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
     createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
     return false;
   }
-  if ((!applyToCustom && configSource === 'uploaded_config') || !cleanSources.length) {
+  const settingsOnly = (!applyToCustom && configSource === 'uploaded_config') || !cleanSources.length;
+  if (settingsOnly && !subscriptionOptions) {
     const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
     operationFinish(saved, saved ? '订阅设置已保存；当前运行配置未更改' : '订阅设置保存失败');
     return saved;
@@ -11670,6 +11675,7 @@ EOF_F50_RESTORE_MEMBERS
   const tx = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
   const paths = [CLASH_CONFIG, CLASH_SUB_URLS, CLASH_SUB_RULE_MODE_FILE, CLASH_POLICY_OPTIONS_FILE,
     CLASH_CONFIG_SOURCE_FILE, CLASH_TEMPLATE, CLASH_TEMPLATE_BASE, CLASH_RULE_OVERRIDE_APPLIED_JSON,
+    ...(subscriptionOptions ? [CLASH_DIR + '/Tools/subscription-settings.json'] : []),
     ...cleanSources.map((source) => `${CLASH_PROXY_DIR}/proxies/${source.name}.yaml`)];
   const snapshot = await runShellWithRoot(`set -e
 umask 077
@@ -11682,10 +11688,26 @@ echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
     operationFinish(false, '无法创建 config.yaml 回滚点；订阅未更改');
     return false;
   }
-  let runtimeAttempted = false, wasRunning = false, restored = false, committed = false;
+  let runtimeAttempted = false, wasRunning = false, restored = false, committed = false, scheduleRestoreFailed = false;
   try {
     wasRunning = !!(await getCorePid());
-    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode))) throw new Error('订阅设置保存失败');
+    if (subscriptionOptions) {
+      const staged = await stageTextBesideTarget(tx + '/options.json', JSON.stringify(subscriptionOptions), 'subscription options');
+      if (!staged.ok) throw Error('订阅设置暂存失败');
+      try {
+        const saved = await f50GistExec(['subscription-save', staged.stagePath], 90000, '', runShellWithRoot);
+        if (!saved.ok) throw Error(f50GistMessage(saved.code));
+        subscriptionPreferences = saved;
+        if (saved.rescueConfigured) cleanConvertMode = SUB_CONVERT_MODE_LOCAL;
+      } finally { await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000); }
+    }
+    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode, { allowEmpty: !!subscriptionOptions }))) throw new Error('订阅设置保存失败');
+    if (settingsOnly) {
+      committed = true;
+      operationFinish(true, '订阅设置已保存；当前运行配置未更改');
+      createToast('订阅设置已保存', 'green');
+      return true;
+    }
     operationStage('根据本地模板生成配置', 1, 5);
     let conversion = null;
     if (cleanConvertMode === SUB_CONVERT_MODE_LOCAL) {
@@ -11748,10 +11770,17 @@ ${paths.map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `restore_
 echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     restored = !!rollback.success && String(rollback.content || '').includes('SUBSCRIPTION_TRANSACTION_RESTORED');
     invalidateStatusSnapshot();
+    if (restored && subscriptionOptions) {
+      try {
+        await loadSubscriptionPreferences();
+        const resumed = await f50GistExec(['start-daemon'], 10000, '', runShellWithRoot);
+        scheduleRestoreFailed = !resumed.ok;
+      } catch (_) { subscriptionPreferences = null; scheduleRestoreFailed = true; }
+    }
     if (restored && runtimeAttempted && wasRunning) restored = await restartClashOk({ skipCheck: true });
     } catch (_) { restored = false; }
     if (!restored) await networkRescue({ showOutput: false });
-    const message = firstFailure;
+    const message = firstFailure + (scheduleRestoreFailed ? '；自动更新调度未恢复，请重新保存订阅设置' : '');
     operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复失败'));
     createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅与配置' : '回滚失败，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
@@ -12212,6 +12241,27 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                         <option value="${SUB_CONVERT_MODE_LOCAL}">设备本地转换（支持分享链接）</option>
                       </select>
                     </label>
+                    ${gist ? '' : `<fieldset id="mm_sub_options" style="border:0;padding:0;margin:0;min-width:0;">
+                      <details style="margin:8px 0;font-size:.64rem;">
+                        <summary>自动更新</summary>
+                        <div style="display:flex;align-items:center;gap:12px;margin:10px 0;flex-wrap:wrap;">
+                          <label><input id="mm_subscription_auto" type="checkbox"> 自动更新订阅</label>
+                          <label>每 <select id="mm_subscription_interval" style="color-scheme:dark;background:#111827;color:#fff;padding:6px;border-radius:6px;">
+                            ${[1,6,12,24].map(hours => `<option value="${hours}">${hours} 小时</option>`).join('')}
+                          </select> 更新</label>
+                        </div>
+                        <div style="opacity:.78;line-height:1.55;">核心停止时暂停后台更新，不会自动启动核心。</div>
+                        <div id="mm_subscription_status" role="status" style="margin-top:6px;opacity:.78;"></div>
+                      </details>
+                      <details style="margin:8px 0;font-size:.64rem;">
+                        <summary>备用节点</summary>
+                        <div id="mm_subscription_rescue_status" style="margin:10px 0 6px;"></div>
+                        <textarea id="mm_subscription_rescue" rows="4" spellcheck="false" autocomplete="off" aria-label="备用节点 YAML 或分享链接" placeholder="单个节点 YAML 或分享链接；留空保留已保存节点" style="box-sizing:border-box;width:100%;padding:8px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px;"></textarea>
+                        <label style="display:block;margin:8px 0;"><input id="mm_subscription_rescue_clear" type="checkbox"> 删除已保存的备用节点</label>
+                        <div style="opacity:.78;line-height:1.55;">启用后使用设备本地转换，直连失败时通过备用节点下载。</div>
+                      </details>
+                    </fieldset>
+                    <div id="mm_sub_options_hint" style="font-size:.62rem;opacity:.78;"></div>`}
                     <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">${gist ? '手动链接会随每次 Gist 同步自动合并；相同链接不重复添加。' : '每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。'}</div>
                     <div style="display:${gist ? 'none' : 'block'};font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
                 </div>
@@ -12229,8 +12279,30 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const clearBtn = el.querySelector('#mm_sub_clear_btn');
       const submitBtn = el.querySelector('#mm_sub_submit_btn');
       const convertModeSelect = el.querySelector('#mm_sub_convert_mode');
-      convertModeSelect.value = preferences?.rescueConfigured && !gist ? SUB_CONVERT_MODE_LOCAL : currentConvertMode;
-      if (preferences?.rescueConfigured && !gist) convertModeSelect.disabled = true;
+      convertModeSelect.value = currentConvertMode;
+      const optionsEl = el.querySelector('#mm_sub_options');
+      const option = name => el.querySelector('#mm_subscription_' + name);
+      if (optionsEl) {
+        option('auto').checked = preferences?.configured ? preferences.auto : currentConvertMode === SUB_CONVERT_MODE_PROVIDER;
+        option('interval').value = String(preferences?.intervalHours || 24);
+        option('rescue_status').textContent = preferences?.rescueConfigured ? '已保存备用节点' : '未设置备用节点';
+        const state = preferences?.state;
+        option('status').textContent = state?.checkedAt && !state.checkedAt.startsWith('0001-')
+          ? '最近后台更新：' + new Date(state.checkedAt).toLocaleString() + (state.code ? ' · ' + f50GistMessage(state.code) : ' · 已完成') : '';
+        const syncOptions = () => {
+          const customUnchanged = configSource === 'uploaded_config' && !el.querySelector('#mm_sub_replace_custom')?.checked;
+          optionsEl.disabled = !preferences || customUnchanged;
+          setText(el.querySelector('#mm_sub_options_hint'), !preferences ? '请先更新组件，再设置自动更新和备用节点。' : customUnchanged ? '勾选“应用到当前自定义配置”后，可设置自动更新和备用节点。' : '');
+          const rescue = !optionsEl.disabled && (option('rescue').value.trim() || (preferences.rescueConfigured && !option('rescue_clear').checked));
+          convertModeSelect.disabled = !!rescue;
+          if (rescue) convertModeSelect.value = SUB_CONVERT_MODE_LOCAL;
+        };
+        option('rescue').oninput = syncOptions;
+        option('rescue_clear').onchange = syncOptions;
+        const replaceCustom = el.querySelector('#mm_sub_replace_custom');
+        if (replaceCustom) replaceCustom.onchange = syncOptions;
+        syncOptions();
+      }
       const ruleModeSelect = el.querySelector('#mm_sub_rule_mode');
       ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       const syncRuleMode = () => {
@@ -12335,7 +12407,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         setButtonBusy(submitBtn, true, '处理中…');
 
         try {
-          if (!hasSubscriptionUrl && !gist) {
+          if (!hasSubscriptionUrl && !gist && (!optionsEl || optionsEl.disabled)) {
             const success = await clearSubSourceFile();
             if (success) close();
             return;
@@ -12346,6 +12418,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             ruleModeSelect.value,
             convertModeSelect.value,
             { applyToCustom: !!el.querySelector('#mm_sub_replace_custom')?.checked,
+              subscriptionOptions: optionsEl && !optionsEl.disabled ? {
+                auto: option('auto').checked, intervalHours: Number(option('interval').value),
+                rescueText: option('rescue').value.trim(), clearRescue: option('rescue_clear').checked,
+              } : null,
               migrateLegacy: (currentRuleMode === 'original' || configSource === 'subscription_original')
                 && await askConfirm('mm_sub_migrate_legacy', '迁移到本地模板？', '旧配置及来源文件会备份；校验或启动失败时恢复旧状态。', '迁移并更新', '取消') },
           );
@@ -12375,71 +12451,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     return true;
   });
 };
-
-    const subscriptionOptionsBtn = document.createElement('button');
-    subscriptionOptionsBtn.classList.add('btn');
-    subscriptionOptionsBtn.textContent = '自动更新与备用节点';
-    subscriptionOptionsBtn.onclick = async () => {
-      try {
-        if (!(await ensureReady({ readOnly: true }))) return;
-        const settings = await loadSubscriptionPreferences();
-        if (!settings) { createToast('请先修复组件，再设置自动更新与备用节点', 'yellow'); return; }
-        const { el, close } = createFixedToast('mm_subscription_options', `
-          <div style="pointer-events:all;width:auto;max-width:760px">
-            <div class="title" style="margin:0">自动更新与备用节点</div>
-            <div style="display:flex;flex-direction:column;gap:12px;margin:14px 0;font-size:.64rem">
-              <label><input id="mm_subscription_auto" type="checkbox"> 自动更新订阅</label>
-              <label>更新间隔 <select id="mm_subscription_interval" style="color-scheme:dark;background:#111827;color:#fff;padding:6px;border-radius:6px">
-                ${[1,6,12,24].map(hours => `<option value="${hours}">${hours} 小时</option>`).join('')}
-              </select></label>
-              <div>适用于插件普通订阅；Gist 使用其自身自动同步。核心停止时不自动启动。</div>
-              <label>备用节点（单个节点 YAML 或分享链接）
-                <textarea id="mm_subscription_rescue" rows="5" spellcheck="false" autocomplete="off" style="box-sizing:border-box;width:100%;margin-top:6px;padding:8px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px"></textarea>
-              </label>
-              <div id="mm_subscription_rescue_status"></div>
-              <label><input id="mm_subscription_rescue_clear" type="checkbox"> 删除已保存的备用节点</label>
-              <div>启用备用节点后，普通订阅改用设备本地转换；直连失败再使用备用节点。留空保留已保存节点。</div>
-              <div id="mm_subscription_options_status" role="status"></div>
-            </div>
-            <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2">
-              <button id="mm_subscription_options_save" style="font-size:.64rem">保存并应用</button>
-              <button id="mm_subscription_options_close" style="font-size:.64rem">关闭</button>
-            </div>
-          </div>`);
-        fitDialogWidth(el, el.firstElementChild);
-        const q = id => el.querySelector('#mm_subscription_' + id);
-        q('auto').checked = settings.auto;
-        q('interval').value = String(settings.intervalHours);
-        q('rescue_status').textContent = settings.rescueConfigured ? '已保存备用节点' : '未设置备用节点';
-        q('options_status').textContent = settings.state?.checkedAt && !settings.state.checkedAt.startsWith('0001-')
-          ? '最近后台更新：' + new Date(settings.state.checkedAt).toLocaleString() + (settings.state.code ? ' · ' + f50GistMessage(settings.state.code) : ' · 已完成') : '';
-        q('options_close').onclick = () => { q('rescue').value = ''; close(); };
-        q('options_save').onclick = () => runCriticalButtonOperation('保存自动更新与备用节点', q('options_save'), '保存中…', async () => {
-          const staged = await stageTextBesideTarget('/data/kano_subscription_options_' + Date.now() + '.json', JSON.stringify({
-            auto: q('auto').checked, intervalHours: Number(q('interval').value),
-            rescueText: q('rescue').value.trim(), clearRescue: q('rescue_clear').checked,
-          }), 'subscription options');
-          if (!staged.ok) throw Error('设置暂存失败');
-          try {
-            const saved = await f50GistExec(['subscription-save', staged.stagePath], 90000, '', runShellWithRoot);
-            if (!saved.ok) throw Error(f50GistMessage(saved.code));
-            subscriptionPreferences = saved;
-            q('rescue').value = '';
-            const sources = await readCurrentSubSources({ includeDisabled: true });
-            const source = await readConfigSource();
-            if (sources.length && source !== 'uploaded_config' && source !== 'subscription_original') {
-              const mode = saved.rescueConfigured ? SUB_CONVERT_MODE_LOCAL : await readSavedSubConvertMode();
-              if (!(await saveSubSources(sources, SUB_RULE_MODE_TEMPLATE, mode))) {
-                q('options_status').textContent = '设置已保存，订阅应用失败；原配置已按更新结果保留或恢复。';
-                return false;
-              }
-            }
-            createToast('自动更新与备用节点设置已保存', 'green');
-            close(); return true;
-          } finally { await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000); }
-        });
-      } catch (error) { createToast(safeTextToHtml(error.message || '无法打开订阅设置'), 'red', 9000); }
-    };
 
     const updateSubBtn = document.createElement('button');
     updateSubBtn.classList.add('btn');
@@ -13061,7 +13072,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
-    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, subscriptionOptionsBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
+    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
     appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
 

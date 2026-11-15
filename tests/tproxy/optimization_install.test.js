@@ -311,10 +311,12 @@ test('legacy online update retains installed GistSync and its settings',{skip:!y
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });
 
-for(const auto of [false,true])test('installation resumes only enabled automatic Gist '+auto,{skip:!yq},()=>{
+for(const auto of [false,true])for(const subscriptionAuto of [false,true])test('installation resumes enabled Gist or subscription scheduling '+JSON.stringify({auto,subscriptionAuto}),{skip:!yq},()=>{
  const c=installCase({old:true,stopped:true});try{
   write(c.root,'Tools/gist-sync/settings.conf',JSON.stringify({auto}));
+  write(c.root,'Tools/subscription-settings.json',JSON.stringify({auto:subscriptionAuto,intervalHours:6}));
   const result=c.execute();assert.equal(result.status,0,result.stdout+result.stderr);
-  assert.equal(fs.existsSync(path.join(c.root,'gist-resumed')),auto);
+  assert.equal(fs.existsSync(path.join(c.root,'gist-resumed')),auto||subscriptionAuto);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(c.root,'Tools/subscription-settings.json'),'utf8')),{auto:subscriptionAuto,intervalHours:6});
  }finally{fs.rmSync(c.dir,{recursive:true,force:true});}
 });

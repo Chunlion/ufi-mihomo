@@ -10,6 +10,8 @@ await page.evaluate(body=>{
  const CLASH_CONFIG='fixture';let saved=[{url:'https://example.test/manual',enabled:true}],calls=[];
  const config={'proxy-providers':{remote:{url:'https://example.test/remote'},manual:{url:'https://example.test/manual'}},'x-f50-gist-manual-providers':['manual'],proxies:[{name:'Gist node <one>'},{name:'Gist node two'}]};
  const operationStage=()=>{},operationFinish=()=>{},createToast=()=>{};
+ const loadSubscriptionPreferences=async()=>null;
+ const fitDialogWidth=()=>{};
  const readCurrentSubSources=async()=>structuredClone(saved),readSavedSubConvertMode=async()=>'local',readCurrentSubRuleMode=async()=>'template',readConfigSource=async()=>'uploaded_config';
  const f50GistManaged=async()=>({settings:{revision:1}}),readYamlObject=async()=>({ok:true,value:config});
  const safeTextToHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');

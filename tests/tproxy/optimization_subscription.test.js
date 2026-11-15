@@ -464,7 +464,7 @@ for (const status of [200, 390, 500, 'timeout']) {
   });
 }
 
-function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local', gistManaged = false } = {}) {
+function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local', gistManaged = false, subscriptionOptions = null, resumeFailure = false } = {}) {
   const dir = temp();
   const constants = { CLASH_DIR: dir, CLASH_PROXY_DIR: path.join(dir, 'Proxy'), CLASH_POLICY_DIR: path.join(dir, 'Policy') };
   for (const [key, file] of Object.entries({ CLASH_CONFIG: 'Proxy/config.yaml', CLASH_SUB_URLS: 'Proxy/subscription_urls.txt',
@@ -474,6 +474,8 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
     constants[key] = write(dir, file, key === 'CLASH_SUB_URLS' ? '# KANO_SUB_RULE_MODE=template\n# KANO_SUB_CONVERT_MODE=' + convertMode + '\nhttps://one.example/sub Provider1\n' : 'old:' + key);
   }
   for (const s of sources) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'old cache:' + s.name);
+  const preferencesFile = path.join(dir, 'Tools/subscription-settings.json');
+  if (subscriptionOptions) write(dir, 'Tools/subscription-settings.json', JSON.stringify({ auto: true, intervalHours: 24 }));
   if (legacy) {
     fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=subscription_original\n');
     fs.writeFileSync(constants.CLASH_SUB_URLS, '# KANO_SUB_RULE_MODE=original\nhttps://one.example/sub Provider1\n');
@@ -488,6 +490,8 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
   if (!fresh) for (const s of sources) before[path.join(dir, 'Proxy/proxies/' + s.name + '.yaml')] = 'old cache:' + s.name;
   let restarts = 0, configWrites = 0, gistUpdates = 0;
   const commands = [];
+  let scheduleResumes = 0;
+  let networkRescues = 0;
   const stored = (ruleMode === 'original' ? sources.slice(0, 1) : sources).map(s => ({ ...s, enabled: !disabled }));
   const extra = slice('function validateSubscriptionMode', 'function buildF50CleanupScript')
     + slice('const fileSnapshotHelpersCmd', 'const readSavedSubSourcesForTemplate')
@@ -534,12 +538,52 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
       ? { failed: 1, providers: [{ name: 'Provider1', ok: false, errorType: 'update_pending' }] }
       : result(failAt === 'reload'),
     providerUpdateNeedsLocalFallback: () => false,
-    invalidateStatusSnapshot() {}, networkRescue: async () => true,
+    invalidateStatusSnapshot() {}, networkRescue: async () => { networkRescues++; return true; },
     buildProviderUpdateResult: () => result(), showSubscriptionUpdateSelfCheck: async () => true,
+    stageTextBesideTarget: async (target, text) => {
+      const file = target.replace('/data/', dir.replace(/\\/g, '/') + '/');
+      fs.writeFileSync(file, text); return { ok: true, stagePath: file };
+    },
+    f50GistMessage: String,
+    f50GistExec: async args => {
+      if (args[0] === 'start-daemon') { scheduleResumes++; return { ok: !resumeFailure, code: resumeFailure ? 'scheduler_start_unconfirmed' : '' }; }
+      if (args[0] === 'subscription-save') {
+        const request = JSON.parse(fs.readFileSync(args[1], 'utf8'));
+        const settings = { auto: request.auto, intervalHours: request.intervalHours, rescueConfigured: !!request.rescueText };
+        fs.writeFileSync(preferencesFile, JSON.stringify(settings));
+        return { ok: true, configured: true, ...settings };
+      }
+      return { ok: true, configured: true, ...JSON.parse(fs.readFileSync(preferencesFile, 'utf8')) };
+    },
   });
   return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites, gistUpdates: () => gistUpdates,
     apply: () => api.overwriteConfigByTemplate(),
-    execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy }) };
+    preferencesFile, scheduleResumes: () => scheduleResumes, networkRescues: () => networkRescues,
+    execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy, subscriptionOptions }) };
+}
+
+test('a scheduler restore failure does not stop the restored proxy configuration', async () => {
+  const c = saveCase({ failAt: 'write', resumeFailure: true, subscriptionOptions: { auto: false, intervalHours: 6 } });
+  try {
+    assert.equal(await c.execute(), false);
+    for (const [file, text] of Object.entries(c.before)) assert.equal(fs.readFileSync(file, 'utf8'), text, file);
+    assert.equal(c.scheduleResumes(), 1);
+    assert.equal(c.networkRescues(), 0);
+  } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+});
+
+for (const failAt of ['download', 'template', 'write', 'reload', '']) {
+  test('subscription preferences follow the configuration transaction / ' + (failAt || 'success'), async () => {
+    const c = saveCase({ convertMode: 'provider', failAt, subscriptionOptions: { auto: false, intervalHours: 6, rescueText: 'fixture-node' } });
+    try {
+      assert.equal(await c.execute(), !failAt);
+      const saved = JSON.parse(fs.readFileSync(c.preferencesFile, 'utf8'));
+      assert.equal(saved.auto, failAt ? true : false);
+      assert.equal(saved.intervalHours, failAt ? 24 : 6);
+      assert.equal(c.scheduleResumes(), failAt ? 1 : 0);
+      if (!failAt) assert.match(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8'), /KANO_SUB_CONVERT_MODE=local/);
+    } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+  });
 }
 
 for (const convertMode of ['provider', 'local']) {

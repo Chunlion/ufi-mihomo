@@ -15,6 +15,8 @@ jobs:
     env:
       F50_TEST_YQ: ${{ github.workspace }}/.cache/gist-sync/tools/yq-linux-amd64
       F50_TEST_QEMU: ${{ github.workspace }}/.cache/gist-sync/tools/qemu-aarch64
+      F50_TEST_MIHOMO: ${{ github.workspace }}/.cache/gist-sync/tools/mihomo-linux-amd64
+      F50_TEST_SUB_HELPER: ${{ github.workspace }}/build/gist-sync/bin/kano-f50-helper-amd64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,12 +35,19 @@ jobs:
       - name: Prepare genuine test tools
         run: |
           python3 scripts/gist_test_tools.py
-          chmod +x .cache/gist-sync/tools/yq-linux-amd64 .cache/gist-sync/tools/age-amd64/age .cache/gist-sync/tools/age-amd64/age-keygen
+          chmod +x .cache/gist-sync/tools/yq-linux-amd64 .cache/gist-sync/tools/mihomo-linux-amd64 .cache/gist-sync/tools/age-amd64/age .cache/gist-sync/tools/age-amd64/age-keygen
           mkdir -p .cache/gist-sync/bin
           ln -s /usr/bin/bsdtar .cache/gist-sync/bin/tar
           echo "$PWD/.cache/gist-sync/bin" >> "$GITHUB_PATH"
       - name: Build components
-        run: python3 scripts/build_gist_sync.py
+        run: |
+          python3 scripts/build_gist_sync.py
+          go -C binary-helper build -o ../build/gist-sync/bin/kano-f50-helper-amd64 .
+      - name: Test native subscriptions and Gist sync
+        run: |
+          sudo env PATH="$PATH" F50_TEST_YQ="$F50_TEST_YQ" F50_TEST_MIHOMO="$F50_TEST_MIHOMO" F50_TEST_SUB_HELPER="$F50_TEST_SUB_HELPER" \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD" \
+            unshare --net sh -c 'ip link set lo up; cd gist-sync/native; exec go test -race ./...'
       - name: Run regression tests
         # Device shell fixtures use root; mocked public URLs must stay off the Internet.
         run: |

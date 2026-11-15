@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -67,7 +68,7 @@ func TestSubscriptionCachesRestoreFailedBatch(t *testing.T) {
 	}
 }
 func TestSubscriptionDirectFetchAndRejection(t *testing.T) {
-	for _, status := range []int{200, 403} {
+	for _, status := range []int{200, 401, 404} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			a := fixture(t)
 			ctx := context.Background()
@@ -139,6 +140,7 @@ func TestSubscriptionRescueEndToEnd(t *testing.T) {
   - {name: Downloaded, type: socks5, server: example.com, port: 1080}
 `
 	proxyCalls := 0
+	var proxyMu sync.Mutex
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "CONNECT" {
 			t.Error("expected CONNECT")
@@ -157,12 +159,15 @@ func TestSubscriptionRescueEndToEnd(t *testing.T) {
 			return
 		}
 		defer request.Body.Close()
+		proxyMu.Lock()
 		proxyCalls++
-		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(body), body)
+		responseBody := body
+		proxyMu.Unlock()
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(responseBody), responseBody)
 	}))
 	defer proxy.Close()
 	host, port, _ := net.SplitHostPort(strings.TrimPrefix(proxy.URL, "http://"))
-	node := fmt.Sprintf("name: Independent\ntype: http\nserver: %s\nport: %s\n", host, port)
+	node := fmt.Sprintf("name: Independent\ntype: http\nserver: %s\nport: %s\npassword: 'https://fixture.invalid/password'\n", host, port)
 	requestPath := a.Root + "/settings-request.json"
 	writeJSON(requestPath, map[string]any{"auto": false, "intervalHours": 6, "rescueText": node})
 	s, e := a.saveSubscriptionSettings(context.Background(), requestPath)
@@ -170,15 +175,18 @@ func TestSubscriptionRescueEndToEnd(t *testing.T) {
 		t.Fatal(s, e)
 	}
 	before, _ := os.ReadFile(a.cfg())
-	mustWrite(t, a.scripts("clashctl_arm64"), []byte("#!/bin/sh\necho 'F50_FETCH_RESULT={\"ok\":false,\"committed\":false,\"providers\":[{\"name\":\"Provider1\",\"ok\":false,\"statusCode\":0}]}'\nexit 1\n"), 0755)
+	mustWrite(t, a.scripts("clashctl_arm64"), []byte("#!/bin/sh\necho 'F50_FETCH_RESULT={\"ok\":false,\"committed\":false,\"providers\":[{\"name\":\"Provider1\",\"ok\":false,\"statusCode\":403}]}'\nexit 1\n"), 0755)
 	path := a.Root + "/fetch-request.json"
 	writeJSON(path, SubscriptionFetch{Sources: []SubscriptionSource{{Name: "Provider1", URL: "http://sub.example.test/sub"}}, UserAgent: "FixtureAgent"})
 	r, e := a.fetchSubscriptions(context.Background(), path)
 	if e != nil || !r.OK || !r.Rescued || !r.Committed || r.Providers[0].ProxyCount != 1 {
 		t.Fatal(r, e)
 	}
-	if proxyCalls != 1 {
-		t.Fatal("proxy requests", proxyCalls)
+	proxyMu.Lock()
+	calls := proxyCalls
+	proxyMu.Unlock()
+	if calls != 1 {
+		t.Fatal("proxy requests", calls)
 	}
 	after, _ := os.ReadFile(a.cfg())
 	if string(before) != string(after) {
@@ -196,7 +204,9 @@ func TestSubscriptionRescueEndToEnd(t *testing.T) {
 		t.Fatal("private work retained")
 	}
 	// A failed rescue conversion must retain the successfully installed cache.
+	proxyMu.Lock()
 	body = "<html>not a subscription</html>"
+	proxyMu.Unlock()
 	r, e = a.fetchSubscriptions(context.Background(), path)
 	if e == nil || r.Committed {
 		t.Fatal("accepted HTML", r, e)

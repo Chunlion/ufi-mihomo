@@ -15,7 +15,7 @@ def main():
     CACHE.mkdir(parents=True,exist_ok=True)
     spec=json.loads((ROOT/'gist-sync/test-tools.json').read_text())
     core=spec['mihomo'];archive=CACHE/'mihomo-linux-amd64.gz'
-    if not archive.exists() or sha(archive.read_bytes())!=core['archive_sha256']:fetch(core.get('download_api',core['source']),archive,core['archive_sha256'])
+    if not archive.exists() or sha(archive.read_bytes())!=core['archive_sha256']:fetch(core['source'],archive,core['archive_sha256'])
     (CACHE/'mihomo-linux-amd64').write_bytes(gzip.decompress(archive.read_bytes()))
     yq=spec['yq'];target=CACHE/'yq-linux-amd64'
     if not target.exists() or sha(target.read_bytes())!=yq['binary_sha256']:fetch(yq['source'],target,yq['binary_sha256'])

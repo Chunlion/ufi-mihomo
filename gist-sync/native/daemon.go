@@ -284,5 +284,8 @@ func (a *App) boot(ctx context.Context) error {
 			return re
 		}
 	}
-	return a.startDaemon(ctx)
+	if e := a.startDaemon(ctx); e != nil {
+		return e
+	}
+	return a.startSubscriptionDaemon(ctx)
 }

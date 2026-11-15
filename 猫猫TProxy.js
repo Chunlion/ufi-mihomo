@@ -8,7 +8,7 @@ const F50_PORTS = {http:7890, socks:7891, mixed:7892, tproxy:7895, dns:1053, con
 const F50_MIPS_MIN_VERSION = '1.19.31';
 // 以下生成脚本共享的清单/表达式统一在此维护，改一处即全量生效。
 const F50_PROTECTED_JOURNALS = 'download.transaction.json rp-filter.json legacy-policy.json';
-const F50_MANAGED_COMMS = 'Clash.Core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|sh|ash|bash|dash|mksh|toybox|busybox|timeout|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64';
+const F50_MANAGED_COMMS = 'Clash.Core|rescue-core|Clash|clash|mihomo|clashctl*|kano-f50*|kano-gist-sync|Clash.*|mosdns*|yq_linux*|age|sh|ash|bash|dash|mksh|toybox|busybox|timeout|inotifyd|curl|wget|unzip|tar|gzip|xz|cp|mv|rm|awk|sed|tee|dd|base64';
 const F50_ROOT_FALLBACK = '${CLASH_ROOT:-${F50_ROOT:-/data/clash}}';
 const F50_PANEL_DIR_REL = 'WebUI/zashboard';
 // Proxy/ 下属于用户数据的条目：显式保留清单与通配排除共用，新增文件只改这里。
@@ -2562,7 +2562,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/device_notes.json Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/subscription-settings.json Tools/subscription-state.json Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/device_notes.json Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -2705,9 +2705,8 @@ else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
   exit 1
 fi
-# Restore scheduling only for an existing enabled Gist configuration.
-if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ -s "$F50_ROOT/Tools/gist-sync/settings.conf" ] &&
-   "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$F50_ROOT/Tools/gist-sync/settings.conf" >/dev/null 2>&1; then
+# Each scheduler checks its own saved enable flag.
+if [ -x "$F50_ROOT/Tools/kano-gist-sync" ]; then
   CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_INSTALL_WARNING=gist_scheduler_resume_failed
 fi
 # Component completion is independent of recovery-marker and lock cleanup.
@@ -3900,7 +3899,7 @@ exit "$delete_rc"
     if (/timeout|timed out|aborted/i.test(text)) return {ok:false,code:'operation_timeout'};
     return {ok:false,code:text.trim()?'response_format_invalid':'device_state_unknown'};
   }
-  async function f50GistExec(args, timeout = 10000, input = '') {
+  async function f50GistExec(args, timeout = 10000, input = '', run = hostRunShellWithRoot) {
     const tag = Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,'0')).join('');
     const invocation = (input ? "printf '%s' " + shellQuote(input) + ' | ' : '') +
       shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') + '\n';
@@ -3913,7 +3912,7 @@ ${invocation}) 2>/dev/null
 rc=$?
 printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
 `;
-    try { return f50GistParse(await hostRunShellWithRoot.call(globalThis,script,timeout),tag,args[0]); }
+    try { return f50GistParse(await run.call(globalThis,script,timeout),tag,args[0]); }
     catch (error) { return {ok:false,code:error?.name==='AbortError' || /timeout/i.test(error?.message || '')?'operation_timeout':'device_state_unknown'}; }
   }
   async function f50GistSeal(key, action, request) {
@@ -3972,6 +3971,18 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
+    subscription_settings_invalid:'无法读取自动更新与备用节点设置。',
+    subscription_conversion_failed:'节点内容无法转换，请检查格式。',
+    subscription_empty:'订阅没有可用节点。',
+    subscription_managed_by_gist:'当前配置由 Gist 管理，使用 Gist 自动同步。',
+    subscription_no_local_sources:'没有需要后台下载的本地订阅。',
+    rescue_single_node_required:'备用节点只允许填写一个节点。',
+    rescue_independent_node_required:'备用节点必须包含服务器地址，且不能依赖其他代理。',
+    rescue_node_invalid:'备用节点未通过核心配置检查。',
+    rescue_start_failed:'备用下载核心启动失败。',
+    subscription_download_failed:'订阅下载失败，原节点缓存已保留。',
+    subscription_download_rejected:'订阅服务器拒绝请求，请检查链接与有效期。',
+    subscription_cache_restore_failed:'节点缓存恢复失败，请检查设备存储。',
     manual_source_invalid:'手动订阅链接无效。',
     manual_source_limit:'手动订阅最多保存 100 条。',
     manual_sources_unreadable:'无法读取手动订阅，未更新配置。',
@@ -5229,6 +5240,17 @@ exit "$kano_task_rc"`;
 
 
   const providerNameFor = (index = 0) => `Provider${index + 1}`;
+  let subscriptionPreferences = null;
+
+  const loadSubscriptionPreferences = async () => {
+    const settings = await f50GistExec(['subscription-status']);
+    if (!settings.ok) {
+      if (['invalid_command', 'components_missing'].includes(settings.code)) { subscriptionPreferences = null; return null; }
+      throw Error(f50GistMessage(settings.code));
+    }
+    subscriptionPreferences = settings;
+    return settings;
+  };
 
   // 受管订阅槽位：名字与缓存路径必须成对匹配，手工 provider 不能混进订阅更新/模式判定。
   const isManagedProviderEntry = (name = '', provider = null) =>
@@ -6064,7 +6086,8 @@ ${buildF50YamlCommitBody(withBase)}
       };
       if (!localFiles && !emptyUrls) {
         provider.url = source.url;
-        provider.interval = 86400;
+        provider.interval = subscriptionPreferences?.configured
+          ? (subscriptionPreferences.auto ? subscriptionPreferences.intervalHours * 3600 : 0) : 86400;
         provider.header = {
           'User-Agent': [currentProviderUserAgent],
         };
@@ -6363,6 +6386,7 @@ ${buildF50YamlCommitBody(withBase)}
       const provider = { ...defaults[source.name], ...cloneJsonValue(previous), type: defaults[source.name].type, path: defaults[source.name].path };
       if (provider.type === 'http') {
         provider.url = source.url;
+        if (subscriptionPreferences?.configured) provider.interval = defaults[source.name].interval;
         if (provider.header != null && !isPlainYamlObject(provider.header)) throw new Error(`proxy-provider ${source.name}.header 必须是映射对象`);
         provider.header = { ...(provider.header || {}), 'User-Agent': defaults[source.name].header['User-Agent'] };
       } else delete provider.url;
@@ -7693,7 +7717,12 @@ KANO_WRITE_CHECK_EOF
   let r;
   try {
     operationStage('下载并验证订阅');
-    r = await f50Command('fetch-batch', 100000, [staged.stagePath]);
+    const settings = await loadSubscriptionPreferences();
+    if (settings?.rescueConfigured) {
+      const reply = await f50GistExec(['subscription-fetch', staged.stagePath], 300000, '', runShellWithRoot);
+      if (!reply.ok) throw Error(f50GistMessage(reply.code));
+      r = { success: true, content: 'F50_FETCH_RESULT=' + JSON.stringify(reply) };
+    } else r = await f50Command('fetch-batch', 100000, [staged.stagePath]);
     const line = String(r.content || '').split(/\r?\n/).find(s => s.startsWith('F50_FETCH_RESULT='));
     let data = null;
     try { if (line) data = JSON.parse(line.slice('F50_FETCH_RESULT='.length)); } catch (_) {}
@@ -7706,8 +7735,8 @@ KANO_WRITE_CHECK_EOF
         rawMessage:'',cacheAvailable:null};
     });
     return buildProviderUpdateResult(results, {ok:!!committed,via:'local',committed:!!committed, message:committed ? '' : (results.find(provider => !provider.ok)?.message || formatSubscriptionDownloadError({}, r.content))});
-  } catch (_) {
-    const message = '订阅下载失败：无法确认下载结果；请检查设备连接后重试';
+  } catch (error) {
+    const message = error?.message ? sanitizeSubscriptionSecrets(error.message) : '订阅下载失败：无法确认下载结果；请检查设备连接后重试';
     return buildProviderUpdateResult(clean.map(source => ({ type: 'proxy-provider', name: source.name, ok: false, attempts: 1,
       statusCode: 0, message, errorType: 'local_download_failed' })), { ok: false, via: 'local', committed: false, message });
   } finally {
@@ -11010,6 +11039,7 @@ EOF_F50_RESTORE_MEMBERS
     };
 
     const ensureTemplateProviders = async (sources, options = {}) => {
+      await loadSubscriptionPreferences();
       const cleanSources = normalizeSubSourceList(sources);
       appendTemplateFlowDebug(`enter ensureTemplateProviders sources=${cleanSources.length} forceTemplate=${options && options.forceTemplate ? '1' : '0'}`);
       const { forceTemplate = false } = options;
@@ -12135,6 +12165,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
     const importSub = async () => {
       operationStage('读取已保存的订阅');
+      const preferences = await loadSubscriptionPreferences();
       const [currentSources, currentConvertMode, currentRuleMode, configSource] = await Promise.all([
         readCurrentSubSources({ includeDisabled: true }),
         readSavedSubConvertMode(),
@@ -12198,7 +12229,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const clearBtn = el.querySelector('#mm_sub_clear_btn');
       const submitBtn = el.querySelector('#mm_sub_submit_btn');
       const convertModeSelect = el.querySelector('#mm_sub_convert_mode');
-      convertModeSelect.value = currentConvertMode;
+      convertModeSelect.value = preferences?.rescueConfigured && !gist ? SUB_CONVERT_MODE_LOCAL : currentConvertMode;
+      if (preferences?.rescueConfigured && !gist) convertModeSelect.disabled = true;
       const ruleModeSelect = el.querySelector('#mm_sub_rule_mode');
       ruleModeSelect.value = SUB_RULE_MODE_TEMPLATE;
       const syncRuleMode = () => {
@@ -12343,6 +12375,71 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     return true;
   });
 };
+
+    const subscriptionOptionsBtn = document.createElement('button');
+    subscriptionOptionsBtn.classList.add('btn');
+    subscriptionOptionsBtn.textContent = '自动更新与备用节点';
+    subscriptionOptionsBtn.onclick = async () => {
+      try {
+        if (!(await ensureReady({ readOnly: true }))) return;
+        const settings = await loadSubscriptionPreferences();
+        if (!settings) { createToast('请先修复组件，再设置自动更新与备用节点', 'yellow'); return; }
+        const { el, close } = createFixedToast('mm_subscription_options', `
+          <div style="pointer-events:all;width:auto;max-width:760px">
+            <div class="title" style="margin:0">自动更新与备用节点</div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin:14px 0;font-size:.64rem">
+              <label><input id="mm_subscription_auto" type="checkbox"> 自动更新订阅</label>
+              <label>更新间隔 <select id="mm_subscription_interval" style="color-scheme:dark;background:#111827;color:#fff;padding:6px;border-radius:6px">
+                ${[1,6,12,24].map(hours => `<option value="${hours}">${hours} 小时</option>`).join('')}
+              </select></label>
+              <div>适用于插件普通订阅；Gist 使用其自身自动同步。核心停止时不自动启动。</div>
+              <label>备用节点（单个节点 YAML 或分享链接）
+                <textarea id="mm_subscription_rescue" rows="5" spellcheck="false" autocomplete="off" style="box-sizing:border-box;width:100%;margin-top:6px;padding:8px;background:#111827;color:#dbeafe;border:1px solid #64748b;border-radius:8px"></textarea>
+              </label>
+              <div id="mm_subscription_rescue_status"></div>
+              <label><input id="mm_subscription_rescue_clear" type="checkbox"> 删除已保存的备用节点</label>
+              <div>启用备用节点后，普通订阅改用设备本地转换；直连失败再使用备用节点。留空保留已保存节点。</div>
+              <div id="mm_subscription_options_status" role="status"></div>
+            </div>
+            <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2">
+              <button id="mm_subscription_options_save" style="font-size:.64rem">保存并应用</button>
+              <button id="mm_subscription_options_close" style="font-size:.64rem">关闭</button>
+            </div>
+          </div>`);
+        fitDialogWidth(el, el.firstElementChild);
+        const q = id => el.querySelector('#mm_subscription_' + id);
+        q('auto').checked = settings.auto;
+        q('interval').value = String(settings.intervalHours);
+        q('rescue_status').textContent = settings.rescueConfigured ? '已保存备用节点' : '未设置备用节点';
+        q('options_status').textContent = settings.state?.checkedAt && !settings.state.checkedAt.startsWith('0001-')
+          ? '最近后台更新：' + new Date(settings.state.checkedAt).toLocaleString() + (settings.state.code ? ' · ' + f50GistMessage(settings.state.code) : ' · 已完成') : '';
+        q('options_close').onclick = () => { q('rescue').value = ''; close(); };
+        q('options_save').onclick = () => runCriticalButtonOperation('保存自动更新与备用节点', q('options_save'), '保存中…', async () => {
+          const staged = await stageTextBesideTarget('/data/kano_subscription_options_' + Date.now() + '.json', JSON.stringify({
+            auto: q('auto').checked, intervalHours: Number(q('interval').value),
+            rescueText: q('rescue').value.trim(), clearRescue: q('rescue_clear').checked,
+          }), 'subscription options');
+          if (!staged.ok) throw Error('设置暂存失败');
+          try {
+            const saved = await f50GistExec(['subscription-save', staged.stagePath], 90000, '', runShellWithRoot);
+            if (!saved.ok) throw Error(f50GistMessage(saved.code));
+            subscriptionPreferences = saved;
+            q('rescue').value = '';
+            const sources = await readCurrentSubSources({ includeDisabled: true });
+            const source = await readConfigSource();
+            if (sources.length && source !== 'uploaded_config' && source !== 'subscription_original') {
+              const mode = saved.rescueConfigured ? SUB_CONVERT_MODE_LOCAL : await readSavedSubConvertMode();
+              if (!(await saveSubSources(sources, SUB_RULE_MODE_TEMPLATE, mode))) {
+                q('options_status').textContent = '设置已保存，订阅应用失败；原配置已按更新结果保留或恢复。';
+                return false;
+              }
+            }
+            createToast('自动更新与备用节点设置已保存', 'green');
+            close(); return true;
+          } finally { await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000); }
+        });
+      } catch (error) { createToast(safeTextToHtml(error.message || '无法打开订阅设置'), 'red', 9000); }
+    };
 
     const updateSubBtn = document.createElement('button');
     updateSubBtn.classList.add('btn');
@@ -12943,7 +13040,14 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const visibleButtons = buttons.filter(Boolean);
       const details = document.createElement('details');
       details.className = 'kano-action-group';
-      if (openGroup) details.open = true;
+      const storageKey = 'kano_mm_group:' + title;
+      try {
+        const saved = localStorage.getItem(storageKey);
+        details.open = saved === null ? openGroup : saved === 'open';
+      } catch (_) { details.open = openGroup; }
+      details.addEventListener('toggle', () => {
+        try { localStorage.setItem(storageKey, details.open ? 'open' : 'closed'); } catch (_) {}
+      });
       const summary = document.createElement('summary');
       summary.textContent = title;
       const inner = document.createElement('div');
@@ -12957,7 +13061,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
-    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
+    appendActionGroup('订阅与配置', [subBtn, updateSubBtn, subscriptionOptionsBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
     appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
 

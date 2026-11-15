@@ -28,7 +28,7 @@
     if (/timeout|timed out|aborted/i.test(text)) return {ok:false,code:'operation_timeout'};
     return {ok:false,code:text.trim()?'response_format_invalid':'device_state_unknown'};
   }
-  async function f50GistExec(args, timeout = 10000, input = '') {
+  async function f50GistExec(args, timeout = 10000, input = '', run = hostRunShellWithRoot) {
     const tag = Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,'0')).join('');
     const invocation = (input ? "printf '%s' " + shellQuote(input) + ' | ' : '') +
       shellQuote(F50_GIST_HELPER) + ' ' + args.map(shellQuote).join(' ') + '\n';
@@ -41,7 +41,7 @@ ${invocation}) 2>/dev/null
 rc=$?
 printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
 `;
-    try { return f50GistParse(await hostRunShellWithRoot.call(globalThis,script,timeout),tag,args[0]); }
+    try { return f50GistParse(await run.call(globalThis,script,timeout),tag,args[0]); }
     catch (error) { return {ok:false,code:error?.name==='AbortError' || /timeout/i.test(error?.message || '')?'operation_timeout':'device_state_unknown'}; }
   }
   async function f50GistSeal(key, action, request) {
@@ -100,6 +100,18 @@ printf '\\nF50_GIST_END_${tag}=%s\\n' "$rc"
   }
 
   const F50_GIST_MESSAGES = {
+    subscription_settings_invalid:'无法读取自动更新与备用节点设置。',
+    subscription_conversion_failed:'节点内容无法转换，请检查格式。',
+    subscription_empty:'订阅没有可用节点。',
+    subscription_managed_by_gist:'当前配置由 Gist 管理，使用 Gist 自动同步。',
+    subscription_no_local_sources:'没有需要后台下载的本地订阅。',
+    rescue_single_node_required:'备用节点只允许填写一个节点。',
+    rescue_independent_node_required:'备用节点必须包含服务器地址，且不能依赖其他代理。',
+    rescue_node_invalid:'备用节点未通过核心配置检查。',
+    rescue_start_failed:'备用下载核心启动失败。',
+    subscription_download_failed:'订阅下载失败，原节点缓存已保留。',
+    subscription_download_rejected:'订阅服务器拒绝请求，请检查链接与有效期。',
+    subscription_cache_restore_failed:'节点缓存恢复失败，请检查设备存储。',
     manual_source_invalid:'手动订阅链接无效。',
     manual_source_limit:'手动订阅最多保存 100 条。',
     manual_sources_unreadable:'无法读取手动订阅，未更新配置。',

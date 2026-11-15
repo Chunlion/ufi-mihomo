@@ -17,6 +17,8 @@ try:
   data=yaml.safe_load(text)
  expression=args[-2]
  if 'tag == "!!map"' in expression:
+  if expression.startswith('select(') and isinstance(data,dict):
+   print(json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False))
   sys.exit(0 if isinstance(data,dict) else 1)
  if '.secret // ""' in expression:
   print(data.get('secret','')); sys.exit(0)

@@ -443,7 +443,11 @@ func (a *App) deleteSettings(ctx context.Context) (out Outcome, err error) {
 	if e = a.clearRetainedIdentities(); e != nil {
 		return out, e
 	}
-	if e = a.editBoot(false); e != nil {
+	sub, e := a.subscriptionSettings()
+	if e != nil {
+		return out, e
+	}
+	if e = a.editBoot(exists(a.subscriptionSettingsPath()) && sub.Auto); e != nil {
 		return out, e
 	}
 	out.OK = true

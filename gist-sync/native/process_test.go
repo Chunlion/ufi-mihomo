@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 			os.Exit(fakeCore(root))
 		}
 		action := os.Args[1]
-		if action == "worker" || action == "daemon" {
+		if action == "worker" || action == "daemon" || action == "subscription-daemon" || action == "subscription-fetch" {
 			base := filepath.Dir(root)
 			a := &App{Root: root, Dev: base + "/dev", Boot: base + "/public/ufi_tools_boot.sh", Upload: base + "/uploads"}
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -56,7 +56,13 @@ func TestMain(m *testing.M) {
 			}
 			e := a.init()
 			if e == nil {
-				if action == "worker" {
+				if action == "subscription-fetch" {
+					var result SubscriptionResult
+					result, e = a.fetchSubscriptions(ctx, os.Args[2])
+					emit(result)
+				} else if action == "subscription-daemon" {
+					e = a.subscriptionDaemon(ctx)
+				} else if action == "worker" {
 					e = a.worker(ctx, os.Args[2], os.Args[3])
 				} else {
 					e = a.daemon(ctx)
@@ -156,6 +162,12 @@ func fakeCore(root string) int {
 				p[str(n["name"])] = map[string]any{"type": n["type"]}
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"proxies": p})
+		case "/providers/proxies/Provider1":
+			if r.Method == "PUT" {
+				w.WriteHeader(204)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"proxies": []any{map[string]any{"name": "fixture-node"}}})
 		default:
 			w.WriteHeader(404)
 		}

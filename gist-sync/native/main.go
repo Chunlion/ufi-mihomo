@@ -39,7 +39,7 @@ func main() {
 	a := makeApp()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer cancel()
-	readOnly := args[0] == "status" || args[0] == "job" || args[0] == "cancel" || args[0] == "stop-daemon" || args[0] == "stop-jobs"
+	readOnly := args[0] == "status" || args[0] == "subscription-status" || args[0] == "job" || args[0] == "cancel" || args[0] == "stop-daemon" || args[0] == "stop-jobs"
 	a.ReadOnly = readOnly
 	if !exists(a.Root + "/Scripts/Clash.Service") {
 		emit(map[string]any{"ok": false, "code": "base_components_missing"})
@@ -54,6 +54,20 @@ func main() {
 	var result any
 	var err error
 	switch args[0] {
+	case "subscription-status":
+		result, err = a.subscriptionStatus()
+	case "subscription-save", "subscription-fetch":
+		if len(args) != 2 {
+			err = fail("invalid_arguments")
+			break
+		}
+		if args[0] == "subscription-save" {
+			result, err = a.saveSubscriptionSettings(ctx, args[1])
+		} else {
+			result, err = a.fetchSubscriptions(ctx, args[1])
+		}
+	case "subscription-daemon":
+		err = a.subscriptionDaemon(ctx)
 	case "status":
 		result, err = a.status(ctx)
 	case "request-key":
@@ -113,6 +127,9 @@ func main() {
 		err = a.daemon(ctx)
 	case "start-daemon":
 		err = a.startDaemon(ctx)
+		if err == nil {
+			err = a.startSubscriptionDaemon(ctx)
+		}
 	case "stop-jobs":
 		err = a.stopOtherJobs(ctx)
 	case "remove-boot":

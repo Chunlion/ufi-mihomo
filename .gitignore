@@ -5,4 +5,14 @@ node_modules/
 scripts/__pycache__/
 .cache/
 build/
-dist/gist-sync/
+
+# Generated locally: regression reports, device evidence, delivery output.
+reports/
+dist/
+
+# Local tooling and notes.
+.workbuddy/
+.codegraph/
+.playwright-cli/
+debug.log
+.tmp-*

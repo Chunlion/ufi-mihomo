@@ -96,6 +96,33 @@ for (const [saved, types, expected] of [
 // 等价覆盖见 tests/tproxy/reliability.test.js 的 lease / cancel 用例。
 
 const yq = process.env.F50_TEST_YQ;
+for (const action of ['start', 'restart']) {
+  for (const settings of ['subscription', 'gist', 'disabled']) {
+    test(`${action} resumes enabled ${settings} scheduler`, { skip: !yq }, () => {
+      const dir = temp();
+      try {
+        write(dir, 'Scripts/Clash.Service', '#!/bin/sh\necho START_STATE=started_verified_process\n');
+        const helper = write(dir, 'Tools/kano-gist-sync', '#!/bin/sh\n[ "$1" = start-daemon ] || exit 1\necho resumed > "$CLASH_ROOT/resumed"\n');
+        const parser = write(dir, 'Tools/yq_linux_arm64', `#!/bin/sh\nexec ${quote(yq)} "$@"\n`);
+        fs.chmodSync(helper, 0o755); fs.chmodSync(parser, 0o755);
+        write(dir, 'Tools/subscription-settings.json', JSON.stringify({ auto: settings === 'subscription' }));
+        write(dir, 'Tools/gist-sync/settings.conf', JSON.stringify({ auto: settings === 'gist' }));
+        const stub = shellApi(source, 'buildF50OriginalServicePatchScript = () => "true";');
+        const result = shell(stub.maintenance() + `
+f50_ensure_live_secret() { return 0; }
+f50_ensure_live_panel_config() { return 0; }
+f50_disable_unsupported_ipv6_dns_hijack() { return 0; }
+f50_drop_detached_tun_rules() { return 0; }
+f50_verify_zashboard_endpoint() { return 0; }
+f50_start_service ${action} 5
+`, { F50_ROOT: dir.replace(/\\/g, '/') });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(fs.existsSync(path.join(dir, 'resumed')), settings !== 'disabled', result.stdout);
+      } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+}
+
 test('curl selection falls back when a bundled executable cannot run', () => {
   const dir = temp();
   try {

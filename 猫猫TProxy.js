@@ -2289,7 +2289,17 @@ f50_ensure_live_panel_config() {
   chmod 600 "$live_cfg" 2>/dev/null || true
 }
 `; }
-function buildF50StartHelpers() { return `f50_patch_service() {
+function buildF50StartHelpers() { return `f50_resume_schedulers() {
+resume_schedule=0
+for schedule_file in "$F50_ROOT/Tools/gist-sync/settings.conf" "$F50_ROOT/Tools/subscription-settings.json"; do
+  [ -s "$schedule_file" ] || continue
+  if "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$schedule_file" >/dev/null 2>&1; then resume_schedule=1; break; fi
+done
+if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ "$resume_schedule" = 1 ]; then
+  CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_WARNING=scheduler_resume_failed
+fi
+}
+f50_patch_service() {
   ${buildF50OriginalServicePatchScript('"$1"')}
 }
 f50_start_service() {
@@ -2342,6 +2352,7 @@ f50_start_service() {
     [ "$F50_START_CODE" != service_finalize_failed ] || { echo F50_HEALTH_API=unverified; echo F50_HEALTH_PANEL_RELOAD=failed; echo F50_SERVICE_FINALIZED=0; }
     ;; esac
   if [ "$F50_START_OK" = 1 ]; then
+    f50_resume_schedulers
     echo F50_SERVICE_FINALIZED=1
     panel_check_output=$(f50_verify_zashboard_endpoint 2>&1); panel_check_rc=$?
     if [ "$panel_check_rc" = 0 ]; then
@@ -2705,14 +2716,7 @@ else
   f50_install_fail "$F50_START_CODE" "$F50_START_DETAIL"
   exit 1
 fi
-resume_schedule=0
-for schedule_file in "$F50_ROOT/Tools/gist-sync/settings.conf" "$F50_ROOT/Tools/subscription-settings.json"; do
-  [ -s "$schedule_file" ] || continue
-  if "$F50_ROOT/Tools/yq_linux_arm64" e -p=json -e '.auto == true' "$schedule_file" >/dev/null 2>&1; then resume_schedule=1; break; fi
-done
-if [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && [ "$resume_schedule" = 1 ]; then
-  CLASH_ROOT="$F50_ROOT" f50_limit 8 "$F50_ROOT/Tools/kano-gist-sync" start-daemon >/dev/null 2>&1 || echo F50_INSTALL_WARNING=gist_scheduler_resume_failed
-fi
+[ "$status" = installed_running ] || f50_resume_schedulers
 # Component completion is independent of recovery-marker and lock cleanup.
 SUCCESS=1
 # Do not retain age identities in ordinary component rollback folders.

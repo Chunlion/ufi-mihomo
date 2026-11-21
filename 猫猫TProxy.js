@@ -4628,7 +4628,35 @@ exit "$kano_task_rc"`;
     editableLocalFiles().find((fileInfo) => fileInfo.path == path) || null;
 
 
-  const removeBootLinesCmd = ({ enable = false, removeGist = false } = {}) => `
+  const gistBootBlockCmd = (snapshot = '') => `awk -v saved=${shellQuote(snapshot)} '
+    function insert( line, rc) {
+      while ((rc = (getline line < saved)) > 0) print line
+      close(saved)
+      if (rc < 0) exit 1
+    }
+    { key=$0; sub(/\\r$/, "", key) }
+    saved != "" && NR == 1 {
+      if (key ~ /^#!/) { print; insert(); next }
+      insert()
+    }
+    key == "# KANO_GIST_SYNC_BEGIN" {
+      if (seen++) { bad=1; exit 1 }
+      inside=1
+      if (saved != "") next
+    }
+    saved == "" && inside { print }
+    key == "# KANO_GIST_SYNC_END" {
+      if (!inside) { bad=1; exit 1 }
+      inside=0
+      next
+    }
+    saved != "" && !inside { print }
+    END {
+      if (inside || bad) exit 1
+      if (saved != "" && NR == 0) insert()
+    }' "$BOOT_SOURCE"`;
+
+  const removeBootLinesCmd = ({ enable = false, removeGist = false, restoreGistFrom = '' } = {}) => `
         (
           set -e
           BOOT_LOCK=/dev/kano_boot_write.lock
@@ -4659,8 +4687,9 @@ exit "$kano_task_rc"`;
           trap 'rm -f "$BOOT_TMP" "$BOOT_LOCK/pid"; rmdir "$BOOT_LOCK"' EXIT
           trap 'exit 1' HUP INT TERM
           BOOT_SOURCE=${shellQuote(BOOT_FILE)}
-          [ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
-          awk \
+          ${restoreGistFrom ? '[ ! -L "$BOOT_SOURCE" ] || exit 1\n          ' : ''}[ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
+          ${restoreGistFrom ? `${gistBootBlockCmd(restoreGistFrom)} > "$BOOT_TMP" || exit 1
+          if cmp -s "$BOOT_SOURCE" "$BOOT_TMP"; then exit 0; fi` : `awk \
             -v remove_gist=${removeGist ? 1 : 0} \
             -v async=${shellQuote(BOOT_ASYNC_LINE)} \
             -v cleanup=${shellQuote(BOOT_CLEANUP_LINE)} \
@@ -4678,7 +4707,7 @@ exit "$kano_task_rc"`;
                if(remove_gist && gist) next;
                if(line != "/data/clash/Scripts/Clash.Service start" && line != async && line != cleanup && line != runtime && line != service && line != legacy_wrapper && line != legacy_inotify && line != inotify && line != legacy_policy && line != policy && line != mac) print }
              END { if(remove_gist && gist) exit 1 }' \
-            "$BOOT_SOURCE" > "$BOOT_TMP" || exit 1
+           "$BOOT_SOURCE" > "$BOOT_TMP" || exit 1`}
           ${enable ? `printf '%s\\n' ${shellQuote(BOOT_ASYNC_LINE)} >> "$BOOT_TMP" || exit 1` : ''}
           sh -n "$BOOT_TMP" || exit 1
           mv "$BOOT_TMP" ${shellQuote(BOOT_FILE)} || exit 1
@@ -11106,8 +11135,8 @@ EOF_F50_RESTORE_MEMBERS
     };
 
 
-    const clearSubSourceFile = async () => {
-      const saved = await persistSubSourceState(
+    const clearSubSourceFile = async ({ alreadySaved = false } = {}) => {
+      const saved = alreadySaved || await persistSubSourceState(
         [],
         await readCurrentSubRuleMode(),
         await readSavedSubConvertMode(),
@@ -11117,7 +11146,7 @@ EOF_F50_RESTORE_MEMBERS
         await runShellWithRoot(`
           rm -f ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} 2>/dev/null || true
           `);
-        createToast('订阅源已清空；当前运行配置未改动', 'green');
+        createToast('订阅源已清空，现有节点和规则已保留', 'green');
         await refreshRuleModeStatus();
       } else {
         createToast('清空订阅源失败；订阅源未改动', 'red');
@@ -11745,19 +11774,21 @@ EOF_F50_RESTORE_MEMBERS
     const gist = await f50GistManaged();
     if (gist) return await f50GistUpdateSources(gist, storedSources);
   }
-  if (!storedSources.length && !subscriptionOptions) { operationFinish(false, '请输入有效的订阅链接'); return false; }
+  const pauseHttpProviders = configSource === 'template.yaml' && !cleanSources.length;
+  if (!storedSources.length && !subscriptionOptions && !pauseHttpProviders) { operationFinish(false, '请输入有效的订阅链接'); return false; }
   const legacyMigration = configSource === 'subscription_original' || await readCurrentSubRuleMode() === 'original';
   if (legacyMigration && (!migrateLegacy || !cleanSources.length)) {
     createToast('旧订阅原配置已保留；请启用订阅并确认迁移到本地模板', 'yellow', 8000);
     return false;
   }
   const settingsOnly = (!applyToCustom && configSource === 'uploaded_config') || !cleanSources.length;
-  if (settingsOnly && !subscriptionOptions) {
+  if (settingsOnly && !subscriptionOptions && !pauseHttpProviders) {
     const saved = await persistSubSourceState(storedSources, cleanMode, cleanConvertMode);
     operationFinish(saved, saved ? '订阅设置已保存；当前运行配置未更改' : '订阅设置保存失败');
     return saved;
   }
   const tx = `/data/kano_subscription_save_${Date.now()}_${createRandomString(6)}`;
+  const bootSnapshot = tx + '/gist-boot';
   const paths = [CLASH_CONFIG, CLASH_SUB_URLS, CLASH_SUB_RULE_MODE_FILE, CLASH_POLICY_OPTIONS_FILE,
     CLASH_CONFIG_SOURCE_FILE, CLASH_TEMPLATE, CLASH_TEMPLATE_BASE, CLASH_RULE_OVERRIDE_APPLIED_JSON,
     ...(subscriptionOptions ? [CLASH_DIR + '/Tools/subscription-settings.json'] : []),
@@ -11768,29 +11799,53 @@ TX=${shellQuote(tx)}
 mkdir -p "$TX"
 ${fileSnapshotHelpersCmd()}
 ${paths.map((path, i) => `snapshot_transaction_file ${i} ${shellQuote(path)}`).join('\n')}
+${subscriptionOptions ? `BOOT_SOURCE=${shellQuote(BOOT_FILE)}
+[ ! -L "$BOOT_SOURCE" ] || exit 1
+[ -f "$BOOT_SOURCE" ] || BOOT_SOURCE=/dev/null
+${gistBootBlockCmd()} > "$TX/gist-boot"` : ''}
 echo SUBSCRIPTION_TRANSACTION_READY`, 20000);
   if (!snapshot.success || !String(snapshot.content || '').includes('SUBSCRIPTION_TRANSACTION_READY')) {
     operationFinish(false, '无法创建 config.yaml 回滚点；订阅未更改');
     return false;
   }
-  let runtimeAttempted = false, wasRunning = false, restored = false, committed = false, scheduleRestoreFailed = false;
+  let runtimeAttempted = false, wasRunning = false, restored = false, committed = false;
+  let subscriptionOptionsAttempted = false, bootRestoreFailed = false, scheduleRestoreFailed = false;
   try {
     wasRunning = !!(await getCorePid());
     if (subscriptionOptions) {
       const staged = await stageTextBesideTarget(tx + '/options.json', JSON.stringify(subscriptionOptions), 'subscription options');
       if (!staged.ok) throw Error('订阅设置暂存失败');
       try {
+        subscriptionOptionsAttempted = true;
         const saved = await f50GistExec(['subscription-save', staged.stagePath], 90000, '', runShellWithRoot);
         if (!saved.ok) throw Error(f50GistMessage(saved.code));
         subscriptionPreferences = saved;
         if (saved.rescueConfigured) cleanConvertMode = SUB_CONVERT_MODE_LOCAL;
       } finally { await runShellWithRoot('rm -f ' + shellQuote(staged.stagePath), 5000); }
     }
-    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode, { allowEmpty: !!subscriptionOptions }))) throw new Error('订阅设置保存失败');
+    if (!(await persistSubSourceState(storedSources, cleanMode, cleanConvertMode, { allowEmpty: !!subscriptionOptions || pauseHttpProviders }))) throw new Error('订阅设置保存失败');
     if (settingsOnly) {
+      if (pauseHttpProviders) {
+        const config = await readYamlObject(CLASH_CONFIG, 'config.yaml');
+        if (!config.ok) throw Error(config.message || '无法读取运行配置');
+        const providers = Object.entries(config.value['proxy-providers'] || {})
+          .filter(([name, provider]) => isManagedProviderEntry(name, provider) && provider.type === 'http' && provider.interval !== 0);
+        if (providers.length) {
+          for (const [, provider] of providers) provider.interval = 0;
+          const written = await kprBaseWriteYamlObjectAtomic(CLASH_CONFIG, config.value, { label: 'config.yaml', backup: false });
+          if (!written.ok) throw Error(written.content || '暂停 HTTP Provider 定时刷新失败');
+          if (wasRunning) {
+            // Mihomo can leave the old provider timer running after a hot reload.
+            operationStage('重启核心以暂停定时刷新');
+            runtimeAttempted = true;
+            if (!(await restartClashOk({ skipCheck: true }))) throw Error('暂停 HTTP Provider 定时刷新后启动失败');
+          }
+        }
+      }
       committed = true;
-      operationFinish(true, '订阅设置已保存；当前运行配置未更改');
-      createToast('订阅设置已保存', 'green');
+      const message = pauseHttpProviders ? '订阅设置已保存；定时刷新已暂停，现有节点和规则已保留' : '订阅设置已保存；当前运行配置未更改';
+      operationFinish(true, message);
+      createToast(message, 'green');
       return true;
     }
     operationStage('根据本地模板生成配置', 1, 5);
@@ -11855,7 +11910,12 @@ ${paths.map((path, i) => ({ path, i })).reverse().map(({ path, i }) => `restore_
 echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     restored = !!rollback.success && String(rollback.content || '').includes('SUBSCRIPTION_TRANSACTION_RESTORED');
     invalidateStatusSnapshot();
-    if (restored && subscriptionOptions) {
+    if (restored && subscriptionOptionsAttempted) {
+      bootRestoreFailed = true;
+      try {
+        const boot = await runShellWithRoot(removeBootLinesCmd({ restoreGistFrom: bootSnapshot }), 10000);
+        bootRestoreFailed = !boot.success;
+      } catch (_) {}
       try {
         await loadSubscriptionPreferences();
         const resumed = await f50GistExec(['start-daemon'], 10000, '', runShellWithRoot);
@@ -11865,16 +11925,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     if (restored && runtimeAttempted && wasRunning) restored = await restartClashOk({ skipCheck: true });
     } catch (_) { restored = false; }
     if (!restored) await networkRescue({ showOutput: false });
-    const message = firstFailure + (scheduleRestoreFailed ? '；自动更新调度未恢复，请重新保存订阅设置' : '');
-    operationFinish(false, message + (restored ? '；已恢复更新前状态' : '；恢复失败'));
+    const message = firstFailure + (bootRestoreFailed ? '；开机调度未恢复，备份保留于 ' + tx : '')
+      + (scheduleRestoreFailed ? '；当前自动更新调度未恢复，请重新保存订阅设置' : '');
+    operationFinish(false, message + (restored ? '；已恢复原订阅与配置' : '；恢复失败'));
     createToast(safeTextToHtml(message) + '<br>' + (restored ? '已恢复原订阅与配置' : '回滚失败，备份保留于 ' + escapeHtml(tx)), 'red', 12000);
     return false;
   } finally {
     if (legacyMigration) {
-      if (committed || restored) await runShellWithRoot('touch ' + shellQuote(tx + '/committed'), 10000);
+      if (committed || (restored && !bootRestoreFailed)) await runShellWithRoot('touch ' + shellQuote(tx + '/committed'), 10000);
       createToast('迁移备份保留于 ' + escapeHtml(tx), 'yellow', 12000);
     }
-    if (!legacyMigration && (committed || restored) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
+    if (!legacyMigration && (committed || (restored && !bootRestoreFailed)) && !(activeCriticalOperation && activeCriticalOperation.token.cancelled)) {
       try { await runShellWithRoot('rm -rf ' + shellQuote(tx), 10000); } catch (_) {}
     }
   }
@@ -12537,7 +12598,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
         try {
           createToast('正在处理订阅…', 'yellow');
-          if (!hasSubscriptionUrl && !gist && (!optionsEl || optionsEl.disabled)) {
+          if (!hasSubscriptionUrl && !gist && (!optionsEl || optionsEl.disabled)
+            && (configSource !== 'template.yaml' || currentRuleMode === 'original')) {
             const success = await clearSubSourceFile();
             if (success) close();
             return;
@@ -12560,7 +12622,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
           if (success) {
             // Invalid options must not clear the saved sources or legacy files.
-            if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile())) return;
+            if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile({ alreadySaved: true }))) return;
             close();
           }
         } catch (e) {

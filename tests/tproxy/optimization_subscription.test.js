@@ -464,7 +464,7 @@ for (const status of [200, 390, 500, 'timeout']) {
   });
 }
 
-function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local', gistManaged = false, subscriptionOptions = null, resumeFailure = false } = {}) {
+function saveCase({ failAt = '', running = true, fresh = false, fallback = false, disabled = false, custom = false, legacy = false, migrateLegacy = false, ruleMode = 'template', convertMode = 'local', gistManaged = false, subscriptionOptions = null, resumeFailure = false, httpProviders = null, bootBefore, bootDuring } = {}) {
   const dir = temp();
   const constants = { CLASH_DIR: dir, CLASH_PROXY_DIR: path.join(dir, 'Proxy'), CLASH_POLICY_DIR: path.join(dir, 'Policy') };
   for (const [key, file] of Object.entries({ CLASH_CONFIG: 'Proxy/config.yaml', CLASH_SUB_URLS: 'Proxy/subscription_urls.txt',
@@ -476,6 +476,9 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
   for (const s of sources) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'old cache:' + s.name);
   const preferencesFile = path.join(dir, 'Tools/subscription-settings.json');
   if (subscriptionOptions) write(dir, 'Tools/subscription-settings.json', JSON.stringify({ auto: true, intervalHours: 24 }));
+  const boot = path.join(dir, 'ufi_tools_boot.sh');
+  if (bootBefore !== undefined) fs.writeFileSync(boot, bootBefore);
+  if (httpProviders) fs.writeFileSync(constants.CLASH_CONFIG, JSON.stringify({ 'proxy-providers': httpProviders, rules: ['MATCH,DIRECT'] }));
   if (legacy) {
     fs.writeFileSync(constants.CLASH_CONFIG_SOURCE_FILE, 'KANO_CONFIG_SOURCE=subscription_original\n');
     fs.writeFileSync(constants.CLASH_SUB_URLS, '# KANO_SUB_RULE_MODE=original\nhttps://one.example/sub Provider1\n');
@@ -494,13 +497,14 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
   let networkRescues = 0;
   const stored = (ruleMode === 'original' ? sources.slice(0, 1) : sources).map(s => ({ ...s, enabled: !disabled }));
   const extra = slice('function validateSubscriptionMode', 'function buildF50CleanupScript')
+    + slice('const gistBootBlockCmd =', '// 策略脚本')
     + slice('const fileSnapshotHelpersCmd', 'const readSavedSubSourcesForTemplate')
     + slice('const switchHttpProviderToLocal', 'const readLegacySubscriptionSources')
     + slice('const saveSubSources = async', 'const overwriteConfigByTemplate')
     + slice('const overwriteConfigByTemplate = async', 'const readEditableLocalFile = async')
     + '({saveSubSources,switchHttpProviderToLocal,overwriteConfigByTemplate})';
   const api = subscriptionApi(extra, {
-    ...constants, activeCriticalOperation: null, createRandomString: () => 'fixture',
+    ...constants, BOOT_FILE: boot, activeCriticalOperation: null, createRandomString: () => 'fixture',
     validateLocalSubscriptionUrl: () => ({ ok: true }),
     readCurrentSubSources: async () => stored, readConfigSource: async () => legacy ? 'subscription_original' : custom ? 'uploaded_config' : 'template.yaml',
     readCurrentSubRuleMode: async () => legacy ? 'original' : 'template',
@@ -509,11 +513,14 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
     f50GistManaged: async () => gistManaged ? { settings: { revision: 1 } } : null,
     f50GistUpdateSources: async () => { gistUpdates++; return true; },
     runShellWithRoot: async script => {
-      const mapped = script.replaceAll('/data/', dir.replace(/\\/g, '/') + '/');
+      const mapped = script.replaceAll('/data/', dir.replace(/\\/g, '/') + '/')
+        .replaceAll('/dev/kano_boot_write.lock', path.join(dir, 'boot-write.lock'));
       const r = shell(mapped);
       return { success: r.status === 0, content: r.stdout + r.stderr };
     },
     getCorePid: async () => running ? '123' : '',
+    readYamlObject: async file => ({ ok: true, value: httpProviders ? JSON.parse(fs.readFileSync(file, 'utf8')) : {} }),
+    kprBaseWriteYamlObjectAtomic: async (file, value) => { configWrites++; fs.writeFileSync(file, JSON.stringify(value)); return { ok: true }; },
     convertSubscriptionsLocally: async () => {
       if (failAt === 'download') return result(true);
       for (const s of stored.filter(s => s.enabled)) write(dir, 'Proxy/proxies/' + s.name + '.yaml', 'new cache');
@@ -532,7 +539,7 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
       return true;
     },
     f50Command: async command => { commands.push(command); return { success: failAt !== 'prepare' }; }, f50Error: String,
-    restartClashOk: async () => { restarts++; return failAt !== 'start' || restarts > 1; },
+    restartClashOk: async () => { restarts++; return !['start', 'pause-restart'].includes(failAt) || restarts > 1; },
     reloadLocalSubscriptionProviders: async () => result(failAt === 'reload'),
     forceUpdateProvidersFromConfig: async () => failAt === 'pending'
       ? { failed: 1, providers: [{ name: 'Provider1', ok: false, errorType: 'update_pending' }] }
@@ -551,15 +558,53 @@ function saveCase({ failAt = '', running = true, fresh = false, fallback = false
         const request = JSON.parse(fs.readFileSync(args[1], 'utf8'));
         const settings = { auto: request.auto, intervalHours: request.intervalHours, rescueConfigured: !!request.rescueText };
         fs.writeFileSync(preferencesFile, JSON.stringify(settings));
+        if (bootDuring !== undefined) fs.writeFileSync(boot, bootDuring);
         return { ok: true, configured: true, ...settings };
       }
       return { ok: true, configured: true, ...JSON.parse(fs.readFileSync(preferencesFile, 'utf8')) };
     },
   });
-  return { dir, constants, before, absent, stored, api, commands, restarts: () => restarts, configWrites: () => configWrites, gistUpdates: () => gistUpdates,
+  return { dir, constants, before, absent, stored, api, commands, boot, restarts: () => restarts, configWrites: () => configWrites, gistUpdates: () => gistUpdates,
     apply: () => api.overwriteConfigByTemplate(),
     preferencesFile, scheduleResumes: () => scheduleResumes, networkRescues: () => networkRescues,
     execute: () => fallback ? api.switchHttpProviderToLocal(stored, ruleMode) : api.saveSubSources(stored, ruleMode, convertMode, { migrateLegacy, subscriptionOptions }) };
+}
+
+const fixtureBootHook = '# KANO_GIST_SYNC_BEGIN\necho fixture-scheduler\n# KANO_GIST_SYNC_END\n';
+for (const previouslyEnabled of [false, true]) {
+  test('failed subscription save restores the previous boot hook / ' + previouslyEnabled, async () => {
+    const header = '#!/bin/sh\n', previous = 'echo original\n', unrelated = 'echo added\n';
+    const c = saveCase({ failAt: 'write', subscriptionOptions: { auto: !previouslyEnabled, intervalHours: 6 },
+      bootBefore: header + (previouslyEnabled ? fixtureBootHook : '') + previous,
+      bootDuring: header + (previouslyEnabled ? '' : fixtureBootHook) + previous + unrelated });
+    try {
+      assert.equal(await c.execute(), false);
+      assert.equal(fs.readFileSync(c.boot, 'utf8'), header + (previouslyEnabled ? fixtureBootHook : '') + previous + unrelated);
+      assert.equal(c.scheduleResumes(), 1);
+    } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const { running, clear, failAt } of [{ running: true }, { running: false }, { running: true, clear: true },
+  { running: true, failAt: 'pause-restart' }]) {
+  test('all managed HTTP subscriptions pause without rewriting caches / ' + JSON.stringify({ running, clear, failAt }), async () => {
+    const providers = {
+      Provider1: { type: 'http', url: sources[0].url, path: './proxies/Provider1.yaml', interval: 3600 },
+      Manual: { type: 'http', url: 'https://manual.example/sub', path: './proxies/Manual.yaml', interval: 7200 },
+    };
+    const c = saveCase({ disabled: true, running, failAt, httpProviders: providers, convertMode: 'provider' });
+    if (clear) c.stored.length = 0;
+    try {
+      assert.equal(await c.execute(), !failAt);
+      const config = JSON.parse(fs.readFileSync(c.constants.CLASH_CONFIG, 'utf8'));
+      assert.deepEqual(config, { 'proxy-providers': { ...providers, Provider1: { ...providers.Provider1, interval: failAt ? 3600 : 0 } },
+        rules: ['MATCH,DIRECT'] });
+      assert.equal(fs.readFileSync(path.join(c.dir, 'Proxy/proxies/Provider1.yaml'), 'utf8'), 'old cache:Provider1');
+      assert.equal(c.restarts(), failAt ? 2 : running ? 1 : 0);
+      assert.equal(c.networkRescues(), failAt ? 1 : 0);
+      if (failAt) assert.equal(fs.readFileSync(c.constants.CLASH_SUB_URLS, 'utf8'), c.before[c.constants.CLASH_SUB_URLS]);
+    } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }
+  });
 }
 
 test('a scheduler restore failure does not stop the restored proxy configuration', async () => {

@@ -234,6 +234,13 @@ test('existing duplicate use references retain their order and multiplicity', ()
   assert.deepEqual(plain(result['proxy-groups'][0].use), raw['proxy-groups'][0].use);
 });
 
+test('multiple missing provider references add each fallback once', () => {
+  const raw = { ...base(), 'proxy-groups': [{ name: 'Choose', type: 'select',
+    use: ['Missing1', 'Provider1', 'Missing2'], proxies: ['DIRECT'] }] };
+  const { config } = api.normalize(raw, sources, { emptyProviderUrls: false });
+  assert.deepEqual(plain(config['proxy-groups'][0].use), ['Provider1', 'Provider2']);
+});
+
 for (const local of [false, true]) {
   test(`a duplicate-URL alias colliding with a renumbered managed source keeps its definition and references / local=${local}`, () => {
     const raw = { ...base(), 'proxy-providers': {

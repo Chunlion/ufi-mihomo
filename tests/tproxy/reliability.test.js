@@ -153,14 +153,34 @@ test('expired frontend reclaims only finished or provably dead receipts', () => 
       write(lock, 'owner', 'mm_stale\n');
       write(lock, 'frontend', 'mm_stale 1\n');
       write(dir, 'tasks/mm_stale.1', body);
+      write(dir, 'tasks/mm_stale.1.output', 'task output\n');
+      write(dir, 'tasks/mm_stale.1.receipt', 'partial receipt\n');
       const result = shell(api.lease() + '\nf50_lease_acquire mm_fixture browser\n', {
         F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: path.join(dir, 'recovery'), F50_TASK_DIR: path.join(dir, 'tasks'),
       });
       assert.equal(result.status, acquired ? 0 : 1, label + ': ' + result.stdout + result.stderr);
       assert.equal(fs.existsSync(receipt), !acquired, label + ': receipt retention');
+      assert.equal(fs.existsSync(receipt + '.output'), !acquired, label + ': output retention');
+      assert.equal(fs.existsSync(receipt + '.receipt'), !acquired, label + ': temporary receipt retention');
       assert.equal(fs.readFileSync(path.join(lock, 'owner'), 'utf8'), acquired ? 'mm_fixture\n' : 'mm_stale\n', label + ': owner');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
+});
+
+test('lease release removes sidecars of a completed task', () => {
+  const dir = temp(), lock = path.join(dir, 'lease'), tasks = path.join(dir, 'tasks');
+  try {
+    write(lock, 'owner', 'mm_fixture\n');
+    write(tasks, 'mm_fixture.1', 'F50_TASK_V2 mm_fixture mm_fixture.1 2147483647 1 2147483647 1 finished 0\n');
+    write(tasks, 'mm_fixture.1.output', 'output');
+    write(tasks, 'mm_fixture.1.receipt', 'temporary receipt');
+    const result = shell(api.lease() + '\nf50_lease_release mm_fixture\n', {
+      F50_OPERATION_LOCK: lock, F50_RECOVERY_LOCK: path.join(dir, 'recovery'), F50_TASK_DIR: tasks,
+    });
+    assert.match(result.stdout, /F50_LEASE_RELEASED=1/);
+    assert.equal(fs.existsSync(lock), false);
+    assert.equal(fs.existsSync(tasks), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('API curl keeps sensitive values off argv and preserves request bytes', async () => {
@@ -309,7 +329,8 @@ for (const name of ['../escape', '..', '/absolute', 'dir/../escape', 'dir\\escap
       const restore = run(slice('const restoreConfigPackageFromFile =', 'const packageUploadEl =') + 'restoreConfigPackageFromFile', {
         createRandomString: () => 'fixture', configPackageBackupFiles: () => [{ label: 'config.yaml', path: path.join(dir, 'config.yaml') }],
         askConfirm: async () => true, textToHtml: String, safeTextToHtml: String, createToast() {},
-        buildControllerInfo: async () => ({}), createConfigRollbackPoint: async () => '', uploadFileToDevice: async () => path.join(dir, 'upload.zip'),
+        getCorePid: async () => '', buildControllerInfo: async () => ({}),
+        createConfigRollbackPoint: async () => '', uploadFileToDevice: async () => path.join(dir, 'upload.zip'),
         shellQuote: productionQuote, CLASH_DIR: path.join(dir, 'clash'), CLASH_PROXY_DIR: path.join(dir, 'clash/Proxy'), CLASH_CONFIG: path.join(dir, 'config.yaml'),
         F50_DEFAULT_SECRET: '123456', prepareYqRuntimeCmd: () => '', yqExecutableCheckCmd: () => '', pruneKanoBackupsCmd: () => '',
         runShellWithRoot: async value => { script = value; return { success: false, content: 'captured' }; },
@@ -398,7 +419,7 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
     assert.equal(patch.status, 0, patch.stdout + patch.stderr);
     const migrated = fs.readFileSync(file, 'utf8');
     assert.equal((migrated.match(/^# KANO_ORIGINAL_CONFIG_PRESERVATION=/gm) || []).length, 1);
-    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=24$/m);
+    assert.match(migrated, /^# KANO_ORIGINAL_CONFIG_PRESERVATION=25$/m);
     assert.notEqual(migrated, legacy);
     write(dir, 'Tools/config_source.conf', 'KANO_CONFIG_SOURCE=uploaded_config\n');
     fs.symlinkSync(process.env.F50_TEST_YQ, path.join(dir, 'Tools/yq_linux_arm64'));
@@ -406,7 +427,7 @@ test('Service version 20 migrates before restoring the selected Gist TUN stack',
     const runtime = write(dir, 'runtime.yaml', 'tun: {enable: true, stack: mixed}\n');
     const core = write(dir, 'Proxy/Clash.Core', '#!/bin/sh\nexit 0\n');
     fs.chmodSync(core, 0o755);
-    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=24', '\nF50_OPERATION_LOCK=', migrated);
+    const helpers = slice('# KANO_ORIGINAL_CONFIG_PRESERVATION=25', '\nF50_OPERATION_LOCK=', migrated);
     const restored = shell(helpers + `\nf50_save_original_config start || exit 1
 cp ${quote(runtime)} "$CLASH_ROOT/Proxy/config.yaml" || exit 1
 f50_restore_original_config || exit 1

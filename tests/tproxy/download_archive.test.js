@@ -12,7 +12,7 @@ const end = source.indexOf('  const setButtonBusy =', start);
 
 function downloader(responses, logs = []) {
   // Keep fixture mirrors independent of the live distribution URL.
-  const mirrors = ['https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://raw.githubusercontent.com/Chunlion/ufi-mihomo/main/tproxy-yq.zip'];
+  const mirrors = ['https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip','https://gitcode.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip','https://github.com/Chunlion/ufi-mihomo/releases/latest/download/tproxy-yq.zip'];
   let index = 0;
   const fixtureConstants = constants.replace(/= [^;]*;/g, () => "= " + JSON.stringify(mirrors[index++]) + ";");
   const calls = [], reads = [], op = { token: { id: 'fixture' } };
@@ -64,7 +64,7 @@ for (const content of ['Load failed', 'ARCHIVE_VERIFY_FAILED=zip']) {
     const result = await download();
     assert.equal(result.ok, true);
     assert.match(calls[0], /https:\/\/gitcode\.com\//);
-    assert.equal(result.source, 'https://gitee.com/Cuty/tp-yq/releases/download/v1/tproxy-yq.zip');
+    assert.equal(result.source, 'https://gitee.com/womye/123/releases/download/v1/tproxy-yq.zip');
     assert.equal(calls.length, 2);
   });
 }
@@ -78,7 +78,7 @@ test('GitCode and Gitee failures fall back to GitHub', async () => {
   const result = await download();
   assert.equal(result.ok, true);
   assert.match(calls[1], /https:\/\/gitee\.com\//);
-  assert.match(result.source, /^https:\/\/raw\.githubusercontent\.com\/Chunlion\/ufi-mihomo\/main\//);
+  assert.equal(result.source, 'https://github.com/Chunlion/ufi-mihomo/releases/latest/download/tproxy-yq.zip');
   assert.equal(calls.length, 3);
 });
 
@@ -204,11 +204,34 @@ function installers(overrides = {}, realEntry = false) {
   return { api, input, calls, prior, storage };
 }
 
+test('cached component bundle accepts a nested compact manifest', async () => {
+  const { execFileSync } = require('node:child_process');
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'f50-cache-'));
+  const zip = path.join(dir, 'package.zip');
+  try {
+    execFileSync('python3', ['-c', `import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    archive.writestr('release bundle/Tools/components.json', '{"plugin":"fixture","controller":"fixture"}')
+    archive.writestr('release bundle/Tools/mihomo.version', 'fixture-core')`, zip]);
+    let prompt;
+    const offer = vm.runInNewContext(source.slice(source.indexOf('async function offerCachedArchive()'),
+      source.indexOf('async function installF50PackageFromNetwork()')) + '\nofferCachedArchive', {
+      DOWNLOAD_ZIP: zip, F50_COMPAT_VERSION: 'fixture', shellQuote: JSON.stringify,
+      window: { confirm: message => { prompt = message; return true; } },
+      runShellWithRoot: async script => ({ content: execFileSync('sh', ['-c', script], { encoding: 'utf8' }) }),
+    });
+    assert.equal(await offer(), true);
+    assert.match(prompt, /fixture-core/);
+    assert.equal(fs.existsSync(zip), true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('online package failure replaces the previous installation diagnostic', async () => {
-  const { api, prior } = installers({ downloadCoreArchive: async () => ({ ok: false, content: 'F50_OPERATION_BUSY' }) });
+  const { api, prior, storage } = installers({ downloadCoreArchive: async () => ({ ok: false, stage: 'download', content: 'ARCHIVE_DOWNLOAD_FAILED=22' }) });
   assert.equal(await api.network(), false);
   assert.notEqual(api.diagnostic(), prior);
-  assert.equal(api.diagnostic().details, 'F50_OPERATION_BUSY');
+  assert.equal(api.diagnostic().details, 'ARCHIVE_DOWNLOAD_FAILED=22');
+  assert.equal(storage.has('kano_f50_operation_inflight'), false);
 });
 
 for (const entry of ['online', 'upload']) for (const idle of [false, true]) {

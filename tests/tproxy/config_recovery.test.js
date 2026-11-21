@@ -60,7 +60,7 @@ function fixture(t) {
       const configPath = write(dir, 'Proxy/config.yaml', typeof original === 'string' ? original : JSON.stringify(original));
       const sourceText = `KANO_CONFIG_SOURCE=${sourceType}\n`;
       write(dir, 'Tools/config_source.conf', sourceText);
-      write(dir, 'Proxy/subscription_urls.txt', `# KANO_SUB_CONVERT_MODE=${convertMode}\n`);
+      write(dir, 'Proxy/subscription_urls.txt', convertMode ? `# KANO_SUB_CONVERT_MODE=${convertMode}\n` : '');
       write(dir, 'runtime.json', JSON.stringify(runtime));
       const result = shell(helpers + `\nf50_save_original_config ${quote(action)} || exit 1\n${beforeController}
 cp "$CLASH_ROOT/runtime.json" "$CLASH_ROOT/Proxy/config.yaml" || exit 1
@@ -100,6 +100,14 @@ const controllerConfig = plain(api.runtime({
   'proxy-groups': [{ name: 'Generated', type: 'select', proxies: ['DIRECT'] }],
   'rule-providers': {}, rules: ['MATCH,Generated'],
 }, { traffic_mode: 'tproxy', ipv6: 'off' }));
+
+test('legacy template preserves HTTP providers without a conversion marker', { skip: !yq }, t => {
+  const f = fixture(t), original = userConfig();
+  const providers = { Provider1: { type: 'http', url: 'https://example.test/sub', path: './proxies/Provider1.yaml' } };
+  const restore = input => f.restore(input, controllerConfig, 'template.yaml', { convertMode: '' });
+  assert.deepEqual(restore({ ...original, 'proxy-providers': providers })['proxy-providers'], providers);
+  assert.deepEqual(restore({ ...original, 'proxy-providers': {} })['proxy-providers'], controllerConfig['proxy-providers']);
+});
 
 for (const sourceType of ['template.yaml', 'uploaded_config', 'subscription_original']) {
   test(`Service preserves complete unmanaged nested values / ${sourceType}`, { skip: !yq }, t => {

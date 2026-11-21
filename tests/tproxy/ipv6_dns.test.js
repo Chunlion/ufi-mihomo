@@ -19,13 +19,13 @@ function fixture({ mode = 'tproxy', capability = 'missing', backendRc = 0, resto
   const options = `traffic_mode=${mode}\nipv6=on\ndns_hijack=on\ndns_port=1053\nprivate_route_enabled=${privateRoute ? 'on' : 'off'}\nprivate_route_cidrs=192.168.11.0/24 fd00::/64\n`;
   fs.writeFileSync(path.join(dir, 'Policy/options.conf'), pending ? options.replace('dns_hijack=on', 'dns_hijack=off') : options);
   if (pending) fs.writeFileSync(path.join(dir, 'Policy/options.conf.ipv6_dns'), options);
-  fs.writeFileSync(path.join(dir, 'Policy/device_bypass.txt'), '192.168.0.248\n192.168.1.0/24\n00:11:22:33:44:55\nfd00::1\n');
+  fs.writeFileSync(path.join(dir, 'Policy/device_bypass.txt'), '192.168.0.248\r\n192.168.1.0/24\r\n00:11:22:33:44:55\r\nfd00::1\r\n');
   function executable(name, code) { const file = path.join(bin, name); fs.writeFileSync(file, '#!/bin/sh\n' + code); fs.chmodSync(file, 0o755); }
   executable('ip6tables', capability === 'available' ? 'exit 0\n' : `echo '${capability === 'missing' ? 'Table does not exist' : 'xtables lock is busy'}' >&2\nexit 3\n`);
   executable('backend', `grep '^dns_hijack=' "$CLASH_ROOT/Policy/options.conf" > "$CLASH_ROOT/observed"\nexit ${backendRc}\n`);
   executable('iptables', `case "$*" in
     '-w 5 -t mangle -S PREROUTING') echo '-A PREROUTING -i br0 -j KANO_F50_PRE';;
-    '-w 5 -t nat -S') echo '-A PREROUTING -i br0 -p udp --dport 53 -j KANO_F50_DNS';;
+    '-w 5 -t nat -S') echo '-A PREROUTING -i br0 -p udp --dport 53 -j KANO_F50_DNS -m comment --comment f50';;
     '-w 5 -t nat -C '*) exit ${missingRule ? 1 : 0};;
     *) exit 9;;
   esac\n`);
@@ -46,7 +46,7 @@ test('missing IPv6 NAT retains the saved flag and applies only owned IPv4 DNS ru
     assert.match(plan, /--mac-source 00:11:22:33:44:55/);
     assert.match(plan, /-s 192\.168\.1\.0\/24/);
     assert.doesNotMatch(plan, /fd00|flush|\*-mangle/);
-    assert.match(plan, /-D PREROUTING.*KANO_F50_DNS/);
+    assert.match(plan, /-D PREROUTING.*KANO_F50_DNS -m comment --comment f50/);
     assert.match(result.stdout, /F50_IPV4_DNS_VERIFIED=1/);
     assert.equal(fs.existsSync(path.join(f.dir, 'Policy/options.conf.ipv6_dns')), false);
   } finally { f.close(); }

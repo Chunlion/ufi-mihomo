@@ -12338,7 +12338,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
-    const importSub = async () => {
+    const importSub = async (opener = document.activeElement) => {
       operationStage('读取已保存的订阅');
       // A settings read failure must not block link editing; only the options section stays locked.
       let preferences = null, preferencesError = '';
@@ -12582,7 +12582,28 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         addSubRow();
       };
 
-      el.querySelector('#mm_sub_close_btn').onclick = close;
+      let closed = false;
+      const closeSubDialog = () => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener('keydown', onSubEscape);
+        close();
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+      };
+      const onSubEscape = (event) => {
+        if (!el.isConnected) {
+          document.removeEventListener('keydown', onSubEscape);
+          return;
+        }
+        if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing
+          || document.getElementById('mm_sub_clear_confirm')
+          || document.getElementById('mm_sub_migrate_legacy')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeSubDialog();
+      };
+      document.addEventListener('keydown', onSubEscape);
+      el.querySelector('#mm_sub_close_btn').onclick = closeSubDialog;
       submitBtn.onclick = async () => {
         const sources = Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({
           url: row.querySelector('.mm_sub_url_input').value,
@@ -12601,7 +12622,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           if (!hasSubscriptionUrl && !gist && (!optionsEl || optionsEl.disabled)
             && (configSource !== 'template.yaml' || currentRuleMode === 'original')) {
             const success = await clearSubSourceFile();
-            if (success) close();
+            if (success) closeSubDialog();
             return;
           }
           const success = await saveSubSources(
@@ -12623,7 +12644,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           if (success) {
             // Invalid options must not clear the saved sources or legacy files.
             if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile({ alreadySaved: true }))) return;
-            close();
+            closeSubDialog();
           }
         } catch (e) {
           if (e?.name === 'OperationCancelled') return;
@@ -12634,6 +12655,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           await releaseCriticalOperation(operationToken);
         }
       };
+      rowsEl.querySelector('.mm_sub_url_input')?.focus({ preventScroll: true });
     };
 
     // \u521b\u5efa\u8ba2\u9605\u94fe\u63a5\u6309\u94ae
@@ -12643,7 +12665,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     subBtn.onclick = async () => {
   return runCriticalOperation('读取订阅设置', async () => {
     if (!(await ensureReady({ readOnly: true }))) return false;
-    await importSub();
+    await importSub(subBtn);
     return true;
   });
 };

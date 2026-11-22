@@ -8,18 +8,39 @@ const loadSubscriptionPreferences=async()=>missing?null:settings;
 const readExistingSubscriptionNodes=async()=>noNodes?[]:[{provider:'Fixture subscription',node:{name:'Selected',type:'socks5',server:'example.test',port:1080,password:'FIXTURE_PRIVATE'}}];
 const readCurrentSubSources=async()=>[{url:'https://example.test/sub',enabled:true}],readSavedSubConvertMode=async()=>'provider',readCurrentSubRuleMode=async()=>'template',readConfigSource=async()=>custom?'uploaded_config':'template.yaml';
 const f50GistManaged=async()=>null,operationStage=()=>{},operationFinish=()=>{},createToast=()=>{};
-const setText=(e,text)=>{if(e)e.textContent=text;},resetChildren=e=>e.replaceChildren(),askConfirm=async()=>true;
+const setText=(e,text)=>{if(e)e.textContent=text;},resetChildren=e=>e.replaceChildren();
 const safeTextToHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),f50GistMessage=String;
+const escapeHtml=safeTextToHtml,activeCriticalOperation=null;
 const acquireCriticalOperation=()=>({}),releaseCriticalOperation=async()=>{},setButtonBusy=(e,busy)=>{e.disabled=busy;};
+const opener=document.createElement('button');
+opener.id='f50_fixture_subscription_opener';opener.textContent='订阅设置';
+opener.onclick=()=>importSub(opener);document.body.appendChild(opener);
 const saveSubSources=async(sources,rule,mode,options)=>{saved={sources,rule,mode,options};if(failSave)return false;if(options.subscriptionOptions){const p=options.subscriptionOptions;settings={...settings,auto:p.auto,intervalHours:p.intervalHours,rescueConfigured:p.rescueText?true:p.clearRescue?false:settings.rescueConfigured};}return true;};
 const clearSubSourceFile=async()=>{clearCalls++;return true;};
 `;
 const viewport=page.viewportSize();
 try{
   await page.evaluate(code=>{window.subscriptionFixture=new Function(code)();},fixture
-    +part('const fitDialogWidth =','const askConfirm =')
+    +part('const fitDialogWidth =','const askText =')
     +part('const importSub = async','const subBtn =')
-    +'return {open:()=>importSub(),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls,empty:()=>noNodes=true};');
+    +'return {open:()=>importSub(opener),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls,empty:()=>noNodes=true};');
+  const opener=page.locator('#f50_fixture_subscription_opener');
+  const dialog=page.locator('#mm_sub_input_toast');
+  await opener.click();
+  await expect(dialog.locator('.mm_sub_url_input').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+  await opener.click();
+  await dialog.locator('#mm_sub_clear_btn').click();
+  const confirm=page.locator('#mm_sub_clear_confirm');
+  await expect(confirm).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button',{name:'取消',exact:true}).click();
+  await dialog.locator('#mm_sub_close_btn').click();
+  await expect(opener).toBeFocused();
   await page.evaluate(()=>window.subscriptionFixture.open());
   await expect(page.locator('#mm_sub_options summary')).toHaveText(['自动更新','备用节点']);
   await page.locator('#mm_sub_options summary').nth(0).click();
@@ -30,6 +51,7 @@ try{
   await expect(page.locator('#mm_sub_convert_mode')).toBeDisabled();
   await expect(page.locator('#mm_sub_convert_mode')).toHaveValue('local');
   await page.locator('#mm_sub_submit_btn').click();
+  await expect(opener).toBeFocused();
   const saved=await page.evaluate(()=>window.subscriptionFixture.saved());
   expect(saved.mode).toEqual('local');expect(saved.options.subscriptionOptions.auto).toEqual(false);expect(saved.options.subscriptionOptions.intervalHours).toEqual(6);
   await page.evaluate(()=>window.subscriptionFixture.open());
@@ -55,6 +77,7 @@ try{
   await page.locator('#mm_sub_submit_btn').click();
   await page.evaluate(()=>window.subscriptionFixture.open());
   await page.locator('#mm_sub_clear_btn').click();
+  await confirm.getByRole('button',{name:'清空',exact:true}).click();
   await page.evaluate(()=>window.subscriptionFixture.fail(true));
   await page.locator('#mm_sub_submit_btn').click();
   expect(await page.evaluate(()=>window.subscriptionFixture.clears())).toEqual(0);
@@ -75,8 +98,8 @@ try{
   await page.evaluate(()=>{window.subscriptionFixture.missing();return window.subscriptionFixture.open();});
   await expect(page.locator('#mm_subscription_auto')).toBeDisabled();
   await expect(page.locator('#mm_sub_submit_btn')).toBeEnabled();
-  return {category:'MOCK',menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true,existingNodeSelection:true,credentialsNotDisplayed:true,emptyCacheManualInput:true};
+  return {category:'MOCK',keyboardFocus:true,escapeDismisses:true,confirmationPreserved:true,menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true,existingNodeSelection:true,credentialsNotDisplayed:true,emptyCacheManualInput:true};
 }finally{
-  await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();delete window.subscriptionFixture;});
+  await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();document.getElementById('mm_sub_clear_confirm')?.remove();document.getElementById('f50_fixture_subscription_opener')?.remove();delete window.subscriptionFixture;});
   if(viewport)await page.setViewportSize(viewport);
 }

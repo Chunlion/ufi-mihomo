@@ -3,7 +3,7 @@
     gistSyncBtn.textContent = 'Gist \u52a0\u5bc6\u540c\u6b65';
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
-      const {el, close} = createFixedToast('mm_gist_sync_dialog', `
+      const {el, close: closeToast} = createFixedToast('mm_gist_sync_dialog', `
         <div style="pointer-events:all;width:auto;max-width:760px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
@@ -119,6 +119,7 @@
       q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
+      const close = bindDialogKeyboard(el, closeToast, gistSyncBtn, q('close'), q('url'));
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
       const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
       observer.observe(document.body,{childList:true,subtree:true});

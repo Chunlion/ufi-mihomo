@@ -21,9 +21,9 @@ const clearSubSourceFile=async()=>{clearCalls++;return true;};
 const viewport=page.viewportSize();
 try{
   await page.evaluate(code=>{window.subscriptionFixture=new Function(code)();},fixture
-    +part('const fitDialogWidth =','const askText =')
+    +part('const fitDialogWidth =','const checkIsBootUp =')
     +part('const importSub = async','const subBtn =')
-    +'return {open:()=>importSub(opener),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls,empty:()=>noNodes=true};');
+    +'return {open:()=>importSub(opener),saved:()=>saved,custom:()=>custom=true,missing:()=>missing=true,fail:flag=>failSave=flag,clears:()=>clearCalls,empty:()=>noNodes=true,openNote:()=>{opener.disabled=true;opener.dataset.kanoBusy="1";return askText("fixture_note","设备备注","","old note",opener);}};');
   const opener=page.locator('#f50_fixture_subscription_opener');
   const dialog=page.locator('#mm_sub_input_toast');
   await opener.click();
@@ -34,12 +34,20 @@ try{
   await opener.click();
   await dialog.locator('#mm_sub_clear_btn').click();
   const confirm=page.locator('#mm_sub_clear_confirm');
-  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole('button',{name:'取消',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(confirm).toBeHidden();
   await expect(dialog).toBeVisible();
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole('button',{name:'取消',exact:true}).click();
+  await expect(dialog.locator('#mm_sub_clear_btn')).toBeFocused();
   await dialog.locator('#mm_sub_close_btn').click();
+  await expect(opener).toBeFocused();
+  const note=page.locator('#fixture_note');
+  await page.evaluate(()=>{window.noteResult=window.subscriptionFixture.openNote();});
+  await expect(note.getByRole('textbox')).toBeFocused();
+  await note.getByRole('button',{name:'保存',exact:true}).press('Escape');
+  await expect(note).toBeHidden();
+  expect(await page.evaluate(()=>window.noteResult)).toBeNull();
+  await opener.evaluate(button=>{button.disabled=false;delete button.dataset.kanoBusy;});
   await expect(opener).toBeFocused();
   await page.evaluate(()=>window.subscriptionFixture.open());
   await expect(page.locator('#mm_sub_options summary')).toHaveText(['自动更新','备用节点']);
@@ -100,6 +108,6 @@ try{
   await expect(page.locator('#mm_sub_submit_btn')).toBeEnabled();
   return {category:'MOCK',keyboardFocus:true,escapeDismisses:true,confirmationPreserved:true,menuPlacement:true,combinedSave:true,rescueMode:true,customConfigProtected:true,oldComponentsCompatible:true,mobileLayout:true,failedSavePreservesSources:true,successfulClearCleansLegacy:true,existingNodeSelection:true,credentialsNotDisplayed:true,emptyCacheManualInput:true};
 }finally{
-  await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();document.getElementById('mm_sub_clear_confirm')?.remove();document.getElementById('f50_fixture_subscription_opener')?.remove();delete window.subscriptionFixture;});
+  await page.evaluate(()=>{document.getElementById('mm_sub_input_toast')?.remove();document.getElementById('mm_sub_clear_confirm')?.remove();document.getElementById('fixture_note')?.remove();document.getElementById('f50_fixture_subscription_opener')?.remove();delete window.noteResult;delete window.subscriptionFixture;});
   if(viewport)await page.setViewportSize(viewport);
 }

@@ -6,6 +6,7 @@ const q=id=>root.querySelector('#mm_gist_'+id),requests=[];
 let action='',confirm=false,closed=false;
 const ctx={document:{body:{},createElement:elem},window:{confirm:()=>confirm},MutationObserver:class{observe(){} disconnect(){}},Date,Promise,Number,setTimeout,URL,TextEncoder,
  ensureAdvanced:async()=>true,createFixedToast:()=>({el:root,close:()=>{closed=true;root.isConnected=false;}}),
+ bindDialogKeyboard:(_el,close)=>close,
  f50GistMessage:c=>String(c||'unknown'),f50InstallGistComponents:async()=>true,
  f50GistExec:async args=>{
   if(args[0]==='status')return JSON.parse(JSON.stringify(state));

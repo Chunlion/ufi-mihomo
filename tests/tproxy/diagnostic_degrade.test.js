@@ -88,7 +88,7 @@ function harness(overrides = {}, realShell = false) {
     slice('  let runtimePreflightCache =', '  const ensureInstalled ='),
     slice('  const readPolicyState =', '  const updateModeBadge ='),
   ].join('\n') : '';
-  const code = shellCode + slice('  const showStatusDiagnostic = async () => {', '  const sanitizeConfigForTProxy =');
+  const code = shellCode + slice('  const showStatusDiagnostic = async', '  const sanitizeConfigForTProxy =');
   const exports = realShell
     ? '({run: showStatusDiagnostic, write: runShellWithRoot, uncertain: () => deviceTaskUncertain})'
     : '({run: showStatusDiagnostic})';

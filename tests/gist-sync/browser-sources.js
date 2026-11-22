@@ -1,7 +1,8 @@
 const fs=await import('node:fs/promises');
 const root='C:/Users/Cuty/Desktop/Github/Tproxy-F50/';
 const source=await fs.readFile(root+'猫猫TProxy.js','utf8');
-const body=source.slice(source.indexOf('    const importSub = async'),source.indexOf('    const subBtn =',source.indexOf('    const importSub = async')));
+const keyboard=source.slice(source.indexOf('  const keyboardDialogs ='),source.indexOf('  const askConfirm ='));
+const body=keyboard+source.slice(source.indexOf('    const importSub = async'),source.indexOf('    const subBtn =',source.indexOf('    const importSub = async')));
 assert.ok(body.includes('const importSub'));
 const previous=page,preview=await context.newPage();await usePage(preview);
 await page.setContent('<html><head><title>Gist subscription merge fixture</title></head><body style="background:#111827;color:white;font:16px Arial"></body></html>');

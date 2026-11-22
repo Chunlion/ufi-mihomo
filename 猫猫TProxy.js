@@ -8056,10 +8056,58 @@ KANO_WRITE_CHECK_EOF
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
   };
 
-  const askConfirm = (id, title, body, ok = '确认', cancel = '取消') => new Promise((resolve) => {
+  const keyboardDialogs = [];
+  const topKeyboardDialog = () => {
+    while (keyboardDialogs.length && !keyboardDialogs[keyboardDialogs.length - 1].el.isConnected) {
+      keyboardDialogs.pop();
+    }
+    return keyboardDialogs[keyboardDialogs.length - 1];
+  };
+  const onDialogEscape = (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat) return;
+    const dialog = topKeyboardDialog();
+    if (!dialog) {
+      document.removeEventListener('keydown', onDialogEscape);
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    dialog.dismiss.click();
+  };
+  const bindDialogKeyboard = (el, close, opener, dismiss, initialFocus = dismiss) => {
+    topKeyboardDialog();
+    const dialog = { el, dismiss };
+    keyboardDialogs.push(dialog);
+    document.addEventListener('keydown', onDialogEscape);
+    initialFocus.focus({ preventScroll: true });
+    return () => {
+      const restoreFocus = topKeyboardDialog() === dialog;
+      const index = keyboardDialogs.indexOf(dialog);
+      if (index < 0) return;
+      keyboardDialogs.splice(index, 1);
+      if (!topKeyboardDialog()) document.removeEventListener('keydown', onDialogEscape);
+      close();
+      if (!restoreFocus || !opener?.isConnected) return;
+      if (opener.dataset.kanoBusy !== '1') {
+        opener.focus({ preventScroll: true });
+        return;
+      }
+      const observer = new MutationObserver(() => {
+        if (opener.dataset.kanoBusy === '1') return;
+        observer.disconnect();
+        const active = document.activeElement;
+        if (opener.isConnected && (active === document.body || el.contains(active))) {
+          opener.focus({ preventScroll: true });
+        }
+      });
+      observer.observe(opener, { attributes: true, attributeFilter: ['disabled'] });
+    };
+  };
+
+  const askConfirm = (id, title, body, ok = '确认', cancel = '取消', opener = document.activeElement) => new Promise((resolve) => {
     const progress = activeCriticalOperation && activeCriticalOperation.progress;
     if (progress) progress.pause(true);
-    const { el, close } = createFixedToast(
+    const { el, close: closeToast } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:auto;max-width:520px;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
@@ -8071,22 +8119,23 @@ KANO_WRITE_CHECK_EOF
       </div>`,
     );
     fitDialogWidth(el, el.firstElementChild, 520);
+    const okBtn = el.querySelector('.ok');
+    const cancelBtn = el.querySelector('.cancel');
+    const close = bindDialogKeyboard(el, closeToast, opener, cancelBtn);
     const done = (value) => {
       close();
       if (progress) progress.pause(false);
       resolve(value);
     };
-    const okBtn = el.querySelector('.ok');
-    const cancelBtn = el.querySelector('.cancel');
     if (okBtn) okBtn.addEventListener('click', () => done(true));
     if (cancelBtn) cancelBtn.addEventListener('click', () => done(false));
   });
 
   // 单行文本输入框，返回输入内容；取消返回 null。备注编辑走这里。
-  const askText = (id, title, body, defaultValue = '') => new Promise((resolve) => {
+  const askText = (id, title, body, defaultValue = '', opener = document.activeElement) => new Promise((resolve) => {
     const progress = activeCriticalOperation && activeCriticalOperation.progress;
     if (progress) progress.pause(true);
-    const { el, close } = createFixedToast(
+    const { el, close: closeToast } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:auto;max-width:520px;min-width:0;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
@@ -8100,21 +8149,21 @@ KANO_WRITE_CHECK_EOF
     );
     fitDialogWidth(el, el.firstElementChild, 520);
     const input = el.querySelector('.k-text-input');
+    const okBtn = el.querySelector('.ok');
+    const cancelBtn = el.querySelector('.cancel');
+    const close = bindDialogKeyboard(el, closeToast, opener, cancelBtn, input);
     const done = (value) => {
       close();
       if (progress) progress.pause(false);
       resolve(value);
     };
-    const okBtn = el.querySelector('.ok');
-    const cancelBtn = el.querySelector('.cancel');
     if (okBtn) okBtn.addEventListener('click', () => done(input ? input.value : ''));
     if (cancelBtn) cancelBtn.addEventListener('click', () => done(null));
     if (input) {
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') { event.preventDefault(); done(input.value); }
-        else if (event.key === 'Escape') { event.preventDefault(); done(null); }
       });
-      setTimeout(() => { try { input.focus(); input.select(); } catch (_) { /* 焦点失败不影响输入 */ } }, 30);
+      input.select();
     }
   });
 
@@ -8281,7 +8330,7 @@ kano_stop_watchers() (
     }
   };
 
-  const networkRescue = async ({ showOutput = true, preempt = false } = {}) => {
+  const networkRescue = async ({ showOutput = true, preempt = false, opener } = {}) => {
   if (recoveryInProgress) return false;
   recoveryInProgress = true;
   const interruptedOperations = [];
@@ -8358,7 +8407,7 @@ case "$hash" in ${F50_TRUSTED_SERVICE_HASHES.join('|')}) echo F50_NATIVE_RECOVER
     const resultToast = [summary, ok ? 'green' : 'red', ok ? 5000 : 15000];
     if (!own && ok) activeCriticalOperation.finalToast = resultToast;
     else createToast(...resultToast);
-    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成；正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>');
+    if (showOutput || !ok) showInfoDialog('mm_network_rescue', ok ? (own ? '恢复完成' : '网络清理完成；正在收尾') : '恢复失败', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto">' + safeTextToHtml(sanitizeSubscriptionSecrets(r.content || '')) + '</pre>', opener);
     return ok;
   } catch (error) {
     deviceTaskUncertain = true;
@@ -8490,7 +8539,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   };
 
 
-  const saveTemplate = async (file) => {
+  const saveTemplate = async (file, opener) => {
     const txId = `${Date.now()}_${createRandomString(6)}`;
     const txBase = `/data/kano_template_upload_${txId}.base.yaml`;
     const txTemplate = `/data/kano_template_upload_${txId}.yaml`;
@@ -8563,6 +8612,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
             `模板包含 ${newSources.length} 个订阅链接；将替换当前已保存的 ${oldSources.length} 个链接。`,
             '替换',
             '取消',
+            opener,
           );
           if (!confirmed) return false;
           const oldCount = savedSources.length;
@@ -8672,9 +8722,9 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     }
   };
 
-  const showInfoDialog = (id, title, bodyHtml) => {
+  const showInfoDialog = (id, title, bodyHtml, opener = document.activeElement) => {
     const closeId = `close_${id}_${createRandomString(4)}`;
-    const { el, close } = createFixedToast(
+    const { el, close: closeToast } = createFixedToast(
       `${id}_${createRandomString(4)}`,
       `<div style="pointer-events:all;width:auto;max-width:760px;min-width:0;overflow-wrap:anywhere;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
@@ -8686,11 +8736,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     );
     fitDialogWidth(el, el.firstElementChild, 760);
     const closeBtn = el.querySelector(`#${closeId}`);
-    if (closeBtn) closeBtn.onclick = close;
+    const close = bindDialogKeyboard(el, closeToast, opener, closeBtn);
+    closeBtn.onclick = close;
     return { el, close };
   };
 
-  const showControllerSettingsDialog = async ({ afterSave = null } = {}) => {
+  const showControllerSettingsDialog = async ({ afterSave = null, opener = document.activeElement } = {}) => {
     const info = await buildControllerInfo();
     const id = `kano_controller_settings_${createRandomString(4)}`;
     const controllerId = `${id}_controller`;
@@ -8705,7 +8756,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         ? '访问密钥：配置中未设置'
         : '访问密钥：已读取配置',
     ].join('<br>');
-    const { el, close } = createFixedToast(
+    const { el, close: closeToast } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:auto;max-width:760px;">
         <div class="title" style="margin:0">面板连接</div>
@@ -8739,12 +8790,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     const saveBtn = el.querySelector(`#${saveId}`);
     const closeBtn = el.querySelector(`#${closeId}`);
     if (!controllerInput || !secretInput || !secretToggleBtn || !statusEl || !checkBtn || !saveBtn || !closeBtn) {
-      close();
+      closeToast();
       return;
     }
     controllerInput.value = `0.0.0.0:${F50_PORTS.controller}`;
     secretInput.value = info.secret;
-    closeBtn.onclick = close;
+    closeBtn.onclick = bindDialogKeyboard(el, closeToast, opener, closeBtn, controllerInput);
     secretToggleBtn.onclick = () => {
       const show = secretInput.type === 'password';
       secretInput.type = show ? 'text' : 'password';
@@ -8796,7 +8847,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   };
 
   // 诊断窗口先出、日志先填：设备慢或 API 不通时，不该让人盯着空屏等整套探测。
-  const showStatusDiagnostic = async () => {
+  const showStatusDiagnostic = async (opener) => {
     const degraded = [];
     const settle = (label, promise, fallback) => Promise.resolve(promise).catch((error) => {
       degraded.push(`${label}：${sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error))}`);
@@ -8810,6 +8861,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
       <div class="kano-diag-install"></div>
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
       <pre class="kano-diag-log" style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">正在读取日志…</pre>`,
+      opener,
     );
     const summaryEl = el.querySelector('.kano-diag-summary');
     const detailEl = el.querySelector('.kano-diag-detail');
@@ -9646,17 +9698,17 @@ btn_disabled.onclick = async () => {
     return Array.from(devices.values()).sort((a, b) => a.mac.localeCompare(b.mac));
   };
 
-  const showPolicyStatus = async () => {
+  const showPolicyStatus = async (opener) => {
     const exists = await runShellWithRoot(`[ -x ${shellQuote(CLASH_POLICY_SCRIPT)} ] && echo 1 || echo 0`, 10 * 1000);
     if (String(exists.content || '').trim() != '1') {
       createToast('网络规则脚本不存在；请在“检查修复”中点“重建网络规则”。', 'yellow', 7000);
       return;
     }
     const res = await runShellWithRoot(`${shellQuote(CLASH_POLICY_SCRIPT)} status`);
-    showInfoDialog('mm_policy_status', '网络与规则状态', `<pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '暂无状态')}</pre>`);
+    showInfoDialog('mm_policy_status', '网络与规则状态', `<pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:420px;overflow:auto;">${escapeHtml(res.content || '暂无状态')}</pre>`, opener);
   };
 
-  const showPolicyToolsDialog = async ({ initialTab = 'network' } = {}) => {
+  const showPolicyToolsDialog = async ({ initialTab = 'network', opener = document.activeElement } = {}) => {
     let state;
     try {
       state = await readPolicyState();
@@ -9665,7 +9717,7 @@ btn_disabled.onclick = async () => {
       return;
     }
     if (state.deviceNotesCorrupted) createToast('设备备注文件已损坏，本次按空备注显示；重新保存后会自动修复', 'yellow', 12000);
-    const { el, close } = createFixedToast(
+    const { el, close: closeToast } = createFixedToast(
       'mm_policy_tools_toast',
       `
         <style>
@@ -9855,7 +9907,8 @@ btn_disabled.onclick = async () => {
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
     updateDeviceBypassScope();
 
-    get('#mm_policy_close').onclick = close;
+    const closeBtn = get('#mm_policy_close');
+    closeBtn.onclick = bindDialogKeyboard(el, closeToast, opener, closeBtn, get('[data-policy-tab].kp-active'));
     const appendDeviceBypassValue = (value = '') => {
       const item = String(value || '').trim();
       if (!item || get('#mm_policy_device').disabled) return;
@@ -9894,7 +9947,7 @@ btn_disabled.onclick = async () => {
           const current = deviceNotes[key] || '';
           const value = await askText('mm_device_note', '设备备注',
             `<div style="font-family:monospace">${escapeHtml(address)}</div><div style="opacity:.72;margin-top:4px">备注立即保存，不改变绕过名单。</div>`,
-            current);
+            current, button);
           if (value === null) return;
           await runCriticalButtonOperation('保存设备备注', button, '保存中…', async () => {
             const nextNotes = { ...(await readPolicyState()).deviceNotes };
@@ -9937,7 +9990,7 @@ btn_disabled.onclick = async () => {
           addMac.onclick = async () => {
             const value = device.mac;
             if (!value || get('#mm_policy_device').disabled) return;
-            const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。');
+            const yes = await askConfirm('mm_mac_scope', '按 MAC 添加直连设备？', '将包含此 MAC 的全部 IP；若为下级路由器，可能代表多台终端。', undefined, undefined, addMac);
             if (yes) appendDeviceBypassValue(value);
           };
           head.appendChild(macEl);
@@ -10024,7 +10077,7 @@ btn_disabled.onclick = async () => {
       const btn = get('#mm_policy_status_btn');
       setButtonBusy(btn, true, '读取中…');
       try {
-        await showPolicyStatus();
+        await showPolicyStatus(btn);
       } finally {
         setButtonBusy(btn, false);
       }
@@ -10033,7 +10086,7 @@ btn_disabled.onclick = async () => {
     get('#mm_policy_clear_install_lock').onclick = async () => {
       const btn = get('#mm_policy_clear_install_lock');
       const yes = await askConfirm('mm_clear_install_lock', '清理安装锁？',
-        '只在确认没有安装或更新正在进行时执行。会删除 /data/clash.install.lock.d，已安装的组件与配置不受影响。');
+        '只在确认没有安装或更新正在进行时执行。会删除 /data/clash.install.lock.d，已安装的组件与配置不受影响。', undefined, undefined, btn);
       if (!yes) return;
       setButtonBusy(btn, true, '清理中…');
       try {
@@ -10095,7 +10148,7 @@ exit 1`, 10000);
           const leaf = await kprVerifySelection(savedOptions);
           liveStatus = leaf ? '实际出站：' + leaf : '私网定向代理未启用';
         } catch (error) { liveStatus = '运行检查失败：' + (error.message || String(error)); }
-        showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>');
+        showInfoDialog('kpr_status_dialog', '私网定向代理检查', '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(liveStatus + '\n' + (response.content || '无输出')) + '</pre><p>规则存在不代表远端服务可达；请从下游设备访问实际 TCP/UDP 服务验证。</p>', statusButton);
       } finally {
         setButtonBusy(statusButton, false);
       }
@@ -10190,6 +10243,7 @@ exit 1`, 10000);
   uploadEl.type = 'file';
   uploadEl.accept = '.yaml,.yml,text/yaml,text/plain';
   uploadEl.onchange = async (e) => {
+    const opener = document.activeElement;
     try {
       if (!e || !e.target || !e.target.files) return;
       const file = e.target.files[0];
@@ -10200,13 +10254,13 @@ exit 1`, 10000);
         createToast(`模板文件大小不能超过 ${2} MB`, 'red');
         return;
       }
-      await runCriticalOperation('上传模板', async () => saveTemplate(file));
+      await runCriticalOperation('上传模板', async () => saveTemplate(file, opener));
     } finally {
       uploadEl.value = '';
     }
   };
 
-  const restoreConfigPackageFromFile = async (file) => {
+  const restoreConfigPackageFromFile = async (file, opener) => {
     const txId = `${Date.now()}_${createRandomString(6)}`;
     const backupFiles = configPackageBackupFiles();
     const restoreFiles = [
@@ -10221,6 +10275,7 @@ exit 1`, 10000);
       `将按以下顺序回灌配置文件：<br>${textToHtml(restoreOrderText)}<br><br>缺少必要文件时不会覆盖现有配置。订阅自动更新、备用节点和 Gist 设置不在配置包内。`,
       '开始导入',
       '取消',
+      opener,
     );
     if (!confirmed) return false;
 
@@ -10549,12 +10604,13 @@ EOF_F50_RESTORE_MEMBERS
   packageUploadEl.type = 'file';
   packageUploadEl.accept = '.tar.gz,.tgz,.zip,application/gzip,application/zip';
   packageUploadEl.onchange = async (e) => {
+    const opener = document.activeElement;
     try {
       if (!e || !e.target || !e.target.files) return;
       const file = e.target.files[0];
       if (!file) return;
       if (!(await ensureReady())) return;
-      await runCriticalOperation('导入配置包', async () => restoreConfigPackageFromFile(file));
+      await runCriticalOperation('导入配置包', async () => restoreConfigPackageFromFile(file, opener));
     } finally {
       packageUploadEl.value = '';
     }
@@ -10891,6 +10947,7 @@ EOF_F50_RESTORE_MEMBERS
     controllerSettingsBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
       await showControllerSettingsDialog({
+        opener: controllerSettingsBtn,
         afterSave: async () => {
           if (isWebPanelVisible()) await refreshPanel();
           await isMMRunning();
@@ -10953,13 +11010,13 @@ EOF_F50_RESTORE_MEMBERS
       if (lastInstallDiagnostic && !lastInstallDiagnostic.ok && !lastInstallDiagnostic.viewed) {
         lastInstallDiagnostic.viewed = true;
         showInfoDialog('mm_last_install_failure', lastInstallDiagnostic.summary,
-          '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre>');
+          '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre>', showLogBtn);
         return;
       }
       if (!(await ensureAdvanced())) return;
       setButtonBusy(showLogBtn, true, '读取中…');
       try {
-        await showStatusDiagnostic();
+        await showStatusDiagnostic(showLogBtn);
       } catch (error) {
         createToast(`诊断读取失败<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 10000);
       } finally {
@@ -10980,7 +11037,7 @@ EOF_F50_RESTORE_MEMBERS
         return;
       }
       const storedCustom = currentValue == KANO_PROVIDER_USER_AGENT ? '' : currentValue;
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_provider_user_agent',
         `
           <div style="pointer-events:all;width:auto;max-width:760px;">
@@ -11002,7 +11059,9 @@ EOF_F50_RESTORE_MEMBERS
       fitDialogWidth(el, el.firstElementChild);
       const input = el.querySelector('#mm_provider_user_agent_input');
       const saveBtn = el.querySelector('#mm_provider_user_agent_save');
-      el.querySelector('#mm_provider_user_agent_close').onclick = close;
+      const closeBtn = el.querySelector('#mm_provider_user_agent_close');
+      const close = bindDialogKeyboard(el, closeToast, userAgentBtn, closeBtn, input);
+      closeBtn.onclick = close;
       saveBtn.onclick = async () => {
         return runCriticalButtonOperation('保存订阅 User-Agent', saveBtn, '保存中…', async () => {
           const result = await persistProviderUserAgent(input.value);
@@ -11033,12 +11092,13 @@ EOF_F50_RESTORE_MEMBERS
         '将停止核心并清理插件创建的 KANO_* iptables 规则，用于恢复规则残留导致的断网。',
         '执行恢复',
         '取消',
+        rescueBtn,
       );
       if (!confirmed) return;
 
       setButtonBusy(rescueBtn, true, '恢复中\u2026');
       try {
-        await networkRescue({ showOutput: true, preempt: true });
+        await networkRescue({ showOutput: true, preempt: true, opener: rescueBtn });
       } finally {
         setButtonBusy(rescueBtn, false);
 
@@ -11056,6 +11116,7 @@ EOF_F50_RESTORE_MEMBERS
         '会通过 Mihomo API 刷新 DNS / Fake-IP 缓存，并清理 provider 临时文件、空缓存和下载残留；不会删除有效节点缓存、config.yaml、template.yaml、订阅链接或覆写文件。',
         '清理缓存',
         '取消',
+        clearCacheBtn,
       );
       if (!confirmed) return;
       return runCriticalButtonOperation('清理缓存', clearCacheBtn, '清理中\u2026', async () => {
@@ -11196,7 +11257,7 @@ EOF_F50_RESTORE_MEMBERS
     const switchHttpProviderToLocal = async (
       cleanSources,
       cleanMode = SUB_RULE_MODE_TEMPLATE,
-      { reason = 'HTTP 390' } = {},
+      { reason = 'HTTP 390', opener } = {},
     ) => {
       const sources = normalizeSubSourceList(cleanSources);
       if (sources.length == 0) return { ok: false, conversion: buildProviderUpdateResult([]) };
@@ -11213,7 +11274,7 @@ EOF_F50_RESTORE_MEMBERS
       if (ok) {
         appendTemplateFlowDebug('provider_auto_local_fallback success convert=local');
         createToast('已自动切换为设备本地转换，节点恢复可用', 'green', 10000);
-        await showSubscriptionUpdateSelfCheck(sources, cleanMode, conversion, null, SUB_CONVERT_MODE_LOCAL);
+        await showSubscriptionUpdateSelfCheck(sources, cleanMode, conversion, null, SUB_CONVERT_MODE_LOCAL, opener);
       }
       return { ok, conversion };
     };
@@ -11429,6 +11490,7 @@ EOF_F50_RESTORE_MEMBERS
       issueText,
       diagnosticSummary,
       repairable,
+      opener,
     }) => {
       const outcome = deriveSubscriptionUpdateOutcome(configValidationResult, providerUpdateResult);
       const {
@@ -11477,7 +11539,7 @@ EOF_F50_RESTORE_MEMBERS
       const repairId = `${id}_repair`;
       const closeId = `${id}_close`;
       const actionCount = 1 + (repairable ? 1 : 0) + (failedProviders.length > 0 ? 1 : 0);
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         id,
         `<div style="pointer-events:all;width:auto;max-width:760px;overflow-wrap:anywhere;word-break:break-word;">
           <div class="title" style="margin:0">${escapeHtml(title)}</div>
@@ -11501,6 +11563,7 @@ EOF_F50_RESTORE_MEMBERS
       const retryBtn = el.querySelector(`#${retryId}`);
       const repairBtn = el.querySelector(`#${repairId}`);
       const closeBtn = el.querySelector(`#${closeId}`);
+      const close = bindDialogKeyboard(el, closeToast, opener ?? document.activeElement, closeBtn);
       const safeClose = () => {
         if (retryBtn) retryBtn.onclick = null;
         if (repairBtn) repairBtn.onclick = null;
@@ -11528,7 +11591,7 @@ EOF_F50_RESTORE_MEMBERS
             });
             const mergedResult = mergeProviderUpdateResults(providerResult, retryResult);
             safeClose();
-            await showSubscriptionUpdateSelfCheck(sources, mode, mergedResult, null, convertMode);
+            await showSubscriptionUpdateSelfCheck(sources, mode, mergedResult, null, convertMode, opener);
           });
         };
       }
@@ -11541,6 +11604,7 @@ EOF_F50_RESTORE_MEMBERS
       providerUpdateResult = null,
       configCheckResult = null,
       convertMode = SUB_CONVERT_MODE_PROVIDER,
+      opener,
     ) => {
       const cleanMode = normalizeSubRuleModeValue(mode);
       const cleanConvertMode = normalizeSubConvertModeValue(convertMode);
@@ -11600,6 +11664,7 @@ EOF_F50_RESTORE_MEMBERS
         issueText,
         diagnosticSummary,
         repairable,
+        opener,
       });
       await isMMRunning({ corePid: controllerCheck.corePid, apiOk: controllerCheck.success });
       return outcome.allOk;
@@ -11623,7 +11688,7 @@ EOF_F50_RESTORE_MEMBERS
       await updateSubProviders(sources, mode, convertMode);
     };
 
-    const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER) => {
+    const updateSubProviders = async (sources, mode = SUB_RULE_MODE_TEMPLATE, convertMode = SUB_CONVERT_MODE_PROVIDER, opener) => {
   if (!(await ensureCompatBackend())) return false;
   const configSource = await readConfigSource();
   // 自定义配置（含 Gist 托管）先更新机场链接，再同步 Gist 链接内容，两类来源在同一次更新里刷新；
@@ -11694,9 +11759,9 @@ EOF_F50_RESTORE_MEMBERS
   if (cleanConvertMode === SUB_CONVERT_MODE_PROVIDER) {
     const updated = await forceUpdateProvidersFromConfig({ showToast: false, config: read.value });
     if (providerUpdateNeedsLocalFallback(updated)) {
-      return (await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390' })).ok;
+      return (await switchHttpProviderToLocal(cleanSources, cleanMode, { reason: 'HTTP 390', opener })).ok;
     }
-    return showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, updated, null, cleanConvertMode);
+    return showSubscriptionUpdateSelfCheck(cleanSources, cleanMode, updated, null, cleanConvertMode, opener);
   }
   // Download first. A failed request never enters the restart/rollback path.
   const converted = await convertSubscriptionsLocally(cleanSources);
@@ -11941,7 +12006,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
   }
 };
 
-    const overwriteConfigByTemplate = async ({ confirm = true } = {}) => {
+    const overwriteConfigByTemplate = async ({ confirm = true, opener } = {}) => {
       const configSource = await readConfigSource();
       if (!confirm && ['uploaded_config', 'subscription_original'].includes(configSource)) {
         createToast('当前配置已保留；如需改用模板，请在“配置与规则”中点击“应用模板”', 'yellow', 8000);
@@ -11957,7 +12022,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           return false;
         }
         if (!sources.length) { createToast('请先添加并启用订阅，再迁移到本地模板', 'yellow', 8000); return false; }
-        const accepted = await askConfirm('mm_original_to_template', '迁移到本地模板？', '旧配置与来源文件会备份；规则和策略组改由本地模板提供，失败时恢复旧状态。', '迁移并应用', '取消');
+        const accepted = await askConfirm('mm_original_to_template', '迁移到本地模板？', '旧配置与来源文件会备份；规则和策略组改由本地模板提供，失败时恢复旧状态。', '迁移并应用', '取消', opener);
         if (!accepted) return false;
         return await saveSubSources(storedSources, SUB_RULE_MODE_TEMPLATE, currentConvertMode, { applyToCustom: true, migrateLegacy: true });
       }
@@ -11979,6 +12044,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           `${body}<br>校验或启动失败时会恢复旧配置。`,
           '开始应用',
           '取消',
+          opener,
         );
         if (!confirmed) return false;
       }
@@ -12033,7 +12099,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const providerUpdate = currentConvertMode == SUB_CONVERT_MODE_LOCAL
           ? buildProviderUpdateResult([])
           : await forceUpdateProvidersFromConfig({ showToast: false });
-        await showSubscriptionUpdateSelfCheck([], SUB_RULE_MODE_TEMPLATE, providerUpdate, null, currentConvertMode);
+        await showSubscriptionUpdateSelfCheck([], SUB_RULE_MODE_TEMPLATE, providerUpdate, null, currentConvertMode, opener);
       }
       return restarted;
     };
@@ -12167,7 +12233,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }
     };
 
-    const writeEditableLocalFile = async (fileInfo, text) => {
+    const writeEditableLocalFile = async (fileInfo, text, opener) => {
       const allowedFile = fileInfo && findEditableLocalFile(fileInfo.path);
       if (!allowedFile) {
         createToast('该文件不在允许编辑的列表中', 'red');
@@ -12180,7 +12246,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }
       if (allowedFile.path == CLASH_CONFIG) return await saveConfig(content);
       if (allowedFile.path == CLASH_TEMPLATE || allowedFile.path == CLASH_TEMPLATE_BASE) {
-        return await saveTemplate(new File([content], allowedFile.label, { type: 'text/yaml;charset=utf-8' }));
+        return await saveTemplate(new File([content], allowedFile.label, { type: 'text/yaml;charset=utf-8' }), opener);
       }
       if (allowedFile.path == CLASH_OVERRIDE_JS) return await saveJsOverrideText(content);
       if (allowedFile.path == CLASH_SUB_URLS) {
@@ -12245,12 +12311,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }
     };
 
-    const showEditableLocalFilesDialog = async () => {
+    const showEditableLocalFilesDialog = async (opener) => {
       const files = editableLocalFiles();
       const options = files
         .map((fileInfo) => `<option value="${escapeHtml(fileInfo.path)}">${escapeHtml(fileInfo.label)}</option>`)
         .join('');
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_local_file_editor',
         `
           <div style="pointer-events:all;width:auto;max-width:960px;">
@@ -12302,7 +12368,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
       select.onchange = loadSelected;
       reloadBtn.onclick = loadSelected;
-      el.querySelector('#mm_local_file_close_btn').onclick = () => { editorClosed = true; readGeneration++; close(); };
+      const closeBtn = el.querySelector('#mm_local_file_close_btn');
+      const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, select);
+      closeBtn.onclick = () => { editorClosed = true; readGeneration++; close(); };
       saveBtn.onclick = async () => {
         const fileInfo = findEditableLocalFile(select.value);
         if (!fileInfo || editorClosed || readyPath !== fileInfo.path) return;
@@ -12316,7 +12384,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               createToast('文件已变化或无法读取；未覆盖原文件，请重新读取后编辑','yellow',9000);
               return false;
             }
-            const saved = await writeEditableLocalFile(fileInfo, content);
+            const saved = await writeEditableLocalFile(fileInfo, content, saveBtn);
             if (saved && !editorClosed) await loadSelected();
             return saved;
           } finally { select.disabled = false; reloadBtn.disabled = false; }
@@ -12331,7 +12399,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     editBtn.onclick = async () => {
       try {
         if (!(await ensureReady({ readOnly: true }))) return;
-        await showEditableLocalFilesDialog();
+        await showEditableLocalFilesDialog(editBtn);
       } catch (error) {
         createToast(`无法打开配置文件<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
       }
@@ -12363,7 +12431,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const nodes = (config.proxies || []).map(p=>p.name).filter(Boolean);
         gistOverview = `<details style="font-size:.64rem;overflow-wrap:anywhere"><summary>Gist：${providers.length} 个订阅 · ${nodes.length} 个节点</summary>${providers.map(([name,p])=>`<div>${safeTextToHtml(name)}${p.url?' · '+safeTextToHtml(p.url):''}</div>`).join('')}<div>${safeTextToHtml(nodes.join('、'))}</div></details>`;
       }
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_sub_input_toast',
         `
             <div style="pointer-events:all;width:auto;max-width:760px;">
@@ -12576,34 +12644,16 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           '仅清空当前窗口的输入；点击“保存并更新”才会清空已保存的订阅源，直接关闭不会修改设备。',
           '清空',
           '取消',
+          clearBtn,
         );
         if (!confirmed) return;
         resetChildren(rowsEl);
         addSubRow();
       };
 
-      let closed = false;
-      const closeSubDialog = () => {
-        if (closed) return;
-        closed = true;
-        document.removeEventListener('keydown', onSubEscape);
-        close();
-        if (opener?.isConnected) opener.focus({ preventScroll: true });
-      };
-      const onSubEscape = (event) => {
-        if (!el.isConnected) {
-          document.removeEventListener('keydown', onSubEscape);
-          return;
-        }
-        if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing
-          || document.getElementById('mm_sub_clear_confirm')
-          || document.getElementById('mm_sub_migrate_legacy')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        closeSubDialog();
-      };
-      document.addEventListener('keydown', onSubEscape);
-      el.querySelector('#mm_sub_close_btn').onclick = closeSubDialog;
+      const closeBtn = el.querySelector('#mm_sub_close_btn');
+      const closeSubDialog = bindDialogKeyboard(el, closeToast, opener, closeBtn, rowsEl.querySelector('.mm_sub_url_input'));
+      closeBtn.onclick = closeSubDialog;
       submitBtn.onclick = async () => {
         const sources = Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({
           url: row.querySelector('.mm_sub_url_input').value,
@@ -12638,7 +12688,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
               // Nothing to migrate while clearing; the legacy guard stays quiet then.
               migrateLegacy: hasSubscriptionUrl
                 && (currentRuleMode === 'original' || configSource === 'subscription_original')
-                && await askConfirm('mm_sub_migrate_legacy', '迁移到本地模板？', '旧配置及来源文件会备份；校验或启动失败时恢复旧状态。', '迁移并更新', '取消') },
+                && await askConfirm('mm_sub_migrate_legacy', '迁移到本地模板？', '旧配置及来源文件会备份；校验或启动失败时恢复旧状态。', '迁移并更新', '取消', submitBtn) },
           );
 
           if (success) {
@@ -12655,7 +12705,6 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           await releaseCriticalOperation(operationToken);
         }
       };
-      rowsEl.querySelector('.mm_sub_url_input')?.focus({ preventScroll: true });
     };
 
     // \u521b\u5efa\u8ba2\u9605\u94fe\u63a5\u6309\u94ae
@@ -12683,7 +12732,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const ruleMode = await readCurrentSubRuleMode();
         if (await readConfigSource() == 'uploaded_config') {
           // 空来源走 updateSubProviders 的早退路径，内部不会 operationFinish，由这里收尾。
-          operationFinish(await updateSubProviders([]));
+          operationFinish(await updateSubProviders([], undefined, undefined, updateSubBtn));
           return;
         }        const storedSources = await readCurrentSubSources({ includeDisabled: true });
         const sources = normalizeSubSourceList(storedSources);
@@ -12702,7 +12751,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         }
         createToast('正在检查订阅并选择更新方式…', 'yellow');
         // 早退路径由外层兜底收尾；内部已带详情的收尾优先（operationFinish 首写为准）。
-        operationFinish(await updateSubProviders(sources, ruleMode, convertMode));
+        operationFinish(await updateSubProviders(sources, ruleMode, convertMode, updateSubBtn));
       } catch (error) {
         if (error?.name === 'OperationCancelled') return;
         operationFinish(false, error.message || String(error));
@@ -12718,7 +12767,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       return await overwriteConfigByTemplate({ confirm: false });
     };
 
-    const showRuleOverrideDialog = async () => {
+    const showRuleOverrideDialog = async (opener) => {
       const [savedConfig, runtimeConfig] = await Promise.all([
         readRuleOverrideConfig(),
         readYamlObject(CLASH_CONFIG, 'config.yaml'),
@@ -12736,7 +12785,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const policyOptionsHtml = policyOptions
         .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
         .join('');
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_rule_override_toast',
         `
           <div style="pointer-events:all;width:auto;max-width:960px;">
@@ -12781,7 +12830,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const applyBtn = el.querySelector('#mm_rule_override_apply_btn');
       const clearBtn = el.querySelector('#mm_rule_override_clear_btn');
       enabledInput.checked = config.enabled !== false;
-      el.querySelector('#mm_rule_override_close_btn').onclick = close;
+      const closeBtn = el.querySelector('#mm_rule_override_close_btn');
+      const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, typeInput);
+      closeBtn.onclick = close;
 
       const syncConfig = () => {
         config.enabled = enabledInput.checked;
@@ -12886,9 +12937,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       renderRules();
     };
 
-    const showJsOverrideDialog = async () => {
+    const showJsOverrideDialog = async (opener) => {
       const current = await readJsOverrideText();
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_js_override_toast',
         `
           <div style="pointer-events:all;width:auto;max-width:960px;">
@@ -12911,7 +12962,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const saveBtn = el.querySelector('#mm_js_override_save_btn');
       const applyBtn = el.querySelector('#mm_js_override_apply_btn');
       textarea.value = current;
-      el.querySelector('#mm_js_override_close_btn').onclick = close;
+      const closeBtn = el.querySelector('#mm_js_override_close_btn');
+      const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, textarea);
+      closeBtn.onclick = close;
       el.querySelector('#mm_js_override_example_btn').onclick = () => {
         textarea.value = buildDefaultOverrideJs();
       };
@@ -12928,7 +12981,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
     };
 
-    const showAirportDnsDialog = async () => {
+    const showAirportDnsDialog = async (opener) => {
       const [read, runtime] = await Promise.all([
         readAirportDnsTemplate(), readYamlObject(CLASH_CONFIG, '当前配置'),
       ]);
@@ -12936,7 +12989,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const policy = new Map(Object.entries(read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {}));
       const currentPolicy = runtime.ok && runtime.value.dns && runtime.value.dns['proxy-server-nameserver-policy'] || {};
       let editingDomain = null;
-      const { el, close } = createFixedToast('mm_airport_dns_dialog', `
+      const { el, close: closeToast } = createFixedToast('mm_airport_dns_dialog', `
         <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0">节点 DNS 策略</div>
           <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
@@ -13031,7 +13084,8 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return;
         if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('节点 DNS 策略已保存；点击“应用模板”后生效', 'green', 7000);
       });
-      el.querySelector('#mm_airport_dns_close').onclick = close;
+      const closeBtn = el.querySelector('#mm_airport_dns_close');
+      closeBtn.onclick = bindDialogKeyboard(el, closeToast, opener, closeBtn, domains);
       render();
     };
 
@@ -13051,7 +13105,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         return;
       }
       const activeRuleCount = ruleOverride.enabled === false ? 0 : ruleOverride.rules.length;
-      const { el, close } = createFixedToast(
+      const { el, close: closeToast } = createFixedToast(
         'mm_template_override_center',
         `
           <div style="pointer-events:all;width:90vw;max-width:760px;">
@@ -13090,27 +13144,29 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const uploadTemplateBtn = el.querySelector('#mm_template_upload_btn');
       const restorePackageBtn = el.querySelector('#mm_template_restore_package_btn');
       const rebuildBtn = el.querySelector('#mm_template_rebuild_btn');
-      el.querySelector('#mm_template_close_btn').onclick = close;
+      const closeBtn = el.querySelector('#mm_template_close_btn');
+      const close = bindDialogKeyboard(el, closeToast, templateOverrideBtn, closeBtn, rulesBtn);
+      closeBtn.onclick = close;
       uploadTemplateBtn.onclick = () => uploadEl.click();
       restorePackageBtn.onclick = () => packageUploadEl.click();
       rulesBtn.onclick = async () => {
         close();
         await wait(350);
-        await showRuleOverrideDialog();
+        await showRuleOverrideDialog(templateOverrideBtn);
       };
       jsBtn.onclick = async () => {
         close();
         await wait(350);
-        await showJsOverrideDialog();
+        await showJsOverrideDialog(templateOverrideBtn);
       };
       airportDnsBtn.onclick = async () => {
         close();
         await wait(350);
-        await showAirportDnsDialog();
+        await showAirportDnsDialog(templateOverrideBtn);
       };
       rebuildBtn.onclick = async () => {
         return runCriticalButtonOperation('应用模板', rebuildBtn, '应用中\u2026', async () => {
-          await overwriteConfigByTemplate();
+          await overwriteConfigByTemplate({ opener: rebuildBtn });
         });
       };
     };
@@ -13121,7 +13177,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     policyToolsBtn.onclick = async () => {
       try {
         if (!(await ensureReady({ readOnly: true }))) return;
-        await showPolicyToolsDialog({ initialTab: 'network' });
+        await showPolicyToolsDialog({ initialTab: 'network', opener: policyToolsBtn });
       } catch (error) {
         createToast(`无法打开网络设置<br>${safeTextToHtml(error && error.message ? error.message : error)}`, 'red', 9000);
       }
@@ -13142,7 +13198,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     gistSyncBtn.textContent = 'Gist \u52a0\u5bc6\u540c\u6b65';
     gistSyncBtn.onclick = async () => {
       if (!(await ensureAdvanced())) return;
-      const {el, close} = createFixedToast('mm_gist_sync_dialog', `
+      const {el, close: closeToast} = createFixedToast('mm_gist_sync_dialog', `
         <div style="pointer-events:all;width:auto;max-width:760px;max-height:85vh;overflow:auto;font-size:.8rem;line-height:1.5;">
           <div class="title" style="margin:0 0 12px">Gist 同步</div>
           <label for="mm_gist_url">Gist Raw 链接</label>
@@ -13258,6 +13314,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       q('cancel').onclick=async()=>{if(currentJob){const r=await f50GistExec(['cancel',currentJob],15000);result(r.ok?'\u5df2\u8bf7\u6c42\u53d6\u6d88\uff1b\u4ee5\u6700\u7ec8\u56de\u6267\u4e3a\u51c6':f50GistMessage(r.code));await refresh(false);}};
       q('recover').onclick=async()=>{busy(true);try{const r=await f50GistExec(['recover'],180000);result(describe(r.result || r));await refresh(false);}finally{if(opened)busy(false);}};
       q('delete').onclick=()=>{if(window.confirm('\u5220\u9664 Gist \u94fe\u63a5\u3001\u79c1\u94a5\u548c\u540c\u6b65\u8bb0\u5f55\uff0c\u5e76\u505c\u6b62\u81ea\u52a8\u540c\u6b65\uff1f\u5f53\u524d config.yaml \u4e0d\u4f1a\u88ab\u5220\u9664\u3002'))return launch('delete');};
+      const close = bindDialogKeyboard(el, closeToast, gistSyncBtn, q('close'), q('url'));
       q('close').onclick=()=>{opened=false;pendingKey='';q('key').value='';close();};
       const observer=new MutationObserver(()=>{if(!el.isConnected){opened=false;pendingKey='';observer.disconnect();}});
       observer.observe(document.body,{childList:true,subtree:true});

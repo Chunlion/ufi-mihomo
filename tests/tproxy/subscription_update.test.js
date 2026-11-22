@@ -157,7 +157,8 @@ function airportDialogHarness(initialPolicy = {}, runtimePolicy = airportPolicy)
     CLASH_CONFIG: '/data/clash/Proxy/config.yaml', readAirportDnsTemplate: api.read, readYamlObject: read,
     isPlainYamlObject: value => value !== null && typeof value === 'object' && !Array.isArray(value),
     updateAirportDnsTemplate: api.update, extractAirportDnsPolicy: api.extract, saveAirportDnsPolicy: api.save,
-    createToast() {}, fitDialogWidth() {}, safeTextToHtml: String, document: { createElement: element },
+    createToast() {}, fitDialogWidth() {}, bindDialogKeyboard: (_el, close) => close,
+    safeTextToHtml: String, document: { createElement: element },
     createFixedToast: () => {
       elements = new Map();
       return { close() {}, el: { querySelector(id) {

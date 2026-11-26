@@ -288,3 +288,57 @@ test('settings do not treat a failed version read as an old kernel', async () =>
   });
   await assert.rejects(verify({ traffic_mode: 'tun', tun_stack: 'auto' }), /无法检查/);
 });
+
+test('f50_expand_ipv6_bypass_suffixes expands suffixes against current br0 /64 prefix and updates on rotation', () => {
+  const f = fixture();
+  try {
+    fs.writeFileSync(path.join(f.dir, 'bin/ip'), `#!/bin/sh
+echo "36: br0 inet6 $TEST_PREFIX/64 scope global"
+`);
+    fs.chmodSync(path.join(f.dir, 'bin/ip'), 0o755);
+    fs.writeFileSync(path.join(f.dir, 'Policy/ipv6_bypass_suffixes.txt'), '::0248\r\n::6:1\n::1:2:3:4\n::1\n');
+    const runWithPrefix = prefix => spawnSync('sh', ['-s'], {
+      encoding: 'utf8',
+      env: { ...process.env, TEST_PREFIX: prefix, CLASH_ROOT: f.dir, PATH: `${path.join(f.dir, 'bin')}:${process.env.PATH}` },
+      input: `${helpers}\nf50_expand_ipv6_bypass_suffixes ${quote(f.dir)}\n`,
+      timeout: 10000,
+    });
+    const first = runWithPrefix('2408:8444:b591:2430::6c');
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /F50_IPV6_SUFFIX_SYNCED=1/);
+    const bypass1 = f.read('Policy/device_bypass.txt');
+    assert.match(bypass1, /^192\.168\.0\.248$/m);
+    assert.match(bypass1, /^2408:8444:b591:2430::248 # kano-v6-suffix$/m);
+    assert.match(bypass1, /^2408:8444:b591:2430::6:1 # kano-v6-suffix$/m);
+    assert.match(bypass1, /^2408:8444:b591:2430:1:2:3:4 # kano-v6-suffix$/m);
+    assert.doesNotMatch(bypass1, /::1 # kano-v6-suffix/);
+
+    // Prefix rotation replaces old # kano-v6-suffix entries while preserving manual lines
+    const second = runWithPrefix('2409:8a00::1');
+    assert.equal(second.status, 0, second.stderr);
+    const bypass2 = f.read('Policy/device_bypass.txt');
+    assert.match(bypass2, /^192\.168\.0\.248$/m);
+    assert.doesNotMatch(bypass2, /2408:8444:b591:2430::248/);
+    assert.match(bypass2, /^2409:8a00::248 # kano-v6-suffix$/m);
+    assert.match(bypass2, /^2409:8a00::6:1 # kano-v6-suffix$/m);
+    assert.match(bypass2, /^2409:8a00::1:2:3:4 # kano-v6-suffix$/m);
+
+    const unavailable = runWithPrefix('');
+    assert.equal(unavailable.status, 0, unavailable.stderr);
+    assert.match(unavailable.stdout, /F50_WARNING=ipv6_bypass_prefix_unavailable/);
+    assert.equal(f.read('Policy/device_bypass.txt'), bypass2.split('\n').filter(line => !line.endsWith('# kano-v6-suffix')).join('\n'));
+    assert.match(f.read('Policy/ipv6_bypass_suffixes.txt'), /::0248/);
+
+    const resumed = runWithPrefix('2409:8a00::1');
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(f.read('Policy/device_bypass.txt'), bypass2);
+
+    // Clearing suffixes removes generated lines without touching manual entries
+    fs.writeFileSync(path.join(f.dir, 'Policy/ipv6_bypass_suffixes.txt'), '');
+    const third = runWithPrefix('2409:8a00::1');
+    assert.equal(third.status, 0, third.stderr);
+    const bypass3 = f.read('Policy/device_bypass.txt');
+    assert.match(bypass3, /^192\.168\.0\.248$/m);
+    assert.doesNotMatch(bypass3, /kano-v6-suffix/);
+  } finally { f.close(); }
+});

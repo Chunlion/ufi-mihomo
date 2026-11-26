@@ -1327,3 +1327,65 @@ for (const outcome of ['precheck_lost', 'precheck_blocked', 'response_lost', 'pa
     }
   });
 }
+
+test('saveTemplate commits paired templates via commitStagedYaml with backup:false on preparation', async () => {
+  const calls = [];
+  const save = run(slice('const saveTemplate =', 'const showInfoDialog =') + 'saveTemplate', {
+    CLASH_DIR: '/data/clash', CLASH_TEMPLATE: '/data/clash/Tools/template.yaml', CLASH_TEMPLATE_BASE: '/data/clash/Tools/template.base.yaml',
+    CLASH_SUB_URLS: '/data/clash/Proxy/subscription_urls.txt', SUB_RULE_MODE_TEMPLATE: 'template',
+    createRandomString: () => 'fixture', readConfigSource: async () => 'template.yaml',
+    uploadFileToDevice: async () => '/tmp/upload.yaml',
+    shellQuote: productionQuote,
+    runShellWithRoot: async script => {
+      if (script.includes('echo 1 || echo 0')) return { success: true, content: '1' };
+      if (script.includes('TEMPLATE_STAGED')) return { success: true, content: 'TEMPLATE_STAGED' };
+      if (script.includes('TEMPLATE_YAML_OK')) return { success: true, content: 'TEMPLATE_YAML_OK' };
+      return { success: true, content: '' };
+    },
+    hostRunShellWithRoot: async () => ({ success: true }),
+    prepareYqRuntimeCmd: () => ':', yqExecutableCheckCmd: () => ':', pruneKanoBackupsCmd: () => 'true',
+    readSavedSubSourcesForTemplate: async () => [], readTemplateProviderSubSources: async () => [],
+    prepareTemplateFromBase: async (_sources, opts) => { calls.push(['prepare', opts.backup]); return true; },
+    hasUserTemplateYaml: async () => true,
+    commitStagedYaml: async opts => { calls.push(['commit', opts.targetPath, opts.basePath, opts.backup]); return { ok: true, content: '' }; },
+    createToast() {}, textToHtml: String, sanitizeSubscriptionSecrets: String, console: { error() {} },
+  });
+  assert.equal(await save({}), true);
+  assert.deepEqual(calls, [
+    ['prepare', false],
+    ['commit', '/data/clash/Tools/template.yaml', '/data/clash/Tools/template.base.yaml', true],
+  ]);
+});
+
+test('writeEditableLocalFile rejects symlink targets and invalidates status snapshot on save', async () => {
+  const dir = temp(), target = path.join(dir, 'options.conf'), link = path.join(dir, 'link.conf'), uploaded = write(dir, 'up.conf', 'a=1\n');
+  let invalidated = 0;
+  try {
+    fs.writeFileSync(target, 'old=1\n');
+    fs.symlinkSync(target, link);
+    const save = run(slice('const writeEditableLocalFile =', 'const showEditableLocalFilesDialog =') + 'writeEditableLocalFile', {
+      findEditableLocalFile: p => ({ path: p, label: path.basename(p), allowEmpty: true }),
+      CLASH_CONFIG: '/config', CLASH_TEMPLATE: '/template', CLASH_TEMPLATE_BASE: '/base',
+      CLASH_OVERRIDE_JS: '/override', CLASH_SUB_URLS: '/sub', CLASH_RULE_OVERRIDE_JSON: '/rules', CLASH_RULE_OVERRIDE_APPLIED_JSON: '/applied',
+      uploadEditorContent: async () => uploaded, shellQuote: productionQuote, createToast() {}, escapeHtml: String, safeTextToHtml: String,
+      invalidateStatusSnapshot: () => { invalidated++; },
+      runShellWithRoot: async cmd => { const r = shell(cmd); return { success: r.status === 0, content: r.stdout + r.stderr }; },
+      hostRunShellWithRoot: async cmd => { const r = shell(cmd); return { success: r.status === 0 }; },
+    });
+    assert.equal(await save({ path: link, label: 'link.conf', allowEmpty: true }, 'a=1\n'), false);
+    assert.equal(invalidated, 0);
+    const up2 = write(dir, 'up2.conf', 'a=2\n');
+    const saveOk = run(slice('const writeEditableLocalFile =', 'const showEditableLocalFilesDialog =') + 'writeEditableLocalFile', {
+      findEditableLocalFile: p => ({ path: p, label: path.basename(p), allowEmpty: true }),
+      CLASH_CONFIG: '/config', CLASH_TEMPLATE: '/template', CLASH_TEMPLATE_BASE: '/base',
+      CLASH_OVERRIDE_JS: '/override', CLASH_SUB_URLS: '/sub', CLASH_RULE_OVERRIDE_JSON: '/rules', CLASH_RULE_OVERRIDE_APPLIED_JSON: '/applied',
+      uploadEditorContent: async () => up2, shellQuote: productionQuote, createToast() {}, escapeHtml: String, safeTextToHtml: String,
+      invalidateStatusSnapshot: () => { invalidated++; },
+      runShellWithRoot: async cmd => { const r = shell(cmd); return { success: r.status === 0, content: r.stdout + r.stderr }; },
+      hostRunShellWithRoot: async cmd => { const r = shell(cmd); return { success: r.status === 0 }; },
+    });
+    assert.equal(await saveOk({ path: target, label: 'options.conf', allowEmpty: true }, 'a=2\n'), true);
+    assert.equal(invalidated, 1);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'a=2\n');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

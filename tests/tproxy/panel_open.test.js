@@ -276,3 +276,11 @@ test('read-only panel checks remain available after a mutation was cancelled', a
   await assert.rejects(api.call('/configs', 'GET', '{}'), /mutation cancelled/);
   assert.equal(reads, 2);
 });
+
+test('popup opening caps retries when snapshot generation keeps advancing', async () => {
+  let builds = 0;
+  const h = harness({ info: async () => { builds++; h.api.statusChanged(); return { port: 7788 }; } });
+  await h.api.open();
+  assert.equal(builds, 5);
+  assert.equal(h.windows[0].replacements.length, 1);
+});

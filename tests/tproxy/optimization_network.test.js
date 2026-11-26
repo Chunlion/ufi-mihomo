@@ -358,3 +358,32 @@ for (const outcome of ['success', 'error', 'cancel']) {
     assert.deepEqual(calls, ['acquire', 'busy', 'ready', 'release']);
   });
 }
+
+test('network dialog validates bypass list before saving notes and retains inputs on failure', async () => {
+  let noteSaves = 0, toasts = [];
+  const elements = new Map();
+  const get = id => {
+    if (!elements.has(id)) elements.set(id, { value: '', checked: false, dispatchEvent() {} });
+    return elements.get(id);
+  };
+  get('#mm_policy_traffic_mode').value = 'tun';
+  get('#mm_policy_device').value = 'not-an-ip-or-mac';
+  const handler = slice("get('#mm_policy_save_apply').onclick", '\n    };\n  };');
+  run(deviceNoteHelpers + handler + '\n};', {
+    ...deviceNoteContext, F50_PORTS: { dns: 1053 }, get,
+    state: { options: { traffic_mode: 'tproxy', ipv6: 'off', tun_stack: 'auto', quic_block: 'off', dns_hijack: 'on', private_route_enabled: 'off', private_route_cidrs: '', private_route_policy: '' }, deviceBypass: '' },
+    deviceNotes: {}, readPolicyState: async () => ({ deviceNotes: {} }),
+    saveOverrideText: async () => { noteSaves++; return true; },
+    acquireCriticalOperation: () => ({}), setButtonBusy() {}, releaseCriticalOperation: async () => {},
+    kprSaveNetworkState: async () => false, Event: class {}, safeTextToHtml: String,
+    createToast: message => toasts.push(message),
+  });
+  await get('#mm_policy_save_apply').onclick();
+  assert.equal(noteSaves, 0);
+  assert.match(toasts[0], /直连设备列表格式错误/);
+  get('#mm_policy_device').value = '192.168.0.5';
+  await get('#mm_policy_save_apply').onclick();
+  assert.equal(noteSaves, 1);
+  assert.equal(get('#mm_policy_traffic_mode').value, 'tun');
+  assert.equal(get('#mm_policy_device').value, '192.168.0.5');
+});

@@ -473,3 +473,20 @@ for (const entry of ['online', 'upload']) {
     });
   }
 }
+
+for (const cause of ['busy', 'upload_failed']) {
+  test('chooseF50Package does not leave stale in-flight mark on ' + cause, async () => {
+    const storage = new Map();
+    const localStorage = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
+    const { api, input } = installers({
+      localStorage,
+      runShellWithRoot: async () => cause === 'busy'
+        ? { success: false, content: 'F50_OPERATION_BUSY' }
+        : { success: true },
+      uploadFileToDevice: async () => { throw new Error('upload_aborted'); },
+    });
+    await api.choose();
+    await input.onchange();
+    assert.equal(storage.has('kano_f50_operation_inflight'), false);
+  });
+}

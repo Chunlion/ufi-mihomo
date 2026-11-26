@@ -78,6 +78,13 @@ const F50_RESTORE_EXCLUDED_KEYS = [...new Set([
   'proxies', 'proxy-groups', 'rules', 'proxy-providers', 'rule-providers',
   'dns', 'tun', 'sniffer', 'profile',
 ])];
+function buildF50ConfigTxRecoverLoop(onFail) {
+  return `for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
+  config_source_file="$F50_ROOT/Tools/config_source.conf"
+  if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
+  f50_config_tx_recover "$config_target" "$config_source_file" || ${onFail}
+done`;
+}
 function buildF50EmergencyScript(resumeTag = '', requireIdle = false, releaseIdleOnly = false, forUninstall = releaseIdleOnly) {
   return buildF50MaintenanceFunctions('cleanup') + buildF50RecoveryEligibilityFunctions(forUninstall) + buildF50ConfigTransactionFunctions() + '\nF50_RESUME_TAG=' + shellQuote(resumeTag) + '\n' + `F50_SKIP_NATIVE_RECOVERY=1
 F50_OPERATION_LOCK=\${F50_OPERATION_LOCK:-/dev/kano_tproxy_operation.lock}
@@ -147,11 +154,7 @@ config_recovery_failed=0
 if [ -d "$F50_ROOT/Tools/gist-sync/activation" ]; then
   [ -x "$F50_ROOT/Tools/kano-gist-sync" ] && "$F50_ROOT/Tools/kano-gist-sync" recover-stopped >/dev/null 2>&1 || config_recovery_failed=1
 fi
-for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
-  config_source_file="$F50_ROOT/Tools/config_source.conf"
-  if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
-  f50_config_tx_recover "$config_target" "$config_source_file" || config_recovery_failed=1
-done
+${buildF50ConfigTxRecoverLoop('config_recovery_failed=1')}
 [ "$config_recovery_failed" = 0 ] || echo F50_RECOVERY_CONFIG_FAILED=1
 for recovery_backup in "$F50_DATA/"kano_subscription_save_* "$F50_DATA/"kano_network_save_* "$F50_DATA/"kano_sub_persist.* "$F50_DATA/"kano_policy_save.*; do
   [ -d "$recovery_backup" ] && [ ! -f "$recovery_backup/committed" ] || continue
@@ -976,7 +979,7 @@ F50_SERVICE_TARGET=${service}
 # All patch segments carry their final marker and the script still parses: nothing to rebuild.
 if grep -qx '# KANO_TUN_RULE_CLEANUP=2' "$F50_SERVICE_TARGET" && grep -qx '# KANO_ORIGINAL_CONFIG_PRESERVATION=25' "$F50_SERVICE_TARGET" &&
   grep -qx '# KANO_CURL_ABSOLUTE=1' "$F50_SERVICE_TARGET" && grep -qx '# KANO_TUN_IPV6_RETURN=3' "$F50_SERVICE_TARGET" &&
-  grep -qx '# KANO_IPV6_DNS_SPLIT=5' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
+  grep -qx '# KANO_IPV6_DNS_SPLIT=6' "$F50_SERVICE_TARGET" && sh -n "$F50_SERVICE_TARGET"; then
   echo F50_SERVICE_PATCH_COMMITTED=1
   exit 0
 fi
@@ -1093,7 +1096,7 @@ awk -v functions="$FUNCTIONS" '
 ' "$SERVICE" > "$TMP" || exit 1
 ${patchFinish}
 fi
-if ! grep -qx '# KANO_IPV6_DNS_SPLIT=5' "$SERVICE"; then
+if ! grep -qx '# KANO_IPV6_DNS_SPLIT=6' "$SERVICE"; then
 TMP="$SERVICE.dns.$$"
 ${patchSetup}
 printf '%s' ${shellQuote(dnsCompat)} > "$FUNCTIONS" || exit 1
@@ -1412,7 +1415,7 @@ function buildF50MaintenanceFunctions(operation = 'all') {
     base: { build: buildF50ShellBase, requires: [] },
     process: { build: () => buildF50ProcessHelpers(operation !== 'install'), requires: ["base"] },
     network: { build: buildF50NetworkHelpers, requires: ["base"] },
-    compat: { build: buildF50NetworkCompatHelpers, requires: ["base"] },
+    compat: { build: () => buildF50NetworkCompatHelpers(operation !== 'install'), requires: ["base"] },
     inspect: { build: buildF50InspectHelpers, requires: ["process","network"] },
     cleanup: { build: buildF50CleanupHelpers, requires: ["process","network"] },
     artifacts: { build: buildF50ArtifactHelpers, requires: ["base"] },
@@ -1780,7 +1783,12 @@ f50_execute_plan() {
   [ "$plan_bad" = 0 ]
 }
 `; }
-function buildF50NetworkCompatHelpers() { return `# KANO_TUN_RULE_CLEANUP=2
+function buildF50NetworkCompatHelpers() {
+  const includeFullDns = arguments[0] !== false;
+  const dnsCompat = includeFullDns
+    ? buildF50Ipv6DnsCompatFunctions()
+    : buildF50Ipv6DnsCompatFunctions().split('\nf50_dns_restore_options() {')[0];
+  return `# KANO_TUN_RULE_CLEANUP=2
 f50_drop_detached_tun_rules() {
   case "$1" in stop|recover|restart) tun_cleanup_active=1 ;; *) tun_cleanup_active=0 ;; esac
   for detached_family in 4 6; do
@@ -1811,7 +1819,7 @@ f50_drop_detached_tun_rules() {
   done
   return 0
 }
-${buildF50Ipv6DnsCompatFunctions()}`; }
+${dnsCompat}`; }
 function buildF50Tun6CompatFunctions() {
   const [major, minor, patch] = F50_MIPS_MIN_VERSION.split('.').map(Number);
   return `f50_check_mips_version() {
@@ -2020,6 +2028,48 @@ f50_ipv4_dns_rules() {
   fi
   echo F50_IPV4_DNS_VERIFIED=1
 }
+f50_expand_ipv6_bypass_suffixes() {
+  r=\${1:-${F50_ROOT_FALLBACK}}; sf="$r/Policy/ipv6_bypass_suffixes.txt"; bf="$r/Policy/device_bypass.txt"
+  [ -f "$sf" ] && [ ! -L "$sf" ] || return 0
+  [ ! -L "$bf" ] || { echo F50_ERROR=invalid_device_bypass_path; return 1; }
+  sl=$(tr -d '\\r' < "$sf" 2>/dev/null | sed 's/#.*//;s/[[:space:]]//g;/^$/d')
+  pa=""
+  if [ -n "$sl" ]; then
+    pa=$(ip -6 -o addr show dev br0 scope global 2>/dev/null | awk '$3=="inet6"{a=$4;sub(/\\/.*/,"",a);if(a~/^[0-9a-fA-F:]+$/&&tolower(a)!~/^(fe[89ab]|fc|fd|ff|::)/){print a;exit}}')
+    [ -n "$pa" ] || pa=$(ip -6 -o addr show scope global 2>/dev/null | awk '$2!~/^(lo|KanoTun|tun|utun|tailscale|dummy)/&&$3=="inet6"{a=$4;sub(/\\/.*/,"",a);if(a~/^[0-9a-fA-F:]+$/&&tolower(a)!~/^(fe[89ab]|fc|fd|ff|::)/){print a;exit}}')
+  fi
+  if [ -z "$pa" ]; then
+    if [ -f "$bf" ] && grep -q '#[[:space:]]*kano-v6-suffix[[:space:]]*$' "$bf" 2>/dev/null; then
+      tf="$bf.sfx.$$"
+      awk '!/#[[:space:]]*kano-v6-suffix[[:space:]]*$/' "$bf" > "$tf" && chmod 600 "$tf" 2>/dev/null && mv -f "$tf" "$bf" || { rm -f "$tf"; return 1; }
+    fi
+    [ -z "$sl" ] || echo F50_WARNING=ipv6_bypass_prefix_unavailable
+    return 0
+  fi
+  se=$(printf '%s\\n' "$sl" | awk -v pa="$pa" '
+    function hv(s, i,v){v=0;for(i=1;i<=length(s);i++)v=v*16+index("0123456789abcdef",substr(s,i,1))-1;return v}
+    function e6(a,o, sd,l,rn,nl,nr,i){
+      for(i=1;i<=8;i++)o[i]=0;a=tolower(a)
+      if(index(a,"::")){if(gsub(/::/,"::",a)>1)return 0;split(a,sd,"::");nl=sd[1]==""?0:split(sd[1],l,":");nr=sd[2]==""?0:split(sd[2],rn,":");if(nl+nr>8)return 0;for(i=1;i<=nl;i++){if(l[i]!~/^[0-9a-f]{1,4}$/)return 0;o[i]=hv(l[i])}for(i=1;i<=nr;i++){if(rn[i]!~/^[0-9a-f]{1,4}$/)return 0;o[8-nr+i]=hv(rn[i])}}
+      else{if(split(a,l,":")!=8)return 0;for(i=1;i<=8;i++){if(l[i]!~/^[0-9a-f]{1,4}$/)return 0;o[i]=hv(l[i])}}
+      return 1
+    }
+    function f6(a, i,cs,cl,bs,bl,o){
+      bl=0;cl=0;for(i=1;i<=8;i++)if(!a[i]){if(!cl)cs=i;if(++cl>bl){bs=cs;bl=cl}}else cl=0
+      if(bl<2)bl=0;o=""
+      for(i=1;i<=8;i++){if(bl&&i==bs){o=o "::";i+=bl-1;continue};o=o (o==""||substr(o,length(o)-1)=="::"?"":":") sprintf("%x",a[i])}
+      return o
+    }
+    BEGIN{if(!e6(pa,p))exit 1}
+    /^::[0-9a-fA-F:]+$/{if(!e6($0,s)||s[1]||s[2]||s[3]||s[4]||(!s[5]&&!s[6]&&!s[7]&&s[8]<2))next;for(i=1;i<=4;i++)s[i]=p[i];ip=f6(s);if(!u[ip]++)print ip " # kano-v6-suffix"}
+  ') || { echo F50_ERROR=ipv6_bypass_suffix_expand_failed; return 1; }
+  mkdir -p "$r/Policy" || return 1
+  sb=""; [ -f "$bf" ] && sb=$(tr -d '\\r' < "$bf" | awk '!/#[[:space:]]*kano-v6-suffix[[:space:]]*$/&&!/^[[:space:]]*$/')
+  sn="$bf.sfx.$$"
+  { [ -z "$sb" ] || printf '%s\\n' "$sb"; [ -z "$se" ] || printf '%s\\n' "$se"; } > "$sn" && chmod 600 "$sn" 2>/dev/null || { rm -f "$sn"; return 1; }
+  mv -f "$sn" "$bf" || { rm -f "$sn"; return 1; }
+  echo F50_IPV6_SUFFIX_SYNCED=1
+}
 f50_run_controller() (
   case "$1" in snapshot|status|version|--version|help|--help|profile|verify-clean|verify-stopped)
     "$binary" "$@"; exit $?;;
@@ -2028,6 +2078,9 @@ f50_run_controller() (
   f50_dns_options="$f50_dns_root/Policy/options.conf"
   f50_dns_backup="$f50_dns_options.ipv6_dns"
   f50_dns_restore_options || exit 1
+  case "$1:$2" in start:*|restart:*|boot:*|policy:apply|policy:boot-apply)
+    f50_expand_ipv6_bypass_suffixes "$f50_dns_root" || exit 1 ;;
+  esac
   case "$1:$2" in start:*|restart:*|boot:*|policy:apply|policy:boot-apply|policy:verify) ;;
     *) "$binary" "$@"; exit $?;;
   esac
@@ -2055,7 +2108,7 @@ f50_run_controller() (
   case "$1:$2" in policy:verify) f50_ipv4_dns_rules verify;; *) f50_ipv4_dns_rules apply;; esac || exit 1
   echo F50_WARNING=ipv6_nat_unavailable_ipv4_dns_preserved
 )
-# KANO_IPV6_DNS_SPLIT=5
+# KANO_IPV6_DNS_SPLIT=6
 `; }
 
 function buildF50InspectHelpers() { return `f50_inspect() {
@@ -2349,7 +2402,6 @@ f50_start_service() {
     printf 'START_SERVICE_RC=%s\nF50_START_CODE=%s\nF50_START_OK=%s\n' "$F50_START_RC" "$F50_START_CODE" "$F50_START_OK"
     return 1
   fi
-  # The Service skips its own capture wrapper here; redaction and the start log are handled once below.
   f50_disable_unsupported_ipv6_dns_hijack || return 1
   f50_drop_detached_tun_rules "$start_action" || return 1
   start_raw=$(F50_SERVICE_CAPTURED=1 CLASH_ROOT="$F50_ROOT" f50_limit "$start_budget" sh "$F50_ROOT/Scripts/Clash.Service" "$start_action" 2>&1)
@@ -2396,7 +2448,6 @@ f50_start_service() {
   )
   service_output_rc=$?
   service_output=$(printf '%s\\n' "$service_output" | f50_redact)
-  # Command substitution isolates assignments; restore only anchored, validated final markers.
   service_status=$(printf '%s\\n' "$service_output" | awk -v rc="$service_output_rc" '
     BEGIN {code="service_failed";ok=0}
     /^F50_START_CODE=[A-Za-z0-9_]+$/ {code=substr($0,16)}
@@ -2594,7 +2645,7 @@ if f50_root_has_data; then HAD_OLD=1; fi
 [ ! -s "$F50_ROOT/Proxy/config.yaml" ] || HAD_USER_CONFIG=1
 f50_preserve_user_data() {
 # Preserve templates too: they are user-editable, not disposable executable resources.
-for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/subscription-settings.json Tools/subscription-state.json Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/device_notes.json Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
+for rel in Tools/gist-sync ${F50_PROXY_USER_DATA.map((name) => `Proxy/${name}`).join(' ')} Tools/subscription-settings.json Tools/subscription-state.json Tools/template.yaml Tools/template.base.yaml Tools/override.js Tools/rule_override.json Tools/rule_override_applied.json Tools/sub_rule_mode.conf Tools/sub_user_agent.conf Tools/device_notes.json Tools/config_source.conf Policy/options.conf Policy/device_bypass.txt Policy/ipv6_bypass_suffixes.txt Policy/direct_domain.list Policy/direct_ip.list Policy/proxy_domain.list Policy/reject_domain.list; do
   src="$F50_ROOT/$rel"; dst="$PKG/$rel"
   [ -e "$src" ] || continue
   [ ! -L "$src" ] || { f50_install_fail user_data_symlink; return 1; }
@@ -2658,7 +2709,6 @@ for template_file in "$PKG/Tools/template.yaml" "$PKG/Tools/template.base.yaml";
     exit 1
   }
 done
-# Panel fields are repaired by Clash.Service only after clashctl start/restart succeeds.
 f50_preflight_config() {
   NEEDS_CONFIG=ready
   f50_limit 5 "$YQ" e -e 'tag == "!!map" and ((.proxies // []) | tag == "!!seq") and ((."proxy-providers" // {}) | tag == "!!map")' "$CFG" >/dev/null 2>&1
@@ -2668,7 +2718,6 @@ f50_preflight_config() {
   urls=$(f50_limit 5 "$YQ" e -r '."proxy-providers"[] | select(.type == "http") | ("URL=" + (.url // ""))' "$CFG" 2>/dev/null); urls_rc=$?
   case "$urls_rc" in 124|137|126|127) f50_install_fail config_probe_failed; return 1 ;; esac
   if [ "$urls_rc" != 0 ]; then NEEDS_CONFIG=invalid_config; return 0; fi
-  # The prefix preserves empty URL rows through command substitution.
   if [ -n "$urls" ]; then
     while IFS= read -r url; do
       url=\${url#URL=}
@@ -2689,14 +2738,12 @@ EOF_F50_URLS
   fi
 }
 f50_preflight_config || exit 1
-# URL syntax is preflighted here; the Controller performs the final validation.
 case "$NEEDS_CONFIG" in invalid_config|invalid_subscription)
   if [ "$HAD_USER_CONFIG" = 0 ] || [ "$OLD_RUNNING" = 1 ]; then f50_install_fail "$NEEDS_CONFIG"; exit 1; fi ;;
 esac
 if [ "$F50_OLD_FOUND" = 1 ]; then
   CLEAN_ATTEMPTED=1
   f50_clean_environment || { f50_install_fail old_environment_cleanup_failed; exit 1; }
-  # Native recovery may repair both the config and cached providers from a prior transaction.
   f50_preserve_user_data || exit 1
   f50_ensure_install_secret || exit 1
   f50_ensure_install_dashboard || exit 1
@@ -2709,7 +2756,6 @@ else
 fi
 printf '%s\\n' 'explicit start required' > "$PKG/Policy/stopped" || { f50_install_fail stopped_latch_failed; exit 1; }
 if [ "$HAD_OLD" = 0 ] && [ -d "$F50_ROOT" ]; then
-  # Remove only the known latch and empty directory scaffold; unexpected new data blocks the transaction.
   rm -f "$F50_ROOT/Policy/stopped" || { f50_install_fail stale_latch_remove_failed; exit 1; }
   find "$F50_ROOT" -depth -type d -exec rmdir {} \\; 2>/dev/null
   [ ! -e "$F50_ROOT" ] || { f50_install_fail target_changed_during_install; exit 1; }
@@ -2738,9 +2784,7 @@ else
   exit 1
 fi
 [ "$status" = installed_running ] || f50_resume_schedulers
-# Component completion is independent of recovery-marker and lock cleanup.
 SUCCESS=1
-# Do not retain age identities in ordinary component rollback folders.
 if [ -n "$BACKUP" ] && [ -d "$BACKUP/Tools/gist-sync" ]; then
   [ ! -L "$BACKUP/Tools/gist-sync" ] && rm -rf "$BACKUP/Tools/gist-sync" || { KEEP_WORK=1; f50_install_fail gist_backup_cleanup_failed; exit 1; }
 fi
@@ -2770,10 +2814,25 @@ function readF50OperationInFlight() {
     return value;
   } catch (_) { return null; }
 }
-function confirmF50OperationNotInFlight() {
+let activeUiConfirm = null;
+async function confirmWithDialog(id, title, bodyHtml, messageFallback, ok = '确认', cancel = '取消', opener = null, options = {}) {
+  if (typeof activeUiConfirm === 'function') {
+    const resolvedOpener = opener || (typeof document !== 'undefined' ? document.activeElement : null);
+    return activeUiConfirm(id, title, bodyHtml, ok, cancel, resolvedOpener, options);
+  }
+  return typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(messageFallback) : false;
+}
+async function confirmF50OperationNotInFlight(opener = null) {
   const pending = readF50OperationInFlight();
   if (!pending) return true;
-  return window.confirm(`上次${pending.label}（${new Date(pending.at).toLocaleTimeString()} 开始）可能仍在设备上执行。\n继续会被设备租约拒绝。仍要继续？`);
+  const started = new Date(pending.at).toLocaleTimeString();
+  const label = String(pending.label || '操作');
+  const plainMsg = `上次${label}（${started} 开始）可能仍在设备上执行。\n继续会被设备租约拒绝。仍要继续？`;
+  if (typeof activeUiConfirm !== 'function') {
+    return typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(plainMsg) : false;
+  }
+  const htmlMsg = `上次${escapeHtml(label)}（${escapeHtml(started)} 开始）可能仍在设备上执行。<br>继续会被设备租约拒绝，确认仍要继续？`;
+  return confirmWithDialog('mm_operation_inflight_confirm', '检测到未结束的操作', htmlMsg, plainMsg, '仍要继续', '取消', opener);
 }
 async function installF50PackageAtDevicePath(uploaded) {
   lastInstallDiagnostic = null;
@@ -2893,14 +2952,18 @@ echo "CACHE_BYTES=$(wc -c < "$ZIP" | tr -d ' ')"
   const coreVersion = (text.match(/^CACHE_CORE_VERSION=(.+)$/m) || [])[1] || '未知版本';
   const bytes = Number((text.match(/^CACHE_BYTES=(\d+)$/m) || [])[1] || 0);
   const sizeText = bytes > 0 ? `，约 ${Math.round(bytes / 1048576)} MB` : '';
-  return window.confirm(
-    `设备上有一份上次没装完的组件包（内核 ${coreVersion}${sizeText}），与当前插件版本匹配。\n\n`
-    + '确定：直接安装它，不重新下载\n取消：重新下载最新包',
-  );
+  const plainPrompt = `设备上有一份上次没装完的组件包（内核 ${coreVersion}${sizeText}），与当前插件版本匹配。\n\n`
+    + '确定：直接安装它，不重新下载\n取消：重新下载最新包';
+  if (typeof confirmWithDialog === 'function' && typeof activeUiConfirm === 'function') {
+    const esc = typeof escapeHtml === 'function' ? escapeHtml : (v) => String(v);
+    const htmlPrompt = `设备上有一份上次没装完的组件包（内核 <strong>${esc(coreVersion)}</strong>${esc(sizeText)}），与当前插件版本匹配。<br><br>选择“安装缓存包”可省去重新下载；如需最新组件包请选择“重新下载”。`;
+    return confirmWithDialog('mm_cached_archive_confirm', '复用上次下载的组件包？', htmlPrompt, plainPrompt, '安装缓存包', '重新下载');
+  }
+  return window.confirm(plainPrompt);
 }
 async function installF50PackageFromNetwork() {
   return runCriticalOperation('安装核心', async () => {
-    if (!confirmF50OperationNotInFlight()) return false;
+    if (!(await confirmF50OperationNotInFlight())) return false;
     lastInstallDiagnostic = null;
     operationStage('下载组件包');
     const ready = await ensureF50InstallLease();
@@ -2965,19 +3028,22 @@ async function chooseF50Package() {
       return;
     }
     await runCriticalOperation('安装核心', async () => {
-        if (!confirmF50OperationNotInFlight()) return false;
-        markF50OperationInFlight('安装');
+        if (!(await confirmF50OperationNotInFlight())) return false;
         lastInstallDiagnostic = null;
         let uploaded = '';
+        let startedInstall = false;
         try {
           const ready = await ensureF50InstallLease();
           if (!ready.success) throw new Error(ready.content);
           await cleanupF50UploadedPackage();
+          markF50OperationInFlight('安装');
           operationStage('上传组件包');
           uploaded = await uploadFileToDevice(file);
           try { localStorage.setItem(F50_UPLOAD_MARK, uploaded); } catch (_) {}
+          startedInstall = true;
           return await installF50PackageAtDevicePath(uploaded);
         } catch (error) {
+          if (!startedInstall && error?.name !== 'OperationCancelled') clearF50OperationInFlight();
           lastInstallDiagnostic = f50Diagnostic(error && (error.message || String(error)));
           const message = lastInstallDiagnostic.summary;
           operationFinish(false, message);
@@ -3319,7 +3385,12 @@ function readF50TproxyPortCmd() { return `printf \"tproxy_port=${F50_PORTS.tprox
 
 async function kprReadOptions() {
   const result = await runShellWithRoot('if [ -f ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' ]; then cat ' + shellQuote(CLASH_POLICY_OPTIONS_FILE) + ' || exit 1; fi\n' + readF50TproxyPortCmd(), 10000);
-  if (!result.success) throw new Error('无法读取网络设置；配置未修改');
+  if (!result.success) {
+    if (/^F50_OPERATION_(?:BUSY|RECOVERY_BUSY)$/m.test(String(result.content || ''))) {
+      throw new Error('设备正忙：已有其他页面或操作正在占用设备锁，请稍后重试；配置未修改');
+    }
+    throw new Error('无法读取网络设置；配置未修改');
+  }
   return parsePolicyOptionsText(String(result.content || ''));
 }
 
@@ -3402,6 +3473,7 @@ async function verifyF50TunStack(options) {
 
 const policyTransactionFiles = () => [
   CLASH_DEVICE_BYPASS_FILE,
+  CLASH_IPV6_BYPASS_SUFFIXES_FILE,
   CLASH_MAC_BYPASS_FILE,
   BOOT_FILE,
   CLASH_DIRECT_DOMAIN_FILE,
@@ -3415,6 +3487,24 @@ const policyTransactionFiles = () => [
   CLASH_POLICY_OPTIONS_FILE,
   CLASH_SUB_RULE_MODE_FILE,
 ];
+
+function syncConfigIpv6Preference(config, options = {}, { force = false } = {}) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return config;
+  const wantIpv6 = options.ipv6 === 'on';
+  if (force) {
+    config.ipv6 = wantIpv6;
+    if (config.dns == null || f50IsPlainObject(config.dns)) {
+      config.dns = config.dns || {};
+      config.dns.ipv6 = wantIpv6;
+    }
+  }
+  if (options.traffic_mode === 'tun' && wantIpv6 && f50IsPlainObject(config.tun)) {
+    if (!Array.isArray(config.tun['inet6-address']) || !config.tun['inet6-address'].length) {
+      delete config.tun['inet6-address'];
+    }
+  }
+  return config;
+}
 
 async function kprSaveNetworkState(previous, next) {
   let backup = '', policySnapshot = '', snapshotCommitted = false, snapshotRestored = false, saved = false, restartAttempted = false, wasRunning = false, configChanged = false;
@@ -3441,7 +3531,12 @@ async function kprSaveNetworkState(previous, next) {
     next.deviceBypass = devices.text;
     const source = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!source.ok) throw new Error(source.message || '无法读取运行配置（config.yaml）');
-    const prepared = await kprShapeRuntimeConfig(source.value, next.options);
+    const sourceOrigin = typeof readConfigSource === 'function' ? await readConfigSource().catch(() => '') : '';
+    const ipv6Toggled = (previous?.options?.ipv6 === 'on') !== (next.options.ipv6 === 'on');
+    const configInput = syncConfigIpv6Preference(cloneJsonValue(source.value), next.options, {
+      force: ipv6Toggled || (!['uploaded_config', 'subscription_original'].includes(sourceOrigin)),
+    });
+    const prepared = await kprShapeRuntimeConfig(configInput, next.options);
     wasRunning = !!(await getCorePid());
     if (wasRunning) await kprVerifySelection(next.options);
     if (configChanged) {
@@ -3451,6 +3546,9 @@ async function kprSaveNetworkState(previous, next) {
     policySnapshot = `/data/kano_network_save_${Date.now()}_${createRandomString(6)}`;
     const snapshot = await runShellWithRoot(`set -e
 umask 077
+for old_tx in /data/kano_network_save_*; do
+  [ -d "$old_tx" ] && [ ! -L "$old_tx" ] && [ -f "$old_tx/committed" ] && rm -rf "$old_tx" 2>/dev/null || true
+done
 TX=${shellQuote(policySnapshot)}
 mkdir "$TX"
 ${fileSnapshotHelpersCmd()}
@@ -3468,7 +3566,7 @@ echo NETWORK_SNAPSHOT_READY`, 20000);
       operationStage('同步内核模式与接管规则', 2, 4);
       restartAttempted = true;
       const ok = configChanged
-        ? await restartClashOk({ skipCheck: true, preferReload: false, policyReady: true, preparedConfig: prepared })
+        ? await restartClashOk({ skipCheck: true, preparedConfig: prepared })
         : await reapplyPolicyRulesSilent({ ensureScript: false });
       if (!ok) throw new Error('新设置未通过运行检查');
       await kprVerifySelection(next.options);
@@ -3507,7 +3605,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
       if (recovered && wasRunning && restartAttempted) {
         try {
           recovered = configChanged
-            ? await restartClashOk({ skipCheck: true, preferReload: true, policyReady: true })
+            ? await restartClashOk({ skipCheck: true, preparedConfig: prepared })
             : await reapplyPolicyRulesSilent({ ensureScript: false });
         } catch (_) { recovered = false; }
       }
@@ -3547,7 +3645,7 @@ echo NETWORK_SETTINGS_RESTORED`, 20000);
   let panelLoadPromise = null;
 
   function shouldShowOperationProgress(label = '') {
-    return /^(?:\u5b89\u88c5\u6838\u5fc3|\u5b89\u88c5\u732b\u732b|\u5378\u8f7d\u732b\u732b|\u5378\u8f7d\u6838\u5fc3|\u6062\u590d\u7f51\u7edc|\u66f4\u65b0\u8ba2\u9605|\u4fdd\u5b58\u66f4\u65b0\u8ba2\u9605|\u91cd\u65b0\u66f4\u65b0\u5931\u8d25\u8282\u70b9\u6765\u6e90|\u4fee\u590d\u8ba2\u9605\u914d\u7f6e|\u4fdd\u5b58\u7f51\u7edc\u4e0e\u79c1\u7f51\u8bbe\u7f6e|\u91cd\u542f\u6838\u5fc3|\u505c\u6b62\u6838\u5fc3|\u4fee\u590d\u4ee3\u7406\u914d\u7f6e|\u4fee\u590d\u7b56\u7565\u89c4\u5219|\u5e94\u7528\u6a21\u677f|\u5e94\u7528\u56fe\u5f62\u89c4\u5219|\u5e94\u7528 JS \u8986\u5199|\u68c0\u67e5\u5e76\u542f\u52a8\u732b\u732b|\u5bfc\u5165\u8f6c\u6362\u7ec4\u4ef6|\u5b89\u88c5\u6216\u66f4\u65b0\u8f6c\u6362\u7ec4\u4ef6|\u5bfc\u5165\u914d\u7f6e\u5305|\u5bfc\u51fa\u914d\u7f6e\u5305|\u4e0a\u4f20\u6a21\u677f|\u6e05\u7406\u7f13\u5b58|\u4fdd\u5b58 config\.yaml)$/.test(String(label));
+    return /^(?:安装核心|安装猫猫|卸载猫猫|卸载核心|恢复网络|更新订阅|保存更新订阅|重新更新失败节点来源|修复订阅配置|保存网络与私网设置|重启核心|停止核心|修复代理配置|修复策略规则|应用模板|应用图形规则|应用 JS 覆写|检查并启动猫猫|导入转换组件|安装或更新转换组件|导入配置包|导出配置包|上传模板|清理缓存|保存 config\.yaml)$/.test(String(label));
   }
 
   function createOperationProgress(label, { enabled = shouldShowOperationProgress(label), delayMs = 800 } = {}) {
@@ -3784,11 +3882,7 @@ if [ -d "$F50_ROOT/Tools/gist-sync/activation" ]; then
   KANO_GIST_TRANSACTION=$(cat "$F50_ROOT/Tools/gist-sync/activation/id" 2>/dev/null)
   export KANO_GIST_TRANSACTION
 fi
-for config_target in "$F50_ROOT/Proxy/config.yaml" "$F50_ROOT/Tools/template.yaml" "$F50_ROOT/Tools/template.base.yaml"; do
-  config_source_file="$F50_ROOT/Tools/config_source.conf"
-  if [ "$config_target" = "$F50_ROOT/Tools/template.yaml" ] && [ -f "$config_target.kano_tx/with_base" ]; then config_source_file="$F50_ROOT/Tools/template.base.yaml"; fi
-  f50_config_tx_recover "$config_target" "$config_source_file" || echo F50_CLEAN_WARNING=uninstall_config_restore_failed
-done` : ''}
+${buildF50ConfigTxRecoverLoop('echo F50_CLEAN_WARNING=uninstall_config_restore_failed')}` : ''}
 f50_inspect || exit 1
 if [ "$F50_OLD_FOUND" = 1 ]; then
   f50_clean_environment || exit 1
@@ -3854,6 +3948,7 @@ exit "$delete_rc"
   const CLASH_POLICY_DIR = `${CLASH_DIR}/Policy`;
   const CLASH_POLICY_SCRIPT = `${CLASH_DIR}/Scripts/Clash.PolicyTools`;
   const CLASH_DEVICE_BYPASS_FILE = `${CLASH_POLICY_DIR}/device_bypass.txt`;
+  const CLASH_IPV6_BYPASS_SUFFIXES_FILE = `${CLASH_POLICY_DIR}/ipv6_bypass_suffixes.txt`;
   const CLASH_DEVICE_NOTES_FILE = `${CLASH_DIR}/Tools/device_notes.json`;
   const CLASH_DIRECT_DOMAIN_FILE = `${CLASH_POLICY_DIR}/direct_domain.list`;
   const CLASH_DIRECT_IP_FILE = `${CLASH_POLICY_DIR}/direct_ip.list`;
@@ -4125,7 +4220,11 @@ fi`,8000);
     const read = await readYamlObject(CLASH_CONFIG, 'config.yaml');
     if (!read.ok) throw Error(read.message || '读取配置失败');
     if (read.value['x-f50-gist-sync'] === true || (st.ok && st.state?.applied?.config && st.state.applied.config === st.currentFingerprint?.config)) {
-      if (window.confirm('Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？')) {
+      const leaveMsg = 'Gist 同步不可用。退出 Gist 管理并保留当前配置，继续普通订阅操作？';
+      const confirmed = typeof confirmWithDialog === 'function' && typeof activeUiConfirm === 'function'
+        ? await confirmWithDialog('mm_gist_leave_confirm', 'Gist 同步不可用', (typeof escapeHtml === 'function' ? escapeHtml : String)(leaveMsg), leaveMsg, '退出并继续', '取消')
+        : window.confirm(leaveMsg);
+      if (confirmed) {
         if (await f50GistLeave()) return null;
       }
       throw Error(f50GistMessage(st.ok ? 'component_version_mismatch' : st.code));
@@ -4604,6 +4703,7 @@ exit "$kano_task_rc"`;
     { label: 'options.conf', path: CLASH_POLICY_OPTIONS_FILE },
     { label: 'mac_bypass.txt', path: CLASH_MAC_BYPASS_FILE },
     { label: 'device_bypass.txt', path: CLASH_DEVICE_BYPASS_FILE, optional: true },
+    { label: 'ipv6_bypass_suffixes.txt', path: CLASH_IPV6_BYPASS_SUFFIXES_FILE, optional: true },
     { label: 'device_notes.json', path: CLASH_DEVICE_NOTES_FILE, optional: true },
     { label: 'direct_domain.list', path: CLASH_DIRECT_DOMAIN_FILE, optional: true },
     { label: 'direct_ip.list', path: CLASH_DIRECT_IP_FILE, optional: true },
@@ -5220,7 +5320,7 @@ exit "$kano_task_rc"`;
     return { ok: true, value: currentProviderUserAgent, custom: !!customValue, message: '' };
   };
 
-  //\u521b\u5efa\u968f\u673a\u6570
+  // 创建随机数
   const createRandomString = (length = 8) => {
     const characters =
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -5352,7 +5452,7 @@ exit "$kano_task_rc"`;
     for (const [name, provider] of Object.entries(config.value['proxy-providers'] || {})) {
       let nodes = provider.payload;
       // Mihomo stores an HTTP provider without an explicit path under proxies/<URL MD5>.
-      const path = provider.path || (provider.type === 'http' && provider.url ? 'proxies/' + CryptoJS.MD5(provider.url).toString() : '');
+      const path = provider.path || (provider.type === 'http' && provider.url && typeof CryptoJS !== 'undefined' ? 'proxies/' + CryptoJS.MD5(provider.url).toString() : '');
       if (provider.type !== 'inline' && path) {
         const cached = await readYamlObject(path.startsWith('/') ? path : `${CLASH_DIR}/Proxy/${path.replace(/^\.\//, '')}`, '订阅节点缓存');
         if (cached.ok) nodes = cached.value.proxies;
@@ -6006,6 +6106,7 @@ exit "$kano_task_rc"`;
       let generated;
       if (generatedMarker) {
         const at = text.indexOf('\nF50_YAML_GENERATED=');
+        if (at < 0) throw new Error('缺少模板生成标记');
         generated = text.slice(at + '\nF50_YAML_GENERATED='.length).trim() === '1';
         text = text.slice(0, at);
       }
@@ -6278,10 +6379,6 @@ ${buildF50YamlCommitBody(withBase)}
     return config;
   };
 
-  // preserveConfig 必须跟随模板来源：手写模板没写 unified-delay 就是没写，覆写不该补默认值。
-  const applyOverrideSafetyFields = (config, preservedSecret = '', { preserveConfig = false } = {}) =>
-    applyRequiredF50Fields(config, { preservedSecret, preserveConfig });
-
   const normalizeManagedProxyGroups = (config, providerNames = [], renamedProviders = null) => {
     if (config['proxy-groups'] != null && !Array.isArray(config['proxy-groups'])) {
       throw new Error('proxy-groups 必须是数组');
@@ -6359,38 +6456,29 @@ ${buildF50YamlCommitBody(withBase)}
     if (config.rules != null && !Array.isArray(config.rules)) {
       throw new Error('rules 必须是数组');
     }
+    if (config['rule-providers'] != null && !isPlainYamlObject(config['rule-providers'])) {
+      throw new Error('rule-providers 必须是映射对象');
+    }
     const rules = Array.isArray(config.rules) ? config.rules.slice() : [];
-    if (rules.length == 0 || generated) {
-      if (config['rule-providers'] != null && !isPlainYamlObject(config['rule-providers'])) {
-        throw new Error('rule-providers 必须是映射对象');
+    const cleaned = rules.length > 0 && !generated ? removeLegacyManagedRulePrefix(rules, proxyGroup) : [];
+    if (cleaned.length > 0) {
+      if (config['rule-providers'] != null) {
+        const providers = { ...config['rule-providers'] };
+        delete providers.kano_reject_domain;
+        delete providers.kano_direct_domain;
+        delete providers.kano_direct_ip;
+        delete providers.kano_proxy_domain;
+        if (Object.keys(providers).length > 0) config['rule-providers'] = providers;
+        else delete config['rule-providers'];
       }
-      config['rule-providers'] = {
-        ...(isPlainYamlObject(config['rule-providers']) ? config['rule-providers'] : {}),
-        ...buildManagedRuleProviders(),
-      };
-      config.rules = buildManagedFallbackRules(proxyGroup);
+      config.rules = cleaned;
       return;
     }
-    if (config['rule-providers'] != null) {
-      if (!isPlainYamlObject(config['rule-providers'])) throw new Error('rule-providers 必须是映射对象');
-      const providers = { ...config['rule-providers'] };
-      delete providers.kano_reject_domain;
-      delete providers.kano_direct_domain;
-      delete providers.kano_direct_ip;
-      delete providers.kano_proxy_domain;
-      if (Object.keys(providers).length > 0) config['rule-providers'] = providers;
-      else delete config['rule-providers'];
-    }
-    const cleaned = removeLegacyManagedRulePrefix(rules, proxyGroup);
-    if (cleaned.length == 0) {
-      config['rule-providers'] = {
-        ...(isPlainYamlObject(config['rule-providers']) ? config['rule-providers'] : {}),
-        ...buildManagedRuleProviders(),
-      };
-      config.rules = buildManagedFallbackRules(proxyGroup);
-      return;
-    }
-    config.rules = cleaned;
+    config['rule-providers'] = {
+      ...(isPlainYamlObject(config['rule-providers']) ? config['rule-providers'] : {}),
+      ...buildManagedRuleProviders(),
+    };
+    config.rules = buildManagedFallbackRules(proxyGroup);
   };
 
   const validateManagedConfigObject = (config, {
@@ -6886,7 +6974,7 @@ ${buildF50YamlCommitBody(withBase)}
 
   const prepareTemplateFromBase = async (
     sources = [],
-    { templateBasePath = CLASH_TEMPLATE_BASE, templatePath = CLASH_TEMPLATE } = {},
+    { templateBasePath = CLASH_TEMPLATE_BASE, templatePath = CLASH_TEMPLATE, backup = true } = {},
   ) => {
     const cleanSources = normalizeSubSourceList(sources);
     const candidate = `${templatePath}.kano_candidate_${Date.now()}_${createRandomString(6)}`;
@@ -6912,7 +7000,7 @@ fi`, 20000);
       }
       if (!(await applyJsOverrideToTemplate({ sources: cleanSources, prepareTemplate: false, templatePath: candidate, backup: false }))) return false;
       const committed = await commitStagedYaml({ targetPath: templatePath, stagePath: candidate,
-        label: 'template.yaml', backupTag: 'template',
+        label: 'template.yaml', backup, backupTag: 'template',
         baseStagePath: newBase ? baseCandidate : null, basePath: templateBasePath });
       if (!committed.ok) throw new Error(committed.content || '模板事务提交失败');
       return true;
@@ -6973,7 +7061,7 @@ fi`, 20000);
         const code = await readJsOverrideText();
         outputObj = await runJsOverrideOnConfig(code, outputObj);
       }
-      applyOverrideSafetyFields(outputObj, preservedSecret, { preserveConfig: !generated });
+      applyRequiredF50Fields(outputObj, { preservedSecret, preserveConfig: !generated });
       assertYamlRootMap(outputObj, 'template.yaml 覆写结果');
     } catch (e) {
       createToast(`覆写执行失败<br>${safeTextToHtml(e.message || e)}`, 'red', 9000);
@@ -7072,12 +7160,19 @@ KANO_WRITE_CHECK_EOF
       return fail('normalize_runtime_object', e.message || String(e));
     }
 
+    let runtimeOptions = null;
+    if (generated) {
+      runtimeOptions = await kprReadOptions().catch(() => null);
+      if (runtimeOptions && typeof syncConfigIpv6Preference === 'function') syncConfigIpv6Preference(normalized.config, runtimeOptions, { force: true });
+    }
+
     const write = await writeYamlObjectAtomic(CLASH_CONFIG, normalized.config, {
       label: 'config.yaml',
       marker: generated ? GENERATED_TEMPLATE_MARKER : '',
       backup,
       backupTag: 'runtime',
       configSource: 'template.yaml',
+      runtimeOptions,
     });
     if (!write.ok) return fail('validate_or_commit_runtime', write.content || '运行配置验证或提交失败');
 
@@ -7981,7 +8076,74 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
+  let currentRuntimeUiState = { state: 'unknown', text: '猫猫' };
+  const updateRuntimeGuidance = () => {
+    const { state, text } = currentRuntimeUiState;
+    const isMissing = state === 'stopped' && /未安装/.test(String(text || ''));
+    const bar = document.querySelector('#IFRAME_KANO .kano-mm-quick-bar');
+    if (bar) {
+      const msgEl = bar.querySelector('.kano-mm-quick-text');
+      const actionBtn = bar.querySelector('.kano-mm-quick-primary');
+      const secondaryBtn = bar.querySelector('.kano-mm-quick-secondary');
+      if (state === 'healthy') {
+        bar.hidden = true;
+      } else if (isMissing) {
+        bar.hidden = false;
+        setText(msgEl, '尚未安装猫猫核心组件：请联网安装或导入本地组件包。');
+        if (actionBtn) { actionBtn.textContent = '联网安装核心'; actionBtn.dataset.quickAction = 'install_or_start'; actionBtn.hidden = false; }
+        if (secondaryBtn) { secondaryBtn.textContent = '导入本地组件包'; secondaryBtn.dataset.quickAction = 'local_package'; secondaryBtn.hidden = false; }
+      } else if (state === 'stopped') {
+        bar.hidden = false;
+        setText(msgEl, '核心当前未运行：点击启动即可接管网络并启用面板。');
+        if (actionBtn) { actionBtn.textContent = '启动猫猫'; actionBtn.dataset.quickAction = 'install_or_start'; actionBtn.hidden = false; }
+        if (secondaryBtn) { secondaryBtn.textContent = '订阅设置'; secondaryBtn.dataset.quickAction = 'sub'; secondaryBtn.hidden = false; }
+      } else if (state === 'error') {
+        bar.hidden = false;
+        setText(msgEl, '核心进程存在但控制 API 未通：建议先检查运行日志或面板连接配置。');
+        if (actionBtn) { actionBtn.textContent = '查看状态与日志'; actionBtn.dataset.quickAction = 'logs'; actionBtn.hidden = false; }
+        if (secondaryBtn) { secondaryBtn.textContent = '面板连接'; secondaryBtn.dataset.quickAction = 'controller'; secondaryBtn.hidden = false; }
+      } else {
+        bar.hidden = true;
+      }
+    }
+    const wrap = document.querySelector('#mm_web_panel_wrap');
+    if (wrap) {
+      const emptyBox = wrap.querySelector('.kano-mm-web-empty');
+      const emptyTitle = wrap.querySelector('.kano-mm-web-empty-title');
+      const emptyDesc = wrap.querySelector('.kano-mm-web-empty-desc');
+      const emptyBtn = wrap.querySelector('.kano-mm-web-empty-btn');
+      const iframe = document.querySelector('#mm_iframe');
+      const hasLiveSrc = !!(iframe && iframe.getAttribute('src') && iframe.getAttribute('src') !== 'about:blank');
+      if (emptyBox) {
+        if (state === 'healthy' && hasLiveSrc) {
+          emptyBox.hidden = true;
+        } else if (!hasLiveSrc || state === 'stopped' || state === 'error') {
+          emptyBox.hidden = false;
+          if (isMissing) {
+            setText(emptyTitle, '组件尚未安装');
+            setText(emptyDesc, '请先安装猫猫组件包；安装完成后将自动加载内置 Web 面板。');
+            if (emptyBtn) { emptyBtn.textContent = '联网安装核心'; emptyBtn.dataset.quickAction = 'install_or_start'; emptyBtn.hidden = false; }
+          } else if (state === 'stopped') {
+            setText(emptyTitle, '核心未运行');
+            setText(emptyDesc, '当前核心处于停止状态，启动后可在此查看节点与实时连接。');
+            if (emptyBtn) { emptyBtn.textContent = '启动猫猫'; emptyBtn.dataset.quickAction = 'install_or_start'; emptyBtn.hidden = false; }
+          } else if (state === 'error') {
+            setText(emptyTitle, '控制 API 暂不可用');
+            setText(emptyDesc, '核心已启动但控制接口未响应，可打开“状态与日志”或检查“面板连接”。');
+            if (emptyBtn) { emptyBtn.textContent = '查看状态与日志'; emptyBtn.dataset.quickAction = 'logs'; emptyBtn.hidden = false; }
+          } else {
+            setText(emptyTitle, 'Web 面板尚未加载');
+            setText(emptyDesc, '点击上方或右上角“刷新面板”尝试加载控制界面。');
+            if (emptyBtn) { emptyBtn.textContent = '加载面板'; emptyBtn.dataset.quickAction = 'refresh_panel'; emptyBtn.hidden = false; }
+          }
+        }
+      }
+    }
+  };
+
   function renderRuntimeStatus(state, text, label = document.querySelector('#running_mm')) {
+    currentRuntimeUiState = { state, text };
+    if (typeof updateRuntimeGuidance === 'function') updateRuntimeGuidance();
     if (!label) return;
     resetChildren(label);
     const dot = document.createElement('span');
@@ -8065,29 +8227,69 @@ KANO_WRITE_CHECK_EOF
     }
     return keyboardDialogs[keyboardDialogs.length - 1];
   };
-  const onDialogEscape = (event) => {
-    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat) return;
+  const ensureDialogButtonTypes = (root) => {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    Array.from(root.querySelectorAll('button:not([type])')).forEach((btn) => { btn.type = 'button'; });
+  };
+  const getDialogFocusables = (el) => {
+    if (!el || typeof el.querySelectorAll !== 'function') return [];
+    const selector = 'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, a[href], [tabindex]:not([tabindex="-1"])';
+    return Array.from(el.querySelectorAll(selector)).filter((node) => {
+      if (!node || node.disabled || node.hidden) return false;
+      const details = node.closest && node.closest('details');
+      if (details && !details.open && node.tagName !== 'SUMMARY') return false;
+      return true;
+    });
+  };
+  const onDialogKeydown = (event) => {
     const dialog = topKeyboardDialog();
     if (!dialog) {
-      document.removeEventListener('keydown', onDialogEscape);
+      document.removeEventListener('keydown', onDialogKeydown);
       return;
     }
+    if (event.key === 'Tab') {
+      const focusables = getDialogFocusables(dialog.el);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (!dialog.el.contains(active) || active === first) {
+          event.preventDefault();
+          last.focus({ preventScroll: true });
+        }
+      } else if (!dialog.el.contains(active) || active === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat) return;
     event.preventDefault();
     event.stopPropagation();
     dialog.dismiss.click();
   };
   const bindDialogKeyboard = (el, close, opener, dismiss, initialFocus = dismiss) => {
     topKeyboardDialog();
+    ensureDialogButtonTypes(el);
+    if (el && typeof el.setAttribute === 'function') {
+      if (!el.getAttribute('role')) el.setAttribute('role', 'dialog');
+      if (!el.getAttribute('aria-modal')) el.setAttribute('aria-modal', 'true');
+      if (!el.getAttribute('aria-label') && !el.getAttribute('aria-labelledby')) {
+        const heading = typeof el.querySelector === 'function' && (el.querySelector('.title') || el.querySelector('.kp-title'));
+        if (heading && heading.textContent) el.setAttribute('aria-label', String(heading.textContent).trim());
+      }
+    }
     const dialog = { el, dismiss };
     keyboardDialogs.push(dialog);
-    document.addEventListener('keydown', onDialogEscape);
+    document.addEventListener('keydown', onDialogKeydown);
     initialFocus.focus({ preventScroll: true });
     return () => {
       const restoreFocus = topKeyboardDialog() === dialog;
       const index = keyboardDialogs.indexOf(dialog);
       if (index < 0) return;
       keyboardDialogs.splice(index, 1);
-      if (!topKeyboardDialog()) document.removeEventListener('keydown', onDialogEscape);
+      if (!topKeyboardDialog()) document.removeEventListener('keydown', onDialogKeydown);
       close();
       if (!restoreFocus || !opener?.isConnected) return;
       if (opener.dataset.kanoBusy !== '1') {
@@ -8106,17 +8308,51 @@ KANO_WRITE_CHECK_EOF
     };
   };
 
-  const askConfirm = (id, title, body, ok = '确认', cancel = '取消', opener = document.activeElement) => new Promise((resolve) => {
+  const bindTextareaTabIndent = (textarea) => {
+    if (!textarea || typeof textarea.addEventListener !== 'function') return;
+    textarea.addEventListener('keydown', (event) => {
+      if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey || textarea.readOnly || textarea.disabled) return;
+      event.preventDefault();
+      const start = textarea.selectionStart ?? 0;
+      const end = textarea.selectionEnd ?? start;
+      const value = textarea.value || '';
+      let from = start, to = end, replacement = '  ';
+      let nextStart = start + 2, nextEnd = nextStart;
+      if (event.shiftKey || start !== end) {
+        from = value.slice(0, start).lastIndexOf('\n') + 1;
+        const lastSelected = end > start && value[end - 1] === '\n' ? end - 1 : end;
+        const lineEnd = value.indexOf('\n', lastSelected);
+        to = lineEnd === -1 ? value.length : lineEnd;
+        const lines = value.slice(from, to);
+        replacement = event.shiftKey ? lines.replace(/^ {1,2}/gm, '') : lines.replace(/^/gm, '  ');
+        if (replacement === lines) return;
+        const firstDelta = event.shiftKey ? -(lines.match(/^ {1,2}/)?.[0].length || 0) : 2;
+        nextStart = Math.max(from, start + firstDelta);
+        nextEnd = Math.max(nextStart, end + replacement.length - lines.length);
+      }
+      if (typeof textarea.setRangeText === 'function') {
+        textarea.setRangeText(replacement, from, to);
+      } else {
+        textarea.value = value.slice(0, from) + replacement + value.slice(to);
+      }
+      textarea.selectionStart = nextStart;
+      textarea.selectionEnd = nextEnd;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  const askConfirm = (id, title, body, ok = '确认', cancel = '取消', opener = document.activeElement, options = {}) => new Promise((resolve) => {
     const progress = activeCriticalOperation && activeCriticalOperation.progress;
     if (progress) progress.pause(true);
+    const dangerClass = options && options.danger ? ' kano-danger' : '';
     const { el, close: closeToast } = createFixedToast(
       id,
       `<div style="pointer-events:all;width:auto;max-width:520px;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
-        <div style="margin-top:10px;font-size:.7rem;line-height:1.75">${body}</div>
+        <div style="margin-top:10px;font-size:clamp(12px,.72rem,15px);line-height:1.75">${body}</div>
         <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:14px;">
-          <button class="ok">${escapeHtml(ok)}</button>
-          <button class="cancel">${escapeHtml(cancel)}</button>
+          <button type="button" class="ok${dangerClass}">${escapeHtml(ok)}</button>
+          <button type="button" class="cancel">${escapeHtml(cancel)}</button>
         </div>
       </div>`,
     );
@@ -8132,6 +8368,19 @@ KANO_WRITE_CHECK_EOF
     if (okBtn) okBtn.addEventListener('click', () => done(true));
     if (cancelBtn) cancelBtn.addEventListener('click', () => done(false));
   });
+  activeUiConfirm = askConfirm;
+
+  const createDirtyCloseGuard = (closeFn, isDirty, opener, { title = '放弃未保存的修改？', body = '当前窗口有未保存的修改；关闭后这些更改将丢失。' } = {}) => {
+    let confirming = false;
+    return async () => {
+      if (confirming) return;
+      if (!isDirty()) { closeFn(); return; }
+      confirming = true;
+      try {
+        if (await askConfirm('mm_unsaved_close_confirm', title, body, '放弃修改', '继续编辑', opener)) closeFn();
+      } finally { confirming = false; }
+    };
+  };
 
   // 单行文本输入框，返回输入内容；取消返回 null。备注编辑走这里。
   const askText = (id, title, body, defaultValue = '', opener = document.activeElement) => new Promise((resolve) => {
@@ -8141,11 +8390,11 @@ KANO_WRITE_CHECK_EOF
       id,
       `<div style="pointer-events:all;width:auto;max-width:520px;min-width:0;">
         <div class="title" style="margin:0">${escapeHtml(title)}</div>
-        <div style="margin-top:10px;font-size:.68rem;line-height:1.7;overflow-wrap:anywhere;">${body}</div>
-        <input class="k-text-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="${escapeHtml(defaultValue)}" style="box-sizing:border-box;width:100%;margin-top:10px;padding:9px;font-size:.7rem;border-radius:9px;border:1px solid rgba(148,163,184,.35);background:rgba(15,23,42,.9);color:#dbeafe;">
+        <div style="margin-top:10px;font-size:clamp(12px,.7rem,15px);line-height:1.7;overflow-wrap:anywhere;">${body}</div>
+        <input class="k-text-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" value="${escapeHtml(defaultValue)}" style="width:100%;margin-top:10px;padding:9px;font-size:clamp(12px,.7rem,15px);background:rgba(15,23,42,.9);">
         <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
-          <button class="ok">保存</button>
-          <button class="cancel">取消</button>
+          <button type="button" class="ok">保存</button>
+          <button type="button" class="cancel">取消</button>
         </div>
       </div>`,
     );
@@ -8169,7 +8418,7 @@ KANO_WRITE_CHECK_EOF
     }
   });
 
-  // \u68c0\u6d4b\u662f\u5426\u5f00\u673a\u81ea\u542f
+  // 检测是否开机自启
   const checkIsBootUp = async () => {
     const state = await inspectBootIntegration();
     return state.enabled;
@@ -8197,7 +8446,7 @@ KANO_WRITE_CHECK_EOF
     }
   };
 
-  //\u76d1\u6d4b\u662f\u5426\u5df2\u7ecf\u5b89\u88c5\u8fc7\u4e86
+  // 监测是否已经安装过了
 
   const ensureInstalled = async () => await ensureCompatBackend();
 
@@ -8237,36 +8486,6 @@ kano_core_pids() (
 find_runtime_pid() {
   kano_core_pids runtime | head -n 1
 }
-kano_stop_core() (
-  for signal in TERM KILL; do
-    pids="$(kano_core_pids all)"
-    [ -n "$pids" ] || exit 0
-    for pid in $pids; do
-      kano_is_owned_core "$pid" all && kill -"$signal" "$pid" 2>/dev/null
-    done
-    count=0
-    while [ "$count" -lt 4 ]; do
-      [ -n "$(kano_core_pids all)" ] || exit 0
-      count=$((count + 1)); sleep 1
-    done
-  done
-  echo KANO_CORE_STOP_FAILED
-  exit 1
-)
-kano_stop_watchers() (
-  for p in /proc/[0-9]*; do
-    [ -r "$p/cmdline" ] || continue
-    # Check executable and complete argv, never text embedded in a shell -c script.
-    exe="$(readlink "$p/exe" 2>/dev/null)"
-    case "\${exe##*/}" in inotifyd|busybox|sh|bash|dash|mksh|toybox) ;; *) continue ;; esac
-    args="$(tr '\\0' '\\n' < "$p/cmdline" 2>/dev/null)"
-    if printf '%s\\n' "$args" | grep -qxF ${shellQuote(`${CLASH_DIR}/Scripts/Clash.Inotify`)}; then
-      kill -TERM "\${p##*/}" 2>/dev/null || true
-    elif printf '%s\\n' "$args" | grep -qxF ${shellQuote(CLASH_SERVICE)} && printf '%s\\n' "$args" | grep -qxF boot; then
-      kill -TERM "\${p##*/}" 2>/dev/null || true
-    fi
-  done
-)
 `;
 
 
@@ -8485,6 +8704,18 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   return restored.ok;
 };
 
+  const restoreOrRemoveConfigAtRollback = async (rollbackPath = '', context = '回滚') => {
+    if (rollbackPath) {
+      return await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
+    }
+    const removed = await runShellWithRoot(`
+      rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
+      [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
+      echo CONFIG_ROLLBACK_RESTORED_ABSENT
+    `, 15 * 1000);
+    return !!removed.success && String(removed.content || '').includes('CONFIG_ROLLBACK_RESTORED_ABSENT');
+  };
+
   const restartClashWithConfigRollback = async (rollbackPath = null, context = '重启') => {
     appendTemplateFlowDebug(`enter restartClashWithConfigRollback context=${context}`);
     const ok = await restartClashOk({ skipCheck: true });
@@ -8502,17 +8733,13 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     }
 
     if (rollbackPath === '') {
-      const removed = await runShellWithRoot(`
-        rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
-        [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
-        echo CONFIG_ROLLBACK_RESTORED_ABSENT
-      `, 15 * 1000);
+      const removed = await restoreOrRemoveConfigAtRollback('', context);
       await networkRescue({ showOutput: false });
       createToast(
-        removed.success
+        removed
           ? `${escapeHtml(context)}失败；写入前没有 config.yaml，已移除新配置并清理网络规则。`
           : `${escapeHtml(context)}失败；写入前没有 config.yaml，且新配置移除失败。`,
-        removed.success ? 'yellow' : 'red',
+        removed ? 'yellow' : 'red',
         12000,
       );
       await isMMRunning();
@@ -8625,7 +8852,7 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           savedSources = templateSources;
         }
       }
-      if (!(await prepareTemplateFromBase(savedSources, { templateBasePath: txBase, templatePath: txTemplate }))) {
+      if (!(await prepareTemplateFromBase(savedSources, { templateBasePath: txBase, templatePath: txTemplate, backup: false }))) {
         throw '准备模板失败；已保留原 template.base.yaml 与 template.yaml';
       }
       if (templateSubSourcesToPersist.length > 0) {
@@ -8654,42 +8881,19 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           throw '订阅链接写入失败；已保留原 template.base.yaml 与 template.yaml';
         }
       }
-      const commitRes = await runShellWithRoot(`
-        set -e
-        BASE=${shellQuote(CLASH_TEMPLATE_BASE)}
-        TEMPLATE=${shellQuote(CLASH_TEMPLATE)}
-        TX_BASE=${shellQuote(txBase)}
-        TX_TEMPLATE=${shellQuote(txTemplate)}
-        stamp="$(date +%Y%m%d%H%M%S 2>/dev/null)"
-        [ -n "$stamp" ] || stamp="$(cat /proc/uptime 2>/dev/null | cut -d. -f1)"
-        backup_base="$BASE.before_template_upload_$stamp"
-        backup_template="$TEMPLATE.before_template_upload_$stamp"
-        base_had=0
-        template_had=0
-        [ -s "$TX_BASE" ] || { echo "TX_BASE_MISSING"; exit 1; }
-        [ -s "$TX_TEMPLATE" ] || { echo "TX_TEMPLATE_MISSING"; exit 1; }
-        if [ -f "$BASE" ]; then cp "$BASE" "$backup_base" || exit 1; base_had=1; fi
-        if [ -f "$TEMPLATE" ]; then cp "$TEMPLATE" "$backup_template" || exit 1; template_had=1; fi
-        rollback_template_pair() {
-          if [ "$base_had" = "1" ]; then cp "$backup_base" "$BASE" 2>/dev/null || true; else rm -f "$BASE" 2>/dev/null || true; fi
-          if [ "$template_had" = "1" ]; then cp "$backup_template" "$TEMPLATE" 2>/dev/null || true; else rm -f "$TEMPLATE" 2>/dev/null || true; fi
-        }
-        cp "$TX_BASE" "$BASE.new" && cp "$TX_TEMPLATE" "$TEMPLATE.new" || {
-          rollback_template_pair
-          exit 1
-        }
-        mv "$BASE.new" "$BASE" && mv "$TEMPLATE.new" "$TEMPLATE" || {
-          rollback_template_pair
-          exit 1
-        }
-        chmod 644 "$BASE" "$TEMPLATE"
-        echo "TEMPLATE_OK"
-        echo "backup_base=$backup_base"
-        echo "backup_template=$backup_template"
-      `);
-      if (!commitRes.success || !String(commitRes.content || '').includes('TEMPLATE_OK')) {
-        throw commitRes.content || '模板提交失败；已尝试恢复原模板';
+      const committed = await commitStagedYaml({
+        targetPath: CLASH_TEMPLATE,
+        stagePath: txTemplate,
+        label: 'template.yaml',
+        backup: true,
+        backupTag: 'template_upload',
+        baseStagePath: txBase,
+        basePath: CLASH_TEMPLATE_BASE,
+      });
+      if (!committed.ok) {
+        throw committed.content || '模板提交失败；已尝试恢复原模板';
       }
+      await runShellWithRoot(pruneKanoBackupsCmd(), 10 * 1000).catch(() => {});
       if (templateSubSyncMessage) {
         createToast(templateSubSyncMessage, 'yellow', 7000);
       }
@@ -8766,12 +8970,12 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           <div id="${statusId}" style="margin-bottom:10px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.45);">${sourceRows}</div>
           <label style="display:block;margin-bottom:8px;">
             <span style="display:block;margin-bottom:4px;">控制地址（固定）</span>
-            <input id="${controllerId}" type="text" readonly style="width:100%;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
+            <input id="${controllerId}" type="text" readonly style="width:100%;background:#0f172a;padding:8px;font-size:.66rem;" />
           </label>
           <div style="display:block;margin-bottom:8px;">
             <span style="display:block;margin-bottom:4px;">访问密钥</span>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input id="${secretId}" type="password" autocomplete="off" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.66rem;" />
+              <input id="${secretId}" type="password" autocomplete="off" style="flex:1;min-width:0;background:#0f172a;padding:8px;font-size:.66rem;" />
               <button id="${secretToggleId}" type="button" aria-controls="${secretId}" aria-pressed="false" title="显示密码" style="flex:0 0 auto;font-size:.64rem;white-space:nowrap;">显示</button>
             </div>
           </div>
@@ -8850,30 +9054,44 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
 
   // 诊断窗口先出、日志先填：设备慢或 API 不通时，不该让人盯着空屏等整套探测。
   const showStatusDiagnostic = async (opener) => {
-    const degraded = [];
-    const settle = (label, promise, fallback) => Promise.resolve(promise).catch((error) => {
-      degraded.push(`${label}：${sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error))}`);
-      return fallback;
-    });
     const { el } = showInfoDialog(
       'mm_status_diagnostic',
       '运行日志与诊断',
-      `<div class="kano-diag-summary">正在读取设备状态…</div>
+      `<div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin:0 0 10px;">
+        <button type="button" class="kano-diag-refresh-btn">刷新诊断</button>
+        <button type="button" class="kano-diag-copy-btn">复制诊断</button>
+      </div>
+      <div class="kano-diag-summary">正在读取设备状态…</div>
       <details class="kano-diag-more" style="margin-top:10px;"><summary>详细信息</summary><div class="kano-diag-detail">正在读取…</div></details>
       <div class="kano-diag-install"></div>
       <div style="margin-top:12px;font-weight:700;">启动输出 + 运行日志</div>
       <pre class="kano-diag-log" style="white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(0,0,0,.78);color:#0f0;padding:10px;max-height:320px;overflow:auto;">正在读取日志…</pre>`,
       opener,
     );
+    const refreshBtn = el.querySelector('.kano-diag-refresh-btn');
+    const copyBtn = el.querySelector('.kano-diag-copy-btn');
     const summaryEl = el.querySelector('.kano-diag-summary');
     const detailEl = el.querySelector('.kano-diag-detail');
     const installEl = el.querySelector('.kano-diag-install');
     const logEl = el.querySelector('.kano-diag-log');
     if (installEl && lastInstallDiagnostic) {
-      installEl.innerHTML = '<details><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>';
+      installEl.innerHTML = '<details' + (lastInstallDiagnostic.ok === false ? ' open' : '') + '><summary>最近一次安装/清理详情</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre></details>';
     }
-    // 日志单独一路，不参与诊断聚合：谁先回来谁先显示。
-    probeShell(`
+    let diagnosticGeneration = 0;
+    const runProbes = async () => {
+      const generation = ++diagnosticGeneration;
+      const degraded = [];
+      const settle = (label, promise, fallback) => Promise.resolve(promise).catch((error) => {
+        degraded.push(`${label}：${sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error))}`);
+        return fallback;
+      });
+      if (generation > 1) {
+        if (summaryEl) summaryEl.textContent = '正在重新读取设备状态…';
+        if (detailEl) detailEl.textContent = '正在读取…';
+        if (logEl) logEl.textContent = '正在读取日志…';
+      }
+      // 日志单独一路，不参与诊断聚合：谁先回来谁先显示。
+      probeShell(`
         START_LOG=${shellQuote('/data/kano_clash_start.log')}
         RUN_LOG=${shellQuote(LOG_FILE)}
         echo "[Clash.Service 启动输出]"
@@ -8882,22 +9100,24 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         echo "[Clash 内核运行日志]"
         if [ -f "$RUN_LOG" ]; then tail -n 100 "$RUN_LOG" 2>/dev/null || echo "（无法读取内核日志）"; else echo "（暂无内核日志）"; fi
         `).then((res) => {
-      if (logEl) logEl.textContent = sanitizeSubscriptionSecrets(String(res?.content || '').trim() || '暂无日志');
-    }).catch((error) => {
-      if (logEl) logEl.textContent = '日志读取失败：' + sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error));
-    });
-    const controllerInfoPromise = buildControllerInfo();
-    const pidPromise = getCorePid();
-    const runtimeStatePromise = settle('运行状态', checkInstallState({ fresh: true, run: probeShell }), { state: 'unknown', message: '读取失败' });
-    const bootStatePromise = inspectBootIntegration(probeShell);
-    const configPromise = readBinarySnapshot({ run: probeShell }).catch(() => null).then((snapshot) => {
-      if (snapshot) {
-        return {
-          success: true,
-          content: `exists=${snapshot.configExists === true ? 1 : 0}\nsize=${Number(snapshot.configSize) || 0}`,
-        };
-      }
-      return probeShell(`
+        if (generation !== diagnosticGeneration) return;
+        if (logEl) logEl.textContent = sanitizeSubscriptionSecrets(String(res?.content || '').trim() || '暂无日志');
+      }).catch((error) => {
+        if (generation !== diagnosticGeneration) return;
+        if (logEl) logEl.textContent = '日志读取失败：' + sanitizeSubscriptionSecrets(error && error.message ? error.message : String(error));
+      });
+      const controllerInfoPromise = buildControllerInfo();
+      const pidPromise = getCorePid();
+      const runtimeStatePromise = settle('运行状态', checkInstallState({ fresh: true, run: probeShell }), { state: 'unknown', message: '读取失败' });
+      const bootStatePromise = inspectBootIntegration(probeShell);
+      const configPromise = readBinarySnapshot({ run: probeShell }).catch(() => null).then((snapshot) => {
+        if (snapshot) {
+          return {
+            success: true,
+            content: `exists=${snapshot.configExists === true ? 1 : 0}\nsize=${Number(snapshot.configSize) || 0}`,
+          };
+        }
+        return probeShell(`
           if [ -f ${shellQuote(CLASH_CONFIG)} ]; then
             size="$(wc -c < ${shellQuote(CLASH_CONFIG)} 2>/dev/null | tr -d ' ')"
             echo "exists=1"
@@ -8907,8 +9127,8 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
             echo "size=0"
           fi
           `);
-    });
-    const processPromise = pidPromise.then((pid) => probeShell(`
+      });
+      const processPromise = pidPromise.then((pid) => probeShell(`
         PID=${shellQuote(String(pid || ''))}
         CORE=${shellQuote(CLASH_CORE)}
         echo "PID=$PID"
@@ -8945,9 +9165,33 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
           echo "CORE_SIZE=0"
           echo "CORE_ELF=0"
         fi
+        probe_nat=$(ip6tables -w 5 -t nat -S 2>&1); rc_nat=$?
+        if [ "$rc_nat" = 0 ]; then
+          echo "IPV6_NAT=1"
+        elif printf '%s\\n' "$probe_nat" | grep -Eiq "can't initialize ip6tables table.*nat|Table does not exist"; then
+          echo "IPV6_NAT=0"
+        else
+          echo "IPV6_NAT=unknown"
+        fi
+        CFG_FILE=${shellQuote(CLASH_CONFIG)}
+        if [ -r "$CFG_FILE" ]; then
+          cfg_v6=$(sed -n 's/^ipv6:[[:space:]]*//p' "$CFG_FILE" 2>/dev/null | head -n 1 | sed 's/[[:space:]]*#.*//' | tr -d '\\r ')
+          cfg_listen=$(awk '/^dns:/{d=1;next} d&&/^[^[:space:]]/{d=0} d&&/^[[:space:]]+listen:/{gsub(/["\\047\\r ]/,"",$2);print $2;exit}' "$CFG_FILE" 2>/dev/null)
+          echo "CONFIG_IPV6=$cfg_v6"
+          echo "CONFIG_DNS_LISTEN=$cfg_listen"
+        fi
+        if ip -6 -o addr show dev KanoTun scope global 2>/dev/null | grep -q 'inet6 '; then
+          if ip -6 route show table 17667 2>/dev/null | grep -qE 'dev KanoTun.*proto 242'; then
+            echo "TUN6_STATE=ready"
+          else
+            echo "TUN6_STATE=missing_route"
+          fi
+        else
+          echo "TUN6_STATE=no_addr"
+        fi
         `, 8 * 1000));
-    // 遍历 /proc 找遗留测试进程最慢，单独一路，回来后再补进详细信息。
-    const stalePromise = settle('遗留测试进程', pidPromise.then((pid) => (pid ? probeShell(`
+      // 遍历 /proc 找遗留测试进程最慢，单独一路，回来后再补进详细信息。
+      const stalePromise = settle('遗留测试进程', pidPromise.then((pid) => (pid ? probeShell(`
         CORE=${shellQuote(CLASH_CORE)}
         stale=""
         for p in /proc/[0-9]*; do
@@ -8964,136 +9208,187 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
         done
         echo "STALE_TEST_PIDS=$stale"
         `, 15 * 1000) : Promise.resolve({ success: true, content: 'STALE_TEST_PIDS=' }))).then((res) => {
-      if (!res?.success) throw new Error(res?.content || '读取失败');
-      return res;
-    }), { success: false, content: '' });
-    const noCore = { success: false, statusCode: 0, message: '核心未运行' };
-    const versionPromise = Promise.all([controllerInfoPromise, pidPromise, runtimeStatePromise]).then(([info, pid, runtime]) => {
-      // 核心没跑就不发请求，避免白等超时；预检刚测过 /version 时直接复用。
-      if (!pid) return noCore;
-      if (runtime && runtime.api && typeof runtime.api.success === 'boolean') return runtime.api;
-      return callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid });
-    });
-    const connectionsPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      pid ? callMihomoApi('/connections', 'GET', null, info, 5, { corePid: pid }) : noCore);
-    // 节点来源与面板探测不再等第一轮：它们只依赖控制地址和 pid。
-    const providerPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
-      pid ? callMihomoApi('/providers/proxies', 'GET', null, info, 5, { corePid: pid }) : noCore);
-    const panelPromise = Promise.resolve().then(() =>
-      probeShell(buildF50ShellBase() + buildF50PanelHelpers() + '\nf50_verify_zashboard_endpoint', 12000));
-    const [
-      runtimeState,
-      bootState,
-      pid,
-      controllerInfo,
-      policyState,
-      configRes,
-      processRes,
-      versionRes,
-      connectionsRes,
-      providerHealth,
-      panelHealth,
-    ] = await Promise.all([
-      runtimeStatePromise,
-      settle('开机自启', bootStatePromise, { state: 'unknown', message: '读取失败' }),
-      settle('核心进程', pidPromise, ''),
-      settle('控制地址', controllerInfoPromise, {
-        raw: '', apiBase: '未读取', externalController: '', secretSet: false, usingFallbackController: false,
-      }),
-      settle('网络设置', readPolicyState(probeShell), { options: {} }),
-      settle('配置文件', configPromise, { success: false, content: '' }),
-      settle('核心进程详情', processPromise, { success: false, content: '' }),
-      settle('控制 API', versionPromise, { success: false, statusCode: 0, message: '未读取' }),
-      settle('活动连接', connectionsPromise, { success: false, responseText: '' }),
-      settle('节点来源', providerPromise, { success: false }),
-      settle('Zashboard', panelPromise, { success: false, content: '' }),
-    ]);
-    const configLines = String(configRes.content || '').split('\n');
-    const configExists = (configLines.find((line) => line == 'exists=1'));
-    const configSize = (configLines.find((line) => line.startsWith('size=')) || 'size=0')
-      .replace(/^size=/, '');
-    const proc = parseKeyValueOutput(processRes.content || '');
-    let connectionStatus = pid
-      ? (connectionsRes.success ? '已连接' : '无法读取')
-      : '核心未运行';
-    if (connectionsRes.success) {
-      try {
-        const connectionData = JSON.parse(connectionsRes.responseText || '{}');
-        connectionStatus = `${Array.isArray(connectionData.connections) ? connectionData.connections.length : 0} 个`;
-      } catch {
-        connectionStatus = '响应格式不受支持';
+        if (!res?.success) throw new Error(res?.content || '读取失败');
+        return res;
+      }), { success: false, content: '' });
+      const noCore = { success: false, statusCode: 0, message: '核心未运行' };
+      const versionPromise = Promise.all([controllerInfoPromise, pidPromise, runtimeStatePromise]).then(([info, pid, runtime]) => {
+        // 核心没跑就不发请求，避免白等超时；预检刚测过 /version 时直接复用。
+        if (!pid) return noCore;
+        if (runtime && runtime.api && typeof runtime.api.success === 'boolean') return runtime.api;
+        return callMihomoApi('/version', 'GET', null, info, 8, { corePid: pid });
+      });
+      const connectionsPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
+        pid ? callMihomoApi('/connections', 'GET', null, info, 5, { corePid: pid }) : noCore);
+      // 节点来源与面板探测不再等第一轮：它们只依赖控制地址和 pid。
+      const providerPromise = Promise.all([controllerInfoPromise, pidPromise]).then(([info, pid]) =>
+        pid ? callMihomoApi('/providers/proxies', 'GET', null, info, 5, { corePid: pid }) : noCore);
+      const panelPromise = Promise.resolve().then(() =>
+        probeShell(buildF50ShellBase() + buildF50PanelHelpers() + '\nf50_verify_zashboard_endpoint', 12000));
+      const [
+        runtimeState,
+        bootState,
+        pid,
+        controllerInfo,
+        policyState,
+        configRes,
+        processRes,
+        versionRes,
+        connectionsRes,
+        providerHealth,
+        panelHealth,
+      ] = await Promise.all([
+        runtimeStatePromise,
+        settle('开机自启', bootStatePromise, { state: 'unknown', message: '读取失败' }),
+        settle('核心进程', pidPromise, ''),
+        settle('控制地址', controllerInfoPromise, {
+          raw: '', apiBase: '未读取', externalController: '', secretSet: false, usingFallbackController: false,
+        }),
+        settle('网络设置', readPolicyState(probeShell), { options: {} }),
+        settle('配置文件', configPromise, { success: false, content: '' }),
+        settle('核心进程详情', processPromise, { success: false, content: '' }),
+        settle('控制 API', versionPromise, { success: false, statusCode: 0, message: '未读取' }),
+        settle('活动连接', connectionsPromise, { success: false, responseText: '' }),
+        settle('节点来源', providerPromise, { success: false }),
+        settle('Zashboard', panelPromise, { success: false, content: '' }),
+      ]);
+      if (generation !== diagnosticGeneration) return;
+      const configLines = String(configRes.content || '').split('\n');
+      const configExists = (configLines.find((line) => line == 'exists=1'));
+      const configSize = (configLines.find((line) => line.startsWith('size=')) || 'size=0')
+        .replace(/^size=/, '');
+      const proc = parseKeyValueOutput(processRes.content || '');
+      let connectionStatus = pid
+        ? (connectionsRes.success ? '已连接' : '无法读取')
+        : '核心未运行';
+      if (connectionsRes.success) {
+        try {
+          const connectionData = JSON.parse(connectionsRes.responseText || '{}');
+          connectionStatus = `${Array.isArray(connectionData.connections) ? connectionData.connections.length : 0} 个`;
+        } catch {
+          connectionStatus = '响应格式不受支持';
+        }
       }
+      const health = f50HealthLayers({ pid, api: versionRes, panel: panelHealth, provider: providerHealth });
+      // 主表只给结论，逐字段明细收进折叠区：默认 9 行，不再平铺 23 行。
+      const runStateLabels = {
+        healthy: '运行正常', installed_stopped: '已安装未运行', running_api_unavailable: '运行中但 API 不可用',
+        not_installed: '未安装', damaged: '文件缺失或不可执行',
+      };
+      const bootLabels = { disabled: '未配置', direct: '原生自启', managed: '托管自启', manager_damaged: '自启配置损坏', incomplete: '自启不完整' };
+      const modeLabel = !policyState.options.traffic_mode
+        ? '模式未读取'
+        : (policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '接管已关闭' : 'TProxy'));
+      const ipv6Label = !policyState.options.ipv6 ? 'IPv6 未读取' : (policyState.options.ipv6 == 'on' ? 'IPv6 开' : 'IPv6 关');
+      const configLabel = configExists ? `config.yaml ${(Number(configSize) / 1024).toFixed(1)} KB` : 'config.yaml 缺失';
+      const coreLabel = !pid ? '未运行' : (proc.PROCESS_KIND == 'config_test' ? '仅配置测试进程' : '运行中');
+      const apiLabel = !pid ? '核心未运行' : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : (versionRes.message || '不可用'));
+      const renderRows = (list) => list.map(([key, value]) =>
+        `<div style="display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12);">
+          <strong>${escapeHtml(key)}</strong><span style="word-break:break-all;">${escapeHtml(value)}</span>
+        </div>`).join('');
+      const paint = () => {
+        // 异常项集中到「总览」一行，正常时逐行比对没有意义。
+        const problems = [];
+        if (!pid) problems.push('核心未运行');
+        else {
+          if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
+          if (proc.PORT_CONTROLLER != '1') problems.push(F50_PORTS.controller + ' 未监听');
+          if (!versionRes.success) problems.push('控制 API 不可用');
+          if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
+        }
+        if (proc.STALE_TEST_PIDS) problems.push(`遗留测试进程 ${proc.STALE_TEST_PIDS}`);
+        if (!configExists) problems.push('config.yaml 缺失');
+        if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
+        if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
+        // 复用 f50HealthLayers 的解析结论：请求成功但格式错误/部分来源读不到时，总览同样要报出来。
+        const providerProblems = Array.isArray(health.providerProblems)
+          ? health.providerProblems
+          : (providerHealth.success ? [] : ['节点来源读取失败']);
+        for (const item of providerProblems) problems.push(item);
+        if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
+        const configIpv6Val = String(proc.CONFIG_IPV6 || '').toLowerCase();
+        if (policyState.options.ipv6 == 'on' && configIpv6Val == 'false') {
+          problems.push('IPv6 开关已开但 config.yaml 为 ipv6:false');
+        }
+        const ipv6NatText = proc.IPV6_NAT == '1' ? '支持' : (proc.IPV6_NAT == '0' ? '不支持（仅劫持 IPv4 DNS）' : '未读取');
+        const configIpv6Summary = configIpv6Val ? `config ipv6:${configIpv6Val}` : '';
+        const ipv6NatDowngraded = policyState.options.ipv6 == 'on' && policyState.options.dns_hijack == 'on' && proc.IPV6_NAT == '0';
+        const rows = [
+          ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
+          ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
+          ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_CONTROLLER == '1' ? F50_PORTS.controller + ' 已监听' : F50_PORTS.controller + ' 未监听'}`],
+          ['控制 API', apiLabel],
+          ['运行配置', `${modeLabel} · ${ipv6Label}${configIpv6Summary ? ` (${configIpv6Summary})` : ''} · ${configLabel}`],
+          ['Web 面板', health.panel],
+          ['节点来源', health.providers],
+          ['活动连接', connectionStatus],
+          ...(ipv6NatDowngraded ? [['IPv6 DNS', '内核缺 IPv6 NAT：仅劫持 IPv4 DNS，原生 IPv6 DNS 不会重定向']] : []),
+          ['未实测', `${health.unverified || '数据面接管、代理连通性'}（进程与 API 状态不能替代）`],
+          ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
+        ];
+        const detailRows = [
+          ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
+          ['API 地址', controllerInfo.apiBase],
+          ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
+          ['IPv6 诊断', `NAT ${ipv6NatText} · ${configIpv6Summary || 'config ipv6 未读取'} · dns.listen ${proc.CONFIG_DNS_LISTEN || '未读取'} · TUN6 ${proc.TUN6_STATE || '未读取'}`],
+          ['核心命令行', proc.CMDLINE || '无'],
+          ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
+          ['遗留测试进程', proc.STALE_TEST_FAILED ? '读取失败' : (proc.STALE_TEST_PIDS || '无')],
+          ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
+          ['预检信息', runtimeState.message || '无'],
+          ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
+        ];
+        if (summaryEl) summaryEl.innerHTML = renderRows(rows);
+        if (detailEl) detailEl.innerHTML = renderRows(detailRows);
+      };
+      paint();
+      // 遗留测试进程慢一步回来，补进明细并刷新总览。
+      const staleRes = await stalePromise;
+      if (generation !== diagnosticGeneration) return;
+      proc.STALE_TEST_PIDS = parseKeyValueOutput(staleRes.content || '').STALE_TEST_PIDS || '';
+      proc.STALE_TEST_FAILED = !staleRes.success;
+      paint();
+    };
+    if (refreshBtn && typeof refreshBtn.addEventListener === 'function') {
+      refreshBtn.addEventListener('click', async () => {
+        if (typeof setButtonBusy === 'function') setButtonBusy(refreshBtn, true, '刷新中…');
+        try { await runProbes(); } finally {
+          if (typeof setButtonBusy === 'function') setButtonBusy(refreshBtn, false);
+        }
+      });
     }
-    const health = f50HealthLayers({ pid, api: versionRes, panel: panelHealth, provider: providerHealth });
-    // 主表只给结论，逐字段明细收进折叠区：默认 9 行，不再平铺 23 行。
-    const runStateLabels = {
-      healthy: '运行正常', installed_stopped: '已安装未运行', running_api_unavailable: '运行中但 API 不可用',
-      not_installed: '未安装', damaged: '文件缺失或不可执行',
-    };
-    const bootLabels = { disabled: '未配置', direct: '原生自启', managed: '托管自启', manager_damaged: '自启配置损坏', incomplete: '自启不完整' };
-    const modeLabel = !policyState.options.traffic_mode
-      ? '模式未读取'
-      : (policyState.options.traffic_mode == 'tun' ? 'TUN' : (policyState.options.traffic_mode == 'off' ? '接管已关闭' : 'TProxy'));
-    const ipv6Label = !policyState.options.ipv6 ? 'IPv6 未读取' : (policyState.options.ipv6 == 'on' ? 'IPv6 开' : 'IPv6 关');
-    const configLabel = configExists ? `config.yaml ${(Number(configSize) / 1024).toFixed(1)} KB` : 'config.yaml 缺失';
-    const coreLabel = !pid ? '未运行' : (proc.PROCESS_KIND == 'config_test' ? '仅配置测试进程' : '运行中');
-    const apiLabel = !pid ? '核心未运行' : (versionRes.success ? `正常（HTTP ${versionRes.statusCode}）` : (versionRes.message || '不可用'));
-    const renderRows = (list) => list.map(([key, value]) =>
-      `<div style="display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.12);">
-        <strong>${escapeHtml(key)}</strong><span style="word-break:break-all;">${escapeHtml(value)}</span>
-      </div>`).join('');
-    const paint = () => {
-      // 异常项集中到「总览」一行，正常时逐行比对没有意义。
-      const problems = [];
-      if (!pid) problems.push('核心未运行');
-      else {
-        if (proc.PROCESS_KIND == 'config_test') problems.push('核心未真正运行');
-        if (proc.PORT_CONTROLLER != '1') problems.push(F50_PORTS.controller + ' 未监听');
-        if (!versionRes.success) problems.push('控制 API 不可用');
-        if (proc.CORE_ELF != '1') problems.push('Core 文件不可识别');
-      }
-      if (proc.STALE_TEST_PIDS) problems.push(`遗留测试进程 ${proc.STALE_TEST_PIDS}`);
-      if (!configExists) problems.push('config.yaml 缺失');
-      if (runtimeState.state != 'healthy') problems.push(`运行状态 ${runStateLabels[runtimeState.state] || runtimeState.state}`);
-      if (!/可访问/.test(String(health.panel || ''))) problems.push('面板不可访问');
-      // 复用 f50HealthLayers 的解析结论：请求成功但格式错误/部分来源读不到时，总览同样要报出来。
-      const providerProblems = Array.isArray(health.providerProblems)
-        ? health.providerProblems
-        : (providerHealth.success ? [] : ['节点来源读取失败']);
-      for (const item of providerProblems) problems.push(item);
-      if (degraded.length) problems.push(`${degraded.length} 项读取失败`);
-      const rows = [
-        ['总览', problems.length ? `需注意：${problems.join('；')}` : '正常'],
-        ['安装与启动', `${runStateLabels[runtimeState.state] || runtimeState.state} · 自启 ${bootLabels[bootState.state] || bootState.state}`],
-        ['核心进程', `${coreLabel}${pid ? ` · PID ${pid}` : ''} · ${proc.PORT_CONTROLLER == '1' ? F50_PORTS.controller + ' 已监听' : F50_PORTS.controller + ' 未监听'}`],
-        ['控制 API', apiLabel],
-        ['运行配置', `${modeLabel} · ${ipv6Label} · ${configLabel}`],
-        ['Web 面板', health.panel],
-        ['节点来源', health.providers],
-        ['活动连接', connectionStatus],
-        ['未实测', `${health.unverified || '数据面接管、代理连通性'}（进程与 API 状态不能替代）`],
-        ...(degraded.length ? [['读取降级', degraded.join('；')]] : []),
-      ];
-      const detailRows = [
-        ['控制地址', `${controllerInfo.externalController}${controllerInfo.usingFallbackController ? '（默认值）' : '（已读取配置）'}`],
-        ['API 地址', controllerInfo.apiBase],
-        ['访问密钥', controllerInfo.secretSet ? '已配置' : '未设置'],
-        ['核心命令行', proc.CMDLINE || '无'],
-        ['进程类型', proc.PROCESS_KIND == 'runtime' ? '真实运行核心' : (proc.PROCESS_KIND == 'config_test' ? '配置测试进程（不计为运行）' : '无')],
-        ['遗留测试进程', proc.STALE_TEST_FAILED ? '读取失败' : (proc.STALE_TEST_PIDS || '无')],
-        ['Core 文件', `${proc.CORE_SIZE || 0} bytes${proc.CORE_ELF == '1' ? '，ELF' : '，非ELF/不可识别'}`],
-        ['预检信息', runtimeState.message || '无'],
-        ['开机自启', `${bootState.state}${bootState.message ? `：${bootState.message}` : ''}`],
-      ];
-      if (summaryEl) summaryEl.innerHTML = renderRows(rows);
-      if (detailEl) detailEl.innerHTML = renderRows(detailRows);
-    };
-    paint();
-    // 遗留测试进程慢一步回来，补进明细并刷新总览。
-    const staleRes = await stalePromise;
-    proc.STALE_TEST_PIDS = parseKeyValueOutput(staleRes.content || '').STALE_TEST_PIDS || '';
-    proc.STALE_TEST_FAILED = !staleRes.success;
-    paint();
+    if (copyBtn && typeof copyBtn.addEventListener === 'function') {
+      copyBtn.addEventListener('click', async () => {
+        const text = [
+          '=== 状态总览 ===',
+          summaryEl ? summaryEl.textContent.trim() : '',
+          '=== 详细信息 ===',
+          detailEl ? detailEl.textContent.trim() : '',
+          installEl && installEl.textContent ? '=== 最近安装/清理 ===\n' + installEl.textContent.trim() : '',
+          '=== 运行日志 ===',
+          logEl ? logEl.textContent.trim() : '',
+        ].filter(Boolean).join('\n\n');
+        try {
+          if (navigator?.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const tmp = document.createElement('textarea');
+            tmp.value = text;
+            tmp.style.cssText = 'position:fixed;left:-9999px;opacity:0;';
+            document.body.appendChild(tmp);
+            tmp.select();
+            const ok = document.execCommand('copy');
+            tmp.remove();
+            if (!ok) throw new Error('copy failed');
+          }
+          createToast('诊断信息已复制到剪贴板', 'green', 4000);
+        } catch (_) {
+          createToast('自动复制受限，请手动选中复制日志内容', 'yellow', 5000);
+        }
+      });
+    }
+    await runProbes();
   };
 
 
@@ -9136,6 +9431,11 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
     try {
       config = cloneJsonValue(read.value);
       applyRequiredF50Fields(config, { preserveConfig: values.config_source === 'subscription_original' });
+      if (typeof syncConfigIpv6Preference === 'function') {
+        syncConfigIpv6Preference(config, runtimeOptions, {
+          force: !['subscription_original', 'uploaded_config'].includes(values.config_source),
+        });
+      }
 
       const preserveUserRules = ['subscription_original', 'uploaded_config'].includes(values.config_source);
       if (config['rule-providers'] != null) {
@@ -9184,7 +9484,11 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   const btn_enabled = document.createElement('button');
   btn_enabled.classList.add('btn');
   btn_enabled.textContent = '在线安装/更新';
-  btn_enabled.onclick = installF50PackageFromNetwork;
+  btn_enabled.onclick = async () => {
+    setButtonBusy(btn_enabled, true, '安装中…');
+    try { return await installF50PackageFromNetwork(); }
+    finally { setButtonBusy(btn_enabled, false); }
+  };
   const localPackageBtn = document.createElement('button');
   localPackageBtn.classList.add('btn');
   localPackageBtn.textContent = '导入组件包';
@@ -9199,9 +9503,21 @@ else echo SOURCE_STATE=unchanged; fi`,15000);
   btn_disabled.textContent = '卸载插件';
 
 btn_disabled.onclick = async () => {
-  if (!confirmF50OperationNotInFlight()) return;
+  if (!(await confirmF50OperationNotInFlight(btn_disabled))) return;
   // 卸载会 rm -rf /data/clash，含订阅链接与 Gist 私钥，误触无法挽回：先要一次明确确认。
-  if (!window.confirm('卸载将删除 /data/clash 下的全部组件、运行配置、订阅链接和 Gist 私钥，无法撤销。\n\n卸载后需要重新导入组件包并重新配置订阅。确认继续？')) return;
+  const uninstallPlain = '卸载将删除 /data/clash 下的全部组件、运行配置、订阅链接和 Gist 私钥，无法撤销。\n\n卸载后需要重新导入组件包并重新配置订阅。确认继续？';
+  const uninstallConfirmed = typeof askConfirm === 'function'
+    ? await askConfirm(
+        'mm_uninstall_confirm',
+        '确认卸载猫猫插件？',
+        '卸载将删除 <code>/data/clash</code> 下的全部组件、运行配置、订阅链接和 Gist 私钥，无法撤销。<br><br>卸载后需要重新导入组件包并重新配置订阅。',
+        '确认卸载',
+        '取消',
+        btn_disabled,
+        { danger: true },
+      )
+    : window.confirm(uninstallPlain);
+  if (!uninstallConfirmed) return;
   const operationToken = acquireCriticalOperation('卸载猫猫', null, true);
   if (!operationToken) return;
   markF50OperationInFlight('卸载');
@@ -9221,7 +9537,10 @@ btn_disabled.onclick = async () => {
       renderRuntimeStatus('stopped', '猫猫 - 未安装', document.querySelector('#running_mm'));
       const ruleStatus = document.querySelector('#mm_rule_mode_status'); if (ruleStatus) ruleStatus.textContent = '猫猫组件已删除';
       if (refreshBootButtonState) await refreshBootButtonState();
-    } else pluginArtifactsRemoved = false;
+    } else {
+      pluginArtifactsRemoved = false;
+      if (result.code !== 'operation_busy') clearF50OperationInFlight();
+    }
     operationFinish(result.ok, result.summary);
     createToast(safeTextToHtml(result.summary), result.ok ? 'green' : 'red', result.ok ? 5000 : 12000);
     return result.ok;
@@ -9283,16 +9602,23 @@ btn_disabled.onclick = async () => {
         }
         emit_policy_file options ${shellQuote(CLASH_POLICY_OPTIONS_FILE)}
         emit_policy_file deviceBypass ${shellQuote(CLASH_DEVICE_BYPASS_FILE)}
+        ${typeof CLASH_IPV6_BYPASS_SUFFIXES_FILE === 'string' && CLASH_IPV6_BYPASS_SUFFIXES_FILE ? `emit_policy_file ipv6Suffixes ${shellQuote(CLASH_IPV6_BYPASS_SUFFIXES_FILE)}` : ''}
         emit_policy_file deviceNotes ${shellQuote(CLASH_DEVICE_NOTES_FILE)}
         emit_policy_file directDomain ${shellQuote(CLASH_DIRECT_DOMAIN_FILE)}
         emit_policy_file directIp ${shellQuote(CLASH_DIRECT_IP_FILE)}
         emit_policy_file proxyDomain ${shellQuote(CLASH_PROXY_DOMAIN_FILE)}
         emit_policy_file rejectDomain ${shellQuote(CLASH_REJECT_DOMAIN_FILE)}
         `);
-    if (!res.success) throw new Error('无法读取网络设置；配置未修改');
+    if (!res.success) {
+      if (/^F50_OPERATION_(?:BUSY|RECOVERY_BUSY)$/m.test(String(res.content || ''))) {
+        throw new Error('设备正忙：已有其他页面或操作正在占用设备锁，请稍后重试；配置未修改');
+      }
+      throw new Error('无法读取网络设置；配置未修改');
+    }
     const sections = {
       options: [],
       deviceBypass: [],
+      ipv6Suffixes: [],
       deviceNotes: [],
       directDomain: [],
       directIp: [],
@@ -9300,11 +9626,22 @@ btn_disabled.onclick = async () => {
       rejectDomain: [],
     };
     String(res.content || '').split('\n').forEach((line) => {
-      const match = line.match(/^KANO_POLICY_(options|deviceBypass|deviceNotes|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
+      const match = line.match(/^KANO_POLICY_(options|deviceBypass|ipv6Suffixes|deviceNotes|directDomain|directIp|proxyDomain|rejectDomain)=(.*)$/);
       if (match) sections[match[1]].push(match[2]);
     });
     const deviceBypass = sections.deviceBypass.join('\n');
-    const deviceRows = deviceBypass.split('\n').map((line) => parseDeviceBypassLine(line).address).filter(Boolean);
+    const isAutoExpandedSuffix = (line) => /#\s*kano-v6-suffix\s*$/i.test(String(line || ''));
+    const staticDeviceLines = deviceBypass.split('\n').filter((line) => !isAutoExpandedSuffix(line));
+    const deviceRows = [];
+    const deviceRowKeys = new Set();
+    for (const line of [...staticDeviceLines, ...sections.ipv6Suffixes]) {
+      const addr = parseDeviceBypassLine(line).normalized;
+      if (!addr) continue;
+      const key = addr.toUpperCase();
+      if (deviceRowKeys.has(key)) continue;
+      deviceRowKeys.add(key);
+      deviceRows.push(addr);
+    }
     const notesText = sections.deviceNotes.join('\n').trim();
     // 备注文件损坏不能让整个网络设置面板打不开：回退为空表，保存时按新内容覆盖即可自愈。
     let savedNotes = {};
@@ -9362,6 +9699,37 @@ btn_disabled.onclick = async () => {
     } catch (_) { return ''; }
   };
 
+  const normalizeIpv6SuffixLike = (value = '') => {
+    const item = String(value || '').trim();
+    if (!item.startsWith('::') || item.includes('/')) return '';
+    const rest = item.slice(2);
+    if (!rest || rest.includes('::')) return '';
+    const rawGroups = rest.split(':');
+    if (rawGroups.length < 1 || rawGroups.length > 4) return '';
+    if (rawGroups.some((group) => !/^[0-9a-fA-F]{1,4}$/.test(group))) return '';
+    const groups = rawGroups.map((group) => group.toLowerCase().replace(/^0+/, '') || '0');
+    if (groups[0] === 'ffff' && groups.length >= 2) return '';
+    while (groups.length > 1 && groups[0] === '0') groups.shift();
+    if (groups.every((group) => group === '0') || (groups.length === 1 && groups[0] === '1')) return '';
+    return '::' + groups.join(':');
+  };
+
+  const extractIpv6SuffixCandidate = (value = '') => {
+    const item = String(value || '').trim().split('/')[0];
+    if (!item || !item.includes(':')) return '';
+    try {
+      const parsed = KPR.cidr(item);
+      if (parsed.family !== 6) return '';
+      const groups = [];
+      for (let i = 64; i < 128; i += 16) {
+        groups.push(parseInt(parsed.bits.slice(i, i + 16), 2).toString(16));
+      }
+      while (groups.length > 1 && groups[0] === '0') groups.shift();
+      if (groups.every((group) => group === '0') || (groups.length === 1 && groups[0] === '1')) return '';
+      return '::' + groups.join(':');
+    } catch (_) { return ''; }
+  };
+
   // 旧版名单行内的备注在保存时迁入独立文件，地址是否绕过与备注分开维护。
   const deviceNoteText = (note = '') => String(note).replace(/[#\r\n]+/g, ' ').trim();
   const parseDeviceBypassLine = (line = '') => {
@@ -9369,7 +9737,7 @@ btn_disabled.onclick = async () => {
     const commentAt = text.indexOf('#');
     const address = (commentAt >= 0 ? text.slice(0, commentAt) : text).trim();
     const note = commentAt >= 0 ? deviceNoteText(text.slice(commentAt + 1)) : '';
-    const normalized = address ? (normalizeMac(address) || normalizeIpLike(address) || normalizeIpv6Like(address)) : '';
+    const normalized = address ? (normalizeMac(address) || normalizeIpLike(address) || normalizeIpv6SuffixLike(address) || normalizeIpv6Like(address)) : '';
     return { address, note, normalized };
   };
   const readDeviceBypassNotes = (value = '') => {
@@ -9454,7 +9822,12 @@ btn_disabled.onclick = async () => {
       createToast(`直连设备列表格式错误：<br>${textToHtml(normalizedDevice.invalid.slice(0, 8).join('\n'))}`, 'red', 8000);
       return false;
     }
-    const macMirrorRows = normalizedDevice.text.split('\n')
+    const normalizedRows = normalizedDevice.text.split('\n').filter(Boolean);
+    const suffixBypassRows = normalizedRows.filter((line) => !!normalizeIpv6SuffixLike(line));
+    const staticBypassRows = normalizedRows.filter((line) => !normalizeIpv6SuffixLike(line));
+    const staticDeviceText = staticBypassRows.join('\n') + (staticBypassRows.length ? '\n' : '');
+    const suffixBypassText = suffixBypassRows.join('\n') + (suffixBypassRows.length ? '\n' : '');
+    const macMirrorRows = normalizedRows
       .map((line) => normalizeMac(line.trim()))
       .filter(Boolean)
       .filter((item, index, array) => array.indexOf(item) == index);
@@ -9533,7 +9906,8 @@ btn_disabled.onclick = async () => {
           chmod "$mode" "$staged" 2>/dev/null || true
           mv -f "$staged" "$target" || return 1
         }
-        write_policy_file ${shellQuote(CLASH_DEVICE_BYPASS_FILE)} 600 ${shellQuote(normalizedDevice.text)}
+        write_policy_file ${shellQuote(CLASH_DEVICE_BYPASS_FILE)} 600 ${shellQuote(staticDeviceText)}
+        write_policy_file ${shellQuote(CLASH_IPV6_BYPASS_SUFFIXES_FILE)} 600 ${shellQuote(suffixBypassText)}
         write_policy_file ${shellQuote(CLASH_MAC_BYPASS_FILE)} 600 ${shellQuote(macMirrorText)}
         if [ -f ${shellQuote(BOOT_FILE)} ]; then
           BOOT_TMP=${shellQuote(`${BOOT_FILE}.kano`)}.$$
@@ -9713,7 +10087,7 @@ btn_disabled.onclick = async () => {
   const showPolicyToolsDialog = async ({ initialTab = 'network', opener = document.activeElement } = {}) => {
     let state;
     try {
-      state = await readPolicyState();
+      state = await readPolicyState(typeof probeShell === 'function' ? probeShell : runShellWithRoot);
     } catch (error) {
       createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       return;
@@ -9726,51 +10100,52 @@ btn_disabled.onclick = async () => {
           #kano_policy_shell{pointer-events:all;min-width:0;width:auto;max-width:960px;box-sizing:border-box;}
           #kano_policy_shell *{box-sizing:border-box;}
           #kano_policy_shell .kp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
-          #kano_policy_shell .kp-title{font-size:.82rem;font-weight:800;line-height:1.2;}
+          #kano_policy_shell .kp-title{font-size:clamp(15px,.84rem,18px);font-weight:800;line-height:1.2;}
           #kano_policy_shell .kp-body{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px;height:min(62vh,560px);min-height:0;}
           #kano_policy_shell .kp-nav{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:8px;background:rgba(255,255,255,.045);height:max-content;}
-          #kano_policy_shell .kp-tab{width:100%;text-align:left;border:1px solid transparent;border-radius:10px;padding:10px 11px;margin-bottom:6px;background:transparent;color:inherit;font-size:.64rem;line-height:1.25;}
+          #kano_policy_shell .kp-tab{width:100%;text-align:left;border:1px solid transparent;border-radius:10px;padding:10px 11px;margin-bottom:6px;background:transparent;color:inherit;font-size:clamp(12px,.68rem,14px);line-height:1.25;}
           #kano_policy_shell .kp-tab:last-child{margin-bottom:0;}
           #kano_policy_shell .kp-tab.kp-active{background:var(--dark-btn-color-active);border-color:rgba(255,255,255,.18);color:#fff;}
           #kano_policy_shell .kp-main{max-width:100%;min-width:0;min-height:0;overflow:auto;padding-right:4px;}
           #kano_policy_shell .kp-panel{display:none;}
           #kano_policy_shell .kp-panel.kp-show{display:block;}
           #kano_policy_shell .kp-card{min-width:0;overflow-wrap:anywhere;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px;background:rgba(255,255,255,.045);margin-bottom:10px;}
-          #kano_policy_shell .kp-card-title{font-size:.70rem;font-weight:800;margin-bottom:8px;}
-          #kano_policy_shell .kp-desc{font-size:.60rem;line-height:1.6;opacity:.72;margin:6px 0 10px;}
-          #kano_policy_shell .kp-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:.63rem;}
+          #kano_policy_shell .kp-card-title{font-size:clamp(13px,.74rem,16px);font-weight:800;margin-bottom:8px;}
+          #kano_policy_shell .kp-desc{font-size:clamp(12px,.64rem,14px);line-height:1.6;opacity:.78;margin:6px 0 10px;}
+          #kano_policy_shell .kp-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:clamp(12px,.66rem,14px);transition:opacity .15s ease;}
+          #kano_policy_shell .kp-row.kp-row-disabled{opacity:.48;}
           #kano_policy_shell .kp-row:first-of-type{border-top:none;}
-          #kano_policy_shell .kp-label{opacity:.82;font-weight:700;}
+          #kano_policy_shell .kp-label{opacity:.88;font-weight:700;}
           #kano_policy_shell input,#kano_policy_shell select,#kano_policy_shell textarea{min-width:0;max-width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(0,0,0,.45);color:inherit;outline:none;}
           #kano_policy_shell select,#kano_policy_shell input{padding:8px;}
           #kano_policy_shell textarea{width:100%;min-height:130px;padding:10px;font-family:monospace;line-height:1.45;resize:vertical;}
           #kano_policy_shell .kp-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-          #kano_policy_shell .kp-actions button,#kano_policy_shell .kp-footer button{font-size:.62rem;border-radius:9px;padding:8px 10px;}
+          #kano_policy_shell .kp-actions button,#kano_policy_shell .kp-footer button{font-size:clamp(12px,.66rem,14px);border-radius:9px;padding:8px 10px;}
           #kano_policy_shell .kp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-          #kano_policy_shell .kp-mini{font-size:.58rem;line-height:1.45;opacity:.68;margin-top:6px;}
-          #kano_policy_shell .kp-scope-note{margin:8px 0 10px;padding:8px 10px;border:1px solid rgba(96,165,250,.25);border-radius:9px;background:rgba(30,64,175,.12);font-size:.59rem;line-height:1.55;}
+          #kano_policy_shell .kp-mini{font-size:clamp(11px,.6rem,13px);line-height:1.45;opacity:.72;margin-top:6px;}
+          #kano_policy_shell .kp-scope-note{margin:8px 0 10px;padding:8px 10px;border:1px solid rgba(96,165,250,.25);border-radius:9px;background:rgba(30,64,175,.12);font-size:clamp(11.5px,.62rem,13.5px);line-height:1.55;}
           #kano_policy_shell .kp-scope-note.kp-warning{border-color:rgba(251,191,36,.35);background:rgba(120,53,15,.18);color:#fde68a;}
           #kano_policy_shell .kp-maintain-item{display:grid;grid-template-columns:170px 1fr;gap:10px;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);}
           #kano_policy_shell .kp-maintain-item:first-of-type{border-top:none;}
           #kano_policy_shell .kp-maintain-item button{width:100%;}
-          #kano_policy_shell .kp-maintain-item span{font-size:.59rem;line-height:1.55;opacity:.72;}
+          #kano_policy_shell .kp-maintain-item span{font-size:clamp(11.5px,.62rem,13.5px);line-height:1.55;opacity:.76;}
           #kano_policy_shell .kp-footer{margin-top:12px;display:flex;justify-content:flex-end;align-items:center;}
           #kano_policy_shell .kp-footer-right{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
-          #kano_policy_shell .kp-footer-right button{width:auto;min-width:72px;min-height:30px;padding:5px 10px;}
-          #kano_policy_shell .kp-client{min-width:0;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px;margin-top:6px;background:rgba(0,0,0,.18);font-size:.60rem;}
+          #kano_policy_shell .kp-footer-right button{width:auto;min-width:72px;min-height:32px;padding:5px 12px;}
+          #kano_policy_shell .kp-client{min-width:0;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px;margin-top:6px;background:rgba(0,0,0,.18);font-size:clamp(11.5px,.62rem,13.5px);}
           #kano_policy_shell .kp-client-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;min-width:0;}
           #kano_policy_shell .kp-client-mac{flex:1 1 auto;min-width:0;font-family:monospace;font-weight:700;overflow-wrap:anywhere;}
-          #kano_policy_shell .kp-client-tag{flex:0 0 auto;font-size:.53rem;opacity:.62;white-space:nowrap;}
-          #kano_policy_shell .kp-client-head button{flex:0 0 auto;width:auto;min-height:0;font-size:.55rem;line-height:1.2;padding:4px 8px;white-space:nowrap;}
-          #kano_policy_shell .kp-scan-summary{font-size:.55rem;line-height:1.5;opacity:.66;margin-top:8px;}
+          #kano_policy_shell .kp-client-tag{flex:0 0 auto;font-size:clamp(11px,.58rem,12.5px);opacity:.68;white-space:nowrap;}
+          #kano_policy_shell .kp-client-head button{flex:0 0 auto;width:auto;min-height:0;font-size:clamp(11px,.58rem,12.5px);line-height:1.2;padding:4px 8px;white-space:nowrap;}
+          #kano_policy_shell .kp-scan-summary{font-size:clamp(11px,.58rem,12.5px);line-height:1.5;opacity:.72;margin-top:8px;}
           #kano_policy_shell .kp-ip-list{display:grid;gap:3px;margin-top:7px;padding-top:7px;border-top:1px dashed rgba(255,255,255,.10);}
           #kano_policy_shell .kp-ip{display:flex;align-items:center;gap:8px;min-width:0;}
           #kano_policy_shell .kp-ip-addr{flex:1 1 auto;min-width:0;font-family:monospace;overflow-wrap:anywhere;word-break:break-all;}
           #kano_policy_shell .kp-ip-note,#kano_policy_shell .kp-client-note{flex:0 1 auto;min-width:0;max-width:44%;color:#93c5fd;opacity:.85;overflow-wrap:anywhere;}
-          #kano_policy_shell .kp-ip>button{flex:0 0 auto;width:auto;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;white-space:nowrap;}
+          #kano_policy_shell .kp-ip>button{flex:0 0 auto;width:auto;min-height:0;font-size:clamp(11px,.58rem,12.5px);line-height:1.2;padding:3px 7px;white-space:nowrap;}
           #kano_policy_shell .kp-ip.kp-link-local>span{opacity:.55;}
-          #kano_policy_shell .kp-link-local-toggle{width:100%;margin-top:6px;min-height:0;font-size:.53rem;line-height:1.2;padding:3px 7px;text-align:center;opacity:.78;}
-          #kano_policy_shell code{font-size:.58rem;opacity:.9;}
+          #kano_policy_shell .kp-link-local-toggle{width:100%;margin-top:6px;min-height:0;font-size:clamp(11px,.58rem,12.5px);line-height:1.2;padding:3px 7px;text-align:center;opacity:.82;}
+          #kano_policy_shell code{font-size:clamp(11px,.6rem,13px);opacity:.9;}
           #kano_policy_shell button:focus-visible,#kano_policy_shell input:focus-visible,#kano_policy_shell select:focus-visible,#kano_policy_shell textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
           @container (max-width:720px){#kano_policy_shell .kp-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);height:min(65vh,640px);}#kano_policy_shell .kp-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}#kano_policy_shell .kp-tab{margin-bottom:0;text-align:center;}#kano_policy_shell .kp-row,#kano_policy_shell .kp-maintain-item{grid-template-columns:1fr;}#kano_policy_shell .kp-grid2{grid-template-columns:1fr;}}
         </style>
@@ -9812,7 +10187,10 @@ btn_disabled.onclick = async () => {
                   </div>
                   <div class="kp-row">
                     <div class="kp-label">DNS 劫持</div>
-                    <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 Mihomo DNS 端口 <input id="mm_policy_dns_port" readonly title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
+                    <div>
+                      <label><input id="mm_policy_dns" type="checkbox"> 劫持 53 到 Mihomo DNS 端口 <input id="mm_policy_dns_port" readonly title="固定 DNS 端口" style="width:82px;margin-left:6px;" value="${F50_PORTS.dns}"></label>
+                      <div class="kp-mini kp-ipv6-dns-hint" hidden style="color:#fde68a;"></div>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -9822,7 +10200,8 @@ btn_disabled.onclick = async () => {
                   <div class="kp-card-title">直连设备</div>
                   <div class="kp-desc">列表中的 IP、网段或 MAC 不经过代理。备注独立保存，不改变名单。</div>
                   <div id="mm_policy_device_scope" class="kp-scope-note" role="status"></div>
-                  <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50 # 客厅电视&#10;fd00::/64&#10;AA:BB:CC:DD:EE:FF # 我的手机"></textarea>
+                  <textarea id="mm_policy_device" spellcheck="false" placeholder="192.168.0.50 # 客厅电视&#10;::248 # 动态补全 IPv6 前缀&#10;AA:BB:CC:DD:EE:FF # 我的手机"></textarea>
+                  <div class="kp-mini kp-suffix-preview" hidden></div>
                   <div class="kp-actions" style="margin-top:9px;">
                     <button type="button" id="mm_policy_scan_clients">扫描客户端</button>
                   </div>
@@ -9892,22 +10271,66 @@ btn_disabled.onclick = async () => {
     get('#mm_policy_dns_port').value = state.options.dns_port || String(F50_PORTS.dns);
     get('#mm_policy_device').value = state.deviceBypass || '';
     let deviceNotes = { ...state.deviceNotes };
+    let ipv6NatCapable = null;
+    const syncIpv6DnsHint = () => {
+      const hintEl = el.querySelector('.kp-ipv6-dns-hint');
+      if (!hintEl) return;
+      const mode = get('#mm_policy_traffic_mode').value;
+      const showHint = ipv6NatCapable === false && mode !== 'off' && get('#mm_policy_ipv6').checked && get('#mm_policy_dns').checked;
+      hintEl.hidden = !showHint;
+      if (showHint) hintEl.textContent = '当前内核不支持 IPv6 NAT：仅劫持 IPv4 DNS（53 端口）；若下游收到运营商原生 IPv6 DNS，请关闭路由器 LAN IPv6 DNS 下发以防分流泄漏。';
+    };
     const updateDeviceBypassScope = () => {
       const mode = get('#mm_policy_traffic_mode').value;
       const note = get('#mm_policy_device_scope');
       const disabled = mode !== 'tproxy';
+      const captureOff = mode === 'off';
       get('#mm_policy_tun_stack').disabled = mode !== 'tun';
+      get('#mm_policy_ipv6').disabled = captureOff;
+      get('#mm_policy_quic').disabled = captureOff;
+      get('#mm_policy_dns').disabled = captureOff;
+      get('#mm_policy_dns_port').disabled = captureOff;
+      for (const selector of ['#mm_policy_tun_stack', '#mm_policy_ipv6', '#mm_policy_quic', '#mm_policy_dns']) {
+        const input = get(selector);
+        const row = input && input.closest && input.closest('.kp-row');
+        if (row) row.classList.toggle('kp-row-disabled', !!input.disabled);
+      }
       get('#mm_policy_device').disabled = disabled;
       get('#mm_policy_scan_clients').disabled = disabled;
       if (disabled) get('#mm_policy_clients').innerHTML = '';
       note.classList.toggle('kp-warning', disabled);
       setText(note, mode === 'tun'
         ? 'TUN 使用固定路由接管，直连设备已暂停生效；名单保留，切回 TProxy 后自动恢复。'
-        : mode === 'off' ? '流量接管已关闭；名单保留但不生效。'
-        : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配其全部 IP。不要将下级路由器 MAC 当作单台设备。');
+        : mode === 'off' ? '流量接管已关闭（IPv6、QUIC、DNS 劫持与直连设备均暂停生效，原有配置保持不变）。'
+        : '名单优先于私网代理；IP 只匹配该地址，MAC 匹配其全部 IP。支持写 IPv6 后缀（如 ::248），保存/启动/应用规则时按当前 br0 的 /64 前缀自动补全。不要将下级路由器 MAC 当作单台设备。');
+      syncIpv6DnsHint();
     };
+    const syncSuffixPreview = () => {
+      const previewEl = typeof el !== 'undefined' && el && el.querySelector ? el.querySelector('.kp-suffix-preview') : null;
+      if (!previewEl) return;
+      const suffixes = String(get('#mm_policy_device').value || '').split('\n')
+        .map((line) => normalizeIpv6SuffixLike(parseDeviceBypassLine(line).address))
+        .filter(Boolean);
+      const unique = [...new Set(suffixes)];
+      previewEl.hidden = unique.length === 0;
+      if (unique.length) {
+        previewEl.textContent = `动态 IPv6 后缀（生效时按当前 br0 前缀自动补全）：${unique.join('、')}`;
+      }
+    };
+    get('#mm_policy_device').addEventListener('input', syncSuffixPreview);
     get('#mm_policy_traffic_mode').addEventListener('change', updateDeviceBypassScope);
+    get('#mm_policy_ipv6').addEventListener('change', syncIpv6DnsHint);
+    get('#mm_policy_dns').addEventListener('change', syncIpv6DnsHint);
     updateDeviceBypassScope();
+    syncSuffixPreview();
+    probeShell("probe=$(ip6tables -w 5 -t nat -S 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then echo 1; elif printf '%s\\n' \"$probe\" | grep -Eiq \"can't initialize ip6tables table.*nat|Table does not exist\"; then echo 0; else echo unknown; fi", 5000)
+      .then((res) => {
+        const out = String(res?.content || '').trim();
+        if (out === '1') ipv6NatCapable = true;
+        else if (out === '0') ipv6NatCapable = false;
+        syncIpv6DnsHint();
+      })
+      .catch(() => {});
 
     const closeBtn = get('#mm_policy_close');
     closeBtn.onclick = bindDialogKeyboard(el, closeToast, opener, closeBtn, get('[data-policy-tab].kp-active'));
@@ -9922,6 +10345,7 @@ btn_disabled.onclick = async () => {
         return parsed.normalized && parsed.normalized.toUpperCase() === key;
       })) return;
       textarea.value = [...rows, item].join('\n') + '\n';
+      if (typeof syncSuffixPreview === 'function') syncSuffixPreview();
     };
     get('#mm_policy_scan_clients').onclick = async () => {
       const scanBtn = get('#mm_policy_scan_clients');
@@ -9964,8 +10388,10 @@ btn_disabled.onclick = async () => {
         summary.className = 'kp-scan-summary';
         const totalIps = devices.reduce((sum, device) => sum + device.ips.length, 0);
         const linkLocalIps = devices.reduce((sum, device) => sum + device.linkLocal, 0);
+        const hasRoutableIpv6 = devices.some((device) => device.ips.some((ip) => ip.includes(':') && !isLinkLocalAddress(ip)));
         summary.textContent = `共 ${devices.length} 台设备 · ${totalIps} 个地址`
-          + (linkLocalIps ? ` · 其中 ${linkLocalIps} 个链路本地地址已折叠` : '');
+          + (linkLocalIps ? ` · 其中 ${linkLocalIps} 个链路本地地址已折叠` : '')
+          + (hasRoutableIpv6 ? ' · 含 IPv6 设备建议优先添加 MAC（防止临时隐私地址轮换失效）' : '');
         box.appendChild(summary);
         devices.forEach((device) => {
           const row = document.createElement('div');
@@ -10025,6 +10451,18 @@ btn_disabled.onclick = async () => {
             ipRow.appendChild(ipNote);
             ipRow.appendChild(noteBtn);
             ipRow.appendChild(addIp);
+            if (!linkLocal && ip.includes(':') && !/^f[cd]/i.test(ip)) {
+              const suffix = extractIpv6SuffixCandidate(ip);
+              if (suffix) {
+                const addSuffix = document.createElement('button');
+                addSuffix.type = 'button';
+                addSuffix.className = 'add_suffix';
+                addSuffix.title = `按固定后缀 ${suffix} 绕过，前缀变化时自动补全`;
+                addSuffix.textContent = '按后缀';
+                addSuffix.addEventListener('click', () => appendDeviceBypassValue(suffix));
+                ipRow.appendChild(addSuffix);
+              }
+            }
             list.appendChild(ipRow);
             return ipRow;
           };
@@ -10162,6 +10600,8 @@ exit 1`, 10000);
       setButtonBusy(button, true, '应用中…');
       try {
         const selected = KPR.normalize({ enabled: get('#kpr_enabled').checked, cidrs: get('#kpr_cidrs').value, policy: get('#kpr_policy').value });
+        const bypassCheck = normalizeDeviceBypassText(get('#mm_policy_device').value);
+        if (bypassCheck.invalid.length) throw new Error('直连设备列表格式错误：' + bypassCheck.invalid.join('; '));
         const nextNotes = { ...(await readPolicyState()).deviceNotes, ...Object.fromEntries(readDeviceBypassNotes(get('#mm_policy_device').value)) };
         if (!(await saveDeviceNotes(nextNotes))) return;
         state.deviceNotes = deviceNotes = nextNotes;
@@ -10176,18 +10616,19 @@ exit 1`, 10000);
           private_route_cidrs: selected.cidrs.join(' '),
           private_route_policy: selected.policy,
         }, deviceBypass: get('#mm_policy_device').value };
-        await kprSaveNetworkState(state, next);
-        get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
-        get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
-        get('#mm_policy_tun_stack').value = state.options.tun_stack || 'auto';
-        get('#mm_policy_quic').checked = state.options.quic_block === 'on';
-        get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
-        get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
-        get('#mm_policy_device').value = state.deviceBypass || '';
-        get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
-        get('#kpr_cidrs').value = String(state.options.private_route_cidrs || '').trim().split(/\s+/).filter(Boolean).join('\n');
-        get('#kpr_policy').value = state.options.private_route_policy || '';
-        get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
+        if (await kprSaveNetworkState(state, next)) {
+          get('#mm_policy_traffic_mode').value = state.options.traffic_mode;
+          get('#mm_policy_ipv6').checked = state.options.ipv6 === 'on';
+          get('#mm_policy_tun_stack').value = state.options.tun_stack || 'auto';
+          get('#mm_policy_quic').checked = state.options.quic_block === 'on';
+          get('#mm_policy_dns').checked = state.options.dns_hijack === 'on';
+          get('#mm_policy_dns_port').value = String(F50_PORTS.dns);
+          get('#mm_policy_device').value = state.deviceBypass || '';
+          get('#kpr_enabled').checked = state.options.private_route_enabled === 'on';
+          get('#kpr_cidrs').value = String(state.options.private_route_cidrs || '').trim().split(/\s+/).filter(Boolean).join('\n');
+          get('#kpr_policy').value = state.options.private_route_policy || '';
+          get('#mm_policy_traffic_mode').dispatchEvent(new Event('change'));
+        }
       } catch (error) {
         createToast(safeTextToHtml(error.message || String(error)), 'red', 10000);
       } finally {
@@ -10197,10 +10638,8 @@ exit 1`, 10000);
     };
   };
 
-  const stopClash = async () => await networkRescue({showOutput:false});
 
-
-  const restartClash = async ({ skipCheck = false, preferReload = false, policyReady = false, preparedConfig = null } = {}) => {
+  const restartClash = async ({ skipCheck = false, preparedConfig = null } = {}) => {
   if (!skipCheck && !(await ensureReady())) return f50StartResult({success:false,content:'F50_START_CODE=backend_not_ready'});
   operationStage('验证固定配置并启动核心');
   if (preparedConfig) {
@@ -10240,7 +10679,7 @@ exit 1`, 10000);
     });
   };
 
-  //\u4e00\u952e\u4e0a\u4f20
+  // 一键上传
   const uploadEl = document.createElement('input');
   uploadEl.type = 'file';
   uploadEl.accept = '.yaml,.yml,text/yaml,text/plain';
@@ -10251,7 +10690,7 @@ exit 1`, 10000);
       const file = e.target.files[0];
       if (!file) return;
       if (!(await ensureReady())) return;
-      // \u68c0\u67e5\u6587\u4ef6\u5927\u5c0f
+      // 检查文件大小
       if (file.size > 2 * 1024 * 1024) {
         createToast(`模板文件大小不能超过 ${2} MB`, 'red');
         return;
@@ -10521,15 +10960,7 @@ EOF_F50_RESTORE_MEMBERS
     const packageRollbackDir = ((restoreOutput.split('\n').find((line) => line.startsWith('RESTORE_ROLLBACK_DIR=')) || '')
       .replace(/^RESTORE_ROLLBACK_DIR=/, '')
       .trim());
-    const restoreOriginalConfigOnly = async (context) => {
-      if (rollbackPath) return await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
-      const removed = await runShellWithRoot(`
-        rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
-        [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
-        echo CONFIG_ROLLBACK_RESTORED_ABSENT
-      `, 15 * 1000);
-      return removed.success && String(removed.content || '').includes('CONFIG_ROLLBACK_RESTORED_ABSENT');
-    };
+    const restoreOriginalConfigOnly = (context) => restoreOrRemoveConfigAtRollback(rollbackPath, context);
     const rollbackRestoredPackage = async (context = '配置包导入', detail = '') => {
       if (!packageRollbackDir) {
         const configRestored = await restoreOriginalConfigOnly(context);
@@ -10626,7 +11057,7 @@ EOF_F50_RESTORE_MEMBERS
     await runCriticalOperation('停止核心', async () => {
       setButtonBusy(stopBtn, true, '停止中…');
       try {
-        return await stopClash();
+        return await networkRescue({ showOutput: false });
       } finally {
         setButtonBusy(stopBtn, false);
       }
@@ -10691,7 +11122,7 @@ EOF_F50_RESTORE_MEMBERS
             override.js)
               printf '%s' ${shellQuote(defaultOverrideJsForBackup)} > "$PKG_DIR/$name" || return 1
               ;;
-            sub_user_agent.conf|mac_bypass.txt|device_bypass.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
+            sub_user_agent.conf|mac_bypass.txt|device_bypass.txt|ipv6_bypass_suffixes.txt|direct_domain.list|direct_ip.list|proxy_domain.list|reject_domain.list)
               : > "$PKG_DIR/$name" || return 1
               ;;
             rule_override.json|rule_override_applied.json)
@@ -10791,43 +11222,55 @@ EOF_F50_RESTORE_MEMBERS
       #IFRAME_KANO *{box-sizing:border-box;}
       #IFRAME_KANO .kano-mm-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;padding:8px 10px;border-radius:14px;background:linear-gradient(135deg,rgba(15,23,42,.72),rgba(30,41,59,.38));border:1px solid rgba(148,163,184,.20);}
       #IFRAME_KANO .kano-mm-title-left{display:flex;align-items:center;gap:8px;min-width:0;}
-      #IFRAME_KANO .kano-mm-badge{font-size:.58rem;padding:3px 8px;border-radius:999px;background:rgba(59,130,246,.16);border:1px solid rgba(147,197,253,.28);color:#bfdbfe;white-space:nowrap;}
+      #IFRAME_KANO .kano-mm-badge{font-size:clamp(11px,.64rem,13px);padding:3px 8px;border-radius:999px;background:rgba(59,130,246,.16);border:1px solid rgba(147,197,253,.28);color:#bfdbfe;white-space:nowrap;}
       #IFRAME_KANO .kano-mm-box{padding:10px;border:1px solid rgba(148,163,184,.18);border-radius:16px;background:rgba(15,23,42,.36);}
       #IFRAME_KANO .kano-mm-overview{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-bottom:10px;align-items:stretch;}
-      #IFRAME_KANO .kano-mm-status{font-size:.58rem;line-height:1.55;margin:0;padding:7px 9px;border:1px solid rgba(96,165,250,.22);border-radius:12px;background:rgba(15,23,42,.46);color:#bfdbfe;}
-      #IFRAME_KANO .kano-mm-task-status{display:flex;align-items:center;justify-content:center;min-width:96px;padding:7px 10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.46);color:#cbd5e1;font-size:.58rem;line-height:1.55;white-space:nowrap;}
+      #IFRAME_KANO .kano-mm-status{font-size:clamp(12px,.66rem,14px);line-height:1.55;margin:0;padding:7px 10px;border:1px solid rgba(96,165,250,.22);border-radius:12px;background:rgba(15,23,42,.46);color:#bfdbfe;}
+      #IFRAME_KANO .kano-mm-task-status{display:flex;align-items:center;justify-content:center;min-width:96px;padding:7px 10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.46);color:#cbd5e1;font-size:clamp(12px,.66rem,14px);line-height:1.55;white-space:nowrap;}
       #IFRAME_KANO .kano-mm-task-status[data-state="running"]{border-color:rgba(251,191,36,.34);background:rgba(120,53,15,.28);color:#fde68a;}
+      #IFRAME_KANO .kano-mm-quick-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding:8px 10px;border-radius:12px;border:1px solid rgba(251,191,36,.32);background:rgba(120,53,15,.22);color:#fde68a;font-size:clamp(12px,.66rem,14px);line-height:1.5;}
+      #IFRAME_KANO .kano-mm-quick-bar[hidden]{display:none;}
+      #IFRAME_KANO .kano-mm-quick-actions{display:flex;gap:6px;flex-wrap:wrap;}
+      #IFRAME_KANO .kano-mm-quick-actions button{min-height:30px;font-size:clamp(12px,.64rem,13.5px);padding:4px 10px;}
       #mm_action_box{margin-bottom:10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:start;}
       #IFRAME_KANO .kano-action-group{min-width:0;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(15,23,42,.44);overflow:hidden;}
-      #IFRAME_KANO .kano-action-group>summary{cursor:pointer;list-style:none;min-height:32px;padding:7px 9px;font-size:.62rem;font-weight:800;letter-spacing:.01em;color:#dbeafe;background:rgba(30,41,59,.55);display:flex;align-items:center;justify-content:space-between;gap:8px;}
-      #IFRAME_KANO .kano-action-group>summary::after{content:'+';font-size:.72rem;opacity:.72;}
+      #IFRAME_KANO .kano-action-group>summary{cursor:pointer;list-style:none;min-height:34px;padding:7px 10px;font-size:clamp(12px,.68rem,14.5px);font-weight:800;letter-spacing:.01em;color:#dbeafe;background:rgba(30,41,59,.55);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+      #IFRAME_KANO .kano-action-group>summary::after{content:'+';font-size:.82rem;opacity:.72;}
       #IFRAME_KANO .kano-action-group[open]>summary::after{content:'-';}
       #IFRAME_KANO .kano-action-group[open]>summary{background:rgba(37,99,235,.20);border-bottom:1px solid rgba(96,165,250,.18);color:#eff6ff;}
       #IFRAME_KANO .kano-action-group>summary::-webkit-details-marker{display:none;}
       #IFRAME_KANO .kano-action-inner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:7px;}
       #IFRAME_KANO .kano-action-inner.kano-action-inner-odd>button:last-child{grid-column:1/-1;}
-      #IFRAME_KANO .kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:32px;line-height:1.2;text-align:center;font-size:.61rem;}
-      #IFRAME_KANO button{border:1px solid rgba(148,163,184,.25);border-radius:9px;padding:5px 9px;background:linear-gradient(180deg,rgba(51,65,85,.94),rgba(30,41,59,.94));color:#e5edf7;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;}
-      #IFRAME_KANO button:hover{filter:brightness(1.08);}
-      #IFRAME_KANO button:disabled{opacity:.55;filter:grayscale(.35);}
-      #IFRAME_KANO button:focus-visible,#IFRAME_KANO summary:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
-      #IFRAME_KANO .kano-danger{background:linear-gradient(180deg,rgba(127,29,29,.95),rgba(69,10,10,.95));border-color:rgba(252,165,165,.35);}
-      #IFRAME_KANO .kano-primary{background:linear-gradient(180deg,rgba(37,99,235,.95),rgba(30,64,175,.95));border-color:rgba(147,197,253,.35);}
+      #IFRAME_KANO .kano-action-inner button{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:34px;line-height:1.25;text-align:center;font-size:clamp(12px,.66rem,14px);}
+      #IFRAME_KANO button,.kano-dialog button{border:1px solid rgba(148,163,184,.25);border-radius:9px;padding:5px 10px;background:linear-gradient(180deg,rgba(51,65,85,.94),rgba(30,41,59,.94));color:#e5edf7;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;cursor:pointer;}
+      #IFRAME_KANO button:hover,.kano-dialog button:hover{filter:brightness(1.08);}
+      #IFRAME_KANO button:disabled,.kano-dialog button:disabled{opacity:.55;filter:grayscale(.35);cursor:not-allowed;}
+      #IFRAME_KANO button:focus-visible,#IFRAME_KANO summary:focus-visible,.kano-dialog button:focus-visible,.kano-dialog summary:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
+      #IFRAME_KANO .kano-danger,.kano-dialog .kano-danger{background:linear-gradient(180deg,rgba(153,27,27,.95),rgba(80,14,14,.95));border-color:rgba(252,165,165,.40);color:#fee2e2;}
+      #IFRAME_KANO .kano-primary,.kano-dialog .kano-primary{background:linear-gradient(180deg,rgba(37,99,235,.95),rgba(30,64,175,.95));border-color:rgba(147,197,253,.35);color:#eff6ff;}
       #IFRAME_KANO .kano-mm-web-panel{border:1px solid rgba(148,163,184,.18);border-radius:16px;background:rgba(15,23,42,.38);overflow:hidden;}
-      #IFRAME_KANO .kano-mm-web-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;font-size:.58rem;opacity:.78;border-bottom:1px solid rgba(148,163,184,.14);}
+      #IFRAME_KANO .kano-mm-web-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 10px;font-size:clamp(12px,.64rem,13.5px);color:#cbd5e1;border-bottom:1px solid rgba(148,163,184,.14);}
+      #IFRAME_KANO .kano-mm-web-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+      #IFRAME_KANO .kano-mm-web-tools button{min-height:26px;padding:3px 8px;font-size:clamp(11px,.6rem,12.5px);}
+      #IFRAME_KANO .kano-mm-web-body{position:relative;}
+      #IFRAME_KANO .kano-mm-web-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px;text-align:center;background:rgba(15,23,42,.92);color:#cbd5e1;}
+      #IFRAME_KANO .kano-mm-web-empty[hidden]{display:none;}
+      #IFRAME_KANO .kano-mm-web-empty-title{font-size:clamp(14px,.78rem,16px);font-weight:700;color:#eff6ff;}
+      #IFRAME_KANO .kano-mm-web-empty-desc{max-width:420px;font-size:clamp(12px,.66rem,14px);line-height:1.6;opacity:.82;}
       #IFRAME_KANO #mm_iframe{border:none;padding:0;margin:0;width:100%;height:70vh;min-height:420px;max-height:720px;display:block;background:#0f172a;}
       .kano-dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;width:auto;margin-left:auto;}
-      .kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:30px;padding:5px 10px;}
+      .kano-dialog-actions>button{flex:0 0 auto;width:auto;min-width:68px;min-height:32px;padding:5px 12px;font-size:clamp(12px,.68rem,14px);}
       .kano-dialog{container-type:inline-size;min-width:0;max-height:calc(100vh - 96px);max-height:calc(100dvh - 96px);overflow:auto;}
-      #mm_sub_input_toast .mm_sub_url_input:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
+      .kano-dialog input[type=text],.kano-dialog input[type=url],.kano-dialog input[type=password],.kano-dialog select,.kano-dialog textarea{box-sizing:border-box;border:1px solid rgba(148,163,184,.35);border-radius:9px;background:#111827;color:#dbeafe;}
+      .kano-dialog input:focus-visible,.kano-dialog select:focus-visible,.kano-dialog textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px;}
       @container (max-width:600px){.kano-dialog-actions.kano-actions-4{display:grid;grid-template-columns:repeat(2,max-content);}}
       .kano-log-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;max-width:440px;margin-left:auto;}
       .kano-log-actions>button{width:100%;min-width:0;min-height:30px;padding:5px 8px;}
       .kano-dialog-menu{display:grid;gap:9px;margin-top:12px;}
       .kano-dialog-menu-section{padding:9px;border:1px solid rgba(148,163,184,.20);border-radius:10px;background:rgba(15,23,42,.28);}
-      .kano-dialog-menu-title{margin-bottom:7px;font-size:.59rem;font-weight:800;color:#bfdbfe;}
+      .kano-dialog-menu-title{margin-bottom:7px;font-size:clamp(12px,.66rem,14px);font-weight:800;color:#bfdbfe;}
       .kano-dialog-menu-grid{display:grid;grid-template-columns:repeat(var(--kano-menu-cols,2),minmax(0,1fr));gap:7px;}
-      .kano-dialog-menu-grid>button{width:100%;min-width:0;min-height:32px;padding:5px 8px;font-size:.62rem;}
+      .kano-dialog-menu-grid>button{width:100%;min-width:0;min-height:34px;padding:5px 8px;font-size:clamp(12px,.66rem,14px);}
       .kano-yaml-editor:focus{border-color:rgba(96,165,250,.75)!important;box-shadow:0 0 0 2px rgba(59,130,246,.22);}
       @media (max-width:1100px){#mm_action_box{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:600px){#mm_action_box{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-overview{grid-template-columns:1fr;}#IFRAME_KANO .kano-mm-task-status{justify-content:flex-start;}#IFRAME_KANO #mm_iframe{min-height:360px;height:65vh;}.kano-dialog-actions.kano-actions-4{display:grid;grid-template-columns:repeat(2,max-content);}.kano-log-actions{grid-template-columns:repeat(2,minmax(0,1fr));max-width:260px;}}
@@ -10849,10 +11292,31 @@ EOF_F50_RESTORE_MEMBERS
               <div id="mm_rule_mode_status" class="kano-mm-status">配置状态：读取中\u2026</div>
               <div id="mm_task_status" class="kano-mm-task-status" data-state="idle" aria-live="polite">任务：空闲</div>
             </div>
+            <div class="kano-mm-quick-bar" hidden>
+              <span class="kano-mm-quick-text"></span>
+              <div class="kano-mm-quick-actions">
+                <button type="button" class="kano-primary kano-mm-quick-primary"></button>
+                <button type="button" class="kano-mm-quick-secondary"></button>
+              </div>
+            </div>
             <div id="mm_action_box"></div>
             <div id="mm_web_panel_wrap" class="kano-mm-web-panel">
-              <div class="kano-mm-web-head"><span>内嵌 Web 面板</span></div>
-              <iframe id="mm_iframe" src="about:blank"></iframe>
+              <div class="kano-mm-web-head">
+                <span>内嵌 Web 面板</span>
+                <div class="kano-mm-web-tools">
+                  <button type="button" data-panel-tool="refresh">刷新</button>
+                  <button type="button" data-panel-tool="open">新窗口</button>
+                  <button type="button" data-panel-tool="controller">连接设置</button>
+                </div>
+              </div>
+              <div class="kano-mm-web-body">
+                <iframe id="mm_iframe" src="about:blank"></iframe>
+                <div class="kano-mm-web-empty">
+                  <div class="kano-mm-web-empty-title">Web 面板尚未加载</div>
+                  <div class="kano-mm-web-empty-desc">启动核心或点击“刷新”加载控制面板。</div>
+                  <button type="button" class="kano-primary kano-mm-web-empty-btn">加载面板</button>
+                </div>
+              </div>
             </div>
         </div>
     </div>
@@ -10884,6 +11348,7 @@ EOF_F50_RESTORE_MEMBERS
       if (!visible) {
         panelLoadRequestId++;
         iframe.src = 'about:blank';
+        updateRuntimeGuidance();
       }
     };
     const refreshPanel = async ({ forceShow = false, forceReload = true } = {}) => {
@@ -10902,6 +11367,8 @@ EOF_F50_RESTORE_MEMBERS
           && localStorage.getItem('#collapse_mm') == 'open'
           && document.querySelector('#mm_iframe') == iframe) {
         iframe.src = url;
+        const emptyBox = document.querySelector('#mm_web_panel_wrap .kano-mm-web-empty');
+        if (emptyBox) emptyBox.hidden = true;
       }
     };
 
@@ -10930,11 +11397,11 @@ EOF_F50_RESTORE_MEMBERS
       try {
         panelWindow.opener = null;
         if (!url) {
-          let generation, panelUrl;
+          let generation, panelUrl, attempts = 0;
           do {
             generation = statusSnapshotGeneration;
             panelUrl = zashboardPanelUrl || await buildPanelUrl();
-          } while (generation !== statusSnapshotGeneration);
+          } while (generation !== statusSnapshotGeneration && ++attempts < 5);
           panelWindow.location.replace(panelUrl);
         }
       } catch (error) {
@@ -11000,7 +11467,7 @@ EOF_F50_RESTORE_MEMBERS
       });
     });
 
-    refreshBootButtonState = () => inspectBootIntegration()
+    refreshBootButtonState = () => inspectBootIntegration(typeof probeShell === 'function' ? probeShell : runShellWithRoot)
       .then(applyBootButtonState)
       .catch((error) => console.error('[KANO] 开机自启状态检查失败:', error));
     refreshBootButtonState();
@@ -11009,11 +11476,8 @@ EOF_F50_RESTORE_MEMBERS
     showLogBtn.classList.add('btn');
     showLogBtn.textContent = '状态与日志';
     showLogBtn.onclick = async () => {
-      if (lastInstallDiagnostic && !lastInstallDiagnostic.ok && !lastInstallDiagnostic.viewed) {
+      if (lastInstallDiagnostic && !lastInstallDiagnostic.ok) {
         lastInstallDiagnostic.viewed = true;
-        showInfoDialog('mm_last_install_failure', lastInstallDiagnostic.summary,
-          '<pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(lastInstallDiagnostic.details) + '</pre>', showLogBtn);
-        return;
       }
       if (!(await ensureAdvanced())) return;
       setButtonBusy(showLogBtn, true, '读取中…');
@@ -11050,7 +11514,7 @@ EOF_F50_RESTORE_MEMBERS
             <input id="mm_provider_user_agent_input" type="text" maxlength="512" spellcheck="false"
               placeholder="${escapeHtml(KANO_PROVIDER_USER_AGENT)}"
               value="${escapeHtml(storedCustom)}"
-              style="box-sizing:border-box;width:100%;padding:10px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">
+              style="width:100%;padding:10px;">
             <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
               <button id="mm_provider_user_agent_save" style="font-size:.64rem">保存</button>
               <button id="mm_provider_user_agent_close" style="font-size:.64rem">关闭</button>
@@ -11198,7 +11662,7 @@ EOF_F50_RESTORE_MEMBERS
     };
 
 
-    const clearSubSourceFile = async ({ alreadySaved = false } = {}) => {
+    const clearSubSourceFile = async ({ alreadySaved = false, quiet = false } = {}) => {
       const saved = alreadySaved || await persistSubSourceState(
         [],
         await readCurrentSubRuleMode(),
@@ -11209,7 +11673,7 @@ EOF_F50_RESTORE_MEMBERS
         await runShellWithRoot(`
           rm -f ${shellQuote(KANO_SUBSCRIPTION_RAW)} ${shellQuote(KANO_SUBSCRIPTION_YAML)} ${shellQuote(KANO_SUBSCRIPTION_MODE_CHECK)} 2>/dev/null || true
           `);
-        createToast('订阅源已清空，现有节点和规则已保留', 'green');
+        if (!quiet) createToast('订阅源已清空，现有节点和规则已保留', 'green');
         await refreshRuleModeStatus();
       } else {
         createToast('清空订阅源失败；订阅源未改动', 'red');
@@ -12148,17 +12612,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         createToast('无法创建 config.yaml 回滚点；写入已取消，原 config.yaml 未改动。', 'red', 9000);
         return false;
       }
-      const rollbackUploadedConfig = async (context) => {
-        if (rollbackPath) {
-          return await restoreConfigRollbackPoint(rollbackPath, context, { showToast: false });
-        }
-        const removed = await runShellWithRoot(`
-          rm -f ${shellQuote(CLASH_CONFIG)} 2>/dev/null || exit 1
-          [ ! -e ${shellQuote(CLASH_CONFIG)} ] || exit 1
-          echo CONFIG_ROLLBACK_RESTORED_ABSENT
-        `, 15 * 1000);
-        return removed.success && String(removed.content || '').includes('CONFIG_ROLLBACK_RESTORED_ABSENT');
-      };
+      const rollbackUploadedConfig = (context) => restoreOrRemoveConfigAtRollback(rollbackPath, context);
       const stagePath = `${CLASH_CONFIG}.kano_upload_stage`;
       const stageRes = await runShellWithRoot(`
         set -e
@@ -12290,6 +12744,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         const res = await runShellWithRoot(`
           set -e
           TARGET=${shellQuote(allowedFile.path)}
+          [ ! -L "$TARGET" ] || { echo "TARGET_SYMLINK_REJECTED: $TARGET"; exit 1; }
           NEW="$TARGET.kano_new.$$"
           trap 'rm -f "$NEW" 2>/dev/null || true' EXIT
           mkdir -p ${shellQuote(targetDir)}
@@ -12299,6 +12754,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           trap - EXIT
           echo FILE_SAVED
         `);
+        if (res.success && typeof invalidateStatusSnapshot === 'function') invalidateStatusSnapshot();
         createToast(
           res.success ? `${escapeHtml(allowedFile.label)} 已保存` : `${escapeHtml(allowedFile.label)} 保存失败<br>${safeTextToHtml(res.content || '')}`,
           res.success ? 'green' : 'red',
@@ -12324,14 +12780,14 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">配置文件</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
-              <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;background:#111827;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;">${options}</select>
-              <button id="mm_local_file_reload_btn" style="font-size:.64rem">读取</button>
+              <select id="mm_local_file_select" style="min-width:0;flex:1 1 220px;padding:8px;">${options}</select>
+              <button type="button" id="mm_local_file_reload_btn" style="font-size:clamp(12px,.66rem,14px)">读取</button>
             </div>
-            <textarea id="mm_local_file_text" spellcheck="false" style="box-sizing:border-box;width:100%;height:min(52vh,480px);min-height:180px;padding:10px;background:#050b16;color:#dbeafe;border:1px solid rgba(148,163,184,.35);border-radius:8px;font-family:monospace;font-size:.62rem;line-height:1.45;resize:vertical;"></textarea>
-            <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:.6rem;opacity:.76;overflow-wrap:anywhere;"></div>
+            <textarea id="mm_local_file_text" spellcheck="false" style="width:100%;height:min(52vh,480px);min-height:180px;padding:10px;background:#050b16;font-family:monospace;font-size:clamp(12px,.66rem,14px);line-height:1.5;resize:vertical;"></textarea>
+            <div id="mm_local_file_status" style="min-height:1.4em;margin-top:6px;font-size:clamp(11.5px,.62rem,13px);opacity:.78;overflow-wrap:anywhere;"></div>
             <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:10px;">
-              <button id="mm_local_file_save_btn" style="font-size:.64rem">保存</button>
-              <button id="mm_local_file_close_btn" style="font-size:.64rem">关闭</button>
+              <button type="button" id="mm_local_file_save_btn" style="font-size:clamp(12px,.66rem,14px)">保存</button>
+              <button type="button" id="mm_local_file_close_btn" style="font-size:clamp(12px,.66rem,14px)">关闭</button>
             </div>
           </div>
         `,
@@ -12342,7 +12798,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const saveBtn = el.querySelector('#mm_local_file_save_btn');
       const textarea = el.querySelector('#mm_local_file_text');
       const status = el.querySelector('#mm_local_file_status');
+      bindTextareaTabIndent(textarea);
       let readGeneration = 0, editorClosed = false, readyPath = '', loadedContent = '';
+      const isEditorDirty = () => !!readyPath && textarea.value !== loadedContent;
       const loadSelected = async () => {
         const fileInfo = findEditableLocalFile(select.value);
         if (!fileInfo || editorClosed) return;
@@ -12368,11 +12826,20 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           }
         }
       };
-      select.onchange = loadSelected;
-      reloadBtn.onclick = loadSelected;
+      select.onchange = async () => {
+        if (isEditorDirty() && !(await askConfirm('mm_local_file_switch_confirm', '切换前放弃修改？', '当前文件有未保存的编辑内容；切换文件或重读后将丢失修改。', '放弃并切换', '留在此文件', select))) {
+          select.value = readyPath;
+          return;
+        }
+        await loadSelected();
+      };
+      reloadBtn.onclick = async () => {
+        if (isEditorDirty() && !(await askConfirm('mm_local_file_reload_confirm', '重新读取并放弃修改？', '当前文件有未保存的编辑内容；重新读取后会覆盖编辑器内容。', '继续读取', '取消', reloadBtn))) return;
+        await loadSelected();
+      };
       const closeBtn = el.querySelector('#mm_local_file_close_btn');
       const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, select);
-      closeBtn.onclick = () => { editorClosed = true; readGeneration++; close(); };
+      closeBtn.onclick = createDirtyCloseGuard(() => { editorClosed = true; readGeneration++; close(); }, isEditorDirty, closeBtn);
       saveBtn.onclick = async () => {
         const fileInfo = findEditableLocalFile(select.value);
         if (!fileInfo || editorClosed || readyPath !== fileInfo.path) return;
@@ -12407,7 +12874,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       }
     };
 
-    // \u8ba2\u9605\u94fe\u63a5\u529f\u80fd
+    // 订阅链接功能
     const importSub = async (opener = document.activeElement) => {
       operationStage('读取已保存的订阅');
       // A settings read failure must not block link editing; only the options section stays locked.
@@ -12486,12 +12953,12 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
                       </details>
                     </fieldset>
                     <div id="mm_sub_options_hint" style="font-size:.62rem;opacity:.78;"></div>`}
-                    <div style="font-size:.62rem;opacity:.78;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">${gist ? '手动链接会随每次 Gist 同步自动合并；相同链接不重复添加。' : '每行一个订阅链接。禁用后保留链接，但不参与生成或更新；全部禁用时保留当前配置。'}</div>
-                    <div style="display:${gist ? 'none' : 'block'};font-size:.6rem;opacity:.72;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
+                    <div style="font-size:clamp(12px,.64rem,14px);opacity:.82;line-height:1.55;padding:8px 10px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(15,23,42,.35);">${gist ? '手动链接会随每次 Gist 同步自动合并；相同链接不重复添加。' : '每框一条订阅链接（支持一次性粘贴多行自动分拆）。可用 ↑/↓ 调整顺序，禁用后保留链接，但不参与生成或更新。'}</div>
+                    <div style="display:${gist ? 'none' : 'block'};font-size:clamp(11.5px,.62rem,13px);opacity:.76;line-height:1.5;">本地转换仍需联网下载订阅，数据不经过第三方转换站。</div>
                 </div>
                 <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;">
-                    <button style="font-size:.64rem" id="mm_sub_submit_btn">保存并更新</button>
-                    <button style="font-size:.64rem" id="mm_sub_close_btn">关闭</button>
+                    <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_sub_submit_btn">保存并更新</button>
+                    <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_sub_close_btn">关闭</button>
                 </div>
             </div>
         `,
@@ -12572,12 +13039,28 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           : '使用插件本地模板的规则和策略组');
       };
 
+      const syncRowNumbers = () => {
+        const rows = Array.from(rowsEl.querySelectorAll('.mm_sub_row'));
+        rows.forEach((row, idx) => {
+          const input = row.querySelector('.mm_sub_url_input');
+          if (input) {
+            const label = `订阅链接 ${idx + 1}`;
+            input.placeholder = label;
+            input.setAttribute('aria-label', label);
+          }
+          const upBtn = row.querySelector('.mm_sub_up_btn');
+          const downBtn = row.querySelector('.mm_sub_down_btn');
+          if (upBtn) upBtn.disabled = idx === 0;
+          if (downBtn) downBtn.disabled = idx === rows.length - 1;
+        });
+      };
+
       const addSubRow = (source = {}, index = rowsEl.children.length) => {
         const row = document.createElement('div');
         row.className = 'mm_sub_row';
         row.dataset.enabled = source.enabled === false ? 'false' : 'true';
-        row.style.display = 'grid';
-        row.style.gridTemplateColumns = 'minmax(0,1fr) repeat(2,56px)';
+        row.style.display = 'flex';
+        row.style.flexWrap = 'wrap';
         row.style.gap = '6px';
         row.style.alignItems = 'center';
         const input = document.createElement('input');
@@ -12588,18 +13071,56 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         input.spellcheck = false;
         input.placeholder = `订阅链接 ${index + 1}`;
         input.setAttribute('aria-label', input.placeholder);
-        input.style.width = '100%';
+        input.style.flex = '1 1 200px';
         input.style.minWidth = '0';
-        input.style.padding = '10px';
-        input.style.border = '1px solid rgba(148,163,184,.35)';
-        input.style.borderRadius = '10px';
-        input.style.background = '#111827';
-        input.style.color = '#dbeafe';
+        input.style.padding = '9px 10px';
         input.value = source.url || '';
+        input.addEventListener('paste', (event) => {
+          const raw = event.clipboardData && event.clipboardData.getData('text');
+          if (!raw || !/\r?\n/.test(raw)) return;
+          const parts = raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+          if (parts.length <= 1) return;
+          event.preventDefault();
+          input.value = parts[0];
+          let lastInput = input;
+          for (let i = 1; i < parts.length; i++) {
+            lastInput = addSubRow({ url: parts[i], enabled: true });
+          }
+          syncRowNumbers();
+          if (lastInput && typeof lastInput.focus === 'function') lastInput.focus({ preventScroll: true });
+        });
+        const controls = document.createElement('div');
+        controls.style.cssText = 'display:flex;gap:5px;flex:0 0 auto;align-items:center;';
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'mm_sub_up_btn';
+        upBtn.textContent = '↑';
+        upBtn.title = '上移';
+        upBtn.setAttribute('aria-label', '上移订阅');
+        upBtn.style.cssText = 'font-size:clamp(12px,.64rem,13.5px);padding:6px 8px;min-width:30px;';
+        upBtn.addEventListener('click', () => {
+          if (row.previousElementSibling) {
+            rowsEl.insertBefore(row, row.previousElementSibling);
+            syncRowNumbers();
+          }
+        });
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'mm_sub_down_btn';
+        downBtn.textContent = '↓';
+        downBtn.title = '下移';
+        downBtn.setAttribute('aria-label', '下移订阅');
+        downBtn.style.cssText = 'font-size:clamp(12px,.64rem,13.5px);padding:6px 8px;min-width:30px;';
+        downBtn.addEventListener('click', () => {
+          if (row.nextElementSibling) {
+            rowsEl.insertBefore(row.nextElementSibling, row);
+            syncRowNumbers();
+          }
+        });
         const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
         toggleBtn.className = 'mm_sub_toggle_btn';
-        toggleBtn.style.fontSize = '.64rem';
-        toggleBtn.style.width = '100%';
+        toggleBtn.style.cssText = 'font-size:clamp(12px,.64rem,13.5px);min-width:48px;padding:6px 8px;';
         const syncToggleState = () => {
           const enabled = row.dataset.enabled != 'false';
           toggleBtn.textContent = enabled ? '禁用' : '启用';
@@ -12612,9 +13133,9 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           syncToggleState();
         };
         const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
         removeBtn.className = 'mm_sub_remove_btn';
-        removeBtn.style.fontSize = '.64rem';
-        removeBtn.style.width = '100%';
+        removeBtn.style.cssText = 'font-size:clamp(12px,.64rem,13.5px);min-width:48px;padding:6px 8px;';
         removeBtn.textContent = '删除';
         removeBtn.onclick = () => {
           if (rowsEl.children.length <= 1) {
@@ -12624,12 +13145,15 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
             return;
           }
           row.remove();
+          syncRowNumbers();
         };
+        controls.append(upBtn, downBtn, toggleBtn, removeBtn);
         row.appendChild(input);
-        row.appendChild(toggleBtn);
-        row.appendChild(removeBtn);
+        row.appendChild(controls);
         rowsEl.appendChild(row);
         syncToggleState();
+        syncRowNumbers();
+        return input;
       };
 
       if (currentSources.length > 0) {
@@ -12638,7 +13162,10 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         addSubRow();
       }
       syncRuleMode();
-      addBtn.onclick = () => addSubRow();
+      addBtn.onclick = () => {
+        const addedInput = addSubRow();
+        if (addedInput && typeof addedInput.focus === 'function') addedInput.focus({ preventScroll: true });
+      };
       clearBtn.onclick = async () => {
         const confirmed = await askConfirm(
           'mm_sub_clear_confirm',
@@ -12653,9 +13180,19 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         addSubRow();
       };
 
+      const snapshotSubSources = () => JSON.stringify(
+        Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({
+          url: String(row.querySelector('.mm_sub_url_input')?.value || '').trim(),
+          enabled: row.dataset.enabled != 'false',
+        })).filter((item) => item.url),
+      );
+      const initialSubSnapshot = snapshotSubSources();
+      const isSubDirty = () => snapshotSubSources() !== initialSubSnapshot
+        || !!(optionsEl && (option('rescue')?.value.trim() || option('node')?.value || option('rescue_clear')?.checked));
+
       const closeBtn = el.querySelector('#mm_sub_close_btn');
       const closeSubDialog = bindDialogKeyboard(el, closeToast, opener, closeBtn, rowsEl.querySelector('.mm_sub_url_input'));
-      closeBtn.onclick = closeSubDialog;
+      closeBtn.onclick = createDirtyCloseGuard(closeSubDialog, isSubDirty, closeBtn);
       submitBtn.onclick = async () => {
         const sources = Array.from(rowsEl.querySelectorAll('.mm_sub_row')).map((row) => ({
           url: row.querySelector('.mm_sub_url_input').value,
@@ -12695,7 +13232,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
 
           if (success) {
             // Invalid options must not clear the saved sources or legacy files.
-            if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile({ alreadySaved: true }))) return;
+            if (!hasSubscriptionUrl && !gist && !(await clearSubSourceFile({ alreadySaved: true, quiet: true }))) return;
             closeSubDialog();
           }
         } catch (e) {
@@ -12709,7 +13246,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       };
     };
 
-    // \u521b\u5efa\u8ba2\u9605\u94fe\u63a5\u6309\u94ae
+    // 创建订阅链接按钮
     const subBtn = document.createElement('button');
     subBtn.classList.add('btn');
     subBtn.textContent = '订阅设置';
@@ -12769,10 +13306,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       return await overwriteConfigByTemplate({ confirm: false });
     };
 
+    const buildConfigSourceOverrideBanner = (configSource) => {
+      if (configSource !== 'uploaded_config' && configSource !== 'subscription_original') return '';
+      const label = configSource === 'uploaded_config' ? '自定义配置' : '旧订阅原配置';
+      return `<div style="margin:0 0 10px;padding:8px 10px;border:1px solid rgba(251,191,36,.35);border-radius:10px;background:rgba(120,53,15,.18);color:#fde68a;font-size:clamp(11.5px,.62rem,13.5px);line-height:1.55;">当前运行配置来自「${label}」；点击“保存并应用”不会覆盖当前配置，请先切换为模板后再应用。</div>`;
+    };
+
     const showRuleOverrideDialog = async (opener) => {
-      const [savedConfig, runtimeConfig] = await Promise.all([
+      const [savedConfig, runtimeConfig, configSource] = await Promise.all([
         readRuleOverrideConfig(),
         readYamlObject(CLASH_CONFIG, 'config.yaml'),
+        readConfigSource(),
       ]);
       let config = normalizeRuleOverrideConfig(savedConfig);
       const policyNames = runtimeConfig.ok && Array.isArray(runtimeConfig.value['proxy-groups'])
@@ -12792,17 +13336,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         `
           <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">图形规则</div>
-            <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
+            <div style="margin:10px 0;font-size:clamp(12px,.64rem,14px);line-height:1.65;opacity:.82;">
               用于少量自定义规则。应用时会重建并校验配置，失败自动回滚。
             </div>
+            ${buildConfigSourceOverrideBanner(configSource)}
             <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:.66rem;">
               <input id="mm_rule_override_enabled" type="checkbox" /> 启用图形规则
             </label>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;align-items:center;">
-              <select id="mm_rule_override_type" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">${typeOptionsHtml}</select>
-              <input id="mm_rule_override_content" type="text" autocomplete="off" placeholder="规则内容，如 apple.com / CN / 443" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;" />
-              <select id="mm_rule_override_policy" aria-label="规则策略" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">${policyOptionsHtml}</select>
-              <select id="mm_rule_override_position" style="min-width:0;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#0f172a;color:#dbeafe;padding:8px;font-size:.62rem;">
+              <select id="mm_rule_override_type" style="min-width:0;background:#0f172a;padding:8px;font-size:.62rem;">${typeOptionsHtml}</select>
+              <input id="mm_rule_override_content" type="text" autocomplete="off" placeholder="规则内容，如 apple.com / CN / 443" style="min-width:0;background:#0f172a;padding:8px;font-size:.62rem;" />
+              <select id="mm_rule_override_policy" aria-label="规则策略" style="min-width:0;background:#0f172a;padding:8px;font-size:.62rem;">${policyOptionsHtml}</select>
+              <select id="mm_rule_override_position" style="min-width:0;background:#0f172a;padding:8px;font-size:.62rem;">
                 <option value="prepend">前置</option>
                 <option value="append">后置</option>
               </select>
@@ -12834,13 +13379,13 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       enabledInput.checked = config.enabled !== false;
       const closeBtn = el.querySelector('#mm_rule_override_close_btn');
       const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, typeInput);
-      closeBtn.onclick = close;
-
       const syncConfig = () => {
         config.enabled = enabledInput.checked;
         config = normalizeRuleOverrideConfig(config);
         return config;
       };
+      let savedRuleSnapshot = JSON.stringify(syncConfig());
+      closeBtn.onclick = createDirtyCloseGuard(close, () => JSON.stringify(syncConfig()) !== savedRuleSnapshot || !!contentInput.value.trim(), closeBtn);
 
       const renderRules = () => {
         syncConfig();
@@ -12920,11 +13465,17 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         contentInput.value = '';
         renderRules();
       };
-      clearBtn.onclick = () => {
+      clearBtn.onclick = async () => {
+        if (config.rules.length && !(await askConfirm('mm_rule_clear_confirm', '清空全部图形规则？', `将清空列表中的 ${config.rules.length} 条规则（点击“保存”前不会改动设备文件）。`, '清空', '取消', clearBtn))) return;
         config.rules = [];
         renderRules();
       };
-      const saveCurrent = async () => saveRuleOverrideConfig(syncConfig());
+      const saveCurrent = async () => {
+        const snapshot = syncConfig();
+        const ok = await saveRuleOverrideConfig(snapshot);
+        if (ok) savedRuleSnapshot = JSON.stringify(snapshot);
+        return ok;
+      };
       saveBtn.onclick = async () => {
         return runCriticalButtonOperation('保存图形规则', saveBtn, '保存中…', async () => {
           if (await saveCurrent()) createToast('图形规则已保存', 'green');
@@ -12940,21 +13491,25 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     };
 
     const showJsOverrideDialog = async (opener) => {
-      const current = await readJsOverrideText();
+      const [current, configSource] = await Promise.all([
+        readJsOverrideText(),
+        readConfigSource(),
+      ]);
       const { el, close: closeToast } = createFixedToast(
         'mm_js_override_toast',
         `
           <div style="pointer-events:all;width:auto;max-width:960px;">
             <div class="title" style="margin:0">JS 覆写</div>
-            <div style="margin:10px 0;font-size:.62rem;line-height:1.65;opacity:.78;">
+            <div style="margin:10px 0;font-size:clamp(12px,.64rem,14px);line-height:1.65;opacity:.82;">
               定义 <code>main(config)</code> 处理复杂规则；清空并保存可停用。仅运行信任的代码，Worker 隔离不等于安全沙箱。
             </div>
-            <textarea id="mm_js_override_text" spellcheck="false" autocapitalize="off" style="width:100%;height:430px;max-height:60vh;border:1px solid rgba(96,165,250,.35);border-radius:12px;background:#111827;color:#E5E7EB;caret-color:#60A5FA;box-sizing:border-box;font-family:Consolas,Monaco,monospace,'Microsoft YaHei';line-height:1.5;padding:12px;outline:none;"></textarea>
+            ${buildConfigSourceOverrideBanner(configSource)}
+            <textarea id="mm_js_override_text" spellcheck="false" autocapitalize="off" style="width:100%;height:430px;max-height:60vh;border:1px solid rgba(96,165,250,.35);border-radius:12px;background:#111827;color:#E5E7EB;caret-color:#60A5FA;box-sizing:border-box;font-family:Consolas,Monaco,monospace,'Microsoft YaHei';font-size:clamp(12px,.66rem,14px);line-height:1.5;padding:12px;outline:none;"></textarea>
             <div class="kano-dialog-actions kano-actions-4" style="--kano-action-count:4;margin-top:10px;">
-              <button style="font-size:.64rem" id="mm_js_override_save_btn">保存</button>
-              <button style="font-size:.64rem" id="mm_js_override_apply_btn">保存并应用</button>
-              <button style="font-size:.64rem" id="mm_js_override_example_btn">恢复示例</button>
-              <button style="font-size:.64rem" id="mm_js_override_close_btn">关闭</button>
+              <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_js_override_save_btn">保存</button>
+              <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_js_override_apply_btn">保存并应用</button>
+              <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_js_override_example_btn">恢复示例</button>
+              <button type="button" style="font-size:clamp(12px,.66rem,14px)" id="mm_js_override_close_btn">关闭</button>
             </div>
           </div>
         `,
@@ -12963,53 +13518,69 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const textarea = el.querySelector('#mm_js_override_text');
       const saveBtn = el.querySelector('#mm_js_override_save_btn');
       const applyBtn = el.querySelector('#mm_js_override_apply_btn');
+      bindTextareaTabIndent(textarea);
       textarea.value = current;
+      let savedJsText = current;
       const closeBtn = el.querySelector('#mm_js_override_close_btn');
       const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, textarea);
-      closeBtn.onclick = close;
+      closeBtn.onclick = createDirtyCloseGuard(close, () => textarea.value !== savedJsText, closeBtn);
       el.querySelector('#mm_js_override_example_btn').onclick = () => {
         textarea.value = buildDefaultOverrideJs();
       };
       saveBtn.onclick = async () => {
         return runCriticalButtonOperation('保存 JS 覆写', saveBtn, '保存中…', async () => {
-          if (await saveJsOverrideText(textarea.value)) createToast('JS 覆写已保存', 'green');
+          const text = textarea.value;
+          if (await saveJsOverrideText(text)) {
+            savedJsText = text;
+            createToast('JS 覆写已保存', 'green');
+          }
         });
       };
       applyBtn.onclick = async () => {
         return runCriticalButtonOperation('应用 JS 覆写', applyBtn, '应用中…', async () => {
-          if (!(await saveJsOverrideText(textarea.value))) return;
+          const text = textarea.value;
+          if (!(await saveJsOverrideText(text))) return;
+          savedJsText = text;
           if (await applySavedOverrides()) close();
         });
       };
     };
 
     const showAirportDnsDialog = async (opener) => {
-      const [read, runtime] = await Promise.all([
-        readAirportDnsTemplate(), readYamlObject(CLASH_CONFIG, '当前配置'),
+      const [read, runtime, configSource] = await Promise.all([
+        readAirportDnsTemplate(),
+        readYamlObject(CLASH_CONFIG, 'config.yaml'),
+        typeof readConfigSource === 'function' ? readConfigSource().catch(() => '') : Promise.resolve(''),
       ]);
       if (!read.ok) { createToast(safeTextToHtml(read.message), 'red', 8000); return; }
       const policy = new Map(Object.entries(read.value.dns && read.value.dns['proxy-server-nameserver-policy'] || {}));
       const currentPolicy = runtime.ok && runtime.value.dns && runtime.value.dns['proxy-server-nameserver-policy'] || {};
       let editingDomain = null;
+      const sourceBannerHtml = typeof buildConfigSourceOverrideBanner === 'function' ? buildConfigSourceOverrideBanner(configSource) : '';
       const { el, close: closeToast } = createFixedToast('mm_airport_dns_dialog', `
         <div style="pointer-events:all;width:auto;max-width:760px;">
           <div class="title" style="margin:0">节点 DNS 策略</div>
-          <div style="margin:10px 0;font-size:.62rem;line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。保存后点击“应用模板”生效，订阅更新会保留。</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;">
-            <label style="font-size:.64rem;">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
-            <label style="font-size:.64rem;">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
+          <div style="margin:10px 0;font-size:clamp(12px,.64rem,14px);line-height:1.7;opacity:.85;">用于解析代理节点域名。填写服务商提供的 DNS；节点地址是 IP 时无需配置。可点击“保存并应用”立即重建生效，订阅更新会保留。</div>
+          ${sourceBannerHtml}
+          <div class="mm-dns-edit-banner" hidden style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding:7px 10px;border:1px solid rgba(96,165,250,.35);border-radius:9px;background:rgba(37,99,235,.14);color:#dbeafe;font-size:clamp(12px,.64rem,13.5px);">
+            <span class="mm-dns-edit-label"></span>
+            <button type="button" class="mm-dns-cancel-edit" style="padding:3px 8px;min-height:24px;font-size:clamp(11px,.6rem,12.5px);">取消编辑</button>
           </div>
-          <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button id="mm_airport_dns_add">添加 / 更新</button></div>
-          <div style="margin-top:10px;font-size:.62rem;">当前配置${runtime.ok ? `已识别 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '无法读取'}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;">
+            <label style="font-size:clamp(12px,.64rem,14px);">节点域名（每行一个）<textarea id="mm_airport_dns_domains" rows="4" style="width:100%;box-sizing:border-box;" placeholder="node.example.com&#10;+.example.net"></textarea></label>
+            <label style="font-size:clamp(12px,.64rem,14px);">DNS 地址（每行一个）<textarea id="mm_airport_dns_servers" rows="4" style="width:100%;box-sizing:border-box;" placeholder="dns.example.com:1066&#10;https://dns.example.com/dns-query"></textarea></label>
+          </div>
+          <div class="kano-dialog-actions kano-actions-1" style="--kano-action-count:1;margin-top:8px;"><button type="button" id="mm_airport_dns_add">添加 / 更新</button></div>
+          <div style="margin-top:10px;font-size:clamp(12px,.64rem,14px);">当前配置${runtime.ok ? `已识别 ${Object.keys(currentPolicy).length} 条节点 DNS 策略` : '无法读取'}</div>
           <textarea id="mm_airport_dns_yaml" rows="5" style="width:100%;box-sizing:border-box;margin-top:8px;" placeholder="粘贴 proxy-server-nameserver-policy 配置，支持 YAML 锚点和别名"></textarea>
           <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:8px;">
-            <button id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
-            <button id="mm_airport_dns_import">导入粘贴内容</button>
-            <button id="mm_airport_dns_copy">复制 DNS 策略</button>
+            <button type="button" id="mm_airport_dns_current" ${runtime.ok ? '' : 'disabled'}>导入当前配置</button>
+            <button type="button" id="mm_airport_dns_import">导入粘贴内容</button>
+            <button type="button" id="mm_airport_dns_copy">复制 DNS 策略</button>
           </div>
           <div id="mm_airport_dns_list" style="margin-top:10px;max-height:35vh;overflow:auto;"></div>
-          <div class="kano-dialog-actions kano-actions-2" style="--kano-action-count:2;margin-top:12px;">
-            <button id="mm_airport_dns_save">保存</button><button id="mm_airport_dns_close">关闭</button>
+          <div class="kano-dialog-actions kano-actions-3" style="--kano-action-count:3;margin-top:12px;">
+            <button type="button" id="mm_airport_dns_save">保存</button><button type="button" class="mm-airport-dns-apply kano-primary">保存并应用</button><button type="button" id="mm_airport_dns_close">关闭</button>
           </div>
         </div>
       `);
@@ -13018,20 +13589,48 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const servers = el.querySelector('#mm_airport_dns_servers');
       const yaml = el.querySelector('#mm_airport_dns_yaml');
       const list = el.querySelector('#mm_airport_dns_list');
+      const editBanner = el.querySelector('.mm-dns-edit-banner');
+      const editBannerLabel = el.querySelector('.mm-dns-edit-label');
+      const cancelEditBtn = el.querySelector('.mm-dns-cancel-edit');
+      const applyBtn = el.querySelector('.mm-airport-dns-apply');
+      if (typeof bindTextareaTabIndent === 'function') bindTextareaTabIndent(yaml);
+      let savedDnsSnapshot = JSON.stringify([...policy.entries()]);
+      const syncEditBanner = () => {
+        if (!editBanner) return;
+        if (editingDomain) {
+          editBanner.hidden = false;
+          editBanner.style.display = 'flex';
+          if (editBannerLabel) editBannerLabel.textContent = `正在编辑域名：${editingDomain}`;
+        } else {
+          editBanner.hidden = true;
+          editBanner.style.display = 'none';
+          if (editBannerLabel) editBannerLabel.textContent = '';
+        }
+      };
       const render = () => {
+        syncEditBanner();
         resetChildren(list);
         if (!policy.size) { list.textContent = '暂无节点 DNS 策略'; return; }
         for (const [domain, value] of policy) {
           const addresses = Array.isArray(value) ? value : [value];
           const row = document.createElement('div');
-          row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid rgba(255,255,255,.1);';
+          const isEditing = editingDomain === domain;
+          row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px solid rgba(255,255,255,.1);' + (isEditing ? 'background:rgba(37,99,235,.16);border-radius:8px;' : '');
           const text = document.createElement('div');
-          text.style.cssText = 'font-size:.62rem;overflow-wrap:anywhere;';
+          text.style.cssText = 'font-size:clamp(12px,.64rem,14px);overflow-wrap:anywhere;';
           text.textContent = `${domain} → ${addresses.join('，')}`;
           const edit = document.createElement('button');
-          edit.textContent = '编辑';
-          edit.onclick = () => { editingDomain = domain; domains.value = domain; servers.value = addresses.join('\n'); };
+          edit.type = 'button';
+          edit.textContent = isEditing ? '编辑中' : '编辑';
+          edit.onclick = () => {
+            editingDomain = domain;
+            domains.value = domain;
+            servers.value = addresses.join('\n');
+            render();
+            if (typeof domains.focus === 'function') domains.focus({ preventScroll: true });
+          };
           const remove = document.createElement('button');
+          remove.type = 'button';
           remove.textContent = '删除';
           remove.onclick = () => {
             policy.delete(domain);
@@ -13045,6 +13644,14 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           list.appendChild(row);
         }
       };
+      if (cancelEditBtn && typeof cancelEditBtn.addEventListener === 'function') {
+        cancelEditBtn.addEventListener('click', () => {
+          editingDomain = null;
+          domains.value = '';
+          servers.value = '';
+          render();
+        });
+      }
       const addEntry = () => {
         try {
           const names = domains.value.split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
@@ -13081,13 +13688,31 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
           createToast('节点 DNS 策略已复制到剪贴板', 'green', 5000);
         } catch (_) { yaml.focus(); yaml.select(); createToast('已选中配置；请手动复制', 'yellow', 5000); }
       };
+      const persistAirportDns = async () => {
+        if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return false;
+        const ok = await saveAirportDnsPolicy(Object.fromEntries(policy));
+        if (ok) savedDnsSnapshot = JSON.stringify([...policy.entries()]);
+        return ok;
+      };
       const save = el.querySelector('#mm_airport_dns_save');
       save.onclick = () => runCriticalButtonOperation('保存节点 DNS 策略', save, '保存中…', async () => {
-        if ((domains.value.trim() || servers.value.trim()) && !addEntry()) return;
-        if (await saveAirportDnsPolicy(Object.fromEntries(policy))) createToast('节点 DNS 策略已保存；点击“应用模板”后生效', 'green', 7000);
+        if (await persistAirportDns()) createToast('节点 DNS 策略已保存；点击“保存并应用”或“应用模板”生效', 'green', 7000);
       });
+      if (applyBtn && typeof applyBtn.addEventListener === 'function') {
+        applyBtn.addEventListener('click', () => runCriticalButtonOperation('应用节点 DNS 策略', applyBtn, '应用中…', async () => {
+          if (!(await persistAirportDns())) return;
+          if (await applySavedOverrides()) close();
+        }));
+      }
       const closeBtn = el.querySelector('#mm_airport_dns_close');
-      closeBtn.onclick = bindDialogKeyboard(el, closeToast, opener, closeBtn, domains);
+      const close = bindDialogKeyboard(el, closeToast, opener, closeBtn, domains);
+      closeBtn.onclick = typeof createDirtyCloseGuard === 'function'
+        ? createDirtyCloseGuard(
+            close,
+            () => JSON.stringify([...policy.entries()]) !== savedDnsSnapshot || !!domains.value.trim() || !!servers.value.trim(),
+            closeBtn,
+          )
+        : close;
       render();
     };
 
@@ -13149,21 +13774,18 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const closeBtn = el.querySelector('#mm_template_close_btn');
       const close = bindDialogKeyboard(el, closeToast, templateOverrideBtn, closeBtn, rulesBtn);
       closeBtn.onclick = close;
-      uploadTemplateBtn.onclick = () => uploadEl.click();
-      restorePackageBtn.onclick = () => packageUploadEl.click();
+      uploadTemplateBtn.onclick = () => { close(); uploadEl.click(); };
+      restorePackageBtn.onclick = () => { close(); packageUploadEl.click(); };
       rulesBtn.onclick = async () => {
         close();
-        await wait(350);
         await showRuleOverrideDialog(templateOverrideBtn);
       };
       jsBtn.onclick = async () => {
         close();
-        await wait(350);
         await showJsOverrideDialog(templateOverrideBtn);
       };
       airportDnsBtn.onclick = async () => {
         close();
-        await wait(350);
         await showAirportDnsDialog(templateOverrideBtn);
       };
       rebuildBtn.onclick = async () => {
@@ -13188,12 +13810,23 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
     const quickRunBtn = document.createElement('button');
     quickRunBtn.classList.add('btn');
     quickRunBtn.textContent = '安装/启动';
-    quickRunBtn.onclick = async ()=>{
- if(!(await ensureAdvanced()))return false;
- const r=await runShellWithRoot(`test -s ${CLASH_SERVICE} && test -x ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)}`,4000);
- if(!r.success)return await installF50PackageFromNetwork();
- return await runCriticalOperation('检查并启动猫猫',async()=>await restartClashOk({skipCheck:true}));
-};
+    quickRunBtn.onclick = async () => {
+      if (!(await ensureAdvanced())) return false;
+      setButtonBusy(quickRunBtn, true, '处理中…');
+      try {
+        let installed = false;
+        try {
+          const r = await probeShell(`test -s ${CLASH_SERVICE} && test -x ${shellQuote(`${CLASH_DIR}/Scripts/clashctl_arm64`)}`, 4000);
+          installed = !!r.success;
+        } catch (_) {
+          installed = false;
+        }
+        if (!installed) return await installF50PackageFromNetwork();
+        return await runCriticalOperation('检查并启动猫猫', async () => await restartClashOk({ skipCheck: true }));
+      } finally {
+        setButtonBusy(quickRunBtn, false);
+      }
+    };
 
     const gistSyncBtn = document.createElement('button');
     gistSyncBtn.classList.add('btn');
@@ -13341,17 +13974,41 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
       const inner = document.createElement('div');
       inner.className = 'kano-action-inner';
       if (visibleButtons.length % 2 == 1) inner.classList.add('kano-action-inner-odd');
-      visibleButtons.forEach((button) => inner.appendChild(button));
+      visibleButtons.forEach((button) => {
+        if (!button.type) button.type = 'button';
+        inner.appendChild(button);
+      });
       details.appendChild(summary);
       details.appendChild(inner);
       mmBox.appendChild(details);
       return details;
     };
 
-    const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], false);
+    const hasSavedGroupState = (() => {
+      try {
+        return ['核心与面板', '订阅与配置', '网络与诊断', '组件与维护'].some((name) => localStorage.getItem('kano_mm_group:' + name) !== null);
+      } catch (_) { return false; }
+    })();
+    const coreGroup = appendActionGroup('核心与面板', [quickRunBtn, btn_restart, stopBtn, boot_on, webPanelToggleBtn, refresh, open, controllerSettingsBtn], !hasSavedGroupState);
     appendActionGroup('订阅与配置', [subBtn, updateSubBtn, userAgentBtn, templateOverrideBtn, editBtn, backupBtn, gistSyncBtn], false);
     appendActionGroup('网络与诊断', [policyToolsBtn, rescueBtn, showLogBtn], false);
     appendActionGroup('组件与维护', [btn_enabled, localPackageBtn, clearCacheBtn, btn_disabled], false);
+
+    const runQuickAction = (action) => {
+      if (action === 'install_or_start') return quickRunBtn.click();
+      if (action === 'local_package') return localPackageBtn.click();
+      if (action === 'sub') return subBtn.click();
+      if (action === 'logs') return showLogBtn.click();
+      if (action === 'controller') return controllerSettingsBtn.click();
+      if (action === 'open') return open.click();
+      if (action === 'refresh' || action === 'refresh_panel') return refresh.click();
+    };
+    Array.from(document.querySelectorAll('#IFRAME_KANO [data-quick-action], #IFRAME_KANO [data-panel-tool], #IFRAME_KANO .kano-mm-web-empty-btn')).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        runQuickAction(btn.dataset.panelTool || btn.dataset.quickAction);
+      });
+    });
+    updateRuntimeGuidance();
 
     let colTimer = null;
     let colTimer1 = null;
@@ -13369,6 +14026,7 @@ echo SUBSCRIPTION_TRANSACTION_RESTORED`, 30000);
         colTimer = setTimeout(() => {
           const iframe = document.getElementById('mm_iframe');
           if (iframe) iframe.src = 'about:blank';
+          updateRuntimeGuidance();
         }, 30 * 1000);
       }
     });

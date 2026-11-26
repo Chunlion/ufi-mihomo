@@ -9,20 +9,31 @@ const result = (failed = false) => ({ ok: !failed, failed: failed ? 1 : 0,
 for (const [providerOk, gistOk] of [[false, true], [true, false], [true, true]]) {
   test(`combined provider/Gist update preserves the final outcome / ${providerOk}/${gistOk}`, async () => {
     const op = { token: {}, progress: {} };
+    const updates = [];
     const update = subscriptionApi(slice('function operationFinish(', 'function operationCancelled()')
       + slice('async function f50GistUpdateSources(', '// Accept pasted Raw links')
+      + slice('const buildProviderUpdateResult', 'const mapWithConcurrency')
+      + slice('const forceUpdateProvidersFromConfig', 'const formatSubscriptionDownloadError')
       + slice('const updateSubProviders = async', 'const readCurrentSubSources = async')
       + '(async () => { const ok = await updateSubProviders([]); operationFinish(ok); return ok; })', {
       activeCriticalOperation: op, ensureCompatBackend: async () => true,
       readConfigSource: async () => 'uploaded_config',
-      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': { airport: { type: 'http' } } } }),
-      readCurrentSubSources: async () => [], forceUpdateProvidersFromConfig: async () => result(!providerOk),
+      readYamlObject: async () => ({ ok: true, value: { 'proxy-providers': {
+        airport: { type: 'http', path: './airport.yaml' }, local: { type: 'file', path: './local.yaml' },
+      } } }),
+      readCurrentSubSources: async () => [], buildControllerInfo: async () => ({}), getCorePid: async () => '123',
+      mapWithConcurrency: (names, limit, updateProvider) => Promise.all(names.map(updateProvider)),
+      callMihomoApi: async (path, method) => {
+        if (method === 'PUT') updates.push(path);
+        return { success: method !== 'PUT' || providerOk, responseText: '{"proxies":[{"name":"Node"}]}' };
+      },
       f50GistManaged: async () => ({ settings: { revision: 1 } }), f50ReleaseLease: async () => {},
       f50GistDispatch: async () => ({ ok: true, job: 'fixture' }),
       f50GistExec: async () => ({ ok: true, status: 'finished', result: { ok: gistOk, code: 'fixture_failure' } }),
       invalidateStatusSnapshot() {}, f50GistMessage: String,
     });
     assert.equal(await update(), providerOk && gistOk);
+    assert.deepEqual(updates, ['/providers/proxies/airport']);
     assert.equal(op.finalResult.ok, providerOk && gistOk);
     assert.equal(op.finalResult.detail, !gistOk ? 'fixture_failure'
       : providerOk ? 'Gist 配置已更新，手动订阅已合并' : 'Gist 配置已更新，但节点来源更新失败');

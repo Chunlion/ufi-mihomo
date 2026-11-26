@@ -7747,8 +7747,10 @@ KANO_WRITE_CHECK_EOF
   const read = config ? {ok:true,value:config} : await readYamlObject(CLASH_CONFIG,'config.yaml');
   if (!read.ok) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'config_read_failed',message:read.message || 'config read failed'}]);
   const defs = read.value['proxy-providers'] || {};
-  // 只更新受管订阅槽位：手工 file/inline provider 不是订阅，PUT 到它只会多出一条失败记录。
-  const names = Object.keys(defs).filter(name => isManagedProviderEntry(name, defs[name]) && (!providerNames || providerNames.includes(name)));
+  // 自定义配置的 HTTP 订阅可以使用任意名称和缓存路径。
+  const names = Object.keys(defs).filter(name =>
+    (isManagedProviderEntry(name, defs[name]) || (refreshRemote && defs[name]?.type === 'http')) &&
+    (!providerNames || providerNames.includes(name)));
   if (!names.length) return buildProviderUpdateResult([{name:'config.yaml',ok:false,proxyCount:null,errorType:'provider_missing',message:'当前配置没有可更新的节点来源'}]);
   if (refreshRemote && Object.keys(read.value['x-f50-provider-sources'] || {}).some(name=>names.includes(name))) {
     const refreshed=await f50Command('refresh-remote-providers',100000);
